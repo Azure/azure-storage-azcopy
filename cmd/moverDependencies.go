@@ -346,6 +346,7 @@ type RawMoverSyncCmdArgs struct {
 	BlobType                common.BlobType
 	BlockSizeMB             float64
 	BlockBlobTier           string
+	UseStreamingMergeJoin   bool
 }
 
 type SyncCmdArgsInput struct {
@@ -392,6 +393,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		blobType:                args.BlobType.String(),
 		blockSizeMB:             args.BlockSizeMB,
 		blockBlobTier:           args.BlockBlobTier,
+		useStreamingMergeJoin:   args.UseStreamingMergeJoin,
 	}
 	return raw.cook()
 }

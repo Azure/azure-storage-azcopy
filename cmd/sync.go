@@ -109,6 +109,11 @@ type rawSyncCmdArgs struct {
 	blobType string
 	// blockBlobTier specifies the access tier for block blobs at the destination.
 	blockBlobTier string
+	// useStreamingMergeJoin opts this job into the channel-based streaming merge-join sync path
+	// (for eligible remote source/dest pairs). Set per-job by the mover when the job's subscription
+	// is allowlisted for the feature OR the USE_STREAMING_MERGE_JOIN env var is set (the mover
+	// combines both into this single flag; azcopy does not read any enablement env var itself).
+	useStreamingMergeJoin bool
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -141,6 +146,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
+		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -542,6 +548,10 @@ type cookedSyncCmdArgs struct {
 
 	// blockBlobTier specifies the access tier for block blobs at the destination.
 	blockBlobTier common.BlockBlobTier
+
+	// useStreamingMergeJoin opts this job into the streaming merge-join sync path (per-job,
+	// set by the mover from featureConfig; see useStreamingMergeJoin()).
+	useStreamingMergeJoin bool
 
 	// cancellation for sync orchestrator
 	orchestratorCancel context.CancelFunc

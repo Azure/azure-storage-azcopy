@@ -620,6 +620,29 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}
 	}
 
+	// Log (once per job) whether the streaming merge-join is used. Enablement is decided in the
+	// mover (subscription allowlist via featureConfig OR the USE_STREAMING_MERGE_JOIN env var) and
+	// passed to azcopy as the single cca.useStreamingMergeJoin flag. This makes it easy to confirm
+	// the gating in production logs.
+	if useStreamingMergeJoin(cca) {
+		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.fromTo.From(), cca.fromTo.To()), true)
+
+		// The streaming merge-join uses its own directory-crawl parallelism
+		// (SYNC_MJ_PARALLEL_TRAVERSERS, default 32) — separate from the indexMap path, which keeps
+		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
+		// source and destination concurrently within each directory.
+		if orchestratorOptions != nil {
+			orchestratorOptions.parallelTraversers = mergeJoinParallelTraversers
+			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+				"Streaming merge-join directory-crawl parallelism set to %d (SYNC_MJ_PARALLEL_TRAVERSERS)", mergeJoinParallelTraversers), true)
+		}
+	} else if cca.useStreamingMergeJoin {
+		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Streaming merge-join requested (mover flag) but NOT used for %s->%s (pair not eligible); using indexMap sync path",
+			cca.fromTo.From(), cca.fromTo.To()), true)
+	}
+
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)
 	return cca.runSyncOrchestrator(enumerator, ctx)
@@ -710,6 +733,124 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		var errMsg string
 
+		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
+
+		// Fork: use the streaming (channel-based) merge-join for remote sources whose
+		// listings are lexicographically sorted; keep the existing indexMap-based flow for
+		// local filesystem sources (which do not guarantee sorted listing order).
+		if useStreamingMergeJoin(cca) {
+			mergeJoinSyncOneDirLog(common.LogDebug,
+				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
+
+			var subDirs []minimalStoredObject
+			var mergeErr error
+
+			// Per-directory cancellable context derived from mainCtx. mergeJoinTwoWaySyncDir cancels it
+			// and drains/awaits all producer goroutines on EVERY return path, so no detached traverser
+			// goroutine outlives this directory's processing and later writes to the shared sync error
+			// channel after it is closed ("send on closed channel"). Creating the traversers with dirCtx
+			// (not mainCtx) is what lets that cancel abort their in-flight listing promptly.
+			dirCtx, dirCancel := context.WithCancel(mainCtx)
+
+			// Channel-based merge-join: bridge source + destination traversers into
+			// back-pressured channels and merge their sorted streams.
+			pt, ptErr := InitResourceTraverser(
+				pt_src,
+				ptt.location,
+				dirCtx,
+				ptt.options)
+			if ptErr != nil {
+				dirCancel()
+				errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, ptErr)
+				syncOrchestratorLog(common.LogError, errMsg)
+				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           pt_src.Value,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.From(),
+				})
+				srcDirEnumerating.Add(-1)
+				if enableThrottling {
+					semaphore.ReleaseSourceSlot()
+				}
+				return ptErr
+			}
+
+			st, stErr := InitResourceTraverser(
+				st_src,
+				stt.location,
+				dirCtx,
+				stt.options)
+			if stErr != nil {
+				dirCancel()
+				errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, stErr)
+				syncOrchestratorLog(common.LogError, errMsg)
+				writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           st_src.Value,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.To(),
+				})
+				srcDirEnumerating.Add(-1)
+				if enableThrottling {
+					semaphore.ReleaseSourceSlot()
+				}
+				return stErr
+			}
+
+			subDirs, mergeErr = mergeJoinTwoWaySyncDir(
+				dirCtx,
+				dirCancel,
+				enumerator,
+				cca,
+				dir.(minimalStoredObject).relativePath,
+				pt,
+				st,
+				isDestinationPresent,
+			)
+
+			srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
+
+			// Release source slot after merge-join completes (source was actively listed during merge-join)
+			if enableThrottling {
+				semaphore.ReleaseSourceSlot()
+			}
+
+			if mergeErr != nil {
+				// Attribute the failure to the correct side (source vs destination) so the error
+				// channel reports the same TraverserLocation/path as the indexMap path. Defaults
+				// to source; a tagged mergeJoinTraversalError overrides it (e.g. dest listing failed).
+				errLocation := cca.fromTo.From()
+				errPath := pt_src.Value
+				var mjErr *mergeJoinTraversalError
+				if errors.As(mergeErr, &mjErr) && mjErr.location == cca.fromTo.To() {
+					errLocation = cca.fromTo.To()
+					errPath = st_src.Value
+				}
+				errMsg = fmt.Sprintf("Merge-join sync failed for dir %s: %s", errPath, mergeErr)
+				syncOrchestratorLog(common.LogError, errMsg, true)
+				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           errPath,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: errLocation,
+				})
+				return mergeErr
+			}
+
+			// Enqueue discovered subdirectories for processing
+			for _, sub_dir := range subDirs {
+				crawlWg.Add(1)
+				enqueueDir(minimalStoredObject{
+					relativePath:           sub_dir.relativePath,
+					changeTime:             sub_dir.changeTime,
+					isPresentAtDestination: sub_dir.isPresentAtDestination,
+				})
+			}
+			return nil
+		}
+
+		// ── Existing indexMap-based path (local filesystem sources) ──
 		// Create source traverser for current directory
 		pt, err := InitResourceTraverser(
 			pt_src,
@@ -775,9 +916,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Flag to control whether we traverse the destination
 		traverseDestination := true
 
-		// Flag to check if destination exists
-		// We will use the parent directory flag as the seed value to avoid redundant checks
-		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
 		finalize := true // Flag to control whether we finalize
 		// Before proceeding, check if we need to enumerate the destination
 		if isDestinationPresent &&

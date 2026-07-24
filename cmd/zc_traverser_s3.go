@@ -215,6 +215,29 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	// The traverser emits objects in raw S3 listing order (files and sub-dirs as ListObjects
+	// returns them) via processOne — it does NO per-level buffering. Any ordering the streaming
+	// merge-join needs is done in its own producer (traverserToTypedChannels: a folders-only heap
+	// plus a file order-guard), so a single prefix with millions of objects is streamed, not
+	// accumulated in memory. This is safe because S3 Contents are lexicographically sorted across
+	// pages (satisfying the producer's file order-guard) and folders (CommonPrefixes) may arrive in
+	// any order and are reordered by the heap. The non-streaming orchestrator path indexes into a
+	// map, so it is order-independent too.
+	processOne := func(so StoredObject) error {
+		e := processIfPassedFilters(filters, so, processor)
+		_, e = getProcessingError(e)
+		if e != nil {
+			t.writeToS3ErrorChannel(ErrorS3Info{
+				S3Name:             so.name,
+				S3Path:             t.s3URLParts.ObjectKey,
+				ErrorMsg:           e,
+				S3LastModifiedTime: so.lastModifiedTime,
+				S3Size:             so.size,
+			})
+		}
+		return e
+	}
+
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
 	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
@@ -336,18 +359,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				t.s3URLParts.BucketName)
 		}
 
-		err = processIfPassedFilters(filters,
-			storedObject,
-			processor)
-		_, err = getProcessingError(err)
-		if err != nil {
-			t.writeToS3ErrorChannel(ErrorS3Info{
-				S3Name:             objectName,
-				S3Path:             t.s3URLParts.ObjectKey,
-				ErrorMsg:           err,
-				S3LastModifiedTime: storedObject.lastModifiedTime,
-				S3Size:             storedObject.size,
-			})
+		if err = processOne(storedObject); err != nil {
 			return
 		}
 	}

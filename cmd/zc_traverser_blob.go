@@ -436,6 +436,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
 		})
 		var marker *string
+
+		// The traverser emits objects in raw service order (files and sub-dirs as the hierarchy
+		// listing returns them) via enqueueOutput. Any ordering the streaming merge-join needs is
+		// done in its own producer (folders-only heap), so the traverser does no per-page sorting.
+
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
