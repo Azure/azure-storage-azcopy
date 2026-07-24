@@ -475,6 +475,7 @@ type BlobObjectCreateOptions struct {
 
 func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectContentContainer, properties ObjectProperties, options *BlobObjectCreateOptions) {
 	a.HelperMarker().Helper()
+
 	opts := DerefOrZero(options)
 	blobProps := properties.BlobProperties
 
@@ -515,6 +516,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 
 	switch DerefOrZero(blobProps.Type) {
 	case "", blob.BlobTypeBlockBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		bodySize := body.Size()
 
@@ -537,6 +542,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		})
 		a.NoError("Block blob upload", err)
 	case blob.BlobTypePageBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for PageBlob. (WI 28334208)
 		client := b.Container.InternalClient.NewPageBlobClient(b.Path)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultPageBlobChunkSize)
@@ -583,6 +592,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			blockIndex++
 		}
 	case blob.BlobTypeAppendBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for AppendBlob. (WI 28334208)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		size := body.Size()

@@ -22,13 +22,14 @@ package common_test
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateParentDirectoryIfNotExist(t *testing.T) {
@@ -38,7 +39,9 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	plan := &ste.JobPartPlanHeader{}
 	fpo := common.EFolderPropertiesOption.AllFolders()
 
-	tracker := ste.NewFolderCreationTracker(fpo, plan)
+	tracker := ste.NewFolderCreationTracker(fpo, plan, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
+		return plan.Transfer(index.TransferIndex)
+	})
 	fileName := "stuff.txt"
 
 	// when destination path is defined as "/" in linux, the source file becomes the destination path string
@@ -80,7 +83,9 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 
 	plan := &ste.JobPartPlanHeader{}
 	fpo := common.EFolderPropertiesOption.AllFolders()
-	tracker := ste.NewFolderCreationTracker(fpo, plan)
+	tracker := ste.NewFolderCreationTracker(fpo, plan, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
+		return plan.Transfer(index.TransferIndex)
+	})
 
 	_, err := common.CreateFileOfSizeWithWriteThroughOption(destinationPath, 1,
 		false,
@@ -90,8 +95,7 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	if err != nil {
 		a.NotEqual(syscall.EINTR, err)
 		return
-	} 
+	}
 	a.NoError(err, fmt.Sprintf("Error creating file: %v", err))
-	
 
 }

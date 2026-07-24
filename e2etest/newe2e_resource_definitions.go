@@ -154,6 +154,7 @@ type ResourceDefinitionObject struct {
 
 	ObjectProperties
 	Body ObjectContentContainer
+
 	// ObjectShouldExist is true unless set to false. Useful in negative validation (e.g. remove)
 	ObjectShouldExist *bool
 

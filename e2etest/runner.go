@@ -29,6 +29,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,10 @@ func newTestRunner() TestRunner {
 var isLaunchedByDebugger = func() bool {
 	// gops executable must be in the path. See https://github.com/google/gops
 	gopsOut, err := exec.Command("gops", strconv.Itoa(os.Getppid())).Output()
-	if err == nil && strings.Contains(string(gopsOut), "\\dlv.exe") {
+
+	searchStr := common.Iff(runtime.GOOS == "windows", "\\dlv.exe", "/dlv")
+
+	if err == nil && strings.Contains(string(gopsOut), searchStr) {
 		// our parent process is (probably) the Delve debugger
 		return true
 	}

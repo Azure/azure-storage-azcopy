@@ -57,5 +57,7 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, "test", common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

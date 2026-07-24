@@ -116,7 +116,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink())
+	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink() || s.entityType == common.EEntityType.Symlink() || s.entityType == common.EEntityType.Other())
 }
 
 func (s *StoredObject) isSourceRootFolder() bool {
@@ -375,9 +375,10 @@ func recommendHttpsIfNecessary(url url.URL) {
 	}
 }
 
-type enumerationCounterFunc func(entityType common.EntityType)
+type enumerationCounterFunc func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkOption common.HardlinkHandlingType)
 
-var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType) {}
+var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkoption common.HardlinkHandlingType) {
+}
 
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
@@ -396,7 +397,6 @@ type InitResourceTraverserOptions struct {
 	CpkOptions common.CpkOptions // Used by Blob
 
 	PreservePermissions common.PreservePermissionsOption // Blob, BlobFS
-	SymlinkHandling     common.SymlinkHandlingType       // Local
 	PermanentDelete     common.PermanentDeleteOption     // Blob, BlobFS
 	SyncHashType        common.SyncHashType              // Local
 	TrailingDotOption   common.TrailingDotOption         // Files
@@ -407,10 +407,12 @@ type InitResourceTraverserOptions struct {
 	PreserveBlobTags        bool // Blob, BlobFS
 	StripTopDir             bool // Local
 
-	ExcludeContainers []string // Blob account
-	ListVersions      bool     // Blob
-	HardlinkHandling  common.HardlinkHandlingType
+	ExcludeContainers []string                    // Blob account
+	ListVersions      bool                        // Blob
+	HardlinkHandling  common.HardlinkHandlingType // Local
+	SymlinkHandling   common.SymlinkHandlingType  // Local
 
+	FromTo                  common.FromTo
 	IncrementNotTransferred enumerationCounterFunc
 }
 

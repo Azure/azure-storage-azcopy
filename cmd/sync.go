@@ -156,7 +156,10 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(),
+		common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(),
+		common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(),
+		common.EFromTo.FileBlobFS(), common.EFromTo.FileNFSFileSMB(), common.EFromTo.FileSMBFileNFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
@@ -206,7 +209,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
 	// NFS/SMB arg processing
-	if common.IsNFSCopy() {
+	if cooked.fromTo.IsNFS() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 		// Using the same EPreservePermissionsOption that we have today for NFS as well
@@ -293,18 +296,31 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return err
 	}
 
+	if err = validateSymlinkHandlingMode(cooked.symlinkHandling, cooked.fromTo); err != nil {
+		return err
+	}
+
 	// NFS/SMB validation
-	if common.IsNFSCopy() {
+	if cooked.fromTo.IsNFS() {
 		if err := performNFSSpecificValidation(
-			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.symlinkHandling, cooked.hardlinks); err != nil {
+			cooked.fromTo,
+			cooked.preservePermissions,
+			cooked.preserveInfo,
+			&cooked.hardlinks,
+			cooked.symlinkHandling); err != nil {
 			return err
 		}
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties); err != nil {
 			return err
+		}
+
+		if cooked.symlinkHandling == common.ESymlinkHandlingType.Follow() {
+			return fmt.Errorf("The '--follow-symlink' flag is not applicable for sync operations.")
+		} else if cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
+			return fmt.Errorf("The '--preserve-symlink' flag is not applicable for sync operations.")
 		}
 	}
 
@@ -514,6 +530,7 @@ type cookedSyncCmdArgs struct {
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
+	atomicSkippedHardlinkCount       uint32
 
 	blockSizeMB   float64
 	putBlobSizeMB float64
@@ -618,6 +635,11 @@ func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationSkipped() uint64 {
 
 // GetSymlinkSkipped returns the number of symbolic links skipped during sync.
 func (cca *cookedSyncCmdArgs) GetSymlinkSkipped() uint32 {
+	return atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+}
+
+// GetSymlinkSkipped returns the number of symbolic links skipped during sync.
+func (cca *cookedSyncCmdArgs) GetHardlinkSkipped() uint32 {
 	return atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 }
 
@@ -794,6 +816,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
@@ -918,6 +941,7 @@ Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
 Number of Copy Transfers for Folder Properties: %v
+Number of Symlink Transfers: %v
 Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
@@ -925,6 +949,7 @@ Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
@@ -935,6 +960,7 @@ Final Job Status: %v%s%s
 		jobsAdmin.ToFixed(duration.Minutes(), 4),
 		summary.FileTransfers,
 		summary.FolderPropertyTransfers,
+		summary.SymlinkTransfers,
 		summary.TotalTransfers,
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
@@ -942,6 +968,7 @@ Final Job Status: %v%s%s
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
 		summary.HardlinksConvertedCount,
+		summary.SkippedHardlinkCount,
 		summary.TotalBytesTransferred,
 		summary.TotalBytesEnumerated,
 		summary.JobStatus,
@@ -963,6 +990,7 @@ Elapsed Time (Minutes): ........................ %12v
 Number of Copy Transfers for Files: ............ %12v
 Number of Copy Transfers for Folder Properties:  %12v
 Number of Copy Transfers for Files Properties:   %12v
+Number of Symlink Transfers: ................... %12v
 Total Number of Copy Transfers: ................ %12v
 Number of Copy Transfers Completed: ............ %12v
 Number of Copy Transfers Failed: ............... %12v
@@ -971,6 +999,7 @@ Number of Deletions at Destination: ............ %12v
 Number of Symbolic Links Skipped: .............. %12v
 Number of Special Files Skipped: ............... %12v
 Number of Hardlinks Converted: ................. %12v
+Number of Hardlinks Skipped: ................... %12v
 ------------------------------------------------------------
 Number of Files Not Requiring Transfer: ........ %12v
 Number of Folders Not Requiring Transfer: ...... %12v
@@ -996,6 +1025,7 @@ Final Job Status: .............................. %12v
 		summary.FileTransfers,
 		summary.FolderPropertyTransfers,
 		summary.FilePropertyTransfers,
+		summary.SymlinkTransfers,
 		summary.TotalTransfers,
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
@@ -1004,6 +1034,7 @@ Final Job Status: .............................. %12v
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
 		summary.HardlinksConvertedCount,
+		summary.SkippedHardlinkCount,
 
 		atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired),
 		atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired),
@@ -1260,8 +1291,22 @@ func init() {
 	_ = syncCmd.PersistentFlags().MarkHidden("include")
 	_ = syncCmd.PersistentFlags().MarkHidden("exclude")
 
-	// TODO follow sym link is not implemented, clarify behavior first
-	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
+	// TODO: Follow symlink is not implemented for Blob or Azure Files SMB.
+	// TODO: Clarify expected behavior before enabling for Blob scenarios.
+
+	// Defining this flag specifically for NFS.
+	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
+	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
+		"Follow symbolic links when uploading from local file system."+
+			"This flag is applicable only if destination is an NFS file share. "+
+			"Note: This flag is not supported for Azure Files SMB shares or Blob storage in case of sync")
+
+	// Defining this flag specifically for NFS.
+	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, "preserve-symlinks", false,
+		"Preserve symbolic links when performing sync for NFS resources. "+
+			"This flag is only applicable when either the source or destination is an NFS file share. "+
+			"Note: This flag is not supported for Azure Files SMB shares or Blob storage, as symlinks are not supported in those services.")
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 

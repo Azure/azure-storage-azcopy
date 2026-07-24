@@ -44,8 +44,9 @@ func NewAzCopyLogSanitizer() LogSanitizer {
 var sensitiveQueryStringKeys = []string{
 	"sig", // was strings.ToLower(SigAzure), but that isn't fully init-order-safe, see init() method below
 	//omitted because covered by "signature" below strings.ToLower(SigXAmzForAws),
-	"signature", // covers both "signature" and x-amz-signature. The former may be used in AWS authorization headers. Not sure if we ever log those, but may as well redact them if we do
-	"token",     // seems worth removing in case something uses it one day (e.g. if we support a new backend)
+	"signature",  // covers both "signature" and x-amz-signature. The former may be used in AWS authorization headers. Not sure if we ever log those, but may as well redact them if we do
+	"token",      // seems worth removing in case something uses it one day (e.g. if we support a new backend)
+	"credential", // covers redacting x-amz-credential from logs
 }
 
 // SanitizeLogLine removes credentials and credential-like strings that are expected to exist

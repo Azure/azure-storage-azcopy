@@ -1,14 +1,17 @@
 package e2etest
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"sync"
-	"time"
+	"github.com/google/uuid"
 )
 
 const (
@@ -65,48 +68,110 @@ As such, we store all the AccessTokens in one place such that any portion of the
 type OAuthCache struct {
 	tc     azcore.TokenCredential
 	tenant string
-	tokens map[string]*azcore.AccessToken
-	mut    *sync.RWMutex
+
+	// We want to know...
+	tokens        map[uuid.UUID]*azcore.AccessToken // what tokens we have
+	tokensByScope map[string][]uuid.UUID            // which tokens can access a given scope
+	scopesOfToken map[uuid.UUID][]string            // what scopes a given token has access to
+
+	mut *sync.RWMutex
 }
 
 func NewOAuthCache(cred azcore.TokenCredential, tenant string) *OAuthCache {
 	return &OAuthCache{
-		tc:     cred,
-		tenant: tenant,
-		tokens: make(map[string]*azcore.AccessToken),
-		mut:    &sync.RWMutex{},
+		tc:            cred,
+		tenant:        tenant,
+		tokens:        make(map[uuid.UUID]*azcore.AccessToken),
+		tokensByScope: make(map[string][]uuid.UUID),
+		scopesOfToken: make(map[uuid.UUID][]string),
+		mut:           &sync.RWMutex{},
 	}
 }
 
 var OAuthCacheDisabledError = errors.New("the OAuth cache is currently disabled")
 
 func (o *OAuthCache) GetAccessToken(scope string) (*AzCoreAccessToken, error) {
-	if o == nil {
-		return nil, OAuthCacheDisabledError
+	// at this point, operates on backwards compat
+	tok, err := o.GetToken(ctx, policy.TokenRequestOptions{
+		Scopes:    []string{scope},
+		TenantID:  o.tenant,
+		EnableCAE: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed fetching new AccessToken: %w", err)
 	}
 
+	return &AzCoreAccessToken{
+		tok:    &tok,
+		parent: o,
+		Scope:  scope,
+	}, nil
+}
+
+func (o *OAuthCache) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	if o == nil {
+		return azcore.AccessToken{}, OAuthCacheDisabledError
+	}
+
+	// step 1: See if we can find a suitable token.
 	o.mut.RLock()
-	tok, ok := o.tokens[scope]
+	var tok *azcore.AccessToken
+	var tokID uuid.UUID
+	// No scope is almost certainly invalid, but we'll treat that as uuid.Nil and see if it's there
+	if len(options.Scopes) == 0 {
+		tok = o.tokens[uuid.Nil]
+		tokID = uuid.Nil
+	} else {
+		// If we do *have* a matching token containing all requested scopes,
+		// any scope should contain a token matching the request.
+		// thus, we take the first of the list.
+		for _, v := range o.tokensByScope[options.Scopes[0]] { // check all of the tokens for the first requested scope
+			if ListOverlaps(options.Scopes, o.scopesOfToken[v]) { // does this token contain all requested scopes?
+				tok = o.tokens[v] // earmark it
+				tokID = v
+
+				// if the range of the token is wider, update our options so that we refresh an equally scoped token.
+				if len(o.scopesOfToken[v]) > len(options.Scopes) {
+					options.Scopes = o.scopesOfToken[v]
+				}
+
+				break // stop looking now
+			}
+		}
+	}
 	o.mut.RUnlock()
 
-	if !ok || time.Now().Add(time.Minute*3).After(tok.ExpiresOn) {
+	if tok == nil || time.Now().Add(time.Minute*3).After(tok.ExpiresOn) {
 		o.mut.Lock()
-		newTok, err := o.tc.GetToken(ctx, policy.TokenRequestOptions{
-			Scopes:    []string{scope},
-			TenantID:  o.tenant,
-			EnableCAE: true,
-		})
+
+		// Grab a new token
+		newTok, err := o.tc.GetToken(ctx, options)
 		if err != nil {
-			return nil, fmt.Errorf("failed fetching new AccessToken: %w", err)
+			return azcore.AccessToken{}, fmt.Errorf("failed fetching new AccessToken: %w", err)
 		}
 
-		o.tokens[scope] = &newTok
-		o.mut.Unlock()
+		// find a free slot for a non-zero scoped token
+		if tokID == uuid.Nil && len(options.Scopes) != 0 {
+			for {
+				tokID = uuid.New()
+				if _, ok := o.tokens[tokID]; !ok {
+					break
+				}
+			}
+		}
 
+		// Add our token to the cache
 		tok = &newTok
+		o.tokens[tokID] = &newTok
+		o.scopesOfToken[tokID] = options.Scopes
+		for _, v := range options.Scopes {
+			o.tokensByScope[v] = append(o.tokensByScope[v], tokID)
+		}
+
+		o.mut.Unlock()
 	}
 
-	return &AzCoreAccessToken{tok, o, scope}, nil
+	return *tok, nil
 }
 
 type AccessToken interface {
