@@ -75,6 +75,14 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderF
 		return
 	}
 
+	err = common.CreateParentDirectoryIfNotExist(jptm.Info().Destination, jptm.GetFolderCreationTracker())
+
+	if err != nil {
+		jptm.FailActiveSend("creating destination folder for symlink", err)
+		jptm.ReportTransferDone()
+		return
+	}
+	
 	err = dl.CreateSymlink(jptm)
 	if err != nil {
 		jptm.FailActiveSend("creating destination symlink", err)
