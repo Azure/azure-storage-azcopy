@@ -110,7 +110,8 @@ func newSyncDestinationComparator(
 	}
 
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
-		orchestratorOptions.fromTo.From() == common.ELocation.Local()
+		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
+		 orchestratorOptions.fromTo.From() == common.ELocation.File())
 
 	return comp
 }
@@ -319,9 +320,6 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return true, false
 	}
 
-	//rosedinh: need to compare Last Modified Time
-	// If LMT changed but LWT and size are the same, return false, true
-
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
 		// assume it changed as we can't compare
 		return true, true
@@ -335,6 +333,27 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	if !f.orchestratorOptions.metaDataOnlySync {
 		// if metadata only sync is not enabled, return early
 		// and assume metadata change status to be same as data
+		return false, false
+	}
+
+	// Cloud-to-cloud (e.g. Azure Files -> Azure Files): ChangeTime is not
+	// reliably settable/preserved on the destination, so we cannot use it as the
+	// metadata-change signal. Instead we use LastModifiedTime (LMT), which the
+	// service bumps on any metadata/property change. At this point, size and
+	// LastWriteTime are already known to be equal, so if only the LMT differs we
+	// treat it as a metadata-only change.
+	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
+		if sourceObject.lastModifiedTime.IsZero() || destinationObject.lastModifiedTime.IsZero() {
+			// can't compare reliably, assume metadata changed
+			return false, true
+		}
+
+		//rosedinh: need to check if LMT of destination object is just set to the last sync time
+		// if so, we need to compare destination's LMT with last successful sync time
+		if sourceObject.lastModifiedTime.Compare(destinationObject.lastModifiedTime) != 0 {
+			return false, true
+		}
+
 		return false, false
 	}
 
