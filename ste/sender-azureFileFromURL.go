@@ -117,3 +117,81 @@ func (r *fileUploadRangeFromURLFixPolicy) Do(req *policy.Request) (*http.Respons
 	}
 	return req.Next()
 }
+
+func (s *urlToAzureFileCopier) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, s.jptm, id, func() {
+		info := s.jptm.Info()
+		var err error
+
+		if info.IsNFSCopy {
+			_, err = s.addNFSPermissionsToHeaders(info, s.getFileClient().URL())
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file permissions", err)
+				return
+			}
+
+			_, err = s.addNFSPropertiesToHeaders(info)
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file properties", err)
+				return
+			}
+
+		} else {
+			_, err = s.addPermissionsToHeaders(info, s.getFileClient().URL())
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file permissions", err)
+				return
+			}
+
+			_, err = s.addSMBPropertiesToHeaders(info)
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file properties", err)
+				return
+			}
+		}
+
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(s.ctx,
+			func() (interface{}, error) {
+				var resp interface{}
+				var err error
+				_, err = s.getFileClient().SetMetadata(s.ctx, &file.SetMetadataOptions{Metadata: s.metadataToApply})
+				if err != nil {
+					return nil, err
+				}
+				if s.jptm.Info().IsNFSCopy {
+					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
+						HTTPHeaders: &s.headersToApply,
+						NFSProperties: &file.NFSProperties{
+							CreationTime:  s.nfsPropertiesToApply.CreationTime,
+							LastWriteTime: s.nfsPropertiesToApply.LastWriteTime,
+							FileMode:      s.nfsPropertiesToApply.FileMode,
+							Owner:         s.nfsPropertiesToApply.Owner,
+							Group:         s.nfsPropertiesToApply.Group,
+						},
+					})
+					if err != nil {
+						s.jptm.FailActiveSend("Applying final attribute settings", err)
+						return nil, err
+					}
+				} else {
+					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
+						HTTPHeaders:   &s.headersToApply,
+						Permissions:   &s.permissionsToApply,
+						SMBProperties: &s.smbPropertiesToApply,
+					})
+					if err != nil {
+						s.jptm.FailActiveSend("Applying final attribute settings", err)
+						return nil, err
+					}
+				}
+				return resp, nil
+			},
+			s.fileOrDirClient,
+			s.jptm.GetForceIfReadOnly())
+
+		if err != nil {
+			s.jptm.FailActiveUpload("Applying final attribute settings", err)
+			return
+		}
+	})
+}
