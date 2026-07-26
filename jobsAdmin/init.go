@@ -379,6 +379,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			jppt := jpp.Transfer(t)
 			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 
+			// A hard link whose underlying inode is a symlink is transferred as a hard link but
+			// counted as a symlink (to match the kernel's find -type l).
+			isHardlinkedSymlink := jppt.EntityType == common.EEntityType.Hardlink() && jppt.HardlinkedSymlink
 			switch jppt.EntityType {
 			case common.EEntityType.File():
 				js.FileTransfers++
@@ -387,15 +390,19 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.EEntityType.Symlink():
 				js.SymlinkTransfers++
 			case common.EEntityType.Hardlink():
-				if jpp.HardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+				if isHardlinkedSymlink {
+					js.SymlinkTransfers++
+				} else if jpp.HardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 					js.HardlinksTransferCount++
 				} else if jpp.HardlinkHandling == common.EHardlinkHandlingType.Follow() {
 					js.HardlinksConvertedCount++
 				}
 			}
 
-			// check for all completed transfer to calculate the progress percentage at the end
-			isHardlink := jppt.EntityType == common.EEntityType.Hardlink()
+			// check for all completed transfer to calculate the progress percentage at the end.
+			// Hard-linked symlinks are treated as true hard links for transfer, but counted as symlinks.
+			isHardlink := jppt.EntityType == common.EEntityType.Hardlink() && !isHardlinkedSymlink
+			isSymlink := jppt.EntityType == common.EEntityType.Symlink() || isHardlinkedSymlink
 
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
@@ -409,6 +416,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.TransfersCompleted++
 				if isHardlink {
 					js.HardlinksCompleted++
+				}
+				if isSymlink {
+					js.SymlinksCompleted++
 				}
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 				js.TotalBytesExpected += uint64(jppt.SourceSize)

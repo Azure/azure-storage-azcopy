@@ -192,7 +192,8 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags, taregtHardlinkFilePath string) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption,
+	entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags, taregtHardlinkFilePath string) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -404,6 +405,10 @@ type JobPartPlanTransfer struct {
 	// atomicErrorCode should not be directly accessed anywhere except by transferStatus and setTransferStatus
 	atomicErrorCode              int32
 	TargetHardlinkFilePathLength int16 // Target hardlink file path at destination for NFS
+	// HardlinkedSymlink indicates that this hard link's underlying inode is a symbolic link.
+	// The transfer is still performed as a hard link, but it is counted as a symlink in the job
+	// summary so the totals match the kernel (find -type l).
+	HardlinkedSymlink bool
 }
 
 // TransferStatus returns the transfer's status

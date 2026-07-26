@@ -173,7 +173,7 @@ Final Job Status: %v
 			summary.FolderPropertyTransfers,
 			summary.SymlinkTransfers,
 			summary.TotalTransfers,
-			summary.TransfersCompleted-summary.FoldersCompleted-summary.HardlinksCompleted,
+			summary.TransfersCompleted-summary.FoldersCompleted-summary.HardlinksCompleted-summary.SymlinksCompleted,
 			summary.FoldersCompleted,
 			summary.TransfersFailed-summary.FoldersFailed-summary.HardlinksFailed,
 			summary.FoldersFailed,

@@ -263,6 +263,7 @@ type ListJobSummaryResponse struct {
 	SymlinkTransfers        uint32 `json:",string"`
 
 	FoldersCompleted   uint32 `json:",string"` // Files can be figured out by TransfersCompleted - FoldersCompleted
+	SymlinksCompleted  uint32 `json:",string"` // All symlink transfers that completed successfully (plain symlinks + hard-linked symlinks)
 	TransfersCompleted uint32 `json:",string"`
 	FoldersFailed      uint32 `json:",string"`
 	TransfersFailed    uint32 `json:",string"`
@@ -331,7 +332,12 @@ type TransferDetail struct {
 	Dst                string
 	IsFolderProperties bool
 	IsHardlink         bool
-	TransferStatus     TransferStatus
+	// IsSymlink is true when this transfer is a (preserved) symbolic link.
+	IsSymlink bool
+	// IsHardlinkedSymlink is true when this is a hard link whose underlying inode is a symlink.
+	// Such transfers are counted as symlinks (not hard links) in the job summary.
+	IsHardlinkedSymlink bool
+	TransferStatus      TransferStatus
 	TransferSize       uint64
 	ErrorCode          int32 `json:",string"`
 }

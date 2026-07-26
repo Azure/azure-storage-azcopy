@@ -331,6 +331,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			// ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
 			TargetHardlinkFilePathLength: int16(len(order.Transfers.List[t].TargetHardlinkFile)),
+			HardlinkedSymlink:            order.Transfers.List[t].HardlinkedSymlink,
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry
 

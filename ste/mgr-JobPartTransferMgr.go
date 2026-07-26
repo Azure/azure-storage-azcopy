@@ -150,6 +150,9 @@ type TransferInfo struct {
 	// Note: Used for NFS hardlinks only
 	TargetHardlinkFilePath string // used for hardlink transfers
 	HardlinkHandlingType   common.HardlinkHandlingType
+	// HardlinkedSymlink is true when this hard link's underlying inode is a symlink.
+	// The transfer is still performed as a hard link, but it is counted as a symlink.
+	HardlinkedSymlink bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -448,6 +451,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		SnapshotID:             snapshotID,
 		TargetHardlinkFilePath: targetHardlinkFilePath,
 		HardlinkHandlingType:   plan.HardlinkHandling,
+		HardlinkedSymlink:      plan.Transfer(jptm.transferIndex).HardlinkedSymlink,
 	}
 }
 
@@ -1011,10 +1015,12 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 	// Update Status Manager
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
-		Dst:                jptm.Info().Destination,
-		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
-		IsHardlink:         jptm.Info().EntityType == common.EEntityType.Hardlink(),
-		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
+		Dst:                 jptm.Info().Destination,
+		IsFolderProperties:  jptm.Info().IsFolderPropertiesTransfer(),
+		IsHardlink:          jptm.Info().EntityType == common.EEntityType.Hardlink(),
+		IsSymlink:           jptm.Info().EntityType == common.EEntityType.Symlink(),
+		IsHardlinkedSymlink: jptm.Info().HardlinkedSymlink,
+		TransferStatus:      jptm.jobPartPlanTransfer.TransferStatus(),
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
 	})
