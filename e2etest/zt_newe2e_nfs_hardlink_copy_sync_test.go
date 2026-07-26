@@ -3225,6 +3225,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 //   - target.txt transferred as regular file
 //   - sym_to_target.txt transferred as symlink (anchor for the inode)
 //   - hlink_to_sym.txt transferred as hardlink → sym_to_target.txt
+// Hardlinked symlinks are recorded in reporting metrics as symlink
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkToSymlink(svm *ScenarioVariationManager) {
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
