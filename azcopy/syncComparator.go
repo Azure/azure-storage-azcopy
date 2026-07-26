@@ -269,6 +269,11 @@ func (f *syncDestinationComparator) normalizeHardlinkTarget(sourceObj *traverser
 		sourceObj.EntityType != common.EEntityType.Hardlink() {
 		return
 	}
+	// Hard-linked symlinks already point at the traverser's symlink anchor; re-normalizing
+	// would break the link and miscount them as hardlinks (see ProcessPendingHardlinks).
+	if sourceObj.HardlinkedSymlink {
+		return
+	}
 	anchor, err := f.inodeStore.GetAnchor(sourceObj.Inode)
 	if err != nil {
 		if common.AzcopyScanningLogger != nil {
