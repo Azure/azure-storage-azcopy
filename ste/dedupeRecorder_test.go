@@ -23,13 +23,16 @@ package ste
 import (
 	"crypto/sha256"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 )
@@ -50,6 +53,552 @@ func hashedBlock(content string, offset, size int64) PlannedBlock {
 		CRC64:        crc,
 		SHA256:       sum,
 		HasHashes:    true,
+	}
+}
+
+func hashCPUBlock(size *int64, crc64Length, sha256Length int) *blockblob.Block {
+	return &blockblob.Block{
+		Size:   size,
+		Crc64:  make([]byte, crc64Length),
+		Sha256: make([]byte, sha256Length),
+	}
+}
+
+type hashCPUTestTransferManager struct {
+	*testJobPartTransferManager
+
+	logsMu sync.Mutex
+	logs   []string
+}
+
+func (m *hashCPUTestTransferManager) LogAtLevelForCurrentTransfer(_ common.LogLevel, message string) {
+	m.logsMu.Lock()
+	defer m.logsMu.Unlock()
+	m.logs = append(m.logs, message)
+}
+
+func (m *hashCPUTestTransferManager) logMessages() []string {
+	m.logsMu.Lock()
+	defer m.logsMu.Unlock()
+	return append([]string(nil), m.logs...)
+}
+
+func assertNoHashCPUMetricFields(t *testing.T, message string) {
+	t.Helper()
+	for _, field := range []string{
+		"crc64CpuTimeUs",
+		"sha256CpuTimeUs",
+		"hashCpuTimeUs",
+		"hashedBlocks",
+		"hashedBytes",
+		"hashCpuTimeResponses",
+		"crc64CpuTimeMissingResponses",
+		"sha256CpuTimeMissingResponses",
+		"requestIdMissingResponses",
+		"crc64CpuTimeInvalidResponses",
+		"sha256CpuTimeInvalidResponses",
+		"crc64CpuTimeOverflowed",
+		"sha256CpuTimeOverflowed",
+		"hashCpuTimeOverflowed",
+		"hashedBlocksOverflowed",
+		"hashedBytesOverflowed",
+		"hashMetricsOverflowed",
+	} {
+		assert.NotContains(t, message, field)
+	}
+}
+
+func TestHashCPUResponseDeltaCPUValues(t *testing.T) {
+	requestID := "  request-42  "
+	tests := []struct {
+		name               string
+		crc64              *int64
+		sha256             *int64
+		requestID          *string
+		wantCRC64          int64
+		wantSHA256         int64
+		wantCRC64Missing   bool
+		wantSHA256Missing  bool
+		wantCRC64Invalid   bool
+		wantSHA256Invalid  bool
+		wantTrimmedRequest string
+	}{
+		{
+			name:               "positive values and trimmed request ID",
+			crc64:              ptrTo(int64(7)),
+			sha256:             ptrTo(int64(11)),
+			requestID:          &requestID,
+			wantCRC64:          7,
+			wantSHA256:         11,
+			wantTrimmedRequest: "request-42",
+		},
+		{
+			name:   "explicit zero",
+			crc64:  ptrTo(int64(0)),
+			sha256: ptrTo(int64(0)),
+		},
+		{
+			name:             "crc64 nil",
+			sha256:           ptrTo(int64(5)),
+			wantSHA256:       5,
+			wantCRC64Missing: true,
+		},
+		{
+			name:              "sha256 nil",
+			crc64:             ptrTo(int64(3)),
+			wantCRC64:         3,
+			wantSHA256Missing: true,
+		},
+		{
+			name:              "both nil",
+			wantCRC64Missing:  true,
+			wantSHA256Missing: true,
+		},
+		{
+			name:              "synthetic negative pointers",
+			crc64:             ptrTo(int64(-1)),
+			sha256:            ptrTo(int64(-2)),
+			wantCRC64Invalid:  true,
+			wantSHA256Invalid: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			delta := hashCPUResponseDelta(blockblob.GetBlockListResponse{
+				CRC64CPUTimeUS:  test.crc64,
+				SHA256CPUTimeUS: test.sha256,
+				RequestID:       test.requestID,
+			})
+
+			assert.Equal(t, test.wantTrimmedRequest, delta.requestID)
+			assert.Equal(t, test.wantCRC64, delta.crc64CPUTimeUS)
+			assert.Equal(t, test.wantSHA256, delta.sha256CPUTimeUS)
+			assert.Equal(t, test.wantCRC64+test.wantSHA256, delta.hashCPUTimeUS)
+			assert.Equal(t, test.wantCRC64Missing, delta.crc64CPUTimeMissing)
+			assert.Equal(t, test.wantSHA256Missing, delta.sha256CPUTimeMissing)
+			assert.Equal(t, test.wantCRC64Invalid, delta.crc64CPUTimeInvalid)
+			assert.Equal(t, test.wantSHA256Invalid, delta.sha256CPUTimeInvalid)
+			assert.False(t, delta.hashCPUTimeOverflowed)
+		})
+	}
+}
+
+func TestHashCPUResponseDeltaCountsOnlyCompleteHashes(t *testing.T) {
+	response := blockblob.GetBlockListResponse{}
+	response.CommittedBlocks = []*blockblob.Block{
+		hashCPUBlock(ptrTo(int64(10)), 8, 32),
+		hashCPUBlock(ptrTo(int64(20)), 8, 32),
+		hashCPUBlock(nil, 8, 32),
+		hashCPUBlock(ptrTo(int64(0)), 8, 32),
+		hashCPUBlock(ptrTo(int64(-5)), 8, 32),
+		hashCPUBlock(ptrTo(int64(100)), 7, 32),
+		hashCPUBlock(ptrTo(int64(100)), 8, 31),
+		hashCPUBlock(ptrTo(int64(100)), 9, 32),
+		hashCPUBlock(ptrTo(int64(100)), 8, 33),
+		nil,
+	}
+
+	delta := hashCPUResponseDelta(response)
+
+	assert.EqualValues(t, 5, delta.hashedBlocks)
+	assert.EqualValues(t, 30, delta.hashedBytes)
+	assert.False(t, delta.hashedBlocksOverflowed)
+	assert.False(t, delta.hashedBytesOverflowed)
+}
+
+func TestHashCPUResponseDeltaSaturatesCombinedCPUAndHashedBytes(t *testing.T) {
+	response := blockblob.GetBlockListResponse{
+		CRC64CPUTimeUS:  ptrTo(int64(math.MaxInt64)),
+		SHA256CPUTimeUS: ptrTo(int64(1)),
+	}
+	response.CommittedBlocks = []*blockblob.Block{
+		hashCPUBlock(ptrTo(int64(math.MaxInt64)), 8, 32),
+		hashCPUBlock(ptrTo(int64(1)), 8, 32),
+	}
+
+	delta := hashCPUResponseDelta(response)
+
+	assert.EqualValues(t, math.MaxInt64, delta.hashCPUTimeUS)
+	assert.True(t, delta.hashCPUTimeOverflowed)
+	assert.EqualValues(t, 2, delta.hashedBlocks)
+	assert.EqualValues(t, math.MaxInt64, delta.hashedBytes)
+	assert.True(t, delta.hashedBytesOverflowed)
+}
+
+func TestHashCPURecordAccumulatesTotalsAndDiagnostics(t *testing.T) {
+	state := &dedupeHashCPUState{}
+	responses := []blockblob.GetBlockListResponse{
+		{
+			CRC64CPUTimeUS: ptrTo(int64(10)),
+			RequestID:      ptrTo("request-1"),
+			BlockList: blockblob.BlockList{CommittedBlocks: []*blockblob.Block{
+				hashCPUBlock(ptrTo(int64(100)), 8, 32),
+			}},
+		},
+		{
+			SHA256CPUTimeUS: ptrTo(int64(20)),
+			RequestID:       ptrTo("request-2"),
+			BlockList: blockblob.BlockList{CommittedBlocks: []*blockblob.Block{
+				hashCPUBlock(ptrTo(int64(50)), 8, 32),
+			}},
+		},
+		{
+			CRC64CPUTimeUS:  ptrTo(int64(-1)),
+			SHA256CPUTimeUS: ptrTo(int64(-2)),
+			RequestID:       ptrTo("   "),
+		},
+	}
+
+	for _, response := range responses {
+		_, accepted := state.record(hashCPUResponseDelta(response))
+		assert.True(t, accepted)
+	}
+
+	assert.Equal(t, dedupeHashCPUSnapshot{
+		crc64CPUTimeUS:                10,
+		sha256CPUTimeUS:               20,
+		hashCPUTimeUS:                 30,
+		hashedBlocks:                  2,
+		hashedBytes:                   150,
+		hashCPUTimeResponses:          3,
+		crc64CPUTimeMissingResponses:  1,
+		sha256CPUTimeMissingResponses: 1,
+		requestIDMissingResponses:     1,
+		crc64CPUTimeInvalidResponses:  1,
+		sha256CPUTimeInvalidResponses: 1,
+	}, state.snapshot())
+}
+
+func TestHashCPURecordRejectsDuplicateRequestID(t *testing.T) {
+	state := &dedupeHashCPUState{}
+	delta := dedupeHashCPUResponseDelta{
+		requestID:       "request-duplicate",
+		crc64CPUTimeUS:  2,
+		sha256CPUTimeUS: 3,
+		hashCPUTimeUS:   5,
+		hashedBlocks:    1,
+		hashedBytes:     64,
+	}
+
+	first, accepted := state.record(delta)
+	assert.True(t, accepted)
+	assert.EqualValues(t, 1, first.cumulative.hashCPUTimeResponses)
+
+	duplicate, accepted := state.record(delta)
+	assert.False(t, accepted)
+	assert.Equal(t, dedupeHashCPUEventSnapshot{}, duplicate)
+
+	snapshot := state.snapshot()
+	assert.EqualValues(t, 2, snapshot.crc64CPUTimeUS)
+	assert.EqualValues(t, 3, snapshot.sha256CPUTimeUS)
+	assert.EqualValues(t, 1, snapshot.hashedBlocks)
+	assert.EqualValues(t, 64, snapshot.hashedBytes)
+	assert.EqualValues(t, 1, snapshot.hashCPUTimeResponses)
+}
+
+func TestHashCPURecordConcurrentDuplicateRequestID(t *testing.T) {
+	const workers = 64
+	state := &dedupeHashCPUState{}
+	delta := dedupeHashCPUResponseDelta{
+		requestID:       "request-concurrent",
+		crc64CPUTimeUS:  13,
+		sha256CPUTimeUS: 17,
+		hashCPUTimeUS:   30,
+		hashedBlocks:    1,
+		hashedBytes:     128,
+	}
+	start := make(chan struct{})
+	results := make(chan bool, workers)
+	var waitGroup sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			_, accepted := state.record(delta)
+			results <- accepted
+		}()
+	}
+	close(start)
+	waitGroup.Wait()
+	close(results)
+
+	accepted := 0
+	for result := range results {
+		if result {
+			accepted++
+		}
+	}
+	assert.Equal(t, 1, accepted)
+	assert.Equal(t, dedupeHashCPUSnapshot{
+		crc64CPUTimeUS:       13,
+		sha256CPUTimeUS:      17,
+		hashCPUTimeUS:        30,
+		hashedBlocks:         1,
+		hashedBytes:          128,
+		hashCPUTimeResponses: 1,
+	}, state.snapshot())
+}
+
+func TestHashCPURecordAcceptsEveryMissingRequestID(t *testing.T) {
+	state := &dedupeHashCPUState{}
+	requestIDs := []*string{nil, ptrTo(""), ptrTo(" \t ")}
+
+	for _, requestID := range requestIDs {
+		_, accepted := state.record(hashCPUResponseDelta(blockblob.GetBlockListResponse{
+			CRC64CPUTimeUS:  ptrTo(int64(0)),
+			SHA256CPUTimeUS: ptrTo(int64(0)),
+			RequestID:       requestID,
+		}))
+		assert.True(t, accepted)
+	}
+
+	snapshot := state.snapshot()
+	assert.EqualValues(t, 3, snapshot.hashCPUTimeResponses)
+	assert.EqualValues(t, 3, snapshot.requestIDMissingResponses)
+	assert.Zero(t, snapshot.crc64CPUTimeMissingResponses)
+	assert.Zero(t, snapshot.sha256CPUTimeMissingResponses)
+}
+
+func TestHashCPURecordSaturationAndStickyOverflow(t *testing.T) {
+	t.Run("components", func(t *testing.T) {
+		state := &dedupeHashCPUState{
+			crc64CPUTimeUS:  math.MaxInt64,
+			sha256CPUTimeUS: math.MaxInt64,
+		}
+		_, accepted := state.record(dedupeHashCPUResponseDelta{
+			requestID:       "component-overflow",
+			crc64CPUTimeUS:  1,
+			sha256CPUTimeUS: 1,
+			hashCPUTimeUS:   2,
+		})
+		assert.True(t, accepted)
+
+		snapshot := state.snapshot()
+		assert.EqualValues(t, math.MaxInt64, snapshot.crc64CPUTimeUS)
+		assert.EqualValues(t, math.MaxInt64, snapshot.sha256CPUTimeUS)
+		assert.EqualValues(t, math.MaxInt64, snapshot.hashCPUTimeUS)
+		assert.True(t, snapshot.crc64CPUTimeOverflowed)
+		assert.True(t, snapshot.sha256CPUTimeOverflowed)
+		assert.True(t, snapshot.hashCPUTimeOverflowed)
+		assert.True(t, snapshot.hashMetricsOverflowed)
+
+		_, accepted = state.record(dedupeHashCPUResponseDelta{requestID: "after-component-overflow"})
+		assert.True(t, accepted)
+		snapshot = state.snapshot()
+		assert.True(t, snapshot.crc64CPUTimeOverflowed)
+		assert.True(t, snapshot.sha256CPUTimeOverflowed)
+		assert.True(t, snapshot.hashCPUTimeOverflowed)
+		assert.True(t, snapshot.hashMetricsOverflowed)
+	})
+
+	t.Run("combined", func(t *testing.T) {
+		state := &dedupeHashCPUState{
+			crc64CPUTimeUS:  math.MaxInt64 - 1,
+			sha256CPUTimeUS: 1,
+		}
+		_, accepted := state.record(dedupeHashCPUResponseDelta{
+			requestID:       "combined-overflow",
+			sha256CPUTimeUS: 1,
+			hashCPUTimeUS:   1,
+		})
+		assert.True(t, accepted)
+
+		snapshot := state.snapshot()
+		assert.False(t, snapshot.crc64CPUTimeOverflowed)
+		assert.False(t, snapshot.sha256CPUTimeOverflowed)
+		assert.True(t, snapshot.hashCPUTimeOverflowed)
+		assert.EqualValues(t, math.MaxInt64, snapshot.hashCPUTimeUS)
+		assert.True(t, snapshot.hashMetricsOverflowed)
+	})
+
+	t.Run("block and byte totals", func(t *testing.T) {
+		state := &dedupeHashCPUState{
+			hashedBlocks: math.MaxInt64,
+			hashedBytes:  math.MaxInt64,
+		}
+		_, accepted := state.record(dedupeHashCPUResponseDelta{
+			requestID:    "hash-total-overflow",
+			hashedBlocks: 1,
+			hashedBytes:  1,
+		})
+		assert.True(t, accepted)
+
+		snapshot := state.snapshot()
+		assert.EqualValues(t, math.MaxInt64, snapshot.hashedBlocks)
+		assert.EqualValues(t, math.MaxInt64, snapshot.hashedBytes)
+		assert.True(t, snapshot.hashedBlocksOverflowed)
+		assert.True(t, snapshot.hashedBytesOverflowed)
+		assert.True(t, snapshot.hashMetricsOverflowed)
+
+		_, accepted = state.record(dedupeHashCPUResponseDelta{requestID: "after-hash-total-overflow"})
+		assert.True(t, accepted)
+		snapshot = state.snapshot()
+		assert.True(t, snapshot.hashedBlocksOverflowed)
+		assert.True(t, snapshot.hashedBytesOverflowed)
+		assert.True(t, snapshot.hashMetricsOverflowed)
+	})
+
+	t.Run("diagnostic counters", func(t *testing.T) {
+		state := &dedupeHashCPUState{
+			hashCPUTimeResponses:          math.MaxInt64,
+			crc64CPUTimeMissingResponses:  math.MaxInt64,
+			sha256CPUTimeMissingResponses: math.MaxInt64,
+			requestIDMissingResponses:     math.MaxInt64,
+			crc64CPUTimeInvalidResponses:  math.MaxInt64,
+			sha256CPUTimeInvalidResponses: math.MaxInt64,
+		}
+		_, accepted := state.record(dedupeHashCPUResponseDelta{
+			crc64CPUTimeMissing:  true,
+			sha256CPUTimeMissing: true,
+			crc64CPUTimeInvalid:  true,
+			sha256CPUTimeInvalid: true,
+		})
+		assert.True(t, accepted)
+
+		snapshot := state.snapshot()
+		assert.EqualValues(t, math.MaxInt64, snapshot.hashCPUTimeResponses)
+		assert.EqualValues(t, math.MaxInt64, snapshot.crc64CPUTimeMissingResponses)
+		assert.EqualValues(t, math.MaxInt64, snapshot.sha256CPUTimeMissingResponses)
+		assert.EqualValues(t, math.MaxInt64, snapshot.requestIDMissingResponses)
+		assert.EqualValues(t, math.MaxInt64, snapshot.crc64CPUTimeInvalidResponses)
+		assert.EqualValues(t, math.MaxInt64, snapshot.sha256CPUTimeInvalidResponses)
+		assert.True(t, snapshot.hashMetricsOverflowed)
+
+		_, accepted = state.record(dedupeHashCPUResponseDelta{requestID: "after-diagnostic-overflow"})
+		assert.True(t, accepted)
+		assert.True(t, state.snapshot().hashMetricsOverflowed)
+	})
+}
+
+func TestHashCPUTimeMessageContainsExactDeltaAndCumulativeFields(t *testing.T) {
+	response := blockblob.GetBlockListResponse{
+		CRC64CPUTimeUS:  ptrTo(int64(4)),
+		SHA256CPUTimeUS: ptrTo(int64(6)),
+		RequestID:       ptrTo("  request-event  "),
+		BlockList: blockblob.BlockList{CommittedBlocks: []*blockblob.Block{
+			hashCPUBlock(ptrTo(int64(9)), 8, 32),
+			hashCPUBlock(nil, 8, 32),
+		}},
+	}
+	state := &dedupeHashCPUState{}
+	snapshot, accepted := state.record(hashCPUResponseDelta(response))
+	assert.True(t, accepted)
+
+	jobID := common.NewJobID()
+	info := &TransferInfo{
+		JobID:       jobID,
+		DstFilePath: "dir/file.bin",
+		Destination: "https://acct.blob.core.windows.net/c/file.bin?sig=secret",
+	}
+	expectedFields := "requestId=\"request-event\" crc64CpuTimeUsDelta=4 " +
+		"sha256CpuTimeUsDelta=6 hashCpuTimeUsDelta=10 hashedBlocksDelta=2 " +
+		"hashedBytesDelta=9 crc64CpuTimeUs=4 sha256CpuTimeUs=6 hashCpuTimeUs=10 " +
+		"hashedBlocks=2 hashedBytes=9 hashCpuTimeResponses=1 " +
+		"crc64CpuTimeMissingResponses=0 sha256CpuTimeMissingResponses=0 " +
+		"requestIdMissingResponses=0 crc64CpuTimeInvalidResponses=0 " +
+		"sha256CpuTimeInvalidResponses=0 crc64CpuTimeOverflowed=false " +
+		"sha256CpuTimeOverflowed=false hashCpuTimeOverflowed=false " +
+		"hashedBlocksOverflowed=false hashedBytesOverflowed=false hashMetricsOverflowed=false"
+	expected := fmt.Sprintf(
+		"%s event=hash_cpu_time mode=enforce jobId=%s file=%q destination=%q %s",
+		dedupeProgressPrefix,
+		jobID.String(),
+		info.DstFilePath,
+		"https://acct.blob.core.windows.net/c/file.bin",
+		expectedFields,
+	)
+
+	assert.Equal(t, expectedFields, snapshot.fields())
+	assert.Equal(t, expected, dedupeHashCPUTimeMessage(dedupeActEnforce, info, snapshot))
+}
+
+func TestHashCPUEmitterScopesModesAndAcceptedResponses(t *testing.T) {
+	oldQueue := dedupeProgressQueue
+	queue := make(chan dedupeProgressEntry, 8)
+	dedupeProgressQueue = queue
+	t.Cleanup(func() {
+		dedupeProgressQueue = oldQueue
+	})
+
+	jobID := common.NewJobID()
+	t.Cleanup(func() {
+		clearDedupeStateForJob(jobID)
+	})
+	manager := &hashCPUTestTransferManager{
+		testJobPartTransferManager: &testJobPartTransferManager{
+			info: &TransferInfo{
+				JobID:       jobID,
+				DstFilePath: "empty-block-list.bin",
+				Destination: "https://acct.blob.core.windows.net/c/empty-block-list.bin",
+			},
+		},
+	}
+	state := dedupeStateForJob(jobID)
+	response := blockblob.GetBlockListResponse{
+		CRC64CPUTimeUS:  ptrTo(int64(7)),
+		SHA256CPUTimeUS: ptrTo(int64(11)),
+		RequestID:       ptrTo("request-empty-list"),
+	}
+
+	emitHashCPUTime(manager, dedupeActOff, response)
+	emitHashCPUTime(manager, dedupeActShadow, response)
+	assert.Equal(t, dedupeHashCPUSnapshot{}, state.hashCPU.snapshot())
+	assert.Empty(t, queue)
+	assert.Empty(t, manager.logMessages())
+
+	emitHashCPUTime(manager, dedupeActEnforce, response)
+	snapshot := state.hashCPU.snapshot()
+	assert.EqualValues(t, 7, snapshot.crc64CPUTimeUS)
+	assert.EqualValues(t, 11, snapshot.sha256CPUTimeUS)
+	assert.EqualValues(t, 18, snapshot.hashCPUTimeUS)
+	assert.Zero(t, snapshot.hashedBlocks)
+	assert.Zero(t, snapshot.hashedBytes)
+	assert.EqualValues(t, 1, snapshot.hashCPUTimeResponses)
+	assert.Len(t, queue, 1)
+	assert.Len(t, manager.logMessages(), 1)
+	first := <-queue
+	assert.Contains(t, first.message, "event=hash_cpu_time")
+	assert.Contains(t, first.message, `requestId="request-empty-list"`)
+
+	emitHashCPUTime(manager, dedupeActEnforce, response)
+	assert.Empty(t, queue)
+	assert.Len(t, manager.logMessages(), 1)
+	assert.EqualValues(t, 1, state.hashCPU.snapshot().hashCPUTimeResponses)
+
+	secondResponse := response
+	secondResponse.RequestID = ptrTo("request-empty-list-2")
+	emitHashCPUTime(manager, dedupeActEnforce, secondResponse)
+	assert.Len(t, queue, 1)
+	assert.Len(t, manager.logMessages(), 2)
+	assert.EqualValues(t, 2, state.hashCPU.snapshot().hashCPUTimeResponses)
+}
+
+func TestHashCPUFieldsAreIsolatedFromGenericProgressEvents(t *testing.T) {
+	info := &TransferInfo{
+		JobID:       common.NewJobID(),
+		DstFilePath: "file.bin",
+		Destination: "https://acct.blob.core.windows.net/c/file.bin",
+	}
+	snapshot := dedupeProgressSnapshot{
+		referencedBlocks:   1,
+		referencedBytes:    64,
+		sourceStagedBlocks: 2,
+		sourceStagedBytes:  128,
+	}
+
+	for _, event := range []string{"target_reuse", "small_file_transfer_complete"} {
+		message := dedupeProgressMessage(
+			event,
+			dedupeActEnforce,
+			info,
+			`operation="unrelated" requestId="service-request"`,
+			snapshot,
+		)
+		assert.Contains(t, message, "event="+event)
+		assertNoHashCPUMetricFields(t, message)
 	}
 }
 

@@ -23,6 +23,7 @@ package ste
 import (
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -32,6 +33,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -43,6 +45,7 @@ import (
 // dedupeJobState holds a single job's dedupe tables plus cumulative would-be-hit counters.
 type dedupeJobState struct {
 	smallProgressMu sync.Mutex
+	hashCPU         dedupeHashCPUState
 
 	// table is the Phase 1 measurement table: blocks are recorded pre-write purely to count the
 	// would-be-hit rate, so it must NOT be used to decide a real reference (the content may not yet
@@ -159,6 +162,289 @@ func (s *dedupeJobState) addSmallFileResultLocked(status common.TransferStatus, 
 	default:
 		return ""
 	}
+}
+
+type dedupeHashCPUState struct {
+	mu sync.Mutex
+
+	seenRequestIDs map[string]struct{}
+
+	crc64CPUTimeUS                int64
+	sha256CPUTimeUS               int64
+	hashedBlocks                  int64
+	hashedBytes                   int64
+	hashCPUTimeResponses          int64
+	crc64CPUTimeMissingResponses  int64
+	sha256CPUTimeMissingResponses int64
+	requestIDMissingResponses     int64
+	crc64CPUTimeInvalidResponses  int64
+	sha256CPUTimeInvalidResponses int64
+	crc64CPUTimeOverflowed        bool
+	sha256CPUTimeOverflowed       bool
+	hashCPUTimeOverflowed         bool
+	hashedBlocksOverflowed        bool
+	hashedBytesOverflowed         bool
+	hashMetricsOverflowed         bool
+}
+
+type dedupeHashCPUResponseDelta struct {
+	requestID string
+
+	crc64CPUTimeUS         int64
+	sha256CPUTimeUS        int64
+	hashCPUTimeUS          int64
+	hashedBlocks           int64
+	hashedBytes            int64
+	crc64CPUTimeMissing    bool
+	sha256CPUTimeMissing   bool
+	crc64CPUTimeInvalid    bool
+	sha256CPUTimeInvalid   bool
+	hashCPUTimeOverflowed  bool
+	hashedBlocksOverflowed bool
+	hashedBytesOverflowed  bool
+}
+
+type dedupeHashCPUSnapshot struct {
+	crc64CPUTimeUS                int64
+	sha256CPUTimeUS               int64
+	hashCPUTimeUS                 int64
+	hashedBlocks                  int64
+	hashedBytes                   int64
+	hashCPUTimeResponses          int64
+	crc64CPUTimeMissingResponses  int64
+	sha256CPUTimeMissingResponses int64
+	requestIDMissingResponses     int64
+	crc64CPUTimeInvalidResponses  int64
+	sha256CPUTimeInvalidResponses int64
+	crc64CPUTimeOverflowed        bool
+	sha256CPUTimeOverflowed       bool
+	hashCPUTimeOverflowed         bool
+	hashedBlocksOverflowed        bool
+	hashedBytesOverflowed         bool
+	hashMetricsOverflowed         bool
+}
+
+type dedupeHashCPUEventSnapshot struct {
+	delta      dedupeHashCPUResponseDelta
+	cumulative dedupeHashCPUSnapshot
+}
+
+func satAddNonNegative(a, b int64) (sum int64, overflow bool) {
+	if a < 0 || b < 0 {
+		return math.MaxInt64, true
+	}
+	if a > math.MaxInt64-b {
+		return math.MaxInt64, true
+	}
+	return a + b, false
+}
+
+func hashCPUTimeDelta(value *int64) (delta int64, missing bool, invalid bool) {
+	if value == nil {
+		return 0, true, false
+	}
+	if *value < 0 {
+		return 0, false, true
+	}
+	return *value, false, false
+}
+
+func hashCPUResponseDelta(resp blockblob.GetBlockListResponse) dedupeHashCPUResponseDelta {
+	delta := dedupeHashCPUResponseDelta{}
+	if resp.RequestID != nil {
+		delta.requestID = strings.TrimSpace(*resp.RequestID)
+	}
+	delta.crc64CPUTimeUS, delta.crc64CPUTimeMissing, delta.crc64CPUTimeInvalid =
+		hashCPUTimeDelta(resp.CRC64CPUTimeUS)
+	delta.sha256CPUTimeUS, delta.sha256CPUTimeMissing, delta.sha256CPUTimeInvalid =
+		hashCPUTimeDelta(resp.SHA256CPUTimeUS)
+	delta.hashCPUTimeUS, delta.hashCPUTimeOverflowed = satAddNonNegative(
+		delta.crc64CPUTimeUS,
+		delta.sha256CPUTimeUS,
+	)
+
+	for _, block := range resp.CommittedBlocks {
+		if block == nil || len(block.Crc64) != 8 || len(block.Sha256) != 32 {
+			continue
+		}
+
+		var overflow bool
+		delta.hashedBlocks, overflow = satAddNonNegative(delta.hashedBlocks, 1)
+		delta.hashedBlocksOverflowed = delta.hashedBlocksOverflowed || overflow
+		if block.Size == nil || *block.Size <= 0 {
+			continue
+		}
+		delta.hashedBytes, overflow = satAddNonNegative(delta.hashedBytes, *block.Size)
+		delta.hashedBytesOverflowed = delta.hashedBytesOverflowed || overflow
+	}
+	return delta
+}
+
+func (s *dedupeHashCPUState) record(delta dedupeHashCPUResponseDelta) (dedupeHashCPUEventSnapshot, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if delta.requestID != "" {
+		if _, duplicate := s.seenRequestIDs[delta.requestID]; duplicate {
+			return dedupeHashCPUEventSnapshot{}, false
+		}
+		if s.seenRequestIDs == nil {
+			s.seenRequestIDs = make(map[string]struct{})
+		}
+		s.seenRequestIDs[delta.requestID] = struct{}{}
+	}
+
+	metricsOverflowed := delta.hashCPUTimeOverflowed ||
+		delta.hashedBlocksOverflowed ||
+		delta.hashedBytesOverflowed
+
+	var overflow bool
+	s.crc64CPUTimeUS, overflow = satAddNonNegative(s.crc64CPUTimeUS, delta.crc64CPUTimeUS)
+	s.crc64CPUTimeOverflowed = s.crc64CPUTimeOverflowed || overflow
+	metricsOverflowed = metricsOverflowed || overflow
+
+	s.sha256CPUTimeUS, overflow = satAddNonNegative(s.sha256CPUTimeUS, delta.sha256CPUTimeUS)
+	s.sha256CPUTimeOverflowed = s.sha256CPUTimeOverflowed || overflow
+	metricsOverflowed = metricsOverflowed || overflow
+
+	s.hashedBlocks, overflow = satAddNonNegative(s.hashedBlocks, delta.hashedBlocks)
+	s.hashedBlocksOverflowed = s.hashedBlocksOverflowed || delta.hashedBlocksOverflowed || overflow
+	metricsOverflowed = metricsOverflowed || overflow
+
+	s.hashedBytes, overflow = satAddNonNegative(s.hashedBytes, delta.hashedBytes)
+	s.hashedBytesOverflowed = s.hashedBytesOverflowed || delta.hashedBytesOverflowed || overflow
+	metricsOverflowed = metricsOverflowed || overflow
+
+	s.hashCPUTimeResponses, overflow = satAddNonNegative(s.hashCPUTimeResponses, 1)
+	metricsOverflowed = metricsOverflowed || overflow
+
+	if delta.crc64CPUTimeMissing {
+		s.crc64CPUTimeMissingResponses, overflow =
+			satAddNonNegative(s.crc64CPUTimeMissingResponses, 1)
+		metricsOverflowed = metricsOverflowed || overflow
+	}
+	if delta.sha256CPUTimeMissing {
+		s.sha256CPUTimeMissingResponses, overflow =
+			satAddNonNegative(s.sha256CPUTimeMissingResponses, 1)
+		metricsOverflowed = metricsOverflowed || overflow
+	}
+	if delta.requestID == "" {
+		s.requestIDMissingResponses, overflow =
+			satAddNonNegative(s.requestIDMissingResponses, 1)
+		metricsOverflowed = metricsOverflowed || overflow
+	}
+	if delta.crc64CPUTimeInvalid {
+		s.crc64CPUTimeInvalidResponses, overflow =
+			satAddNonNegative(s.crc64CPUTimeInvalidResponses, 1)
+		metricsOverflowed = metricsOverflowed || overflow
+	}
+	if delta.sha256CPUTimeInvalid {
+		s.sha256CPUTimeInvalidResponses, overflow =
+			satAddNonNegative(s.sha256CPUTimeInvalidResponses, 1)
+		metricsOverflowed = metricsOverflowed || overflow
+	}
+
+	_, overflow = satAddNonNegative(s.crc64CPUTimeUS, s.sha256CPUTimeUS)
+	s.hashCPUTimeOverflowed = s.hashCPUTimeOverflowed ||
+		delta.hashCPUTimeOverflowed ||
+		s.crc64CPUTimeOverflowed ||
+		s.sha256CPUTimeOverflowed ||
+		overflow
+	metricsOverflowed = metricsOverflowed ||
+		s.crc64CPUTimeOverflowed ||
+		s.sha256CPUTimeOverflowed ||
+		s.hashCPUTimeOverflowed ||
+		s.hashedBlocksOverflowed ||
+		s.hashedBytesOverflowed
+	s.hashMetricsOverflowed = s.hashMetricsOverflowed || metricsOverflowed
+
+	return dedupeHashCPUEventSnapshot{
+		delta:      delta,
+		cumulative: s.snapshotLocked(),
+	}, true
+}
+
+func (s *dedupeHashCPUState) snapshot() dedupeHashCPUSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.snapshotLocked()
+}
+
+func (s *dedupeHashCPUState) snapshotLocked() dedupeHashCPUSnapshot {
+	hashCPUTimeUS, hashCPUTimeOverflowed :=
+		satAddNonNegative(s.crc64CPUTimeUS, s.sha256CPUTimeUS)
+	hashCPUTimeOverflowed = hashCPUTimeOverflowed ||
+		s.crc64CPUTimeOverflowed ||
+		s.sha256CPUTimeOverflowed ||
+		s.hashCPUTimeOverflowed
+
+	return dedupeHashCPUSnapshot{
+		crc64CPUTimeUS:                s.crc64CPUTimeUS,
+		sha256CPUTimeUS:               s.sha256CPUTimeUS,
+		hashCPUTimeUS:                 hashCPUTimeUS,
+		hashedBlocks:                  s.hashedBlocks,
+		hashedBytes:                   s.hashedBytes,
+		hashCPUTimeResponses:          s.hashCPUTimeResponses,
+		crc64CPUTimeMissingResponses:  s.crc64CPUTimeMissingResponses,
+		sha256CPUTimeMissingResponses: s.sha256CPUTimeMissingResponses,
+		requestIDMissingResponses:     s.requestIDMissingResponses,
+		crc64CPUTimeInvalidResponses:  s.crc64CPUTimeInvalidResponses,
+		sha256CPUTimeInvalidResponses: s.sha256CPUTimeInvalidResponses,
+		crc64CPUTimeOverflowed:        s.crc64CPUTimeOverflowed,
+		sha256CPUTimeOverflowed:       s.sha256CPUTimeOverflowed,
+		hashCPUTimeOverflowed:         hashCPUTimeOverflowed,
+		hashedBlocksOverflowed:        s.hashedBlocksOverflowed,
+		hashedBytesOverflowed:         s.hashedBytesOverflowed,
+		hashMetricsOverflowed: s.hashMetricsOverflowed ||
+			s.crc64CPUTimeOverflowed ||
+			s.sha256CPUTimeOverflowed ||
+			hashCPUTimeOverflowed ||
+			s.hashedBlocksOverflowed ||
+			s.hashedBytesOverflowed,
+	}
+}
+
+func (s dedupeHashCPUSnapshot) fields() string {
+	return fmt.Sprintf(
+		"crc64CpuTimeUs=%d sha256CpuTimeUs=%d hashCpuTimeUs=%d hashedBlocks=%d "+
+			"hashedBytes=%d hashCpuTimeResponses=%d crc64CpuTimeMissingResponses=%d "+
+			"sha256CpuTimeMissingResponses=%d requestIdMissingResponses=%d "+
+			"crc64CpuTimeInvalidResponses=%d sha256CpuTimeInvalidResponses=%d "+
+			"crc64CpuTimeOverflowed=%t sha256CpuTimeOverflowed=%t "+
+			"hashCpuTimeOverflowed=%t hashedBlocksOverflowed=%t "+
+			"hashedBytesOverflowed=%t hashMetricsOverflowed=%t",
+		s.crc64CPUTimeUS,
+		s.sha256CPUTimeUS,
+		s.hashCPUTimeUS,
+		s.hashedBlocks,
+		s.hashedBytes,
+		s.hashCPUTimeResponses,
+		s.crc64CPUTimeMissingResponses,
+		s.sha256CPUTimeMissingResponses,
+		s.requestIDMissingResponses,
+		s.crc64CPUTimeInvalidResponses,
+		s.sha256CPUTimeInvalidResponses,
+		s.crc64CPUTimeOverflowed,
+		s.sha256CPUTimeOverflowed,
+		s.hashCPUTimeOverflowed,
+		s.hashedBlocksOverflowed,
+		s.hashedBytesOverflowed,
+		s.hashMetricsOverflowed,
+	)
+}
+
+func (s dedupeHashCPUEventSnapshot) fields() string {
+	return fmt.Sprintf(
+		"requestId=%q crc64CpuTimeUsDelta=%d sha256CpuTimeUsDelta=%d "+
+			"hashCpuTimeUsDelta=%d hashedBlocksDelta=%d hashedBytesDelta=%d %s",
+		s.delta.requestID,
+		s.delta.crc64CPUTimeUS,
+		s.delta.sha256CPUTimeUS,
+		s.delta.hashCPUTimeUS,
+		s.delta.hashedBlocks,
+		s.delta.hashedBytes,
+		s.cumulative.fields(),
+	)
 }
 
 type dedupeProgressSnapshot struct {
@@ -455,6 +741,39 @@ func writeFinalDedupeProgress(jobID common.JobID, message string) error {
 func emitDedupeProgress(jptm IJobPartTransferMgr, message string) {
 	jptm.LogAtLevelForCurrentTransfer(common.LogDebug, message)
 	enqueueDedupeProgress(jptm.Info().JobID, message)
+}
+
+func dedupeHashCPUTimeMessage(
+	mode dedupeActMode,
+	info *TransferInfo,
+	snapshot dedupeHashCPUEventSnapshot,
+) string {
+	return fmt.Sprintf(
+		"%s event=hash_cpu_time mode=%s jobId=%s file=%q destination=%q %s",
+		dedupeProgressPrefix,
+		mode,
+		info.JobID.String(),
+		info.DstFilePath,
+		sanitizedDestForDedupe(info.Destination),
+		snapshot.fields(),
+	)
+}
+
+func emitHashCPUTime(
+	jptm IJobPartTransferMgr,
+	mode dedupeActMode,
+	resp blockblob.GetBlockListResponse,
+) {
+	if mode != dedupeActEnforce {
+		return
+	}
+
+	st := dedupeStateForJob(jptm.Info().JobID)
+	snapshot, accepted := st.hashCPU.record(hashCPUResponseDelta(resp))
+	if !accepted {
+		return
+	}
+	emitDedupeProgress(jptm, dedupeHashCPUTimeMessage(mode, jptm.Info(), snapshot))
 }
 
 func isSmallFileProgressTransfer(jptm IJobPartTransferMgr) bool {
@@ -809,7 +1128,7 @@ func finalizeDedupeJob(
 		log(common.LogInfo, dedupeJobSummaryMessage(mode, st))
 		message := fmt.Sprintf(
 			"%s event=job_complete mode=%s jobId=%s status=%q transfersCompleted=%d "+
-				"transfersSkipped=%d transfersFailed=%d %s",
+				"transfersSkipped=%d transfersFailed=%d %s %s",
 			dedupeProgressPrefix,
 			mode,
 			jobID.String(),
@@ -817,7 +1136,8 @@ func finalizeDedupeJob(
 			transfersCompleted,
 			transfersSkipped,
 			transfersFailed,
-			st.progressSnapshot().fields(mode))
+			st.progressSnapshot().fields(mode),
+			st.hashCPU.snapshot().fields())
 		if err := writeFinalDedupeProgress(jobID, message); err != nil {
 			log(common.LogError,
 				dedupeProgressPrefix+" event=output_error reason="+fmt.Sprintf("%q", err.Error()))

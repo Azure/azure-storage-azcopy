@@ -126,15 +126,23 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 		return
 	}
 
-	plan, err := fetchSourceGridPlan(jptm)
+	resp, err := getSourceBlockList(jptm)
 	if err != nil {
 		preflightFailed("source_block_list", err.Error())
 		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "dedupe-act: GetBlockList failed, using uniform grid: "+err.Error())
 		return
 	}
-	if plan == nil || len(plan.Blocks) == 0 {
+	emitHashCPUTime(jptm, mode, resp)
+
+	if len(resp.CommittedBlocks) == 0 {
 		preflightFailed("source_block_list", "source has no committed named blocks")
 		return // single-PutBlob or empty source: no committed blocks to align to
+	}
+	plan, err := buildSourceGridPlan(rawCommittedBlocksFromResponse(resp))
+	if err != nil {
+		preflightFailed("source_block_list", err.Error())
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "dedupe-act: GetBlockList failed, using uniform grid: "+err.Error())
+		return
 	}
 	if plan.TotalSize != info.SourceSize {
 		preflightFailed(
