@@ -67,6 +67,26 @@ func NewSyncEnumeratorOptions(errorChannelSize int, options *SyncOrchestratorOpt
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
 func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOptions *SyncEnumeratorOptions) (enumerator *syncEnumerator, err error) {
+	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
+		return nil, fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
+		return nil, fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
+	if cca.fromTo.IsUpload() || cca.fromTo.IsS2S() {
+		// Solve for the destination, and potentially, the source as an auxiliary token.
+	} else if cca.fromTo.IsDownload() {
+		// it's a download, so,
+	} else {
+		panic("auth resolution scheme not defined for transfer fromto " + cca.fromTo.String())
+	}
+
+	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
+	if err != nil {
+		return nil, err
+	}
 
 	if enumeratorOptions == nil {
 		enumeratorOptions = NewSyncDefaultEnumeratorOptions()

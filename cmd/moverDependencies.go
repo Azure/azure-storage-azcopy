@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -325,8 +324,13 @@ func CreateClientOptionsExt(
 // RawMoverSyncCmdArgs - Represents the raw command line arguments for the mover sync command.
 // This struct is a subset of rawSyncCmdArgs, specifically tailored for the mover sync command.
 type RawMoverSyncCmdArgs struct {
-	Src                     string
-	Dst                     string
+	Src string
+	Dst string
+
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
+
 	FromTo                  string
 	Recursive               bool
 	ExcludeRegex            string
@@ -351,8 +355,13 @@ type RawMoverSyncCmdArgs struct {
 }
 
 type SyncCmdArgsInput struct {
-	Src                     string
-	Dst                     string
+	Src string
+	Dst string
+
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
+
 	FromTo                  string
 	Recursive               bool
 	ExcludeRegex            string
@@ -374,6 +383,8 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 	raw := rawSyncCmdArgs{
 		src:                     args.Src,
 		dst:                     args.Dst,
+		SrcCredName:             args.SrcCredName,
+		DstCredName:             args.DstCredName,
 		fromTo:                  args.FromTo,
 		recursive:               args.Recursive,
 		excludeRegex:            args.ExcludeRegex,
@@ -399,8 +410,12 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 	return raw.cook()
 }
 
-func (cca *cookedSyncCmdArgs) SetCredentialInfo(ctx context.Context) error {
-	return cca.setCredentialInfo(ctx)
+func InitializeAzCopyFolders(
+	logPathFolder,
+	jobPlanFolder,
+	appPathFolder string) (string, string) {
+	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders(logPathFolder, jobPlanFolder, appPathFolder)
+	return azcopyLogPathFolder, common.AzcopyJobPlanFolder
 }
 
 // ToStringMap returns a map representation of cookedSyncCmdArgs
