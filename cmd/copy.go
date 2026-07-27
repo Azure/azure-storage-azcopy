@@ -58,6 +58,9 @@ type rawCopyCmdArgs struct {
 	src    string
 	dst    string
 	fromTo string
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
 	// blobUrlForRedirection string
 
 	// new include/exclude only apply to file names
@@ -244,6 +247,9 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		s2sSourceChangeValidation:        raw.s2sSourceChangeValidation,
 		dryrunMode:                       raw.dryrun,
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
+
+		SrcCredName: raw.SrcCredName,
+		DstCredName: raw.DstCredName,
 	}
 
 	// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
@@ -614,6 +620,10 @@ type CookedCopyCmdArgs struct {
 	Destination common.ResourceString
 	FromTo      common.FromTo
 
+	// named credentials (resolved from --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
+
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
 	// includePathPatterns are handled like a list-of-files. Do not panic. This is not a bug that it is not present here.
@@ -825,7 +835,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: SourceCredentialName,
+		PreferredTokenName: cca.SrcCredName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
@@ -910,7 +920,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		Context:            ctx,
 		CanBePublic:        false,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: DestCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
@@ -998,7 +1008,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Context:            ctx,
 			CanBePublic:        false, // dest can't be public
 			SharedKeyAllowed:   true,  // dest could be shared key
-			PreferredTokenName: DestCredentialName,
+			PreferredTokenName: cca.DstCredName,
 			CpkOptions:         common.CpkOptions{}, // not necessary, since dest can't be public.
 			TokenManager:       credManager,
 		})
@@ -1010,7 +1020,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Context:            ctx,
 			CanBePublic:        true,  // source can be public
 			SharedKeyAllowed:   false, // but it can't be shared key
-			PreferredTokenName: SourceCredentialName,
+			PreferredTokenName: cca.SrcCredName,
 			CpkOptions:         cca.CpkOptions,
 			TokenManager:       credManager,
 		})
@@ -1923,5 +1933,5 @@ func init() {
 		}
 	}
 
-	AddSourceDestCredFlags(cpCmd)
+	AddSourceDestCredFlags(cpCmd, &raw.SrcCredName, &raw.DstCredName)
 }

@@ -80,7 +80,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: SourceCredentialName,
+		PreferredTokenName: cca.SrcCredName,
 		CpkOptions:         cca.cpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
@@ -175,7 +175,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		Context:            ctx,
 		CanBePublic:        false,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: DestCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         common.CpkOptions{}, // unnecessary for destination
 		TokenManager:       GetCredentialManager(),
 	})

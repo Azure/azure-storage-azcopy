@@ -193,5 +193,5 @@ func init() {
 		"\n If the destination does not support trailing dot files (Windows or Blob Storage), "+
 		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
-	AddTargetCredFlags(setPropCmd)
+	AddTargetCredFlags(setPropCmd, &raw.DstCredName)
 }

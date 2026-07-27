@@ -393,7 +393,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 		Context:            ctx,
 		CanBePublic:        false,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: DestCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       GetCredentialManager(),
 	}); err != nil {
@@ -510,7 +510,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		Context:            ctx,
 		CanBePublic:        false,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: DestCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})

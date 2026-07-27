@@ -47,6 +47,9 @@ import (
 type rawMakeCmdArgs struct {
 	resourceToCreate string
 	quota            uint32
+
+	// named credentials (bound to --cred flag)
+	CredName string
 }
 
 // parse raw input
@@ -65,6 +68,7 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 		resourceURL:      *parsedURL,
 		resourceLocation: InferArgumentLocation(raw.resourceToCreate),
 		quota:            int32(raw.quota),
+		CredName:         raw.CredName,
 	}, nil
 }
 
@@ -73,6 +77,9 @@ type cookedMakeCmdArgs struct {
 	resourceURL      url.URL
 	resourceLocation common.Location
 	quota            int32 // quota is in GB
+
+	// named credentials (resolved from --cred flag)
+	CredName string
 }
 
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
@@ -91,7 +98,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		Context:            ctx,
 		CanBePublic:        false,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: TargetCredentialName,
+		PreferredTokenName: cookedArgs.CredName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       GetCredentialManager(),
 	})
@@ -220,5 +227,5 @@ func init() {
 	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), "+
 		"\n 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
-	AddTargetCredFlags(makeCmd)
+	AddTargetCredFlags(makeCmd, &rawArgs.CredName)
 }

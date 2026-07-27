@@ -40,6 +40,7 @@ type LoginStatusOptions struct {
 	AADEndpoint       bool
 	Method            bool
 	NicknameSpecified bool
+	Nickname          string
 }
 
 type LoginStatus struct {
@@ -60,7 +61,7 @@ func (options LoginStatusOptions) process() LoginStatus {
 	var creds []cred.TokenHeader
 
 	if options.NicknameSpecified {
-		nickname := TargetCredentialName
+		nickname := options.Nickname
 		header, ok := manager.ProbeToken(nickname)
 		if !ok {
 			return LoginStatus{Identities: map[string]IdentityStatus{
@@ -159,7 +160,7 @@ func init() {
 		},
 	}
 
-	AddTargetCredFlags(lgStatus, "nickname")
+	AddTargetCredFlags(lgStatus, &commandLineInput.Nickname, "nickname")
 
 	lgCmd.AddCommand(lgStatus)
 	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantID, "tenant", false, "Prints the Microsoft Entra tenant ID that is currently being used in session.")

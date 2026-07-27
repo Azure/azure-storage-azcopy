@@ -41,7 +41,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: TargetCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})

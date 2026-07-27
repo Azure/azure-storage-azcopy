@@ -43,7 +43,7 @@ func init() {
 		},
 	}
 
-	AddTargetCredFlags(logoutCmd, "nickname")
+	AddTargetCredFlags(logoutCmd, &logoutCmdArgs.Nickname, "nickname")
 	rootCmd.AddCommand(logoutCmd)
 }
 
@@ -51,10 +51,12 @@ func RunLogout(options LogoutOptions) error {
 	return options.process()
 }
 
-type LogoutOptions struct{}
+type LogoutOptions struct {
+	Nickname string
+}
 
 func (options LogoutOptions) process() error {
-	nickname := TargetCredentialName
+	nickname := options.Nickname
 	if !GetCredentialManager().DeleteCredentials(nickname) {
 		return fmt.Errorf("no cached token found for %q", nickname)
 	}

@@ -53,7 +53,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: TargetCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
@@ -177,7 +177,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: TargetCredentialName,
+		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
