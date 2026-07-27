@@ -155,5 +155,5 @@ func init() {
 		"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
 		"\n Provided key and its hash will be fetched from environment variables CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
 
-	AddTargetCredFlags(deleteCmd)
+	AddTargetCredFlags(deleteCmd, &raw.DstCredName)
 }

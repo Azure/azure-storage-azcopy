@@ -48,6 +48,10 @@ type rawSyncCmdArgs struct {
 	recursive bool
 	fromTo    string
 
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
+
 	// options from flags
 	blockSizeMB           float64
 	putBlobSizeMB         float64
@@ -151,6 +155,9 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
 		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
+
+		SrcCredName: raw.SrcCredName,
+		DstCredName: raw.DstCredName,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -471,6 +478,10 @@ type cookedSyncCmdArgs struct {
 	source      common.ResourceString
 	destination common.ResourceString
 	fromTo      common.FromTo
+
+	// named credentials (resolved from --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
 
 	// filters
 	recursive             bool
@@ -1229,5 +1240,5 @@ func init() {
 		}
 	}
 
-	AddSourceDestCredFlags(syncCmd)
+	AddSourceDestCredFlags(syncCmd, &raw.SrcCredName, &raw.DstCredName)
 }

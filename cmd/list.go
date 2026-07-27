@@ -52,6 +52,9 @@ type rawListCmdArgs struct {
 	RunningTally    bool
 	MegaUnits       bool
 	trailingDot     string
+
+	// named credentials (bound to --cred flag)
+	CredName string
 }
 
 type validProperty string
@@ -148,6 +151,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 		return cooked, err
 	}
 	cooked.properties = raw.parseProperties()
+	cooked.CredName = raw.CredName
 
 	return cooked, nil
 }
@@ -161,6 +165,9 @@ type cookedListCmdArgs struct {
 	RunningTally    bool
 	MegaUnits       bool
 	trailingDot     common.TrailingDotOption
+
+	// named credentials (resolved from --cred flag)
+	CredName string
 }
 
 var raw rawListCmdArgs
@@ -219,7 +226,7 @@ func init() {
 
 	rootCmd.AddCommand(listContainerCmd)
 
-	AddTargetCredFlags(listContainerCmd)
+	AddTargetCredFlags(listContainerCmd, &raw.CredName)
 }
 
 // handleListContainerCommand handles the list container command
@@ -246,7 +253,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: TargetCredentialName,
+		PreferredTokenName: cooked.CredName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       GetCredentialManager(),
 	})

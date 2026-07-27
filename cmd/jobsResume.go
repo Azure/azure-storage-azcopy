@@ -241,7 +241,7 @@ func init() {
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
 
-	AddSourceDestCredFlags(resumeCmd)
+	AddSourceDestCredFlags(resumeCmd, &resumeCmdArgs.SrcCredName, &resumeCmdArgs.DstCredName)
 }
 
 type resumeCmdArgs struct {
@@ -251,6 +251,10 @@ type resumeCmdArgs struct {
 
 	SourceSAS      string
 	DestinationSAS string
+
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
 }
 
 func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
@@ -275,7 +279,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		Context:            ctx,
 		CanBePublic:        true,  // source can be public
 		SharedKeyAllowed:   false, // but not shared key
-		PreferredTokenName: SourceCredentialName,
+		PreferredTokenName: rca.SrcCredName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       credManager,
 	})
@@ -284,7 +288,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		Context:            ctx,
 		CanBePublic:        true,  // source can be public
 		SharedKeyAllowed:   false, // but not shared key
-		PreferredTokenName: DestCredentialName,
+		PreferredTokenName: rca.DstCredName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       credManager,
 	})
