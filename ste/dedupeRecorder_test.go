@@ -63,12 +63,145 @@ func TestDedupeProgressSnapshotEnforce(t *testing.T) {
 	st.addReferenced(50)
 	st.addSourceStaged(100)
 	st.addFallback()
+	st.addSmallFileStarted(1024)
+	st.addSmallFileResult(common.ETransferStatus.Success(), 1024)
 
 	a.Equal(
 		"filesStarted=2 filesCommitted=1 targetURIBlocks=2 targetURIBytes=150 "+
 			"sourceURIBlocks=1 sourceURIBytes=100 fallbackBlocks=1 transferredBlocks=3 "+
-			"transferredBytes=250 wanSavingsPercent=60.0",
+			"transferredBytes=250 wanSavingsPercent=60.0 smallFilesStarted=1 "+
+			"smallFilesCompleted=1 smallFilesFailed=0 smallFilesSkipped=0 "+
+			"smallFilesCanceled=0 smallFilesInProgress=0 smallFileBytesStarted=1024 "+
+			"smallFileBytesCompleted=1024 smallFileBytesFailed=0 smallFileBytesSkipped=0 "+
+			"smallFileBytesCanceled=0 smallFileBytesInProgress=0",
 		st.progressSnapshot().fields(dedupeActEnforce))
+}
+
+func TestDedupeProgressSmallFileThreshold(t *testing.T) {
+	jptm := &testJobPartTransferManager{
+		info: &TransferInfo{
+			SourceSize: smallFileProgressThresholdBytes - 1,
+			EntityType: common.EEntityType.File(),
+		},
+		fromTo: common.EFromTo.BlobBlob(),
+	}
+	assert.True(t, isSmallFileProgressTransfer(jptm))
+
+	jptm.info.SourceSize = 0
+	assert.True(t, isSmallFileProgressTransfer(jptm))
+
+	jptm.info.SourceSize = smallFileProgressThresholdBytes
+	assert.False(t, isSmallFileProgressTransfer(jptm))
+
+	jptm.info.SourceSize = smallFileProgressThresholdBytes - 1
+	jptm.fromTo = common.EFromTo.LocalBlob()
+	assert.False(t, isSmallFileProgressTransfer(jptm))
+
+	jptm.fromTo = common.EFromTo.BlobBlob()
+	jptm.info.EntityType = common.EEntityType.Folder()
+	assert.False(t, isSmallFileProgressTransfer(jptm))
+}
+
+func TestDedupeProgressSmallFileResultCounters(t *testing.T) {
+	st := &dedupeJobState{}
+	st.addSmallFileStarted(100)
+	st.addSmallFileStarted(200)
+	st.addSmallFileStarted(300)
+	st.addSmallFileStarted(400)
+	st.addSmallFileStarted(500)
+
+	assert.Equal(
+		t,
+		"small_file_transfer_complete",
+		st.addSmallFileResult(common.ETransferStatus.Success(), 100),
+	)
+	assert.Equal(
+		t,
+		"small_file_transfer_failed",
+		st.addSmallFileResult(common.ETransferStatus.Failed(), 200),
+	)
+	assert.Equal(
+		t,
+		"small_file_transfer_skipped",
+		st.addSmallFileResult(common.ETransferStatus.SkippedEntityAlreadyExists(), 300),
+	)
+	assert.Equal(
+		t,
+		"small_file_transfer_canceled",
+		st.addSmallFileResult(common.ETransferStatus.Cancelled(), 400),
+	)
+
+	snapshot := st.progressSnapshot()
+	assert.EqualValues(t, 5, snapshot.smallFilesStarted)
+	assert.EqualValues(t, 1, snapshot.smallFilesCompleted)
+	assert.EqualValues(t, 1, snapshot.smallFilesFailed)
+	assert.EqualValues(t, 1, snapshot.smallFilesSkipped)
+	assert.EqualValues(t, 1, snapshot.smallFilesCanceled)
+	assert.EqualValues(t, 1500, snapshot.smallFileBytesStarted)
+	assert.EqualValues(t, 100, snapshot.smallFileBytesCompleted)
+	assert.EqualValues(t, 200, snapshot.smallFileBytesFailed)
+	assert.EqualValues(t, 300, snapshot.smallFileBytesSkipped)
+	assert.EqualValues(t, 400, snapshot.smallFileBytesCanceled)
+	assert.Contains(t, snapshot.fields(dedupeActEnforce), "smallFilesInProgress=1")
+	assert.Contains(t, snapshot.fields(dedupeActEnforce), "smallFileBytesInProgress=500")
+}
+
+func TestDedupeProgressSmallFileStartMarkerIsExactlyOnce(t *testing.T) {
+	jptm := &jobPartTransferMgr{}
+
+	assert.False(t, jptm.smallFileProgressStarted())
+	assert.True(t, jptm.markSmallFileProgressStarted())
+	assert.True(t, jptm.smallFileProgressStarted())
+	assert.False(t, jptm.markSmallFileProgressStarted())
+}
+
+func TestDedupeProgressSmallFileCancellationNormalizesStatus(t *testing.T) {
+	assert.Equal(
+		t,
+		common.ETransferStatus.Cancelled(),
+		normalizeSmallFileResultStatus(common.ETransferStatus.Started(), true),
+	)
+	assert.Equal(
+		t,
+		common.ETransferStatus.Started(),
+		normalizeSmallFileResultStatus(common.ETransferStatus.Started(), false),
+	)
+	assert.Equal(
+		t,
+		common.ETransferStatus.Success(),
+		normalizeSmallFileResultStatus(common.ETransferStatus.Success(), true),
+	)
+}
+
+func TestDedupeJobPartCompletionTracker(t *testing.T) {
+	tracker := make(dedupeJobPartCompletionTracker)
+	part0 := PartNumber(0)
+	part1 := PartNumber(1)
+
+	assert.False(t, tracker.record(nil))
+	assert.True(t, tracker.record(&part0))
+	assert.False(t, tracker.record(&part0))
+	assert.False(t, tracker.allKnownPartsReported(2))
+	assert.True(t, tracker.record(&part1))
+	assert.True(t, tracker.allKnownPartsReported(2))
+
+	tracker.reset()
+	assert.False(t, tracker.allKnownPartsReported(2))
+}
+
+func TestDedupePausedRunResetsOnlyAfterAllPartsReport(t *testing.T) {
+	assert.True(
+		t,
+		shouldResetDedupeRunProgress(common.EJobStatus.Paused(), true),
+	)
+	assert.False(
+		t,
+		shouldResetDedupeRunProgress(common.EJobStatus.Paused(), false),
+	)
+	assert.False(
+		t,
+		shouldResetDedupeRunProgress(common.EJobStatus.Completed(), true),
+	)
 }
 
 func TestDedupeProgressMessageSanitizesSASAndIsExtractable(t *testing.T) {

@@ -71,6 +71,18 @@ func dedupeActModeFromEnv() dedupeActMode {
 	return parseDedupeActMode(common.GetEnvironmentVariable(common.EEnvironmentVariable.DedupeAct()))
 }
 
+func initializeDedupeStateForTransfer(jptm IJobPartTransferMgr) {
+	mode := dedupeActModeFromEnv()
+	if mode == dedupeActOff {
+		return
+	}
+	fromTo := jptm.FromTo()
+	if fromTo.From() != common.ELocation.Blob() || fromTo.To() != common.ELocation.Blob() {
+		return
+	}
+	setDedupeActModeForJob(jptm.Info().JobID, mode)
+}
+
 // parseDedupeActMode is the pure core of dedupeActModeFromEnv, split out so it can be unit tested.
 func parseDedupeActMode(raw string) dedupeActMode {
 	switch strings.ToLower(strings.TrimSpace(raw)) {

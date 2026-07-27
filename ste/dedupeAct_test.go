@@ -272,10 +272,17 @@ func TestFinalizeDedupeJobLogsAndClearsState(t *testing.T) {
 	setDedupeActModeForJob(jobID, dedupeActEnforce)
 
 	var messages []string
-	finalizeDedupeJob(jobID, func(level common.LogLevel, value string) {
-		a.Equal(common.LogInfo, level)
-		messages = append(messages, value)
-	})
+	finalizeDedupeJob(
+		jobID,
+		common.EJobStatus.Failed(),
+		2,
+		1,
+		1,
+		func(level common.LogLevel, value string) {
+			a.Equal(common.LogInfo, level)
+			messages = append(messages, value)
+		},
+	)
 
 	a.Contains(strings.Join(messages, "\n"), "dedupe-job-summary(enforce)")
 	logPath := filepath.Join(common.AzcopyLogFolder, dedupeLogDirectoryName, jobID.String()+".log")
@@ -283,6 +290,10 @@ func TestFinalizeDedupeJobLogsAndClearsState(t *testing.T) {
 	a.NoError(err)
 	a.Contains(string(logBytes), "event=job_complete")
 	a.Contains(string(logBytes), "jobId="+jobID.String())
+	a.Contains(string(logBytes), `status="Failed"`)
+	a.Contains(string(logBytes), "transfersCompleted=2")
+	a.Contains(string(logBytes), "transfersSkipped=1")
+	a.Contains(string(logBytes), "transfersFailed=1")
 
 	_, exists := dedupeStateForJobIfExists(jobID)
 	a.False(exists)

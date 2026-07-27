@@ -199,6 +199,13 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 	info := jptm.Info()
 	fromTo := jptm.FromTo()
 
+	if (info.EntityType == common.EEntityType.File() ||
+		info.EntityType == common.EEntityType.Hardlink()) &&
+		jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() {
+		initializeDedupeStateForTransfer(jptm)
+		emitSmallFileTransferStart(jptm)
+	}
+
 	// Ensure that the transfer isn't the same item, and fail it if it is.
 	// This scenario can only happen with S2S. We'll parse the URLs and compare the host and path.
 	if fromTo.IsS2S() {
@@ -256,7 +263,6 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		jptm.ReportTransferDone()
 		return
 	}
-
 	// step 2a. Create sender
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {

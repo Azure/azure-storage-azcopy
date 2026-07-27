@@ -89,12 +89,38 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 	if mode == dedupeActOff {
 		return
 	}
+	info := jptm.Info()
+	setDedupeActModeForJob(info.JobID, mode)
+	st := dedupeStateForJob(info.JobID)
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		"preflight_start",
+		mode,
+		info,
+		"stage=\"source_grid\"",
+		st.progressSnapshot()))
+
+	preflightFailed := func(stage, reason string) {
+		emitDedupeProgress(jptm, dedupeProgressMessage(
+			"preflight_failed",
+			mode,
+			info,
+			fmt.Sprintf(
+				"stage=%q reason=%q action=%q",
+				stage,
+				reason,
+				"uniform_grid",
+			),
+			st.progressSnapshot()))
+	}
+
 	blobSrc, ok := srcInfoProvider.(IBlobSourceInfoProvider)
 	if !ok || blobSrc.BlobType() != blob.BlobTypeBlockBlob {
+		preflightFailed("source_type", "source is not a block blob")
 		return
 	}
 	_, destinationSAS := jptm.SAS()
 	if !dedupeActDestinationReady(mode, destinationSAS) {
+		preflightFailed("destination_auth", "destination SAS is unavailable")
 		jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
 			"dedupe-act(enforce): destination SAS is unavailable, using uniform grid")
 		return
@@ -102,27 +128,51 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 
 	plan, err := fetchSourceGridPlan(jptm)
 	if err != nil {
+		preflightFailed("source_block_list", err.Error())
 		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "dedupe-act: GetBlockList failed, using uniform grid: "+err.Error())
 		return
 	}
 	if plan == nil || len(plan.Blocks) == 0 {
+		preflightFailed("source_block_list", "source has no committed named blocks")
 		return // single-PutBlob or empty source: no committed blocks to align to
 	}
-	if plan.TotalSize != jptm.Info().SourceSize {
+	if plan.TotalSize != info.SourceSize {
+		preflightFailed(
+			"source_grid",
+			fmt.Sprintf("planned bytes %d do not match source bytes %d", plan.TotalSize, info.SourceSize),
+		)
 		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
-			"dedupe-act: source-grid total %d != source size %d, using uniform grid", plan.TotalSize, jptm.Info().SourceSize))
+			"dedupe-act: source-grid total %d != source size %d, using uniform grid", plan.TotalSize, info.SourceSize))
 		return
 	}
 	if len(plan.Blocks) > common.MaxNumberOfBlocksPerBlob {
+		preflightFailed(
+			"source_grid",
+			fmt.Sprintf("source block count %d exceeds maximum %d", len(plan.Blocks), common.MaxNumberOfBlocksPerBlob),
+		)
 		return
 	}
 
 	dedupeIndex := buildSourceBlockHashIndex(plan)
 	if len(dedupeIndex) == 0 {
+		preflightFailed("source_hashes", "source block list contains no complete CRC64 and SHA256 pairs")
 		jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
 			"dedupe-act: source block list contained no complete hashes, using uniform grid")
 		return
 	}
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		"chunk_plan_validated",
+		mode,
+		info,
+		fmt.Sprintf(
+			"sourceBlocks=%d hashedBlocks=%d plannedChunks=%d plannedBytes=%d sourceBytes=%d",
+			len(plan.Blocks),
+			len(dedupeIndex),
+			len(plan.Blocks),
+			plan.TotalSize,
+			info.SourceSize,
+		),
+		st.progressSnapshot()))
 
 	// One chunk per source committed block.
 	c.numChunks = uint32(len(plan.Blocks))
@@ -130,8 +180,6 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 	c.dedupeMode = mode
 	c.dedupePlan = plan
 	c.dedupeIndex = dedupeIndex
-	setDedupeActModeForJob(jptm.Info().JobID, mode)
-	st := dedupeStateForJob(jptm.Info().JobID)
 	st.addFileStarted()
 
 	jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(

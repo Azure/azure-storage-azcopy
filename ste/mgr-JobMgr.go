@@ -794,117 +794,211 @@ func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
 	jm.jobPartProgress <- progressInfo
 }
 
+// jobPartDoneState holds the loop-local accumulators for reportJobPartDoneHandler. The state is
+// owned exclusively by that single goroutine, so its fields need no synchronization.
+type jobPartDoneState struct {
+	jobProgress          jobPartProgressInfo
+	dedupeProgress       jobPartProgressInfo
+	dedupeCompletedParts dedupeJobPartCompletionTracker
+	shouldLog            bool
+}
+
+// accumulate folds one part's reported progress into the running job-wide totals, and into the
+// dedupe totals the first time each part is seen.
+func (s *jobPartDoneState) accumulate(partProgressInfo jobPartProgressInfo) {
+	if s.dedupeCompletedParts.record(partProgressInfo.partNum) {
+		s.dedupeProgress.transfersCompleted += partProgressInfo.transfersCompleted
+		s.dedupeProgress.transfersSkipped += partProgressInfo.transfersSkipped
+		s.dedupeProgress.transfersFailed += partProgressInfo.transfersFailed
+	}
+	s.jobProgress.transfersCompleted += partProgressInfo.transfersCompleted
+	s.jobProgress.transfersSkipped += partProgressInfo.transfersSkipped
+	s.jobProgress.transfersFailed += partProgressInfo.transfersFailed
+}
+
 func (jm *jobMgr) reportJobPartDoneHandler() {
-	var haveFinalPart bool
-	var jobProgressInfo jobPartProgressInfo
-	shouldLog := jm.ShouldLog(common.LogInfo)
+	state := &jobPartDoneState{
+		dedupeCompletedParts: make(dedupeJobPartCompletionTracker),
+		shouldLog:            jm.ShouldLog(common.LogInfo),
+	}
 
 	for {
 		select {
 		case <-jm.reportCancelCh:
-			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
-			if ok {
-				part0plan := jobPart0Mgr.Plan()
-				if part0plan.JobStatus() == common.EJobStatus.InProgress() ||
-					part0plan.JobStatus() == common.EJobStatus.Cancelling() {
-					jm.Panic(fmt.Errorf("reportCancelCh received cancel event while job still not completed, Job(%s) in state: %s",
-						jm.jobID.String(), part0plan.JobStatus()))
-				}
-			} else {
-				jm.Log(common.LogError, "part0Plan of job invalid")
-			}
+			jm.assertJobFinishedOnCancel()
 			jm.Log(common.LogInfo, "reportJobPartDoneHandler done called")
 			return
 
 		case partProgressInfo := <-jm.jobPartProgress:
-			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
-			if !ok {
-				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
-			}
-			part0Plan := jobPart0Mgr.Plan()
-			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
-			partsDone := atomic.AddUint32(&jm.partsDone, 1)
-			jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
-			jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
-			jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
-
-			if buildmode.IsMover {
-				// PROGRESSIVE CLEANUP: Unmap completed job part plan files immediately to free memory
-				// Uses selective unmapping: Part 0 is preserved, Parts 1+ are unmapped
-				if partProgressInfo.partNum != nil {
-					partNum := *partProgressInfo.partNum
-					if completedPartMgr, exists := jm.jobPartMgrs.Get(partNum); exists {
-						completedPartMgr.UnmapPlanFile()
-					} else {
-						fmt.Printf("DEBUG: Could not find part manager for part %d\n", partNum)
-					}
-				} else {
-					fmt.Println("DEBUG: Skipping unmap - partNum is nil")
-				}
-			}
-
-			if partProgressInfo.completionChan != nil {
-				close(partProgressInfo.completionChan)
-			}
-
-			// If the last part is still awaited or other parts all still not complete,
-			// JobPart 0 status is not changed (unless we are cancelling)
-			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
-			allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
-			isCancelling := jobStatus == common.EJobStatus.Cancelling()
-			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
-				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
-			if shouldComplete {
-				// Inform StatusManager that all parts are done.
-				if jm.jstm.xferDone != nil {
-					close(jm.jstm.xferDone)
-				}
-
-				// Wait  for all XferDone messages to be processed by statusManager. Front end
-				// depends on JobStatus to determine if we've to quit job. Setting it here without
-				// draining XferDone will make it report incorrect statistics.
-				jm.waitToDrainXferDone()
-				partDescription := "all parts of entire Job"
-				if !haveFinalPart {
-					if allKnownPartsDone {
-						partDescription = "known parts of incomplete Job"
-					} else {
-						partDescription = "incomplete Job"
-					}
-				}
-				if shouldLog {
-					jm.Log(common.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
-				}
-
-				switch part0Plan.JobStatus() {
-				case common.EJobStatus.Cancelling():
-					part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
-					if shouldLog {
-						jm.Log(common.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
-					}
-				case common.EJobStatus.InProgress():
-					part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
-						jobProgressInfo.transfersFailed > 0,
-						jobProgressInfo.transfersCompleted > 0))
-				}
-				status := part0Plan.JobStatus()
-				if status.IsJobDone() {
-					finalizeDedupeJob(jm.jobID, jm.Log)
-				}
-
-				// reset counters
-				atomic.StoreUint32(&jm.partsDone, 0)
-				jobProgressInfo = jobPartProgressInfo{}
-
-				// flush logs
-				jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
-			} //Else log and wait for next part to complete
-
-			if shouldLog {
-				jm.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
-			}
+			jm.handlePartProgress(partProgressInfo, state)
 		}
 	}
+}
+
+// assertJobFinishedOnCancel validates, when a cancel is reported, that part 0 is no longer
+// running. A cancel event for a job still InProgress/Cancelling indicates a coordination bug.
+func (jm *jobMgr) assertJobFinishedOnCancel() {
+	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+	if !ok {
+		jm.Log(common.LogError, "part0Plan of job invalid")
+		return
+	}
+	part0plan := jobPart0Mgr.Plan()
+	if part0plan.JobStatus() == common.EJobStatus.InProgress() ||
+		part0plan.JobStatus() == common.EJobStatus.Cancelling() {
+		jm.Panic(fmt.Errorf("reportCancelCh received cancel event while job still not completed, Job(%s) in state: %s",
+			jm.jobID.String(), part0plan.JobStatus()))
+	}
+}
+
+// handlePartProgress processes one job-part progress report: it accumulates counters, runs the
+// per-part side effects, transitions the job to a terminal state once all parts are done, and
+// finalizes dedupe reporting.
+func (jm *jobMgr) handlePartProgress(partProgressInfo jobPartProgressInfo, state *jobPartDoneState) {
+	state.accumulate(partProgressInfo)
+
+	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+	if !ok {
+		jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+	}
+	part0Plan := jobPart0Mgr.Plan()
+	jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
+	partsDone := atomic.AddUint32(&jm.partsDone, 1)
+
+	jm.unmapCompletedPartIfMover(partProgressInfo)
+	signalPartCompletion(partProgressInfo)
+
+	if description, shouldComplete := jm.evaluateJobCompletion(partsDone, jobStatus); shouldComplete {
+		jm.finalizeJobCompletion(part0Plan, description, state)
+	}
+
+	jm.finalizeDedupe(part0Plan, state)
+
+	if state.shouldLog {
+		jm.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
+	}
+}
+
+// unmapCompletedPartIfMover releases a completed part's memory-mapped plan file when running in
+// Mover build mode, to bound memory use across very large jobs.
+func (jm *jobMgr) unmapCompletedPartIfMover(partProgressInfo jobPartProgressInfo) {
+	if !buildmode.IsMover {
+		return
+	}
+	// PROGRESSIVE CLEANUP: Unmap completed job part plan files immediately to free memory
+	// Uses selective unmapping: Part 0 is preserved, Parts 1+ are unmapped
+	if partProgressInfo.partNum == nil {
+		fmt.Println("DEBUG: Skipping unmap - partNum is nil")
+		return
+	}
+	partNum := *partProgressInfo.partNum
+	if completedPartMgr, exists := jm.jobPartMgrs.Get(partNum); exists {
+		completedPartMgr.UnmapPlanFile()
+	} else {
+		fmt.Printf("DEBUG: Could not find part manager for part %d\n", partNum)
+	}
+}
+
+// signalPartCompletion unblocks anything waiting on this part's completion channel.
+func signalPartCompletion(partProgressInfo jobPartProgressInfo) {
+	if partProgressInfo.completionChan != nil {
+		close(partProgressInfo.completionChan)
+	}
+}
+
+// evaluateJobCompletion decides whether the job should now be finalized, based on the number of
+// parts done and the job status captured before any completion mutation. When it returns true it
+// also returns a human-readable description of what is completing, for logging.
+func (jm *jobMgr) evaluateJobCompletion(partsDone uint32, jobStatus common.JobStatus) (description string, shouldComplete bool) {
+	// If the last part is still awaited or other parts all still not complete,
+	// JobPart 0 status is not changed (unless we are cancelling)
+	haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
+	allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
+	isCancelling := jobStatus == common.EJobStatus.Cancelling()
+	shouldComplete = (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
+		(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
+	if !shouldComplete {
+		return "", false
+	}
+
+	description = "all parts of entire Job"
+	if !haveFinalPart {
+		if allKnownPartsDone {
+			description = "known parts of incomplete Job"
+		} else {
+			description = "incomplete Job"
+		}
+	}
+	return description, true
+}
+
+// finalizeJobCompletion drains outstanding status messages, sets the terminal status on part 0,
+// and resets the per-job progress counters. It must be called only when evaluateJobCompletion
+// reported that the job should complete.
+func (jm *jobMgr) finalizeJobCompletion(part0Plan *JobPartPlanHeader, description string, state *jobPartDoneState) {
+	// Inform StatusManager that all parts are done.
+	if jm.jstm.xferDone != nil {
+		close(jm.jstm.xferDone)
+	}
+
+	// Wait for all XferDone messages to be processed by statusManager. Front end
+	// depends on JobStatus to determine if we've to quit job. Setting it here without
+	// draining XferDone will make it report incorrect statistics.
+	jm.waitToDrainXferDone()
+
+	if state.shouldLog {
+		jm.Log(common.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", description, jm.jobID.String()))
+	}
+
+	switch part0Plan.JobStatus() {
+	case common.EJobStatus.Cancelling():
+		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
+		if state.shouldLog {
+			jm.Log(common.LogInfo, fmt.Sprintf("%s %v successfully cancelled", description, jm.jobID))
+		}
+	case common.EJobStatus.InProgress():
+		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(state.jobProgress.transfersSkipped > 0,
+			state.jobProgress.transfersFailed > 0,
+			state.jobProgress.transfersCompleted > 0))
+	}
+
+	// reset counters
+	atomic.StoreUint32(&jm.partsDone, 0)
+	state.jobProgress = jobPartProgressInfo{}
+
+	// flush logs
+	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
+}
+
+// finalizeDedupe emits the dedupe job summary and clears dedupe state once the job is done and
+// every known part has reported. It reads the (possibly just-updated) terminal status.
+func (jm *jobMgr) finalizeDedupe(part0Plan *JobPartPlanHeader, state *jobPartDoneState) {
+	currentStatus := part0Plan.JobStatus()
+	allKnownPartsReported := state.dedupeCompletedParts.allKnownPartsReported(jm.jobPartMgrs.Count())
+	if shouldResetDedupeRunProgress(currentStatus, allKnownPartsReported) {
+		// Resume reports the same part numbers again. Reset per-run completion accounting
+		// while retaining the job-local dedupe tables and cumulative progress counters.
+		state.dedupeCompletedParts.reset()
+		state.dedupeProgress = jobPartProgressInfo{}
+		return
+	}
+	if !currentStatus.IsJobDone() || !allKnownPartsReported {
+		return
+	}
+	finalizeDedupeJob(
+		jm.jobID,
+		currentStatus,
+		state.dedupeProgress.transfersCompleted,
+		state.dedupeProgress.transfersSkipped,
+		state.dedupeProgress.transfersFailed,
+		jm.Log,
+	)
+	state.dedupeCompletedParts.reset()
+	state.dedupeProgress = jobPartProgressInfo{}
+}
+
+func shouldResetDedupeRunProgress(status common.JobStatus, allKnownPartsReported bool) bool {
+	return status == common.EJobStatus.Paused() && allKnownPartsReported
 }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {

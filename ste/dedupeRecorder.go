@@ -42,6 +42,8 @@ import (
 
 // dedupeJobState holds a single job's dedupe tables plus cumulative would-be-hit counters.
 type dedupeJobState struct {
+	smallProgressMu sync.Mutex
+
 	// table is the Phase 1 measurement table: blocks are recorded pre-write purely to count the
 	// would-be-hit rate, so it must NOT be used to decide a real reference (the content may not yet
 	// exist at the destination).
@@ -60,16 +62,26 @@ type dedupeJobState struct {
 
 	// Phase 2 "act" counters (also cumulative + atomic). Together they quantify how many source
 	// reads dedupe actually avoided (enforce) or would avoid (shadow).
-	referencedBlocks      int64 // enforce: blocks staged from the destination instead of the source
-	referencedBytes       int64 // enforce: source-read bytes avoided
-	wouldReferenceBlocks  int64 // shadow: blocks that would be referenced under enforce
-	wouldReferenceBytes   int64 // shadow: source-read bytes that would be avoided under enforce
-	sourceStagedBlocks    int64 // blocks staged from the source (real source reads)
-	sourceStagedBytes     int64 // bytes staged from the source
-	fallbackBlocks        int64 // enforce: hits whose target reference failed and fell back to source
-	filesStarted          int64 // files armed for source-grid dedupe
-	filesCommitted        int64 // files whose destination block list was committed
-	progressEventsDropped uint64
+	referencedBlocks        int64 // enforce: blocks staged from the destination instead of the source
+	referencedBytes         int64 // enforce: source-read bytes avoided
+	wouldReferenceBlocks    int64 // shadow: blocks that would be referenced under enforce
+	wouldReferenceBytes     int64 // shadow: source-read bytes that would be avoided under enforce
+	sourceStagedBlocks      int64 // blocks staged from the source (real source reads)
+	sourceStagedBytes       int64 // bytes staged from the source
+	fallbackBlocks          int64 // enforce: hits whose target reference failed and fell back to source
+	filesStarted            int64 // files armed for source-grid dedupe
+	filesCommitted          int64 // files whose destination block list was committed
+	smallFilesStarted       int64 // Blob-to-Blob files smaller than 4 MiB that entered transfer handling
+	smallFilesCompleted     int64 // small files that completed successfully
+	smallFilesFailed        int64 // small files that completed with a failure status
+	smallFilesSkipped       int64 // small files skipped by transfer policy
+	smallFilesCanceled      int64 // small files canceled before completion
+	smallFileBytesStarted   int64
+	smallFileBytesCompleted int64
+	smallFileBytesFailed    int64
+	smallFileBytesSkipped   int64
+	smallFileBytesCanceled  int64
+	progressEventsDropped   uint64
 
 	actMode int32 // active dedupeActMode for this job
 }
@@ -105,29 +117,99 @@ func (s *dedupeJobState) addFileCommitted() {
 	atomic.AddInt64(&s.filesCommitted, 1)
 }
 
+func (s *dedupeJobState) addSmallFileStarted(size int64) {
+	s.smallProgressMu.Lock()
+	defer s.smallProgressMu.Unlock()
+	s.addSmallFileStartedLocked(size)
+}
+
+func (s *dedupeJobState) addSmallFileResult(status common.TransferStatus, size int64) string {
+	s.smallProgressMu.Lock()
+	defer s.smallProgressMu.Unlock()
+	return s.addSmallFileResultLocked(status, size)
+}
+
+func (s *dedupeJobState) addSmallFileStartedLocked(size int64) {
+	s.smallFilesStarted++
+	s.smallFileBytesStarted += size
+}
+
+func (s *dedupeJobState) addSmallFileResultLocked(status common.TransferStatus, size int64) string {
+	switch status {
+	case common.ETransferStatus.Success():
+		s.smallFilesCompleted++
+		s.smallFileBytesCompleted += size
+		return "small_file_transfer_complete"
+	case common.ETransferStatus.Failed(),
+		common.ETransferStatus.BlobTierFailure(),
+		common.ETransferStatus.TierAvailabilityCheckFailure():
+		s.smallFilesFailed++
+		s.smallFileBytesFailed += size
+		return "small_file_transfer_failed"
+	case common.ETransferStatus.SkippedEntityAlreadyExists(),
+		common.ETransferStatus.SkippedBlobHasSnapshots(),
+		common.ETransferStatus.SkippedArchiveNotRestored():
+		s.smallFilesSkipped++
+		s.smallFileBytesSkipped += size
+		return "small_file_transfer_skipped"
+	case common.ETransferStatus.Cancelled():
+		s.smallFilesCanceled++
+		s.smallFileBytesCanceled += size
+		return "small_file_transfer_canceled"
+	default:
+		return ""
+	}
+}
+
 type dedupeProgressSnapshot struct {
-	referencedBlocks     int64
-	referencedBytes      int64
-	wouldReferenceBlocks int64
-	wouldReferenceBytes  int64
-	sourceStagedBlocks   int64
-	sourceStagedBytes    int64
-	fallbackBlocks       int64
-	filesStarted         int64
-	filesCommitted       int64
+	referencedBlocks        int64
+	referencedBytes         int64
+	wouldReferenceBlocks    int64
+	wouldReferenceBytes     int64
+	sourceStagedBlocks      int64
+	sourceStagedBytes       int64
+	fallbackBlocks          int64
+	filesStarted            int64
+	filesCommitted          int64
+	smallFilesStarted       int64
+	smallFilesCompleted     int64
+	smallFilesFailed        int64
+	smallFilesSkipped       int64
+	smallFilesCanceled      int64
+	smallFileBytesStarted   int64
+	smallFileBytesCompleted int64
+	smallFileBytesFailed    int64
+	smallFileBytesSkipped   int64
+	smallFileBytesCanceled  int64
 }
 
 func (s *dedupeJobState) progressSnapshot() dedupeProgressSnapshot {
+	s.smallProgressMu.Lock()
+	defer s.smallProgressMu.Unlock()
+	return s.progressSnapshotLocked()
+}
+
+func (s *dedupeJobState) progressSnapshotLocked() dedupeProgressSnapshot {
 	return dedupeProgressSnapshot{
-		referencedBlocks:     atomic.LoadInt64(&s.referencedBlocks),
-		referencedBytes:      atomic.LoadInt64(&s.referencedBytes),
-		wouldReferenceBlocks: atomic.LoadInt64(&s.wouldReferenceBlocks),
-		wouldReferenceBytes:  atomic.LoadInt64(&s.wouldReferenceBytes),
-		sourceStagedBlocks:   atomic.LoadInt64(&s.sourceStagedBlocks),
-		sourceStagedBytes:    atomic.LoadInt64(&s.sourceStagedBytes),
-		fallbackBlocks:       atomic.LoadInt64(&s.fallbackBlocks),
-		filesStarted:         atomic.LoadInt64(&s.filesStarted),
-		filesCommitted:       atomic.LoadInt64(&s.filesCommitted),
+		referencedBlocks:        atomic.LoadInt64(&s.referencedBlocks),
+		referencedBytes:         atomic.LoadInt64(&s.referencedBytes),
+		wouldReferenceBlocks:    atomic.LoadInt64(&s.wouldReferenceBlocks),
+		wouldReferenceBytes:     atomic.LoadInt64(&s.wouldReferenceBytes),
+		sourceStagedBlocks:      atomic.LoadInt64(&s.sourceStagedBlocks),
+		sourceStagedBytes:       atomic.LoadInt64(&s.sourceStagedBytes),
+		fallbackBlocks:          atomic.LoadInt64(&s.fallbackBlocks),
+		filesStarted:            atomic.LoadInt64(&s.filesStarted),
+		filesCommitted:          atomic.LoadInt64(&s.filesCommitted),
+		smallFilesStarted:       s.smallFilesStarted,
+		smallFilesCompleted:     s.smallFilesCompleted,
+		smallFilesFailed:        s.smallFilesFailed,
+		smallFilesSkipped:       s.smallFilesSkipped,
+		smallFilesCanceled:      s.smallFilesCanceled,
+		smallFileBytesStarted:   s.smallFileBytesStarted,
+		smallFileBytesCompleted: s.smallFileBytesCompleted,
+		smallFileBytesFailed:    s.smallFileBytesFailed,
+		smallFileBytesSkipped:   s.smallFileBytesSkipped,
+		smallFileBytesCanceled:  s.smallFileBytesCanceled,
 	}
 }
 
@@ -142,17 +224,42 @@ func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
 		transferredBlocks = s.sourceStagedBlocks
 		transferredBytes = s.sourceStagedBytes
 	}
+	smallFilesInProgress := s.smallFilesStarted -
+		s.smallFilesCompleted -
+		s.smallFilesFailed -
+		s.smallFilesSkipped -
+		s.smallFilesCanceled
+	if smallFilesInProgress < 0 {
+		smallFilesInProgress = 0
+	}
+	smallFileBytesInProgress := s.smallFileBytesStarted -
+		s.smallFileBytesCompleted -
+		s.smallFileBytesFailed -
+		s.smallFileBytesSkipped -
+		s.smallFileBytesCanceled
+	if smallFileBytesInProgress < 0 {
+		smallFileBytesInProgress = 0
+	}
 
 	return fmt.Sprintf(
 		"filesStarted=%d filesCommitted=%d targetURIBlocks=%d targetURIBytes=%d "+
 			"sourceURIBlocks=%d sourceURIBytes=%d fallbackBlocks=%d transferredBlocks=%d "+
-			"transferredBytes=%d wanSavingsPercent=%.1f",
+			"transferredBytes=%d wanSavingsPercent=%.1f smallFilesStarted=%d "+
+			"smallFilesCompleted=%d smallFilesFailed=%d smallFilesSkipped=%d "+
+			"smallFilesCanceled=%d smallFilesInProgress=%d smallFileBytesStarted=%d "+
+			"smallFileBytesCompleted=%d smallFileBytesFailed=%d smallFileBytesSkipped=%d "+
+			"smallFileBytesCanceled=%d smallFileBytesInProgress=%d",
 		s.filesStarted, s.filesCommitted, targetBlocks, targetBytes,
 		s.sourceStagedBlocks, s.sourceStagedBytes, s.fallbackBlocks, transferredBlocks,
-		transferredBytes, dedupePercent(targetBytes, transferredBytes))
+		transferredBytes, dedupePercent(targetBytes, transferredBytes),
+		s.smallFilesStarted, s.smallFilesCompleted, s.smallFilesFailed,
+		s.smallFilesSkipped, s.smallFilesCanceled, smallFilesInProgress,
+		s.smallFileBytesStarted, s.smallFileBytesCompleted, s.smallFileBytesFailed,
+		s.smallFileBytesSkipped, s.smallFileBytesCanceled, smallFileBytesInProgress)
 }
 
 const dedupeProgressPrefix = "DEDUPE_PROGRESS"
+const smallFileProgressThresholdBytes = int64(4 * 1024 * 1024)
 const dedupeProgressQueueCapacity = 4096
 const dedupeProgressFinalWriteTimeout = 5 * time.Second
 const dedupeLogDirectoryName = "dedupe-logs"
@@ -236,6 +343,27 @@ var (
 		return common.AzcopyLogFolder
 	})
 )
+
+type dedupeJobPartCompletionTracker map[PartNumber]struct{}
+
+func (t dedupeJobPartCompletionTracker) record(partNum *PartNumber) bool {
+	if partNum == nil {
+		return false
+	}
+	if _, exists := t[*partNum]; exists {
+		return false
+	}
+	t[*partNum] = struct{}{}
+	return true
+}
+
+func (t dedupeJobPartCompletionTracker) allKnownPartsReported(knownParts uint32) bool {
+	return knownParts > 0 && uint32(len(t)) == knownParts
+}
+
+func (t dedupeJobPartCompletionTracker) reset() {
+	clear(t)
+}
 
 func init() {
 	go drainDedupeProgress()
@@ -327,6 +455,156 @@ func writeFinalDedupeProgress(jobID common.JobID, message string) error {
 func emitDedupeProgress(jptm IJobPartTransferMgr, message string) {
 	jptm.LogAtLevelForCurrentTransfer(common.LogDebug, message)
 	enqueueDedupeProgress(jptm.Info().JobID, message)
+}
+
+func isSmallFileProgressTransfer(jptm IJobPartTransferMgr) bool {
+	if jptm == nil || jptm.Info() == nil {
+		return false
+	}
+	fromTo := jptm.FromTo()
+	info := jptm.Info()
+	sourceSize := info.SourceSize
+	return fromTo.From() == common.ELocation.Blob() &&
+		fromTo.To() == common.ELocation.Blob() &&
+		(info.EntityType == common.EEntityType.File() ||
+			info.EntityType == common.EEntityType.Hardlink()) &&
+		sourceSize >= 0 &&
+		sourceSize < smallFileProgressThresholdBytes
+}
+
+type smallFileProgressTracker interface {
+	markSmallFileProgressStarted() bool
+	smallFileProgressStarted() bool
+}
+
+func (jptm *jobPartTransferMgr) markSmallFileProgressStarted() bool {
+	return atomic.CompareAndSwapUint32(&jptm.atomicSmallFileProgressStarted, 0, 1)
+}
+
+func (jptm *jobPartTransferMgr) smallFileProgressStarted() bool {
+	return atomic.LoadUint32(&jptm.atomicSmallFileProgressStarted) == 1
+}
+
+func emitSmallFileTransferStart(jptm IJobPartTransferMgr) {
+	if !isSmallFileProgressTransfer(jptm) {
+		return
+	}
+	st, ok := dedupeStateForJobIfExists(jptm.Info().JobID)
+	if !ok {
+		return
+	}
+	mode := dedupeActMode(atomic.LoadInt32(&st.actMode))
+	if mode == dedupeActOff {
+		return
+	}
+	tracker, ok := jptm.(smallFileProgressTracker)
+	if !ok || !tracker.markSmallFileProgressStarted() {
+		return
+	}
+
+	st.smallProgressMu.Lock()
+	defer st.smallProgressMu.Unlock()
+	st.addSmallFileStartedLocked(jptm.Info().SourceSize)
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		"small_file_transfer_start",
+		mode,
+		jptm.Info(),
+		fmt.Sprintf(
+			"status=%q fileBytes=%d thresholdBytes=%d",
+			"InProgress",
+			jptm.Info().SourceSize,
+			smallFileProgressThresholdBytes,
+		),
+		st.progressSnapshotLocked()))
+}
+
+func emitSmallFileTransferResult(
+	jptm IJobPartTransferMgr,
+	status common.TransferStatus,
+) {
+	if !isSmallFileProgressTransfer(jptm) {
+		return
+	}
+	tracker, ok := jptm.(smallFileProgressTracker)
+	if !ok || !tracker.smallFileProgressStarted() {
+		return
+	}
+	st, ok := dedupeStateForJobIfExists(jptm.Info().JobID)
+	if !ok {
+		return
+	}
+	mode := dedupeActMode(atomic.LoadInt32(&st.actMode))
+	if mode == dedupeActOff {
+		return
+	}
+
+	status = normalizeSmallFileResultStatus(status, jptm.WasCanceled())
+
+	st.smallProgressMu.Lock()
+	defer st.smallProgressMu.Unlock()
+	event := st.addSmallFileResultLocked(status, jptm.Info().SourceSize)
+	if event == "" {
+		return
+	}
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		event,
+		mode,
+		jptm.Info(),
+		fmt.Sprintf(
+			"status=%q fileBytes=%d thresholdBytes=%d",
+			status.String(),
+			jptm.Info().SourceSize,
+			smallFileProgressThresholdBytes,
+		),
+		st.progressSnapshotLocked()))
+}
+
+func normalizeSmallFileResultStatus(
+	status common.TransferStatus,
+	wasCanceled bool,
+) common.TransferStatus {
+	if wasCanceled &&
+		(status == common.ETransferStatus.NotStarted() ||
+			status == common.ETransferStatus.Started() ||
+			status == common.ETransferStatus.Restarted()) {
+		return common.ETransferStatus.Cancelled()
+	}
+	return status
+}
+
+func emitDedupeTransferFailure(
+	jptm IJobPartTransferMgr,
+	event string,
+	operation string,
+	status int,
+	requestID string,
+	reason string,
+	partNumber PartNumber,
+	transferIndex uint32,
+) {
+	st, ok := dedupeStateForJobIfExists(jptm.Info().JobID)
+	if !ok {
+		return
+	}
+	mode := dedupeActMode(atomic.LoadInt32(&st.actMode))
+	if mode == dedupeActOff {
+		return
+	}
+	details := fmt.Sprintf(
+		"operation=%q httpStatus=%d requestId=%q reason=%q partNumber=%d transferIndex=%d",
+		operation,
+		status,
+		requestID,
+		reason,
+		partNumber,
+		transferIndex,
+	)
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		event,
+		mode,
+		jptm.Info(),
+		details,
+		st.progressSnapshot()))
 }
 
 func dedupeProgressMessage(event string, mode dedupeActMode, info *TransferInfo, details string, snapshot dedupeProgressSnapshot) string {
@@ -514,7 +792,14 @@ func logDedupeJobSummary(jobID common.JobID, log func(common.LogLevel, string)) 
 	log(common.LogInfo, dedupeJobSummaryMessage(mode, st))
 }
 
-func finalizeDedupeJob(jobID common.JobID, log func(common.LogLevel, string)) {
+func finalizeDedupeJob(
+	jobID common.JobID,
+	status common.JobStatus,
+	transfersCompleted int,
+	transfersSkipped int,
+	transfersFailed int,
+	log func(common.LogLevel, string),
+) {
 	st, ok := dedupeStateForJobIfExists(jobID)
 	if !ok {
 		return
@@ -523,8 +808,16 @@ func finalizeDedupeJob(jobID common.JobID, log func(common.LogLevel, string)) {
 	if mode != dedupeActOff {
 		log(common.LogInfo, dedupeJobSummaryMessage(mode, st))
 		message := fmt.Sprintf(
-			"%s event=job_complete mode=%s jobId=%s %s",
-			dedupeProgressPrefix, mode, jobID.String(), st.progressSnapshot().fields(mode))
+			"%s event=job_complete mode=%s jobId=%s status=%q transfersCompleted=%d "+
+				"transfersSkipped=%d transfersFailed=%d %s",
+			dedupeProgressPrefix,
+			mode,
+			jobID.String(),
+			status.String(),
+			transfersCompleted,
+			transfersSkipped,
+			transfersFailed,
+			st.progressSnapshot().fields(mode))
 		if err := writeFinalDedupeProgress(jobID, message); err != nil {
 			log(common.LogError,
 				dedupeProgressPrefix+" event=output_error reason="+fmt.Sprintf("%q", err.Error()))
