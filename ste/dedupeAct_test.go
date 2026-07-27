@@ -22,6 +22,8 @@ package ste
 
 import (
 	"encoding/binary"
+	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -269,6 +271,16 @@ func TestFinalizeDedupeJobLogsAndClearsState(t *testing.T) {
 	jobID := common.NewJobID()
 	st := dedupeStateForJob(jobID)
 	st.addReferenced(100)
+	cpuResponse := blockblob.GetBlockListResponse{
+		CRC64CPUTimeUS:  ptrTo(int64(math.MaxInt64)),
+		SHA256CPUTimeUS: ptrTo(int64(1)),
+		RequestID:       ptrTo("request-final"),
+	}
+	cpuResponse.CommittedBlocks = []*blockblob.Block{
+		{Size: ptrTo(int64(64)), Crc64: make([]byte, 8), Sha256: make([]byte, 32)},
+	}
+	_, accepted := st.hashCPU.record(hashCPUResponseDelta(cpuResponse))
+	a.True(accepted)
 	setDedupeActModeForJob(jobID, dedupeActEnforce)
 
 	var messages []string
@@ -294,6 +306,25 @@ func TestFinalizeDedupeJobLogsAndClearsState(t *testing.T) {
 	a.Contains(string(logBytes), "transfersCompleted=2")
 	a.Contains(string(logBytes), "transfersSkipped=1")
 	a.Contains(string(logBytes), "transfersFailed=1")
+	a.Contains(string(logBytes), "crc64CpuTimeUs="+fmt.Sprint(math.MaxInt64))
+	a.Contains(string(logBytes), "sha256CpuTimeUs=1")
+	a.Contains(string(logBytes), "hashCpuTimeUs="+fmt.Sprint(math.MaxInt64))
+	a.Contains(string(logBytes), "hashedBlocks=1")
+	a.Contains(string(logBytes), "hashedBytes=64")
+	a.Contains(string(logBytes), "hashCpuTimeResponses=1")
+	a.Contains(string(logBytes), "crc64CpuTimeMissingResponses=0")
+	a.Contains(string(logBytes), "sha256CpuTimeMissingResponses=0")
+	a.Contains(string(logBytes), "requestIdMissingResponses=0")
+	a.Contains(string(logBytes), "crc64CpuTimeInvalidResponses=0")
+	a.Contains(string(logBytes), "sha256CpuTimeInvalidResponses=0")
+	a.Contains(string(logBytes), "crc64CpuTimeOverflowed=false")
+	a.Contains(string(logBytes), "sha256CpuTimeOverflowed=false")
+	a.Contains(string(logBytes), "hashCpuTimeOverflowed=true")
+	a.Contains(string(logBytes), "hashedBlocksOverflowed=false")
+	a.Contains(string(logBytes), "hashedBytesOverflowed=false")
+	a.Contains(string(logBytes), "hashMetricsOverflowed=true")
+	a.NotContains(string(logBytes), "Delta=")
+	a.NotContains(string(logBytes), " requestId=")
 
 	_, exists := dedupeStateForJobIfExists(jobID)
 	a.False(exists)
