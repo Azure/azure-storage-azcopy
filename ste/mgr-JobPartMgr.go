@@ -630,7 +630,9 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 	switch status {
 	case common.ETransferStatus.Success():
 		atomic.AddUint32(&jpm.atomicTransfersCompleted, 1)
-	case common.ETransferStatus.Failed(), common.ETransferStatus.BlobTierFailure():
+	case common.ETransferStatus.Failed(),
+		common.ETransferStatus.BlobTierFailure(),
+		common.ETransferStatus.TierAvailabilityCheckFailure():
 		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)

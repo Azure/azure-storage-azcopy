@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -58,6 +59,14 @@ func TestInferContentType(t *testing.T) {
 		// we use Contains to check because charset is also in contentType
 		a.True(strings.Contains(contentType, expectedType))
 	}
+}
+
+func TestUpdateJobPartProgressCountsTierAvailabilityAsFailure(t *testing.T) {
+	jpm := &jobPartMgr{}
+
+	jpm.updateJobPartProgress(common.ETransferStatus.TierAvailabilityCheckFailure())
+
+	assert.EqualValues(t, 1, atomic.LoadUint32(&jpm.atomicTransfersFailed))
 }
 
 func TestAddJobPartRuntimeSAS(t *testing.T) {
