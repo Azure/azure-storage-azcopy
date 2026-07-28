@@ -295,16 +295,25 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 				"s3 authentication to %s is not currently supported in AzCopy", host)
 		}
 	case common.ECredentialType.GoogleAppCredentials():
-		if resourceType != common.ELocation.GCP() {
+		if resourceType != common.ELocation.GCP() && resourceType != common.ELocation.S3() {
 			return fmt.Errorf("google application credentials to %s is not valid", resourceType.String())
 		}
 
 		u, err := url.Parse(resource)
 		if err == nil {
 			host := u.Host
-			_, err := common.NewGCPURLParts(*u)
-			if err != nil {
-				return fmt.Errorf("GCP authentication to %s is not currently supported", host)
+			// For S3 location, validate it's a Google endpoint
+			if resourceType == common.ELocation.S3() {
+				s3Parts, err := common.NewS3URLParts(*u)
+				if err != nil || !s3Parts.IsGoogleCloudStorage() {
+					return fmt.Errorf("GCP authentication is only supported for Google Cloud Storage endpoints (googleapis.com)")
+				}
+			} else {
+				// For native GCP location, validate using GCPURLParts
+				_, err := common.NewGCPURLParts(*u)
+				if err != nil {
+					return fmt.Errorf("GCP authentication to %s is not currently supported", host)
+				}
 			}
 		}
 	default:
@@ -457,6 +466,20 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	if location == common.ELocation.S3() {
+		// Check if this is a Google Cloud Storage endpoint (S3-compatible API)
+		u, parseErr := url.Parse(resource.Value)
+		if parseErr == nil {
+			s3Parts, s3ParseErr := common.NewS3URLParts(*u)
+			if s3ParseErr == nil && s3Parts.IsGoogleCloudStorage() {
+				// Google S3-compatible endpoint: try GCP credentials first, fall back to S3 HMAC
+				googleAppCredentials := common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
+				if googleAppCredentials != "" {
+					credType = common.ECredentialType.GoogleAppCredentials()
+					return
+				}
+			}
+		}
+
 		//Commenting this block out because checkAuthSafeForTarget has no case to handle public. Copy defaults S3 to access key, so similar functionality should be present for sync
 		if !buildmode.IsMover {
 			accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
