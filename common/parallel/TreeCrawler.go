@@ -23,13 +23,22 @@ package parallel
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// CrawlStats exposes live counters for a running crawl. All fields are
+// atomically updated and safe to read from any goroutine.
+type CrawlStats struct {
+	ActiveWorkers int64 // number of workers currently processing a directory
+	QueuedDirs    int64 // approximate number of directories waiting to be processed
+}
 
 type crawler struct {
 	output      chan CrawlResult
 	workerBody  EnumerateOneDirFunc
 	parallelism int
+	stats       *CrawlStats
 	cond        *sync.Cond
 	// the following are protected by cond (and must only be accessed when cond.L is held)
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
@@ -55,15 +64,24 @@ type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueue
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
 func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
+	ch, _ := CrawlWithStats(ctx, root, worker, parallelism)
+	return ch
+}
+
+// CrawlWithStats is like Crawl but also returns live CrawlStats that the
+// caller can poll to observe active worker count and queue depth.
+func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) (<-chan CrawlResult, *CrawlStats) {
+	stats := &CrawlStats{}
 	c := &crawler{
 		unstartedDirs: make([]Directory, 0, 1024),
 		output:        make(chan CrawlResult, 1000),
 		workerBody:    worker,
 		parallelism:   parallelism,
+		stats:         stats,
 		cond:          sync.NewCond(&sync.Mutex{}),
 	}
 	go c.start(ctx, root)
-	return c.output
+	return c.output, stats
 }
 
 func (c *crawler) start(ctx context.Context, root Directory) {
@@ -149,6 +167,9 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 
 				c.dirInProgressCount++ // record that we are working on something
 				c.cond.Broadcast()     // and let other threads know of that fact
+				// Update live stats
+				atomic.AddInt64(&c.stats.ActiveWorkers, 1)
+				atomic.StoreInt64(&c.stats.QueuedDirs, int64(len(c.unstartedDirs)))
 			} else {
 				if c.dirInProgressCount > 0 {
 					// something has gone wrong in the design of this algorithm, because we should only get here if all done now
@@ -182,7 +203,10 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 
 	c.unstartedDirs = append(c.unstartedDirs, foundDirectories...) // do NOT try to wait here if unstartedDirs is getting big. May cause deadlocks, due to all workers waiting and none processing the queue
 	c.dirInProgressCount--                                         // we were doing something, and now we have finished it
-	c.cond.Broadcast()                                             // let other workers know that the state has changed
+	// Update live stats
+	atomic.AddInt64(&c.stats.ActiveWorkers, -1)
+	atomic.StoreInt64(&c.stats.QueuedDirs, int64(len(c.unstartedDirs)))
+	c.cond.Broadcast() // let other workers know that the state has changed
 
 	// If our queue of unstarted stuff is getting really huge,
 	// reduce our parallelism in the hope of preventing further excessive RAM growth.

@@ -27,7 +27,9 @@ import (
 	"context"
 	"fmt"
 	_ "net/http/pprof"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,6 +50,7 @@ const (
 	throttleLogIntervalSecs       int           = 60 * 60                               // How often to log during throttling
 	semaphoreThrottleWaitInterval time.Duration = time.Duration(time.Millisecond * 100) // How often to check semaphore after throttle limit is hit
 	semaphoreWaitInterval         time.Duration = time.Duration(time.Millisecond * 50)  // How often to check semaphore status
+
 
 	// Performance tuning constants
 	filesPerGBMemory = 1_000_000 // Files per GB of memory
@@ -158,6 +161,26 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 		crawlParallelism = orchestratorOptions.parallelTraversers
 	}
 
+	// For merge-join (remote sources), parallelism is not bound by memory/indexMap constraints
+	// since objects are streamed and not accumulated. Use env var override with a high default.
+	if useStreamingMergeJoin(orchestratorOptions.fromTo) {
+		crawlParallelism = getMergeJoinParallelism()
+		// Merge-join streams objects — no indexMap accumulation — so memory/file/goroutine
+		// throttling is unnecessary. Disabling avoids the ReadMemStats STW bottleneck
+		// that serializes all workers through a global mutex+STW pause.
+		enableMemoryBasedThrottling = false
+		enableFileBasedThrottling = false
+		enableGoroutineBasedThrottling = false
+		// Each merge-join worker processes one flat directory — no recursive sub-tree.
+		// The blob traverser internally does parallel.Crawl(..., EnumerationParallelism)
+		// which spawns 16 goroutines per traverser. With 5000 workers × 2 traversers × 16
+		// = 160K goroutines, most idle. Set to 1 since outer crawl already provides parallelism.
+		EnumerationParallelism = 1
+		syncOrchestratorLog(common.LogInfo,
+			fmt.Sprintf("[MergeJoin] Using merge-join parallelism: %d, throttling disabled, inner enum=1", crawlParallelism),
+			true)
+	}
+
 	if maxDirectoryDirectChildCount > maxActiveFiles {
 		syncOrchestratorLog(
 			common.LogWarning,
@@ -167,13 +190,16 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 
 	// Validate if the crawl parallelism is within acceptable limits
 	// We need to check how many directories can be enumerated in parallel based on system memory
-	safeParallelismLimit := GetSafeParallelismLimit(maxActiveFiles, maxDirectoryDirectChildCount, orchestratorOptions.fromTo)
-	if crawlParallelism > safeParallelismLimit {
-		syncOrchestratorLog(
-			common.LogWarning,
-			fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", crawlParallelism, safeParallelismLimit),
-			true)
-		crawlParallelism = safeParallelismLimit
+	// Skip for merge-join — parallelism is set independently via env var
+	if !useStreamingMergeJoin(orchestratorOptions.fromTo) {
+		safeParallelismLimit := GetSafeParallelismLimit(maxActiveFiles, maxDirectoryDirectChildCount, orchestratorOptions.fromTo)
+		if crawlParallelism > safeParallelismLimit {
+			syncOrchestratorLog(
+				common.LogWarning,
+				fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", crawlParallelism, safeParallelismLimit),
+				true)
+			crawlParallelism = safeParallelismLimit
+		}
 	}
 
 	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -213,6 +239,21 @@ func GetSafeParallelismLimit(maxActiveFiles, maxChildCount int64, fromTo common.
 	default:
 		return min(limit, 48)
 	}
+}
+
+const defaultMergeJoinParallelism int32 = 500
+
+// getMergeJoinParallelism returns the parallelism for merge-join crawling.
+// It reads from AZCOPY_MERGE_JOIN_PARALLELISM env var, defaulting to 500.
+// Merge-join streams objects without accumulating them in memory, so parallelism
+// is not constrained by memory/indexMap limits.
+func getMergeJoinParallelism() int32 {
+	if val := os.Getenv("AZCOPY_MERGE_JOIN_PARALLELISM"); val != "" {
+		if p, err := strconv.Atoi(val); err == nil && p > 0 {
+			return int32(p)
+		}
+	}
+	return defaultMergeJoinParallelism
 }
 
 // GetNumCPU returns the number of logical CPU cores available on the system.
@@ -255,6 +296,8 @@ type ThrottleSemaphore struct {
 	fileThrottleActive      bool
 	memoryThrottleActive    bool
 	goroutineThrottleActive bool
+
+
 
 	// Context-based cancellation instead of channel
 	ctx    context.Context
@@ -439,9 +482,9 @@ func (ds *ThrottleSemaphore) shouldThrottle() bool {
 		}
 
 		if ds.isThrottling {
-			syncOrchestratorLog(common.LogWarning, fmt.Sprintf("THROTTLE ENGAGED: %s", strings.Join(reasons, ", ")))
+			syncOrchestratorLog(common.LogWarning, fmt.Sprintf("THROTTLE ENGAGED: %s", strings.Join(reasons, ", ")), true)
 		} else {
-			syncOrchestratorLog(common.LogInfo, "THROTTLE RELEASED: All resources below release thresholds")
+			syncOrchestratorLog(common.LogInfo, "THROTTLE RELEASED: All resources below release thresholds", true)
 		}
 	}
 

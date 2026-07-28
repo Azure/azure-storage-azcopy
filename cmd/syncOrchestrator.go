@@ -35,6 +35,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -670,6 +671,12 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			cca.destination.Value,
 			orchestratorOptions.ToStringMap()))
 
+	// Log merge-join mode to console (visible in LAW)
+	if useStreamingMergeJoin(cca.fromTo) {
+		syncOrchestratorLog(common.LogInfo,
+			fmt.Sprintf("[MergeJoin] Streaming merge-join ENABLED for %s source (fromTo=%s)", cca.fromTo.From(), cca.fromTo), true)
+	}
+
 	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
 
 	// syncOneDir processes a single directory by creating source and destination traversers,
@@ -685,16 +692,27 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		defer totalDirectoriesProcessed.Add(1)
 
 		var err error
+		var stepStart time.Time
 
 		// Acquire semaphore slot to limit concurrent directory processing
 		if enableThrottling {
+			syncOrchestratorLog(common.LogInfo,
+				fmt.Sprintf("[STEP] dir='%s' → AcquireSourceSlot START (activeMJ=%d, goroutines=%d)",
+					dir.(minimalStoredObject).relativePath, activeMergeJoinDirs.Load(), runtime.NumGoroutine()), true)
+			stepStart = time.Now()
 			err = semaphore.AcquireSourceSlot(mainCtx)
+			if elapsed := time.Since(stepStart); elapsed > 5*time.Second {
+				syncOrchestratorLog(common.LogWarning,
+					fmt.Sprintf("[SLOW-STEP] dir='%s' AcquireSourceSlot took %v", dir.(minimalStoredObject).relativePath, elapsed), true)
+			}
 			if err != nil {
 				syncOrchestratorLog(
 					common.LogError,
 					fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
 				return err
 			}
+			syncOrchestratorLog(common.LogInfo,
+				fmt.Sprintf("[STEP] dir='%s' → AcquireSourceSlot DONE", dir.(minimalStoredObject).relativePath), true)
 		}
 
 		srcDirEnumerating.Add(1) // Increment active directory count
@@ -840,6 +858,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		// ── Existing indexMap-based path (local filesystem sources) ──
 		// Create source traverser for current directory
+		syncOrchestratorLog(common.LogInfo,
+			fmt.Sprintf("[STEP] dir='%s' → InitResourceTraverser(src) START", dir.(minimalStoredObject).relativePath), true)
+		stepStart = time.Now()
 		pt, err := InitResourceTraverser(
 			pt_src,
 			ptt.location,
@@ -856,8 +877,15 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			})
 			return err
 		}
+		if elapsed := time.Since(stepStart); elapsed > 10*time.Second {
+			syncOrchestratorLog(common.LogWarning,
+				fmt.Sprintf("[SLOW-STEP] dir='%s' InitResourceTraverser(src) took %v", dir.(minimalStoredObject).relativePath, elapsed), true)
+		}
 
 		// Create destination traverser for current directory
+		syncOrchestratorLog(common.LogInfo,
+			fmt.Sprintf("[STEP] dir='%s' → InitResourceTraverser(dst) START", dir.(minimalStoredObject).relativePath), true)
+		stepStart = time.Now()
 		st, err := InitResourceTraverser(
 			st_src,
 			stt.location,
@@ -874,6 +902,67 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			})
 			return err
 		}
+		if elapsed := time.Since(stepStart); elapsed > 10*time.Second {
+			syncOrchestratorLog(common.LogWarning,
+				fmt.Sprintf("[SLOW-STEP] dir='%s' InitResourceTraverser(dst) took %v", dir.(minimalStoredObject).relativePath, elapsed), true)
+		}
+
+		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
+
+		// Fork: use streaming merge-join for remote sources (sorted listings),
+		// keep existing indexMap-based flow for local filesystem (unsorted).
+		if useStreamingMergeJoin(cca.fromTo) {
+			// ── Streaming merge-join path (S3, Blob, BlobFS sources) ──
+			// Both source and destination listings are lexicographically ordered,
+			// enabling O(1) memory streaming comparison instead of O(N) indexMap.
+
+			mergeJoinSyncOneDirLog(common.LogDebug,
+				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
+
+			subDirs, mergeErr := mergeJoinSyncDir(
+				mainCtx,
+				enumerator,
+				cca,
+				dir.(minimalStoredObject).relativePath,
+				pt,
+				st,
+				isDestinationPresent,
+			)
+
+			srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
+
+			// Release source slot after merge-join completes (source was actively listed during merge-join)
+			if enableThrottling {
+				semaphore.ReleaseSourceSlot()
+			}
+
+			if mergeErr != nil {
+				errMsg = fmt.Sprintf("Merge-join sync failed for dir %s: %s", pt_src.Value, mergeErr)
+				syncOrchestratorLog(common.LogError, errMsg, true)
+				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           pt_src.Value,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.From(),
+				})
+				return mergeErr
+			}
+
+			// Enqueue discovered subdirectories for processing
+			for _, sub_dir := range subDirs {
+				crawlWg.Add(1)
+				enqueueDir(minimalStoredObject{
+					relativePath:           sub_dir.relativePath,
+					changeTime:             sub_dir.changeTime,
+					isPresentAtDestination: sub_dir.isPresentAtDestination,
+				})
+			}
+			return nil
+		}
+
+		// ── Existing indexMap-based path (local filesystem sources) ──
+		// Local filesystem does not guarantee lexicographic listing order,
+		// so we use the traditional store-all-then-compare approach.
 
 		// Create sync traverser for this directory
 		stra := newSyncTraverser(enumerator, dir.(minimalStoredObject).relativePath, enumerator.objectComparator)
@@ -1091,7 +1180,33 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
 	// Start parallel crawling with specified concurrency
-	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
+	crawlCh, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(crawlParallelism))
+
+	// Log active worker and queue stats periodically
+	statsCtx, stopStats := context.WithCancel(mainCtx)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-statsCtx.Done():
+				return
+			case <-ticker.C:
+				active := atomic.LoadInt64(&crawlStats.ActiveWorkers)
+				queued := atomic.LoadInt64(&crawlStats.QueuedDirs)
+				activeMJ := activeMergeJoinDirs.Load()
+				goroutines := runtime.NumGoroutine()
+				syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+					"[CrawlStats] activeWorkers=%d/%d, queuedDirs=%d, activeMergeJoin=%d, goroutines=%d",
+					active, int(crawlParallelism), queued, activeMJ, goroutines), true)
+			}
+		}
+	}()
+
+	// Drain crawl results (required — Crawl blocks if channel isn't consumed)
+	for range crawlCh {
+	}
+	stopStats()
 
 	// Cancellation-aware wait
 	done := make(chan struct{})
@@ -1104,6 +1219,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	case <-done:
 		// All goroutines completed normally
 		syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
+		if useStreamingMergeJoin(cca.fromTo) {
+			syncOrchestratorLog(common.LogInfo, "[MergeJoin] Streaming merge-join scan completed", true)
+		}
 
 	case <-mainCtx.Done():
 		// Cancellation occurred
