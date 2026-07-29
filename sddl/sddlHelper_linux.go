@@ -927,10 +927,10 @@ func aceToString(aceSlice []byte, aclRevision byte) (string, error) {
 	// ACCESS_ALLOWED_ACE.Header.AceType.
 	aceType := aceSlice[:1][0]
 
-	// This is our gatekeeper for blocking unsupported ace types. ACL revision should not mattter as long as the ACE is in the compatible format.
+	// This is our gatekeeper for blocking unsupported ace types. ACL revision should not matter as long as the ACE is in the compatible format.
 	// We open up ACEs as we add support for them.
 	if isUnsupportedAceType(aceType) {
-		return "", fmt.Errorf("Unsupported ACE type: 0x%x. ACL revision :%d", aceType, aclRevision)
+		return "", fmt.Errorf("Unsupported ACE type: 0x%x. ACL revision: %d", aceType, aclRevision)
 	}
 
 	// ACCESS_ALLOWED_ACE.Header.AceFlags.
