@@ -21,7 +21,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -32,12 +31,6 @@ import (
 func TestError_SIGTERMDuringEnumerationDoesNotHang(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows does not support sending SIGTERM with os.Process.Signal")
-	}
-
-	const fileCount = 5000
-	files := make([]interface{}, fileCount)
-	for i := range files {
-		files[i] = fmt.Sprintf("file-%05d", i)
 	}
 
 	RunScenarios(
@@ -54,8 +47,8 @@ func TestError_SIGTERMDuringEnumerationDoesNotHang(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize:    "1",
-			shouldTransfer: files,
+			defaultSize:    "1K",
+			shouldTransfer: []interface{}{"file-1", "file-2"},
 		},
 		EAccountType.Standard(), EAccountType.Standard(), "")
 }

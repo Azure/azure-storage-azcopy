@@ -46,6 +46,7 @@ type TestRunner struct {
 	flags                  map[string]string
 	signalOnOutput         string
 	signal                 os.Signal
+	signalTriggerTimeout   time.Duration
 	exitTimeoutAfterSignal time.Duration
 }
 
@@ -70,8 +71,10 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	p := s.p
 	o := s.operation
 	if p.sigtermDuringEnumeration {
-		t.signalOnOutput = "Scanning..."
+		t.flags["await-enumeration"] = "true"
+		t.signalOnOutput = "Awaiting cancellation during enumeration"
 		t.signal = syscall.SIGTERM
+		t.signalTriggerTimeout = 10 * time.Second
 		t.exitTimeoutAfterSignal = 10 * time.Second
 	}
 
@@ -192,7 +195,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 }
 
 type outputMarkerBuffer struct {
-	bytes.Buffer
+	buffer  bytes.Buffer
 	marker  []byte
 	matched chan struct{}
 	once    sync.Once
@@ -222,7 +225,11 @@ func (b *outputMarkerBuffer) Write(p []byte) (int, error) {
 		b.tail = append(b.tail[:0], searchBuffer[len(searchBuffer)-tailLength:]...)
 	}
 
-	return b.Buffer.Write(p)
+	return b.buffer.Write(p)
+}
+
+func (b *outputMarkerBuffer) Bytes() []byte {
+	return b.buffer.Bytes()
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -286,6 +293,8 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 				case <-stdout.matched:
 					result <- c.Process.Signal(t.signal)
 				case <-processDone:
+				case <-time.After(t.signalTriggerTimeout):
+					result <- fmt.Errorf("AzCopy did not emit %q within %s", t.signalOnOutput, t.signalTriggerTimeout)
 				}
 			}()
 		}
