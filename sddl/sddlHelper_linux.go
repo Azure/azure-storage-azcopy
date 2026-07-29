@@ -1648,7 +1648,7 @@ func SetSecurityObject(path string, flags SECURITY_INFORMATION, sd []byte) error
 
 		// Put in the end to prevent "unreachable code" complaints from vet.
 		// TODO: Add support for "DACL + SACL + Owner + Group".
-		//       Remove this panic only after rest of the code correctly supports SACL.
+		//       Return an error until the rest of the code correctly supports SACL.
 		return fmt.Errorf("SetSecurityObject: Unsupported flags value 0x%x", flags)
 
 	} else {
@@ -1689,7 +1689,7 @@ func QuerySecurityObject(path string, flags SECURITY_INFORMATION) ([]byte, error
 
 		// Put in the end to prevent "unreachable code" complaints from vet.
 		// TODO: Add support for "DACL + SACL + Owner + Group".
-		//       Remove this panic only after rest of the code correctly supports SACL.
+		//       Return an error until the rest of the code correctly supports SACL.
 		return nil, fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags)
 	} else {
 		return nil, fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags)
@@ -1702,7 +1702,7 @@ func QuerySecurityObject(path string, flags SECURITY_INFORMATION) ([]byte, error
 
 	// Ensure Security Descriptor returned by the cifs client is fine.
 	if err := sdRelativeIsValid(sd, flags); err != nil {
-		// panic because we expect cifs client to return a valid Security Descriptor.
+		// Return an error because we expect cifs client to return a valid Security Descriptor.
 		return nil, fmt.Errorf("QuerySecurityObject: %v", err)
 	}
 
