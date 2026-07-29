@@ -21,11 +21,37 @@
 package e2etest
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+func TestError_SIGTERMDuringEnumerationDoesNotHang(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not support sending SIGTERM with os.Process.Signal")
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:                true,
+			disableParallelTesting:   true,
+			sigtermDuringEnumeration: true,
+		},
+		nil,
+		testFiles{
+			defaultSize:    "1K",
+			shouldTransfer: []interface{}{"file-1", "file-2"},
+		},
+		EAccountType.Standard(), EAccountType.Standard(), "")
+}
 
 func TestError_CancelFromStdin(t *testing.T) {
 	RunScenarios(

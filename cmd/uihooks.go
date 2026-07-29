@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -66,10 +67,11 @@ var glcm LifecycleMgr = func() (lcmgr *lifecycleMgr) {
 	lcmgr.checkAndStartCPUProfiling()
 
 	common.SetUIHooks(&common.JobUIHooks{
-		Prompt:                 lcmgr.Prompt,
-		Info:                   lcmgr.Info,
-		Warn:                   lcmgr.Warn,
-		E2EAwaitAllowOpenFiles: lcmgr.E2EAwaitAllowOpenFiles,
+		Prompt:                   lcmgr.Prompt,
+		Info:                     lcmgr.Info,
+		Warn:                     lcmgr.Warn,
+		E2EAwaitAllowOpenFiles:   lcmgr.E2EAwaitAllowOpenFiles,
+		E2EAwaitEnumerationStart: lcmgr.E2EAwaitEnumerationStart,
 	})
 
 	return
@@ -100,6 +102,8 @@ type LifecycleMgr interface {
 	E2EAwaitContinue()                                                         // used by E2E tests
 	E2EAwaitAllowOpenFiles()                                                   // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                                  // used by E2E tests
+	E2EAwaitEnumerationStart(context.Context)                                  // used by E2E tests
+	E2EEnableAwaitEnumerationStart(enable bool)                                // used by E2E tests
 	RegisterCloseFunc(func())
 	MsgHandlerChannel() <-chan *common.LCMMsg
 	ReportAllJobPartsDone()
@@ -123,6 +127,7 @@ type lifecycleMgr struct {
 	allowCancelFromStdIn  bool           // allow user to send in 'cancel' from the stdin to stop the current job
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
+	e2eAwaitEnumeration   bool           // pause before enumeration until the context is cancelled
 	closeFunc             func()         // used to close logs before exiting
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *common.LCMMsg
@@ -691,6 +696,19 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 	} else {
 		close(lcm.e2eAllowOpenChannel) // so that E2EAwaitAllowOpenFiles will instantly return every time
 	}
+}
+
+func (lcm *lifecycleMgr) E2EAwaitEnumerationStart(ctx context.Context) {
+	if !lcm.e2eAwaitEnumeration {
+		return
+	}
+
+	lcm.Info("Awaiting cancellation during enumeration")
+	<-ctx.Done()
+}
+
+func (lcm *lifecycleMgr) E2EEnableAwaitEnumerationStart(enable bool) {
+	lcm.e2eAwaitEnumeration = enable
 }
 
 func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *common.LCMMsg {
