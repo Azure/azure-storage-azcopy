@@ -369,6 +369,17 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
 		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 
+			out := fmt.Sprintf("sourceObjectLmt %s, destinationObjectLmt %s, lastSuccessfulSyncJobStartTime %s", 
+				sourceObject.lastModifiedTime, destinationObject.lastModifiedTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
+
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo, out)
+			}
+
+			if stdout {
+				glcm.Info(out)
+			}
+
 			if sourceObject.lastModifiedTime.IsZero() {
 				// invalid LMT
 				// assume metadata change
