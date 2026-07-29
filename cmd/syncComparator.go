@@ -346,6 +346,11 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
 		// assume it changed as we can't compare
+		out = fmt.Sprintf("rosedinh: LWT is zero")
+
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogInfo, out)
+		}
 		return true, true
 	}
 
@@ -357,6 +362,11 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	if !f.orchestratorOptions.metaDataOnlySync {
 		// if metadata only sync is not enabled, return early
 		// and assume metadata change status to be same as data
+		out = fmt.Sprintf("rosedinh: no metadata only sync")
+
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogInfo, out)
+		}
 		return false, false
 	}
 
@@ -369,7 +379,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
 		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 
-			out := fmt.Sprintf("sourceObjectLmt %s, destinationObjectLmt %s, lastSuccessfulSyncJobStartTime %s", 
+			out = fmt.Sprintf("sourceObjectLmt %s, destinationObjectLmt %s, lastSuccessfulSyncJobStartTime %s", 
 				sourceObject.lastModifiedTime, destinationObject.lastModifiedTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
 
 			if azcopyScanningLogger != nil {
@@ -379,12 +389,27 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 			if sourceObject.lastModifiedTime.IsZero() {
 				// invalid LMT
 				// assume metadata change
+				out = fmt.Sprintf("rosedinh: source LMT is zero")
+
+				if azcopyScanningLogger != nil {
+					azcopyScanningLogger.Log(common.LogInfo, out)
+				}
 				return false, true
 			} else {
+				out = fmt.Sprintf("rosedinh: checking LMT's")
+
+				if azcopyScanningLogger != nil {
+					azcopyScanningLogger.Log(common.LogInfo, out)
+				}
 				// else check if source or target changed after last successful job start time
 				return false, sourceObject.lastModifiedTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
 			}
 		} else {
+			out = fmt.Sprintf("rosedinh: Last successful sync job start time is zero")
+
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo, out)
+			}
 			// If last successful job start time can't be used, we assume it's changed
 			// this will lead to more work but it is necessary to maintain fidelity
 			return false, true
