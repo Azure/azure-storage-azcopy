@@ -204,21 +204,7 @@ func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 				cancelCalled = true
 				j.handler.Info("Cancellation requested. Beginning clean shutdown...")
 				if !reporter.CompletedEnumeration() {
-					answer := j.handler.Prompt("The enumeration (source only for copy, source/destination comparison for sync) is not complete, "+
-						"cancelling the job at this point means it cannot be resumed.",
-						common.PromptDetails{
-							PromptType: common.EPromptType.Cancel(),
-							ResponseOptions: []common.ResponseOption{
-								common.EResponseOption.Yes(),
-								common.EResponseOption.No(),
-							},
-						})
-
-					if answer != common.EResponseOption.Yes() {
-						// user aborted cancel - continue monitoring but don't cancel
-						cancelCalled = false
-						continue
-					}
+					j.handler.Info("The enumeration is not complete; cancelling the job at this point means it cannot be resumed.")
 				}
 				// schedule job cancellation
 				// reporter will continue to report progress until the job is fully cancelled or completed
