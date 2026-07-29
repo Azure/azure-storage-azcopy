@@ -32,6 +32,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -40,7 +43,11 @@ import (
 // encapsulates the interaction with the AzCopy instance that is being tested
 // the flag names should be captured here so that in case they change, only 1 place needs to be updated
 type TestRunner struct {
-	flags map[string]string
+	flags                  map[string]string
+	signalOnOutput         string
+	signal                 os.Signal
+	signalTriggerTimeout   time.Duration
+	exitTimeoutAfterSignal time.Duration
 }
 
 func newTestRunner() TestRunner {
@@ -63,6 +70,13 @@ var isLaunchedByDebugger = func() bool {
 func (t *TestRunner) SetAllFlags(s *scenario) {
 	p := s.p
 	o := s.operation
+	if p.sigtermDuringEnumeration {
+		t.flags["await-enumeration"] = "true"
+		t.signalOnOutput = "Awaiting cancellation during enumeration"
+		t.signal = syscall.SIGTERM
+		t.signalTriggerTimeout = 10 * time.Second
+		t.exitTimeoutAfterSignal = 10 * time.Second
+	}
 
 	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
 		if value == dflt {
@@ -180,6 +194,44 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	}
 }
 
+type outputMarkerBuffer struct {
+	buffer  bytes.Buffer
+	marker  []byte
+	matched chan struct{}
+	once    sync.Once
+	tail    []byte
+}
+
+func newOutputMarkerBuffer(marker string) *outputMarkerBuffer {
+	return &outputMarkerBuffer{
+		marker:  []byte(marker),
+		matched: make(chan struct{}),
+	}
+}
+
+func (b *outputMarkerBuffer) Write(p []byte) (int, error) {
+	if len(b.marker) > 0 {
+		searchBuffer := make([]byte, 0, len(b.tail)+len(p))
+		searchBuffer = append(searchBuffer, b.tail...)
+		searchBuffer = append(searchBuffer, p...)
+		if bytes.Contains(searchBuffer, b.marker) {
+			b.once.Do(func() { close(b.matched) })
+		}
+
+		tailLength := len(b.marker) - 1
+		if tailLength > len(searchBuffer) {
+			tailLength = len(searchBuffer)
+		}
+		b.tail = append(b.tail[:0], searchBuffer[len(searchBuffer)-tailLength:]...)
+	}
+
+	return b.buffer.Write(p)
+}
+
+func (b *outputMarkerBuffer) Bytes() []byte {
+	return b.buffer.Bytes()
+}
+
 func (t *TestRunner) SetAwaitOpenFlag() {
 	t.flags["await-open"] = "true"
 }
@@ -208,14 +260,14 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 		c.Env = env
 	}
 
-	var stdout bytes.Buffer
+	stdout := newOutputMarkerBuffer(t.signalOnOutput)
 	var stderr bytes.Buffer
 	stdin, err := c.StdinPipe()
 	if err != nil {
 		return make([]byte, 0), err
 	}
 
-	c.Stdout = &stdout
+	c.Stdout = stdout
 	c.Stderr = &stderr
 
 	// instead of err := c.Run(), we do the following
@@ -224,6 +276,28 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 		defer func() {
 			_ = c.Process.Kill() // in case we never finish c.Wait() below, and get panicked or killed
 		}()
+
+		processDone := make(chan struct{})
+		waitResult := make(chan error, 1)
+		go func() {
+			waitResult <- c.Wait()
+			close(processDone)
+		}()
+
+		var signalResult <-chan error
+		if t.signalOnOutput != "" {
+			result := make(chan error, 1)
+			signalResult = result
+			go func() {
+				select {
+				case <-stdout.matched:
+					result <- c.Process.Signal(t.signal)
+				case <-processDone:
+				case <-time.After(t.signalTriggerTimeout):
+					result <- fmt.Errorf("AzCopy did not emit %q within %s", t.signalOnOutput, t.signalTriggerTimeout)
+				}
+			}()
+		}
 
 		if debug {
 			beginAzCopyDebugging(stdin)
@@ -251,8 +325,28 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 			}()
 		}
 
-		// wait for completion
-		runErr = c.Wait()
+		if signalResult == nil {
+			runErr = <-waitResult
+		} else {
+			select {
+			case runErr = <-waitResult:
+			case signalErr := <-signalResult:
+				if signalErr != nil {
+					_ = c.Process.Kill()
+					<-waitResult
+					runErr = fmt.Errorf("failed to signal AzCopy after output %q: %w", t.signalOnOutput, signalErr)
+					break
+				}
+
+				select {
+				case runErr = <-waitResult:
+				case <-time.After(t.exitTimeoutAfterSignal):
+					_ = c.Process.Kill()
+					<-waitResult
+					runErr = fmt.Errorf("AzCopy did not exit within %s after receiving %v", t.exitTimeoutAfterSignal, t.signal)
+				}
+			}
+		}
 	}
 
 	// back to normal exec.Cmd.Output() processing
@@ -385,6 +479,16 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	}
 
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, env, afterStart, chToStdin)
+	if t.signalOnOutput != "" {
+		if err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || len(exitErr.Stderr) > 0 {
+				return CopyOrSyncCommandResult{}, false,
+					fmt.Errorf("AzCopy signal test failed: %w\n  with stdout: %s\n  from args %v", err, out, args)
+			}
+		}
+		return CopyOrSyncCommandResult{rawOutput: string(out)}, true, nil
+	}
 
 	wasClean := true
 	stdErr := make([]byte, 0)
@@ -437,6 +541,7 @@ func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID, azcopyDir string
 type CopyOrSyncCommandResult struct {
 	jobID       common.JobID
 	finalStatus common.ListSyncJobSummaryResponse
+	rawOutput   string
 }
 
 func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool) {
