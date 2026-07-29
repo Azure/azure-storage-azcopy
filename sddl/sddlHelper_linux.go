@@ -927,10 +927,10 @@ func aceToString(aceSlice []byte, aclRevision byte) (string, error) {
 	// ACCESS_ALLOWED_ACE.Header.AceType.
 	aceType := aceSlice[:1][0]
 
-	// This is our gatekeeper for blocking unsupported ace types. ACL revision should not matter as long as the ACE is in the compatible format.
+	// This is our gatekeeper for blocking unsupported ace types. ACL revision should not mattter as long as the ACE is in the compatible format.
 	// We open up ACEs as we add support for them.
 	if isUnsupportedAceType(aceType) {
-		return "", fmt.Errorf("Unsupported ACE type: 0x%x. ACL revision: %d", aceType, aclRevision)
+		return "", fmt.Errorf("Unsupported ACE type: 0x%x. ACL revision :%d", aceType, aclRevision)
 	}
 
 	// ACCESS_ALLOWED_ACE.Header.AceFlags.
@@ -1119,7 +1119,7 @@ func getDaclString(sd []byte) (string, error) {
 	// ACL.AclRevision.
 	aclRevision := sd[dacloffset]
 
-	// Skip ACL revision check as some SMB servers may return different revision values
+	// Skip ACL revision check as various SMB servers may return different revision values
 	// (2, 3, 4, 5, etc.). The unsupported ACE types will be caught later by isUnsupportedAceType().
 
 	// ACL.AceCount.
@@ -1648,7 +1648,7 @@ func SetSecurityObject(path string, flags SECURITY_INFORMATION, sd []byte) error
 
 		// Put in the end to prevent "unreachable code" complaints from vet.
 		// TODO: Add support for "DACL + SACL + Owner + Group".
-		//       Return an error until the rest of the code correctly supports SACL.
+		//       Remove this panic only after rest of the code correctly supports SACL.
 		return fmt.Errorf("SetSecurityObject: Unsupported flags value 0x%x", flags)
 
 	} else {
@@ -1689,7 +1689,7 @@ func QuerySecurityObject(path string, flags SECURITY_INFORMATION) ([]byte, error
 
 		// Put in the end to prevent "unreachable code" complaints from vet.
 		// TODO: Add support for "DACL + SACL + Owner + Group".
-		//       Return an error until the rest of the code correctly supports SACL.
+		//       Remove this panic only after rest of the code correctly supports SACL.
 		return nil, fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags)
 	} else {
 		return nil, fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags)
@@ -1702,7 +1702,7 @@ func QuerySecurityObject(path string, flags SECURITY_INFORMATION) ([]byte, error
 
 	// Ensure Security Descriptor returned by the cifs client is fine.
 	if err := sdRelativeIsValid(sd, flags); err != nil {
-		// Return an error because we expect cifs client to return a valid Security Descriptor.
+		// panic because we expect cifs client to return a valid Security Descriptor.
 		return nil, fmt.Errorf("QuerySecurityObject: %v", err)
 	}
 
