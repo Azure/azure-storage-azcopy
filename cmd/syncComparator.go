@@ -352,10 +352,6 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 				azcopyScanningLogger.Log(common.LogInfo, out)
 			}
 
-			if stdout {
-				glcm.Info(out)
-			}
-
 			if sourceObject.lastModifiedTime.IsZero() {
 				// invalid LMT
 				// assume metadata change
