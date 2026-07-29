@@ -343,18 +343,22 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	// LastWriteTime are already known to be equal, so if only the LMT differs we
 	// treat it as a metadata-only change.
 	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
-		if sourceObject.lastModifiedTime.IsZero() || destinationObject.lastModifiedTime.IsZero() {
-			// can't compare reliably, assume metadata changed
+		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
+
+			if sourceObject.lastModifiedTime.IsZero() {
+				// invalid LMT
+				// assume metadata change
+				return false, true
+			} else {
+				// else check if source or target changed after last successful job start time
+				return false, (sourceObject.lastModifiedTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime) || 
+							   destinationObject.lastModifiedTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime))
+			}
+		} else {
+			// If last successful job start time can't be used, we assume it's changed
+			// this will lead to more work but it is necessary to maintain fidelity
 			return false, true
 		}
-
-		//rosedinh: need to check if LMT of destination object is just set to the last sync time
-		// if so, we need to compare destination's LMT with last successful sync time
-		if sourceObject.lastModifiedTime.Compare(destinationObject.lastModifiedTime) != 0 {
-			return false, true
-		}
-
-		return false, false
 	}
 
 	if isNFSCopy {
