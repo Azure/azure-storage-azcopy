@@ -258,7 +258,7 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 	}
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	switch p.EntityType() {
-	case common.EEntityType.File(), common.EEntityType.Hardlink():
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
 		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
@@ -322,7 +322,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		p.cachedPermissionKey = properties.FilePermissionKey() // We cache this as getting the SDDL is a separate operation.
 
 		switch p.EntityType() {
-		case common.EEntityType.File(), common.EEntityType.Hardlink():
+		case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
 					ContentType:        properties.ContentType(),
