@@ -141,9 +141,17 @@ func dedupeActDestinationReady(mode dedupeActMode, destinationSAS string) bool {
 func rawCommittedBlocksFromResponse(resp blockblob.GetBlockListResponse) []rawCommittedBlock {
 	raw := make([]rawCommittedBlock, 0, len(resp.CommittedBlocks))
 	for _, b := range resp.CommittedBlocks {
+		if b == nil {
+			raw = append(raw, rawCommittedBlock{})
+			continue
+		}
 		rb := rawCommittedBlock{
 			Name: common.IffNotNil(b.Name, ""),
 			Size: common.IffNotNil(b.Size, 0),
+		}
+		if b.Offset != nil {
+			rb.Offset = *b.Offset
+			rb.HasOffset = true
 		}
 		if len(b.Crc64) == 8 && len(b.Sha256) == 32 {
 			rb.CRC64 = binary.LittleEndian.Uint64(b.Crc64)

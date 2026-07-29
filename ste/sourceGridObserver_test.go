@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,70 @@ func TestBuildSourceGridPlan_AssignsContiguousOffsets(t *testing.T) {
 
 	a.EqualValues(350, plan.Blocks[2].Offset)
 	a.EqualValues(50, plan.Blocks[2].Size)
+}
+
+func TestBuildSourceGridPlan_UsesServiceOffsetsAndDerivesMissingOffsets(t *testing.T) {
+	a := assert.New(t)
+
+	plan, err := buildSourceGridPlan([]rawCommittedBlock{
+		{Name: "b0", Size: 100, Offset: 0, HasOffset: true},
+		{Name: "b1", Size: 250},
+		{Name: "b2", Size: 50, Offset: 350, HasOffset: true},
+	})
+	a.NoError(err)
+	a.EqualValues(400, plan.TotalSize)
+	a.EqualValues(0, plan.Blocks[0].Offset)
+	a.EqualValues(100, plan.Blocks[1].Offset)
+	a.EqualValues(350, plan.Blocks[2].Offset)
+}
+
+func TestBuildSourceGridPlan_RejectsInvalidServiceOffsets(t *testing.T) {
+	tests := []struct {
+		name   string
+		blocks []rawCommittedBlock
+	}{
+		{
+			name: "negative",
+			blocks: []rawCommittedBlock{
+				{Name: "b0", Size: 100, Offset: -1, HasOffset: true},
+			},
+		},
+		{
+			name: "nonzero first offset",
+			blocks: []rawCommittedBlock{
+				{Name: "b0", Size: 100, Offset: 1, HasOffset: true},
+			},
+		},
+		{
+			name: "gap",
+			blocks: []rawCommittedBlock{
+				{Name: "b0", Size: 100, Offset: 0, HasOffset: true},
+				{Name: "b1", Size: 100, Offset: 101, HasOffset: true},
+			},
+		},
+		{
+			name: "overlap",
+			blocks: []rawCommittedBlock{
+				{Name: "b0", Size: 100, Offset: 0, HasOffset: true},
+				{Name: "b1", Size: 100, Offset: 99, HasOffset: true},
+			},
+		},
+		{
+			name: "range overflow",
+			blocks: []rawCommittedBlock{
+				{Name: "b0", Size: math.MaxInt64},
+				{Name: "b1", Size: 1},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := buildSourceGridPlan(test.blocks)
+			a := assert.New(t)
+			a.Error(err)
+		})
+	}
 }
 
 func TestBuildSourceGridPlan_Empty(t *testing.T) {

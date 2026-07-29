@@ -122,9 +122,11 @@ Derived source ranges:         [0,4), [4,8), [8,10) MiB
 Scheduled AzCopy chunks:       [0,4), [4,8), [8,10) MiB
 ```
 
-`buildSourceGridPlan` derives each offset as the prefix sum of the preceding
-block sizes. It rejects non-positive block sizes. Before enabling source-grid
-chunking for a transfer, the implementation also requires:
+`buildSourceGridPlan` uses the offset returned by XStore when it is present.
+For compatibility with legacy Azure responses that omit `Offset`, it derives
+only the missing value from the preceding block ranges. It rejects negative
+offsets, gaps, overlaps, integer overflow, and non-positive block sizes. Before
+enabling source-grid chunking for a transfer, the implementation also requires:
 
 - a block-blob to block-blob service-to-service transfer;
 - a committed named-block list;
