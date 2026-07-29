@@ -137,7 +137,7 @@ func TestRawCommittedBlocksFromResponse(t *testing.T) {
 
 	resp := blockblob.GetBlockListResponse{}
 	resp.CommittedBlocks = []*blockblob.Block{
-		{Name: ptrTo("blk-0"), Size: ptrTo(int64(100)), Crc64: crc[:], Sha256: sha},
+		{Name: ptrTo("blk-0"), Size: ptrTo(int64(100)), Offset: ptrTo(int64(42)), Crc64: crc[:], Sha256: sha},
 		{Name: ptrTo("blk-1"), Size: ptrTo(int64(200))}, // no hashes (GetHash off for this block)
 	}
 
@@ -146,6 +146,8 @@ func TestRawCommittedBlocksFromResponse(t *testing.T) {
 	a.Len(raw, 2)
 	a.Equal("blk-0", raw[0].Name)
 	a.EqualValues(100, raw[0].Size)
+	a.EqualValues(42, raw[0].Offset)
+	a.True(raw[0].HasOffset)
 	a.Equal(uint64(0x0102030405060708), raw[0].CRC64) // decoded little-endian
 	a.Equal(byte(0xAA), raw[0].SHA256[0])
 	a.Equal(byte(0xBB), raw[0].SHA256[31])
@@ -153,6 +155,7 @@ func TestRawCommittedBlocksFromResponse(t *testing.T) {
 
 	a.Equal("blk-1", raw[1].Name)
 	a.EqualValues(200, raw[1].Size)
+	a.False(raw[1].HasOffset)
 	a.EqualValues(0, raw[1].CRC64)
 	a.False(raw[1].HasHashes)
 	a.Equal([32]byte{}, raw[1].SHA256)

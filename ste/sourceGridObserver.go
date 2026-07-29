@@ -23,6 +23,7 @@ package ste
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
@@ -59,38 +60,66 @@ type SourceGridPlan struct {
 	TotalSize int64
 }
 
-// rawCommittedBlock is the minimal block info needed to build a plan: the committed block name
-// and its size, plus the optional per-block content hashes returned when the service supports the
-// include=crc64,sha256 extension. Offsets are derived (committed block lists are returned in order).
+// rawCommittedBlock is the minimal block info needed to build a plan: the committed block name,
+// size, optional service-provided offset, and optional per-block content hashes.
 type rawCommittedBlock struct {
 	Name      string
 	Size      int64
+	Offset    int64
+	HasOffset bool
 	CRC64     uint64
 	SHA256    [32]byte
 	HasHashes bool
 }
 
-// buildSourceGridPlan converts an ordered committed block list into a SourceGridPlan, assigning
-// each block a contiguous offset equal to the prefix sum of the preceding block sizes. Non-positive
-// block sizes are rejected because they cannot be scheduled as HTTP ranges.
+// buildSourceGridPlan converts an ordered committed block list into a SourceGridPlan. It uses
+// service-provided offsets when present and derives only missing offsets for legacy responses.
+// Every resulting range must be ordered and contiguous.
 func buildSourceGridPlan(blocks []rawCommittedBlock) (*SourceGridPlan, error) {
 	plan := &SourceGridPlan{Blocks: make([]PlannedBlock, 0, len(blocks))}
-	var offset int64
+	var expectedOffset int64
 	for i, b := range blocks {
 		if b.Size <= 0 {
 			return nil, fmt.Errorf("committed block %d (%q) has non-positive size %d", i, b.Name, b.Size)
 		}
+
+		blockOffset := expectedOffset
+		if b.HasOffset {
+			blockOffset = b.Offset
+			if blockOffset < 0 {
+				return nil, fmt.Errorf("committed block %d (%q) has negative offset %d", i, b.Name, blockOffset)
+			}
+			if blockOffset != expectedOffset {
+				return nil, fmt.Errorf(
+					"committed block %d (%q) has non-contiguous offset %d; expected %d",
+					i,
+					b.Name,
+					blockOffset,
+					expectedOffset,
+				)
+			}
+		}
+		if b.Size > math.MaxInt64-blockOffset {
+			return nil, fmt.Errorf(
+				"committed block %d (%q) range overflows int64: offset %d size %d",
+				i,
+				b.Name,
+				blockOffset,
+				b.Size,
+			)
+		}
+
 		plan.Blocks = append(plan.Blocks, PlannedBlock{
-			Offset:       offset,
+			Offset:       blockOffset,
 			Size:         b.Size,
 			SrcBlockName: b.Name,
 			CRC64:        b.CRC64,
 			SHA256:       b.SHA256,
 			HasHashes:    b.HasHashes,
 		})
-		offset += b.Size
+		expectedOffset = blockOffset + b.Size
 	}
-	plan.TotalSize = offset
+	plan.TotalSize = expectedOffset
 	return plan, nil
 }
 
