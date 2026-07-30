@@ -44,6 +44,7 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -58,13 +59,16 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
 	s, ok := baseSender.(propertiesSender)
 	if !ok {
-		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support copying properties alone", 0)
+		err_msg := "sender implementation does not support copying properties alone"
+		jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -74,6 +78,7 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	err = jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return

@@ -186,7 +186,9 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 			srcRQ := srcURL.Query()
 
 			if len(srcRQ["sharesnapshot"]) == 0 && len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 {
-				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
+				err_msg := "Transfer source and destination are the same, which would cause data loss. Aborting transfer."
+				jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+				jptm.SetErrorMessage(err_msg)
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
 				return
@@ -231,6 +233,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -252,6 +255,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -273,7 +277,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		exists, dstLmt, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Could not check destination file existence. "+existenceErr.Error(), 0)
+			err_msg := "Could not check destination file existence. " + existenceErr.Error()
+			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+			jptm.SetErrorMessage(err_msg)
 			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
 			jptm.ReportTransferDone()
 			return
@@ -317,7 +323,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			if strings.Contains(err.Error(), "Access is denied") && runtime.GOOS == "windows" {
 				suffix = " See --" + common.BackupModeFlagName + " flag if you need to read all files regardless of their permissions"
 			}
-			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source. "+err.Error()+suffix, 0)
+			err_msg := "Couldn't open source. " + err.Error() + suffix
+			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+			jptm.SetErrorMessage(err_msg)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -333,13 +341,18 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		(srcInfoProvider.IsLocal() || isS2SCopier && info.S2SSourceChangeValidation) {
 		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
+			err_msg := "Couldn't get source's last modified time-" + err.Error()
+			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+			jptm.SetErrorMessage(err_msg)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
 		}
+
 		if !lmt.Equal(jptm.LastModifiedTime()) {
-			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
+			err_msg := fmt.Sprintf("File modified since transfer scheduled. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt)
+			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+			jptm.SetErrorMessage(err_msg)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -354,6 +367,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	err = jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
