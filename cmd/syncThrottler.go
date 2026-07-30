@@ -27,7 +27,9 @@ import (
 	"context"
 	"fmt"
 	_ "net/http/pprof"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,14 +38,27 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+// maxActiveGoRoutines caps total process goroutines before the sync throttler pauses source
+// enumeration. In high-throughput transfers the goroutine count is dominated by the HTTP
+// connection pool (~2 goroutines per live connection), NOT scanner activity, so the static 50k
+// default can false-trip and stall enumeration. Env-tunable via AZCOPY_SYNC_MAX_GOROUTINES to
+// decouple the throttle from transfer connections.
+var maxActiveGoRoutines int64 = func() int64 {
+	if v := os.Getenv("AZCOPY_SYNC_MAX_GOROUTINES"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 50_000
+}()
+
 // --- BEGIN Throttling and Concurrency Configuration ---
 const (
 	defaultMaxDirectoryChildCount int64 = 100_000 // Max files per active directory
 
 	// These are static limits as of now. This can be dynamically adjusted later
 	// by the StatsMonitor based on available system resources.
-	maxActiveGoRoutines      int64   = 50_000 // Max active goroutines, used for dynamic limits
-	maxMemoryUsageMultiplier float64 = 0.7    // Max memory usage percentage, used for dynamic limits
+	maxMemoryUsageMultiplier float64 = 0.7 // Max memory usage percentage, used for dynamic limits
 
 	throttleLogIntervalSecs       int           = 60 * 60                               // How often to log during throttling
 	semaphoreThrottleWaitInterval time.Duration = time.Duration(time.Millisecond * 100) // How often to check semaphore after throttle limit is hit
@@ -481,14 +496,32 @@ func (ds *ThrottleSemaphore) shouldThrottleBasedOnFiles() bool {
 
 // shouldThrottleBasedOnMemory applies hysteresis to memory pressure throttling
 func (ds *ThrottleSemaphore) shouldThrottleBasedOnMemory() bool {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
+	var usagePercent float64
 
-	totalMemoryBytes, err := common.GetTotalPhysicalMemory()
-	if err != nil {
-		totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
+	// Prefer the cached OS-level (container/cgroup-aware) memory percentage from the
+	// stats monitor. It is refreshed on the monitor's interval and avoids the
+	// runtime.ReadMemStats stop-the-world pause that would otherwise serialize every
+	// directory acquisition. It also reflects true process RSS rather than just the
+	// Go heap arena, which is what actually drives the container OOM killer.
+	gotFromMonitor := false
+	if common.GlobalSystemStatsMonitor != nil {
+		if p := common.GlobalSystemStatsMonitor.GetMemoryPercent(); p >= 0 {
+			usagePercent = p
+			gotFromMonitor = true
+		}
 	}
-	usagePercent := float64(memStats.Sys) / float64(totalMemoryBytes) * 100
+
+	if !gotFromMonitor {
+		// Fallback (e.g. non-linux dev, or monitor not yet started): use runtime stats.
+		var memStats runtime.MemStats
+		runtime.ReadMemStats(&memStats)
+
+		totalMemoryBytes, err := common.GetTotalPhysicalMemory()
+		if err != nil {
+			totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
+		}
+		usagePercent = float64(memStats.Sys) / float64(totalMemoryBytes) * 100
+	}
 
 	if !ds.memoryThrottleActive {
 		// Not currently throttling - check if we should start
@@ -564,6 +597,8 @@ func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
 		{Key: "SrcEnum", Value: fmt.Sprintf("%d", srcDirEnumerating.Load())},
 		{Key: "DstEnum", Value: fmt.Sprintf("%d", dstDirEnumerating.Load())},
 		{Key: "Done", Value: fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
+		{Key: "ChanFull", Value: fmt.Sprintf("%d", mergeJoinChanFullEvents.Load())},
+		{Key: "ChanDry", Value: fmt.Sprintf("%d", mergeJoinChanDryEvents.Load())},
 	}
 
 	waitingSource := ds.waitingForSourceSemaphore.Load()

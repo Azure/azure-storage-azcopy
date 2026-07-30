@@ -71,6 +71,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.JobPlanLocation(),
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
+	EEnvironmentVariable.SchedulerParallelism(),
 	EEnvironmentVariable.EnumerationPoolSize(),
 	EEnvironmentVariable.DisableHierarchicalScanning(),
 	EEnvironmentVariable.ParallelStatFiles(),
@@ -276,6 +277,27 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENT_FILES",
 		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
+	}
+}
+
+func (EnvironmentVariable) SchedulerParallelism() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_SCHEDULERS",
+		Description: "Overrides the number of goroutines that pull job parts off the parts channel and schedule their transfers. Higher values prevent the per-transfer creation loop from becoming a single-threaded bottleneck when copying very large numbers of small files.",
+	}
+}
+
+func (EnvironmentVariable) ShuffleTransfers() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SHUFFLE_TRANSFERS",
+		Description: "Sync orchestrator: enable transfer shuffling and part reordering to spread key-space prefixes across plan parts. Default false (disabled). When disabled, transfers are dispatched directly to STE in arrival order with bounded memory. Set to true or 1 to enable.",
+	}
+}
+
+func (EnvironmentVariable) ShuffleThresholdParts() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SHUFFLE_THRESHOLD_PARTS",
+		Description: "Sync orchestrator: number of plan-parts worth of transfers to buffer before shuffling and flushing (only when AZCOPY_SHUFFLE_TRANSFERS is enabled). Larger values shuffle across a wider key range (better storage-partition spread) at the cost of more in-memory buffering. Default 500 (~5M transfers at 10k/part). Must be >= 1.",
 	}
 }
 

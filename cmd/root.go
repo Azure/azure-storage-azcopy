@@ -26,11 +26,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -253,7 +255,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	}
 
 	if buildmode.IsMover {
-		//StartSystemStatsMonitorForJob(jobID)
+		StartSystemStatsMonitorForJob(jobID)
 	}
 
 	return nil
@@ -274,18 +276,37 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 		logger.CloseLog()
 	})
 
+	// Stats sampling cadence is env-tunable (AZCOPY_STATS_INTERVAL_SEC, default 10s). The system
+	// stats collection calls runtime.ReadMemStats (a stop-the-world pause) and parses /proc for
+	// socket/FD counts, so a too-aggressive interval steals throughput on large (30k-conn) jobs.
+	statsInterval := 10 * time.Second
+	if v := os.Getenv("AZCOPY_STATS_INTERVAL_SEC"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			statsInterval = time.Duration(secs) * time.Second
+		}
+	}
+
 	config := common.StatsMonitorConfig{
-		Interval:     5 * time.Second,
+		Interval:     statsInterval,
 		MonitorPaths: []string{azcopyLogPathFolder, common.AzcopyJobPlanFolder},
 		Logger:       logger,
 		LogConditions: common.LogConditions{
-			LogInterval: 60 * time.Second, // Regular logging
+			LogInterval: statsInterval,
 		},
 	}
 
 	common.GlobalSystemStatsMonitor, _ = common.NewSystemStatsMonitor(config)
 
 	common.GlobalSystemStatsMonitor.Start(context.TODO())
+
+	// Optional pprof endpoint for live heap/goroutine profiling (debug only). The net/http/pprof
+	// handlers are already registered on the default mux; only start the listener when a port is
+	// set via AZCOPY_PPROF_PORT so normal runs are unaffected.
+	if pprofPort := os.Getenv("AZCOPY_PPROF_PORT"); pprofPort != "" {
+		go func() {
+			_ = http.ListenAndServe("localhost:"+pprofPort, nil)
+		}()
+	}
 
 	glcm.RegisterCloseFunc(func() {
 		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()

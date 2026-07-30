@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -734,7 +735,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			throughputString = ", " + jobsAdmin.FormatThroughput(throughput)
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
@@ -788,12 +789,12 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		// indicate whether constrained by disk or not
 		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
 			summary.PercentComplete,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
+			summary.TotalTransfers, perfString, jobsAdmin.FormatThroughput(throughput), diskString)
 	})
 
 	if jobDone {
@@ -1117,6 +1118,25 @@ func init() {
 			}
 			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
 				glcm.Error(InvalidFlagsForNFSMsg)
+			}
+
+			// Streaming merge-join enablement for the standalone CLI (perf branch): in mover builds the
+			// high-throughput streaming merge-join sync path is enabled BY DEFAULT so a customer running
+			// this azcopy directly gets it without extra flags. Actual use is still restricted by
+			// useStreamingMergeJoin() (only S3->Blob and Azure->Azure) and the orchestrator (which
+			// requires --recursive=false), so ineligible jobs transparently fall back to the classic sync
+			// path. USE_STREAMING_MERGE_JOIN is an explicit override / kill switch: set it to false/0/off
+			// to force the classic path, or true to force-enable in a non-mover build.
+			// (The mover's programmatic RawMoverSyncCmdArgs path sets this flag itself and does not reach
+			// this CLI code, so it is unaffected.)
+			if buildmode.IsMover {
+				raw.useStreamingMergeJoin = true
+			}
+			switch strings.ToLower(strings.TrimSpace(os.Getenv("USE_STREAMING_MERGE_JOIN"))) {
+			case "false", "0", "no", "off":
+				raw.useStreamingMergeJoin = false
+			case "true", "1", "yes", "on":
+				raw.useStreamingMergeJoin = true
 			}
 
 			cooked, err := raw.cook()

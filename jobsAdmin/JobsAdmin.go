@@ -601,6 +601,15 @@ func getSTEStats() []common.CustomStatEntry {
 	var totalPartsCreatedSize int
 	var totalXferDoneUsed int
 	var totalXferDoneSize int
+	// Diagnostic counters
+	var totalChunkStarveCount int64
+	var totalTransferStarveCount int64
+	var maxMainPoolSize int32
+	var maxNumGoroutines int
+	var e2eMs int
+	var serverBusyPct float32
+	var connWaitMs, wireMs int
+	var connReused, connNew int64
 
 	// Iterate through all jobs to get their metrics
 	for _, jobID := range jobIDs {
@@ -611,6 +620,17 @@ func getSTEStats() []common.CustomStatEntry {
 			totalTransfersCompleted += uint64(jobSummary.TransfersCompleted)
 			totalTransfersFailed += uint64(jobSummary.TransfersFailed)
 			totalTransfersSkipped += uint64(jobSummary.TransfersSkipped)
+
+			// Pipeline network stats (cheap: computed from atomic counters) — E2E round-trip ms
+			// and server-busy% for throttling visibility.
+			if ps := jobMgr.PipelineNetworkStats(); ps != nil {
+				e2eMs = ps.AverageE2EMilliseconds()
+				serverBusyPct = ps.TotalServerBusyPercentage()
+				connWaitMs = ps.AverageConnWaitMs()
+				wireMs = ps.AverageWireMs()
+				connReused = ps.ConnReusedCount()
+				connNew = ps.ConnNewCount()
+			}
 
 			// Get channel statistics through the interface method
 			channelStats := jobMgr.GetChannelStats()
@@ -628,6 +648,14 @@ func getSTEStats() []common.CustomStatEntry {
 			totalPartsCreatedSize += channelStats.PartsCreatedSize
 			totalXferDoneUsed += channelStats.XferDoneUsed
 			totalXferDoneSize += channelStats.XferDoneSize
+			totalChunkStarveCount += channelStats.ChunkStarveCount
+			totalTransferStarveCount += channelStats.TransferStarveCount
+			if channelStats.CurrentMainPoolSize > maxMainPoolSize {
+				maxMainPoolSize = channelStats.CurrentMainPoolSize
+			}
+			if channelStats.NumGoroutines > maxNumGoroutines {
+				maxNumGoroutines = channelStats.NumGoroutines
+			}
 		}
 	}
 
@@ -641,8 +669,20 @@ func getSTEStats() []common.CustomStatEntry {
 		{Key: "low_xfer_ch", Value: fmt.Sprintf("%d/%d", totalLowTransferChannelUsed, totalLowTransferChannelSize)},
 		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
 		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
-		// {Key: "parts_cr_ch", Value: fmt.Sprintf("%d/%d", totalPartsCreatedUsed, totalPartsCreatedSize)},
-		// {Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
+		{Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
+		// Diagnostic counters: cumulative starvation events. Sustained high values indicate
+		// the worker pool is idle waiting for new chunks/transfers (dispatcher is the bottleneck);
+		// near-zero values indicate workers are saturated.
+		{Key: "chunk_starve", Value: fmt.Sprintf("%d", totalChunkStarveCount)},
+		{Key: "xfer_starve", Value: fmt.Sprintf("%d", totalTransferStarveCount)},
+		{Key: "pool_size", Value: fmt.Sprintf("%d", maxMainPoolSize)},
+		{Key: "goroutines", Value: fmt.Sprintf("%d", maxNumGoroutines)},
+		{Key: "e2e_ms", Value: fmt.Sprintf("%d", e2eMs)},
+		{Key: "conn_wait_ms", Value: fmt.Sprintf("%d", connWaitMs)},
+		{Key: "wire_ms", Value: fmt.Sprintf("%d", wireMs)},
+		{Key: "conn_reused", Value: fmt.Sprintf("%d", connReused)},
+		{Key: "conn_new", Value: fmt.Sprintf("%d", connNew)},
+		{Key: "serverbusy_pct", Value: fmt.Sprintf("%.2f", serverBusyPct)},
 	}
 }
 

@@ -324,6 +324,13 @@ type ListJobSummaryResponse struct {
 	// Will be zero if read outside the process running the job (e.g. with 'jobs show' command)
 	AverageIOPS            int     `json:",string"`
 	AverageE2EMilliseconds int     `json:",string"`
+	AverageConnWaitMs      int     `json:",string"`
+	AverageWireMs          int     `json:",string"`
+	AverageDNSMs           int     `json:",string"`
+	AverageTLSMs           int     `json:",string"`
+	ConnNewCount           int64   `json:",string"`
+	ConnReusedCount        int64   `json:",string"`
+	AverageChunkQueueMs    int     `json:",string"`
 	ServerBusyPercentage   float32 `json:",string"`
 	NetworkErrorPercentage float32 `json:",string"`
 

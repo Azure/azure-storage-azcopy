@@ -146,9 +146,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				continue
 			}
 
-			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
-			msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
-
 			switch msg.TransferStatus {
 			case common.ETransferStatus.Success():
 				if msg.IsFolderProperties {
@@ -163,6 +160,8 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.FoldersFailed++
 				}
 				js.TransfersFailed++
+				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
@@ -170,6 +169,8 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.FoldersSkipped++
 				}
 				js.TransfersSkipped++
+				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
 			case common.ETransferStatus.SkippedArchiveNotRestored():
 				js.SkippedArchiveFileCount++
