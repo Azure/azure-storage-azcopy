@@ -392,7 +392,6 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	}
 
 	// retry the action
-	LogToJobLogWithPrefix(fmt.Sprintf("ReadOnly attribute cleared successfully on %s. Retrying the operation.", targetFileOrDir.URL()), LogInfo)
 	_, err = action()
 	return err
 }
