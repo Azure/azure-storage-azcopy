@@ -69,6 +69,15 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties.Value() && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties.Value() && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	// The Azure Files sync-orchestrator path enumerates via the extended-info LIST API, which does NOT
+	// return metadata or content headers (ListFilesInclude only supports Timestamps/ETag/Attributes/PermissionKey).
+	// When getRemoteProperties is set (e.g. s2sSourceChangeValidation/includeAfter/includeBefore), the frontend
+	// fetches LMTs for change detection but backend property fetch is turned off above, so metadata and content
+	// headers would be dropped at the destination. Force the backend fetch back on so the sender fetches full
+	// properties per-file at transfer time. (Standard sync already runs with both frontend + backend fetch on.)
+	if UseSyncOrchestrator && !cca.isNFSCopy && cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties.Value() {
+		jobPartOrder.S2SGetPropertiesInBackend = true
+	}
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
