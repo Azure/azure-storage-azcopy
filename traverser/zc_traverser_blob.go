@@ -260,6 +260,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			blobPropsAdapter,
 			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
+			nil,
 		)
 
 		if t.s2sPreserveSourceTags {
@@ -300,6 +301,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			common.Metadata{},
 			blobURLParts.ContainerName,
+			nil,
 		)
 
 		if t.incrementEnumerationCounter != nil {
@@ -335,6 +337,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				dirPropsAdapter,
 				dirPropsAdapter.Metadata,
 				blobURLParts.ContainerName,
+				nil,
 			)
 
 			if t.incrementEnumerationCounter != nil {
@@ -430,6 +433,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 								pbPropAdapter,
 								pbPropAdapter.Metadata,
 								containerName,
+								nil,
 							)
 
 							if t.s2sPreserveSourceTags {
@@ -564,6 +568,7 @@ func (t *BlobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		adapter, // adapter satisfies both interfaces
 		blobInfo.Metadata,
 		containerName,
+		nil,
 	)
 
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)

@@ -202,6 +202,10 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWri
 	})
 }
 
+func (a *blobDownloader) CreateHardLink(jptm IJobPartTransferMgr) error {
+	return nil
+}
+
 type dummyReader struct{}
 
 func (dummyReader) Read(p []byte) (n int, err error) {

@@ -207,7 +207,8 @@ var rootCmd = &cobra.Command{
 				// don't wait too long
 			}
 		}
-		return nil
+		// Print out help command on just `azcopy`
+		return cmd.Help()
 	},
 }
 
