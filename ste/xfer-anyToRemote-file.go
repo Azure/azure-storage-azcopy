@@ -284,6 +284,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 
 	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
+		jptm.SetErrorMessage(err.Error())
 		if errors.Is(err, common.ErrS3ArchiveObjectNotRestored) {
 			jptm.LogAtLevelForCurrentTransfer(common.LogWarning, err.Error())
 			jptm.SetStatus(common.ETransferStatus.SkippedArchiveNotRestored())
@@ -291,7 +292,6 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			return
 		}
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
-		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
