@@ -88,6 +88,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 		if jptm.ShouldLog(common.LogInfo) {
 			if status == common.ETransferStatus.Failed() {
 				jptm.LogError(info.Source, "DELETE ERROR ", err)
+				jptm.SetErrorMessage(fmt.Sprintf("DELETE FAILED: %v, %v", info.Source, err.Error()))
 			} else {
 				if jptm.ShouldLog(common.LogInfo) {
 					jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
