@@ -5,7 +5,7 @@
 
 ### New Features
 
-1. Added hardlink support for Azure Files NFS. AzCopy can now preserve, skip, or follow hardlinks for transfers to and from Azure Files NFS shares, covering `Local <-> Azure Files NFS`, `Azure Files NFS <-> Azure Files NFS`, `Azure Files NFS -> Local`, download, service-to-service `sync`, and resume workflows. ([#3465](https://github.com/Azure/azure-storage-azcopy/pull/3465))
+1. Added hard link support for Azure Files NFS. AzCopy can now preserve, skip, or follow hard links for transfers to and from Azure Files NFS shares, covering `Local <-> Azure Files NFS`, `Azure Files NFS <-> Azure Files NFS`, service-to-service `sync`, and resume workflows. ([#3465](https://github.com/Azure/azure-storage-azcopy/pull/3465))
 2. Added a skip value for the `--hardlinks` flag. ([#3331](https://github.com/Azure/azure-storage-azcopy/pull/3331))
 3. Upgraded minio to better support more recent S3 regions (migrated from `minio-go v6` to `minio-go/v7 v7.2.1`). ([#3495](https://github.com/Azure/azure-storage-azcopy/pull/3495))
 4. The Windows `resource.syso` files are now generated and embedded into the executable as part of the build pipeline. ([#3479](https://github.com/Azure/azure-storage-azcopy/pull/3479))
