@@ -75,11 +75,6 @@ type blobTraverser struct {
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
 	// is not folder aware.
 	includeDirectoryOrPrefix bool
-
-	// emitSorted, when true, makes parallelList buffer each listing page and emit it in
-	// lexicographic order (folders and files merged). Required by the streaming merge-join sync
-	// path. The indexMap path leaves this false, since its ordering is irrelevant.
-	emitSorted bool
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -442,42 +437,15 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		})
 		var marker *string
 
-		// The streaming merge-join (sync orchestrator) requires each directory level to be
-		// emitted in lexicographic order. The hierarchy listing returns files (BlobItems) and
-		// sub-dirs (BlobPrefixes) as two SEPARATE arrays, but each array is already sorted by the
-		// service. Emitting all dirs then all files would not be globally sorted (e.g. "b/", "n/",
-		// then "a.txt"). Rather than re-sort, we collect the page's dirs and files into two runs
-		// (each stays sorted, since the listing yields them in order) and MERGE the two runs on
-		// flush. The merge key matches buildChildPath: a folder sorts as "<name>/" (trailing slash),
-		// a file as its plain relative path (so "foo.txt" < "foo/"). Memory is bounded to one page.
-		type pageEntry struct {
-			obj StoredObject
-			err error
-			key string
-		}
-		var dirBuf, fileBuf []pageEntry
-		emit := func(obj StoredObject, err error) {
-			if !t.emitSorted {
-				// Not the streaming merge-join (indexMap / recursive / non-orchestrator paths):
-				// order does not matter, so emit directly without buffering.
-				enqueueOutput(obj, err)
-				return
-			}
-			if obj.entityType == common.EEntityType.Folder() {
-				key := strings.TrimSuffix(obj.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
-				dirBuf = append(dirBuf, pageEntry{obj: obj, err: err, key: key})
-			} else {
-				fileBuf = append(fileBuf, pageEntry{obj: obj, err: err, key: obj.relativePath})
-			}
-		}
+		// The traverser emits objects in raw service order (files and sub-dirs as the hierarchy
+		// listing returns them) via enqueueOutput. Any ordering the streaming merge-join needs is
+		// done in its own producer (folders-only heap), so the traverser does no per-page sorting.
 
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
-			dirBuf = dirBuf[:0]
-			fileBuf = fileBuf[:0]
 			emptyPrefix = emptyPrefix && len(lResp.Segment.BlobPrefixes) == 0 && len(lResp.Segment.BlobItems) == 0
 			// queue up the sub virtual directories if recursive is true or if enqueueDirorPrefix is true
 			if t.recursive || t.includeDirectoryOrPrefix {
@@ -538,7 +506,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 								}
 							}
 
-							emit(storedObject, err)
+							enqueueOutput(storedObject, err)
 							enqueuedDirAsOutput = true
 						} else {
 							// There was nothing there, but is there folder/?
@@ -575,7 +543,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							containerName,
 						)
 						storedObject.isVirtualPrefix = true
-						emit(storedObject, err)
+						enqueueOutput(storedObject, err)
 					}
 				}
 			}
@@ -602,23 +570,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					storedObject.blobTags = blobTagsMap
 				}
 
-				emit(storedObject, nil)
-			}
-
-			// Emit this page in globally lexicographic order by merging the two already-sorted runs
-			// (sub-dirs and files) — no comparison sort, since the listing API already returns each
-			// run in order. For the non-sorted paths emit() forwarded directly, so both runs are empty.
-			if t.emitSorted {
-				di, fi := 0, 0
-				for di < len(dirBuf) || fi < len(fileBuf) {
-					if fi >= len(fileBuf) || (di < len(dirBuf) && dirBuf[di].key < fileBuf[fi].key) {
-						enqueueOutput(dirBuf[di].obj, dirBuf[di].err)
-						di++
-					} else {
-						enqueueOutput(fileBuf[fi].obj, fileBuf[fi].err)
-						fi++
-					}
-				}
+				enqueueOutput(storedObject, nil)
 			}
 
 			// if debug mode is on, note down the result, this is not going to be fast
@@ -814,7 +766,6 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:          opts.IsSyncDestination,
-		emitSorted:                  opts.EmitSorted,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive

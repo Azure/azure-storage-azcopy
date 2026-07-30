@@ -113,7 +113,8 @@ type rawSyncCmdArgs struct {
 	blockBlobTier string
 	// useStreamingMergeJoin opts this job into the channel-based streaming merge-join sync path
 	// (for eligible remote source/dest pairs). Set per-job by the mover when the job's subscription
-	// is allowlisted for the feature. Independent of the AZCOPY_USE_STREAMING_MERGE_JOIN env flag.
+	// is allowlisted for the feature OR the USE_STREAMING_MERGE_JOIN env var is set (the mover
+	// combines both into this single flag; azcopy does not read any enablement env var itself).
 	useStreamingMergeJoin bool
 }
 
