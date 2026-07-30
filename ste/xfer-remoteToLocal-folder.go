@@ -40,7 +40,9 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFa
 
 	d, err := df(jptm)
 	if err != nil {
-		jptm.LogDownloadError(info.Source, info.Destination, "failed to create downloader", 0)
+		err_msg := "failed to create downloader: " + err.Error()
+		jptm.LogDownloadError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -48,7 +50,9 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFa
 
 	dl, ok := d.(folderDownloader)
 	if !ok {
-		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support folders", 0)
+		err_msg := "downloader implementation does not support folders"
+		jptm.LogDownloadError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
