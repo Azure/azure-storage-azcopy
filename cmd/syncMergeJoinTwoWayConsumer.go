@@ -440,10 +440,18 @@ func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
 	if !cca.useStreamingMergeJoin {
 		return false
 	}
+	return isStreamingMergeJoinSupportedPair(cca.fromTo)
+}
+
+// isStreamingMergeJoinSupportedPair reports whether the source/destination location pair is on the
+// streaming merge-join allow-list: S3 -> Blob, or Azure -> Azure (Blob/BlobFS in any combination).
+// Keep this conservative: any source whose listing is not guaranteed globally sorted would silently
+// break the two-pointer merge.
+func isStreamingMergeJoinSupportedPair(fromTo common.FromTo) bool {
 	isAzure := func(loc common.Location) bool {
 		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
 	}
-	from, to := cca.fromTo.From(), cca.fromTo.To()
+	from, to := fromTo.From(), fromTo.To()
 	switch {
 	case from == common.ELocation.S3() && to == common.ELocation.Blob():
 		return true // S3 -> Blob
