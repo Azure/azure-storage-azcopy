@@ -590,25 +590,25 @@ extends:
               image: ubuntu22-1espt
               os: linux
 
-            templateContext:
-              inputs:
-                - input: pipelineArtifact
-                  artifactName: azcopy-mac-unsigned
-                  targetPath: $(System.DefaultWorkingDirectory)/mac
-                  displayName: 'Download Mac Unsigned'
-                - input: pipelineArtifact
-                  artifactName: azcopy-mac-m1-unsigned
-                  targetPath: $(System.DefaultWorkingDirectory)/mac-m1
-                  displayName: 'Download Mac M1 Unsigned'
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/signed
-                  artifactName: 'azcopy-mac-signed'
-                  displayName: 'Upload Mac Signed'
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azcopy-binaries-mac'
-                  displayName: 'Upload Mac Binaries'
+            # templateContext:
+            #   inputs:
+            #     - input: pipelineArtifact
+            #       artifactName: azcopy-mac-unsigned
+            #       targetPath: $(System.DefaultWorkingDirectory)/mac
+            #       displayName: 'Download Mac Unsigned'
+            #     - input: pipelineArtifact
+            #       artifactName: azcopy-mac-m1-unsigned
+            #       targetPath: $(System.DefaultWorkingDirectory)/mac-m1
+            #       displayName: 'Download Mac M1 Unsigned'
+            #   outputs:
+            #     - output: pipelineArtifact
+            #       targetPath: $(System.DefaultWorkingDirectory)/signed
+            #       artifactName: 'azcopy-mac-signed'
+            #       displayName: 'Upload Mac Signed'
+            #     - output: pipelineArtifact
+            #       targetPath: $(System.DefaultWorkingDirectory)/binaries
+            #       artifactName: 'azcopy-binaries-mac'
+            #       displayName: 'Upload Mac Binaries'
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -640,11 +640,11 @@ extends:
                   ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
                   Pattern: '*.zip'
 
-              - template: setup/esrp_sign_notarize_macos.yml@self
-                parameters:
-                  FolderPath: $(mac-m1)
-                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-                  Pattern: '*.zip'
+              # - template: setup/esrp_sign_notarize_macos.yml@self
+              #   parameters:
+              #     FolderPath: $(mac-m1)
+              #     ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+              #     Pattern: '*.zip'
 
               # Validate signed images have md5sum changed
               - script: |
@@ -652,13 +652,13 @@ extends:
                   mkdir -p $(signed)
                   chmod 755 $(mac)/*
                   rm -rf $(mac)/*.md
-                  chmod 755 $(mac-m1)/*
-                  rm -rf $(mac-m1)/*.md
+                  # chmod 755 $(mac-m1)/*
+                  # rm -rf $(mac-m1)/*.md
                 displayName: 'Make Artifacts executable'
 
               - script: |
                   mv $(mac)/azcopy* $(signed)/
-                  mv $(mac-m1)/azcopy* $(signed)/
+                  # mv $(mac-m1)/azcopy* $(signed)/
                 displayName: 'Copy required files'
 
               - script: |
