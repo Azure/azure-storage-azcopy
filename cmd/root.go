@@ -344,6 +344,10 @@ func init() {
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-enumeration")
+	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 
 	// special flags to be used in case of unexpected service errors.
 	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
