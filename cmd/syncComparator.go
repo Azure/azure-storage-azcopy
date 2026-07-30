@@ -346,27 +346,22 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
 		// assume it changed as we can't compare
-		out = fmt.Sprintf("rosedinh: LWT is zero")
-
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, out)
-		}
 		return true, true
 	}
 
+<<<<<<< HEAD
 	// Compare last write times with precision tolerance
 	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, common.IsNFSCopy()) {
+=======
+	// Compare last write times
+	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+>>>>>>> 69aff3d4 (Remove destination LMT check)
 		return true, true
 	}
 
 	if !f.orchestratorOptions.metaDataOnlySync {
 		// if metadata only sync is not enabled, return early
 		// and assume metadata change status to be same as data
-		out = fmt.Sprintf("rosedinh: no metadata only sync")
-
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, out)
-		}
 		return false, false
 	}
 
@@ -379,44 +374,26 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
 		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 
-			out = fmt.Sprintf("sourceObjectLmt %s, destinationObjectLmt %s, lastSuccessfulSyncJobStartTime %s", 
-				sourceObject.lastModifiedTime, destinationObject.lastModifiedTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
-
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogInfo, out)
-			}
-
 			if sourceObject.lastModifiedTime.IsZero() {
 				// invalid LMT
 				// assume metadata change
-				out = fmt.Sprintf("rosedinh: source LMT is zero")
-
-				if azcopyScanningLogger != nil {
-					azcopyScanningLogger.Log(common.LogInfo, out)
-				}
 				return false, true
 			} else {
-				out = fmt.Sprintf("rosedinh: checking LMT's")
-
-				if azcopyScanningLogger != nil {
-					azcopyScanningLogger.Log(common.LogInfo, out)
-				}
 				// else check if source or target changed after last successful job start time
 				return false, sourceObject.lastModifiedTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
 			}
 		} else {
-			out = fmt.Sprintf("rosedinh: Last successful sync job start time is zero")
-
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogInfo, out)
-			}
 			// If last successful job start time can't be used, we assume it's changed
 			// this will lead to more work but it is necessary to maintain fidelity
 			return false, true
 		}
 	}
 
+<<<<<<< HEAD
 	if common.IsNFSCopy() {
+=======
+	if isNFSCopy {
+>>>>>>> 69aff3d4 (Remove destination LMT check)
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.
