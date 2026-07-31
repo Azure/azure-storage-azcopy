@@ -19,20 +19,21 @@ LOCAL_TAG="$IMAGE:$VER"
 REMOTE_TAG="$REGISTRY/$REPO:$VER"
 LATEST_TAG="$REGISTRY/$REPO:latest"
 
-echo "Building/publishing image: $LOCAL_TAG"
+echo "Publishing prebuilt image: $LOCAL_TAG"
 echo "Remote target: $REMOTE_TAG"
 echo "Latest target: $LATEST_TAG"
 
 # -----------------------------
 # 1) Pre-push security gate
 # -----------------------------
-# Requires Defender for Cloud CLI to be installed and authenticated.
+# Requires Defender for Cloud CLI and Azure CLI to be installed and authenticated.
 # --defender-break causes a non-zero exit code if critical issues are found.
+command -v defender >/dev/null 2>&1 || { echo "defender CLI not found in PATH"; exit 127; }
+command -v az >/dev/null 2>&1 || { echo "Azure CLI (az) not found in PATH"; exit 127; }
 echo "Running pre-push security scan..."
 defender scan image "$LOCAL_TAG" \
   --defender-break \
-  --defender-output "./defender-scan-$IMAGE.sarif"
-
+  --defender-output "./defender-scan-$IMAGE-$VER.sarif"
 echo "Pre-push scan passed."
 
 # -----------------------------
@@ -70,7 +71,8 @@ securityresources
 | extend repo = tostring(properties.additionalData.artifactDetails.repositoryName)
 | extend registry = tostring(properties.additionalData.artifactDetails.registryHost)
 | extend severity = tostring(properties.status.severity)
-| where repo contains '$REPO'
+| where registry =~ '$REGISTRY'
+| where repo == '$REPO'
 | project repo, registry, severity
 "
 
@@ -100,8 +102,8 @@ if [[ -z "$result" ]]; then
   exit 1
 fi
 
-# Fail on bad severity
-if echo "$result" | grep -E "Critical|High"; then
+# Fail on bad severity (parse TSV columns to avoid false positives)
+if echo "$result" | awk -F'\t' '$3 ~ /^(Critical|High)$/ { exit 0 } END { exit 1 }'; then
   echo "Vulnerabilities found"
   exit 1
 fi
