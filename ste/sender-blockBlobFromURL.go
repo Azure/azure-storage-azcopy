@@ -138,6 +138,10 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 		preflightFailed("source_block_list", "source has no committed named blocks")
 		return // single-PutBlob or empty source: no committed blocks to align to
 	}
+	if resp.ETag == nil || *resp.ETag == "" {
+		preflightFailed("source_block_list", "source block list response has no ETag")
+		return
+	}
 	plan, err := buildSourceGridPlan(rawCommittedBlocksFromResponse(resp))
 	if err != nil {
 		preflightFailed("source_block_list", err.Error())
@@ -161,21 +165,35 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 		return
 	}
 
-	dedupeIndex := buildSourceBlockHashIndex(plan)
-	if len(dedupeIndex) == 0 {
-		preflightFailed("source_hashes", "source block list contains no complete CRC64 and SHA256 pairs")
+	crcBlocks := countSourceGridCRCBlocks(plan)
+	if crcBlocks == 0 {
+		preflightFailed("source_hashes", "source block list contains no valid CRC64 values")
 		jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
-			"dedupe-act: source block list contained no complete hashes, using uniform grid")
+			"dedupe-act: source block list contained no valid CRC64 values, using uniform grid")
 		return
 	}
+	discoveredBlocks, discoveredBytes := st.addCRCDiscovery(plan)
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		"crc_only_discovery",
+		mode,
+		info,
+		fmt.Sprintf(
+			"sourceBlocks=%d crcBlocks=%d crcBytes=%d sourceETag=%q",
+			len(plan.Blocks),
+			discoveredBlocks,
+			discoveredBytes,
+			*resp.ETag,
+		),
+		st.progressSnapshot(),
+	))
 	emitDedupeProgress(jptm, dedupeProgressMessage(
 		"chunk_plan_validated",
 		mode,
 		info,
 		fmt.Sprintf(
-			"sourceBlocks=%d hashedBlocks=%d plannedChunks=%d plannedBytes=%d sourceBytes=%d",
+			"sourceBlocks=%d crcBlocks=%d plannedChunks=%d plannedBytes=%d sourceBytes=%d",
 			len(plan.Blocks),
-			len(dedupeIndex),
+			crcBlocks,
 			len(plan.Blocks),
 			plan.TotalSize,
 			info.SourceSize,
@@ -187,19 +205,33 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 	c.blockIDs = make([]string, c.numChunks)
 	c.dedupeMode = mode
 	c.dedupePlan = plan
-	c.dedupeIndex = dedupeIndex
+	c.dedupeIndex = make(map[srcBlockKey]srcBlockHashes)
+	c.dedupeETag = *resp.ETag
 	st.addFileStarted()
 
 	jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
-		"dedupe-act(%s): source-grid chunking armed: %d block(s), %d with hashes, totalSize=%d",
-		mode, len(plan.Blocks), len(c.dedupeIndex), plan.TotalSize))
+		"dedupe-act(%s): source-grid chunking armed: %d block(s), %d with CRC64, totalSize=%d",
+		mode, len(plan.Blocks), crcBlocks, plan.TotalSize))
 	emitDedupeProgress(jptm, dedupeProgressMessage(
 		"file_start",
 		mode,
 		jptm.Info(),
-		fmt.Sprintf("source=%q sourceBlocks=%d hashedBlocks=%d fileBytes=%d",
-			sanitizedDestForDedupe(jptm.Info().Source), len(plan.Blocks), len(c.dedupeIndex), plan.TotalSize),
+		fmt.Sprintf("source=%q sourceBlocks=%d crcBlocks=%d fileBytes=%d",
+			sanitizedDestForDedupe(jptm.Info().Source), len(plan.Blocks), crcBlocks, plan.TotalSize),
 		st.progressSnapshot()))
+}
+
+func countSourceGridCRCBlocks(plan *SourceGridPlan) int {
+	if plan == nil {
+		return 0
+	}
+	count := 0
+	for _, block := range plan.Blocks {
+		if blockHasCRC64(block) {
+			count++
+		}
+	}
+	return count
 }
 
 // Returns a chunk-func for blob copies
@@ -263,12 +295,11 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			return
 		}
 
-		options := &blockblob.StageBlockFromURLOptions{
-			Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
-			CPKInfo:                 c.jptm.CpkInfo(),
-			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-			CopySourceAuthorization: token,
-		}
+		options := c.sourceStageBlockOptions(
+			id.OffsetInFile(),
+			adjustedChunkSize,
+			token,
+		)
 
 		// Informs SDK to add xms-file-request-intent header
 		if c.addFileRequestIntent {
@@ -299,19 +330,115 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 	})
 }
 
+func (c *urlToBlockBlobCopier) sourceStageBlockOptions(
+	offset int64,
+	count int64,
+	token *string,
+) *blockblob.StageBlockFromURLOptions {
+	options := &blockblob.StageBlockFromURLOptions{
+		Range:                   blob.HTTPRange{Offset: offset, Count: count},
+		CPKInfo:                 c.jptm.CpkInfo(),
+		CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+		CopySourceAuthorization: token,
+	}
+	if c.dedupeMode != dedupeActOff && c.dedupeETag != "" {
+		etag := c.dedupeETag
+		options.SourceModifiedAccessConditions = &blob.SourceModifiedAccessConditions{
+			SourceIfMatch: &etag,
+		}
+	}
+	return options
+}
+
 // tryDedupeStage applies the block-level dedupe decision for one chunk. It returns true only when the
 // block was fully handled by staging it from an already-migrated destination block (enforce mode on a
 // successful reference). In shadow mode, or on any miss/failure, it returns false so the caller stages
 // the block from the source as usual.
 func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, blockIndex int32, encodedBlockID string, size int64) (handled bool) {
 	st := dedupeStateForJob(c.jptm.Info().JobID)
-	target, reference := decideStaging(c.dedupeIndex, st.committed, id.OffsetInFile(), size, c.jptm.Info().Destination)
-	if !reference {
+	c.dedupeResolveOnce.Do(func() {
+		hasher, err := newSDKDedupeRangeHasher(c.jptm, func(role string, response blockblob.GetBlobHashResponse) {
+			emitGetBlobHashCPUTime(c.jptm, c.dedupeMode, role, response)
+		})
+		if err != nil {
+			c.dedupeResolveErr = err
+			return
+		}
+		c.dedupeIndex, c.dedupeResolveStats, c.dedupeResolveErr = resolveDedupeCandidateHashes(
+			c.jptm.Context(),
+			st,
+			c.dedupePlan,
+			c.dedupeETag,
+			c.jptm.Info().Destination,
+			hasher,
+		)
+		if c.dedupeResolveErr == nil {
+			applyResolvedSourceHashes(c.dedupePlan, c.dedupeIndex)
+		}
+		emitDedupeHashResolutionProgress(
+			c.jptm,
+			c.dedupeMode,
+			c.dedupeResolveStats,
+			c.dedupeResolveErr,
+		)
+	})
+	if c.dedupeResolveErr != nil {
+		if isDedupePreconditionFailure(c.dedupeResolveErr) {
+			c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo,
+				"dedupe-act: source changed before GetBlobHash; staging from source")
+		} else {
+			c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
+				"dedupe-act: GetBlobHash failed; staging from source: "+c.dedupeResolveErr.Error())
+		}
+		return false
+	}
+	targets := matchingDedupeTargets(
+		c.dedupeIndex,
+		st.committed,
+		id.OffsetInFile(),
+		size,
+		c.jptm.Info().Destination,
+	)
+	if len(targets) == 0 {
+		if hasDedupeSHAMismatch(
+			c.dedupeIndex,
+			st.committed,
+			id.OffsetInFile(),
+			size,
+			c.jptm.Info().Destination,
+		) {
+			st.addSHAMismatch()
+			emitDedupeProgress(c.jptm, dedupeProgressMessage(
+				"sha_mismatch",
+				c.dedupeMode,
+				c.jptm.Info(),
+				fmt.Sprintf("blockIndex=%d sourceOffset=%d blockBytes=%d",
+					blockIndex, id.OffsetInFile(), size),
+				st.progressSnapshot(),
+			))
+		}
 		c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
 			"dedupe-act(%s): no committed destination hash hit for offset=%d size=%d; staging from sourceURI",
 			c.dedupeMode, id.OffsetInFile(), size))
 		return false
 	}
+	target := targets[0]
+	st.addSHAConfirmed()
+	emitDedupeProgress(c.jptm, dedupeProgressMessage(
+		"sha_confirmed",
+		c.dedupeMode,
+		c.jptm.Info(),
+		fmt.Sprintf(
+			"blockIndex=%d sourceOffset=%d blockBytes=%d targetURI=%q targetOffset=%d targetLength=%d",
+			blockIndex,
+			id.OffsetInFile(),
+			size,
+			sanitizedDestForDedupe(target.TargetURI),
+			target.TargetOffset,
+			target.TargetLength,
+		),
+		st.progressSnapshot(),
+	))
 
 	if c.dedupeMode == dedupeActShadow {
 		st.addWouldReference(size)
@@ -327,37 +454,107 @@ func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, blockIndex int3
 		return false
 	}
 
-	// enforce: stage the block from the destination sub-range, guarded by the recorded ETag.
-	c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
-		"dedupe-act(enforce): committed destination hash hit for offset=%d size=%d; staging from targetURI=%s [%d,%d)",
-		id.OffsetInFile(), size, sanitizedDestForDedupe(target.TargetURI), target.TargetOffset, target.TargetOffset+target.TargetLength))
-	if err := c.stageBlockFromTarget(encodedBlockID, target); err != nil {
-		st.addFallback()
-		c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
-			"dedupe-act(enforce): reference to %s failed (%v); falling back to staging from source", sanitizedDestForDedupe(target.TargetURI), err))
+	// Enforce: try every safe matching occurrence before falling back to the source.
+	selected, attempts, staged := stageDedupeTargetCandidates(
+		targets,
+		func(candidate common.BlockEntry) error {
+			c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
+				"dedupe-act(enforce): committed destination hash hit for offset=%d size=%d; staging from targetURI=%s [%d,%d)",
+				id.OffsetInFile(), size, sanitizedDestForDedupe(candidate.TargetURI),
+				candidate.TargetOffset, candidate.TargetOffset+candidate.TargetLength))
+			return c.stageBlockFromTarget(encodedBlockID, candidate)
+		},
+	)
+	for targetIndex, attempt := range attempts {
+		candidate := attempt.target
+		if attempt.err != nil {
+			st.committed.RemoveTargetOccurrence(
+				candidate.TargetURI,
+				candidate.TargetOffset,
+				candidate.TargetLength,
+				candidate.ETag,
+			)
+			c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+				"dedupe-act(enforce): reference attempt %d/%d to %s failed (%v)",
+				targetIndex+1, len(targets), sanitizedDestForDedupe(candidate.TargetURI), attempt.err))
+			emitDedupeProgress(c.jptm, dedupeProgressMessage(
+				"target_reuse_attempt_failed",
+				c.dedupeMode,
+				c.jptm.Info(),
+				fmt.Sprintf(
+					"blockIndex=%d sourceOffset=%d blockBytes=%d targetIndex=%d targetCount=%d "+
+						"targetURI=%q targetOffset=%d targetLength=%d",
+					blockIndex, id.OffsetInFile(), size, targetIndex, len(targets),
+					sanitizedDestForDedupe(candidate.TargetURI),
+					candidate.TargetOffset, candidate.TargetLength),
+				st.progressSnapshot(),
+			))
+			if isDedupePreconditionFailure(attempt.err) {
+				removed := st.committed.RemoveTargetEpoch(candidate.TargetURI, candidate.ETag)
+				st.addHashResolution(dedupeHashResolutionStats{targetEpochInvalidations: 1})
+				emitDedupeProgress(c.jptm, dedupeProgressMessage(
+					"epoch_invalidated_412",
+					c.dedupeMode,
+					c.jptm.Info(),
+					fmt.Sprintf(
+						"role=%q targetURI=%q removedEntries=%d",
+						"target_stage",
+						sanitizedDestForDedupe(candidate.TargetURI),
+						removed,
+					),
+					st.progressSnapshot(),
+				))
+			}
+		}
+	}
+	if staged {
+		st.addReferenced(size)
+		c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
+			"dedupe-act(enforce): block at offset=%d size=%d staged from %s [%d,%d)",
+			id.OffsetInFile(), size, sanitizedDestForDedupe(selected.TargetURI),
+			selected.TargetOffset, selected.TargetLength))
 		emitDedupeProgress(c.jptm, dedupeProgressMessage(
-			"target_reuse_fallback",
+			"target_reuse",
 			c.dedupeMode,
 			c.jptm.Info(),
 			fmt.Sprintf("blockIndex=%d sourceOffset=%d blockBytes=%d targetURI=%q targetOffset=%d targetLength=%d",
-				blockIndex, id.OffsetInFile(), size, sanitizedDestForDedupe(target.TargetURI),
-				target.TargetOffset, target.TargetLength),
+				blockIndex, id.OffsetInFile(), size, sanitizedDestForDedupe(selected.TargetURI),
+				selected.TargetOffset, selected.TargetLength),
 			st.progressSnapshot()))
-		return false
+		return true
 	}
-	st.addReferenced(size)
-	c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
-		"dedupe-act(enforce): block at offset=%d size=%d staged from %s [%d,%d)",
-		id.OffsetInFile(), size, sanitizedDestForDedupe(target.TargetURI), target.TargetOffset, target.TargetLength))
+
+	st.addFallback()
+	c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+		"dedupe-act(enforce): all %d target reference attempts failed; falling back to staging from source",
+		len(targets)))
 	emitDedupeProgress(c.jptm, dedupeProgressMessage(
-		"target_reuse",
+		"target_reuse_fallback",
 		c.dedupeMode,
 		c.jptm.Info(),
-		fmt.Sprintf("blockIndex=%d sourceOffset=%d blockBytes=%d targetURI=%q targetOffset=%d targetLength=%d",
-			blockIndex, id.OffsetInFile(), size, sanitizedDestForDedupe(target.TargetURI),
-			target.TargetOffset, target.TargetLength),
+		fmt.Sprintf("blockIndex=%d sourceOffset=%d blockBytes=%d attemptedTargets=%d",
+			blockIndex, id.OffsetInFile(), size, len(targets)),
 		st.progressSnapshot()))
-	return true
+	return false
+}
+
+type dedupeTargetStageAttempt struct {
+	target common.BlockEntry
+	err    error
+}
+
+func stageDedupeTargetCandidates(
+	targets []common.BlockEntry,
+	stage func(common.BlockEntry) error,
+) (selected common.BlockEntry, attempts []dedupeTargetStageAttempt, staged bool) {
+	for _, target := range targets {
+		err := stage(target)
+		attempts = append(attempts, dedupeTargetStageAttempt{target: target, err: err})
+		if err == nil {
+			return target, attempts, true
+		}
+	}
+	return common.BlockEntry{}, attempts, false
 }
 
 // stageBlockFromTarget stages a block by copying a sub-range of an already-migrated destination blob

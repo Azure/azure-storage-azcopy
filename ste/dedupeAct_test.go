@@ -30,6 +30,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
@@ -127,9 +129,130 @@ func TestDedupeChunkSpecs_OffReturnsNil(t *testing.T) {
 	a.Equal([]chunkSpec{{0, 100}}, shadow.dedupeChunkSpecs())
 }
 
-func TestRawCommittedBlocksFromResponse(t *testing.T) {
+func TestSourceStageBlockOptionsPinsDedupeSourceETag(t *testing.T) {
+	manager := &testJobPartTransferManager{}
+	token := "token"
+	copier := &urlToBlockBlobCopier{blockBlobSenderBase: blockBlobSenderBase{
+		jptm:       manager,
+		dedupeMode: dedupeActEnforce,
+		dedupeETag: azcore.ETag(`"source-etag"`),
+	}}
+
+	options := copier.sourceStageBlockOptions(7, 13, &token)
+	assert.Equal(t, blob.HTTPRange{Offset: 7, Count: 13}, options.Range)
+	assert.Equal(t, &token, options.CopySourceAuthorization)
+	if assert.NotNil(t, options.SourceModifiedAccessConditions) &&
+		assert.NotNil(t, options.SourceModifiedAccessConditions.SourceIfMatch) {
+		assert.Equal(t, azcore.ETag(`"source-etag"`), *options.SourceModifiedAccessConditions.SourceIfMatch)
+	}
+
+	copier.dedupeMode = dedupeActOff
+	options = copier.sourceStageBlockOptions(7, 13, &token)
+	assert.Nil(t, options.SourceModifiedAccessConditions)
+}
+
+func TestStageDedupeTargetCandidatesUsesAlternative(t *testing.T) {
+	targets := []common.BlockEntry{
+		{TargetURI: "first"},
+		{TargetURI: "second"},
+		{TargetURI: "third"},
+	}
+	var called []string
+	selected, attempts, staged := stageDedupeTargetCandidates(
+		targets,
+		func(target common.BlockEntry) error {
+			called = append(called, target.TargetURI)
+			if target.TargetURI == "second" {
+				return nil
+			}
+			return fmt.Errorf("unusable")
+		},
+	)
+
+	assert.True(t, staged)
+	assert.Equal(t, "second", selected.TargetURI)
+	assert.Equal(t, []string{"first", "second"}, called)
+	if assert.Len(t, attempts, 2) {
+		assert.Error(t, attempts[0].err)
+		assert.NoError(t, attempts[1].err)
+	}
+}
+
+func TestStageDedupeTargetCandidatesAllFail(t *testing.T) {
+	targets := []common.BlockEntry{{TargetURI: "first"}, {TargetURI: "second"}}
+	selected, attempts, staged := stageDedupeTargetCandidates(
+		targets,
+		func(common.BlockEntry) error { return fmt.Errorf("unusable") },
+	)
+
+	assert.False(t, staged)
+	assert.Equal(t, common.BlockEntry{}, selected)
+	assert.Len(t, attempts, 2)
+}
+
+func TestSourceBlockListOptionsRequestsOnlyCRC64(t *testing.T) {
 	a := assert.New(t)
 
+	options := sourceBlockListOptions()
+	a.Equal(
+		[]blockblob.BlockListIncludeItem{blockblob.BlockListIncludeItemCrc64},
+		options.Include,
+	)
+	a.NotContains(options.Include, blockblob.BlockListIncludeItemSha256)
+}
+
+func TestRawCommittedBlocksFromResponse_CRC64Only(t *testing.T) {
+	a := assert.New(t)
+	var crc [8]byte
+	binary.LittleEndian.PutUint64(crc[:], 0x0102030405060708)
+
+	resp := blockblob.GetBlockListResponse{}
+	resp.CommittedBlocks = []*blockblob.Block{
+		{Name: ptrTo("crc-only"), Size: ptrTo(int64(100)), Crc64: crc[:]},
+		{Name: ptrTo("zero-crc"), Size: ptrTo(int64(200)), Crc64: make([]byte, 8)},
+	}
+
+	raw := rawCommittedBlocksFromResponse(resp)
+
+	a.Len(raw, 2)
+	a.Equal("crc-only", raw[0].Name)
+	a.EqualValues(100, raw[0].Size)
+	a.Equal(uint64(0x0102030405060708), raw[0].CRC64) // decoded little-endian
+	a.True(raw[0].HasCRC64)
+	a.False(raw[0].HasSHA256)
+	a.False(raw[0].HasHashes)
+
+	a.Equal("zero-crc", raw[1].Name)
+	a.EqualValues(0, raw[1].CRC64)
+	a.True(raw[1].HasCRC64) // an all-zero CRC64 is still present
+	a.False(raw[1].HasHashes)
+}
+
+func TestRawCommittedBlocksFromResponse_MalformedCRC64(t *testing.T) {
+	sha := make([]byte, 32)
+	sha[0], sha[31] = 0xAA, 0xBB
+
+	for _, length := range []int{7, 9} {
+		t.Run(fmt.Sprintf("%d_bytes", length), func(t *testing.T) {
+			resp := blockblob.GetBlockListResponse{}
+			resp.CommittedBlocks = []*blockblob.Block{
+				{Name: ptrTo("malformed-crc"), Size: ptrTo(int64(100)), Crc64: make([]byte, length), Sha256: sha},
+			}
+
+			raw := rawCommittedBlocksFromResponse(resp)
+
+			a := assert.New(t)
+			a.Len(raw, 1)
+			a.False(raw[0].HasCRC64)
+			a.EqualValues(0, raw[0].CRC64)
+			a.True(raw[0].HasSHA256)
+			a.False(raw[0].HasHashes)
+		})
+	}
+}
+
+func TestRawCommittedBlocksFromResponse_LegacyCRC64AndSHA256(t *testing.T) {
+	a := assert.New(t)
 	var crc [8]byte
 	binary.LittleEndian.PutUint64(crc[:], 0x0102030405060708)
 	sha := make([]byte, 32)
@@ -137,28 +260,22 @@ func TestRawCommittedBlocksFromResponse(t *testing.T) {
 
 	resp := blockblob.GetBlockListResponse{}
 	resp.CommittedBlocks = []*blockblob.Block{
-		{Name: ptrTo("blk-0"), Size: ptrTo(int64(100)), Offset: ptrTo(int64(42)), Crc64: crc[:], Sha256: sha},
-		{Name: ptrTo("blk-1"), Size: ptrTo(int64(200))}, // no hashes (GetHash off for this block)
+		{Name: ptrTo("legacy"), Size: ptrTo(int64(100)), Offset: ptrTo(int64(42)), Crc64: crc[:], Sha256: sha},
 	}
 
 	raw := rawCommittedBlocksFromResponse(resp)
 
-	a.Len(raw, 2)
-	a.Equal("blk-0", raw[0].Name)
+	a.Len(raw, 1)
+	a.Equal("legacy", raw[0].Name)
 	a.EqualValues(100, raw[0].Size)
 	a.EqualValues(42, raw[0].Offset)
 	a.True(raw[0].HasOffset)
-	a.Equal(uint64(0x0102030405060708), raw[0].CRC64) // decoded little-endian
+	a.Equal(uint64(0x0102030405060708), raw[0].CRC64)
+	a.True(raw[0].HasCRC64)
 	a.Equal(byte(0xAA), raw[0].SHA256[0])
 	a.Equal(byte(0xBB), raw[0].SHA256[31])
+	a.True(raw[0].HasSHA256)
 	a.True(raw[0].HasHashes)
-
-	a.Equal("blk-1", raw[1].Name)
-	a.EqualValues(200, raw[1].Size)
-	a.False(raw[1].HasOffset)
-	a.EqualValues(0, raw[1].CRC64)
-	a.False(raw[1].HasHashes)
-	a.Equal([32]byte{}, raw[1].SHA256)
 }
 
 func TestRecordCommittedBlocks_PopulatesCommittedTableForReference(t *testing.T) {
@@ -189,6 +306,42 @@ func TestRecordCommittedBlocks_PopulatesCommittedTableForReference(t *testing.T)
 	a.EqualValues(0, target.TargetOffset)
 	a.EqualValues(100, target.TargetLength)
 	a.EqualValues("etag-xyz", target.ETag)
+}
+
+func TestRecordCommittedBlocks_RecordsCRCOnlyCandidates(t *testing.T) {
+	a := assert.New(t)
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{
+		{Offset: 0, Size: 37, CRC64: 10, HasCRC64: true},
+		{Offset: 37, Size: 513, CRC64: 20, HasCRC64: true},
+		{Offset: 550, Size: 19},
+	}}
+	recorded := recordCommittedBlocks(
+		jobID,
+		"https://acct.blob.core.windows.net/c/migrated",
+		"?sig=secret",
+		azcore.ETag(`"etag-crc-only"`),
+		plan,
+	)
+
+	a.Equal(2, recorded)
+	committed := dedupeStateForJob(jobID).committed
+	a.Equal(2, committed.Len())
+
+	first := committed.LookupByCRC64AndLength(10, 37)
+	if a.Len(first, 1) {
+		a.False(first[0].HasSHA256)
+		a.EqualValues(0, first[0].TargetOffset)
+		a.EqualValues(37, first[0].TargetLength)
+		a.Contains(first[0].TargetURI, "sig=secret")
+	}
+	second := committed.LookupByCRC64AndLength(20, 513)
+	if a.Len(second, 1) {
+		a.False(second[0].HasSHA256)
+		a.EqualValues(37, second[0].TargetOffset)
+	}
 }
 
 func TestRecordCommittedBlocks_NilPlanIsNoOp(t *testing.T) {
@@ -235,6 +388,21 @@ func TestDedupeJobStateCounters(t *testing.T) {
 	a.EqualValues(1, st.fallbackBlocks)
 	a.EqualValues(1, st.filesStarted)
 	a.EqualValues(1, st.filesCommitted)
+}
+
+func TestDedupeJobStateCRCDiscoveryCounters(t *testing.T) {
+	st := &dedupeJobState{}
+	blocks, bytes := st.addCRCDiscovery(&SourceGridPlan{Blocks: []PlannedBlock{
+		{Offset: 0, Size: 3, CRC64: 1, HasCRC64: true},
+		{Offset: 3, Size: 7},
+		{Offset: 10, Size: 2, CRC64: 2, HasCRC64: true},
+	}})
+
+	assert.EqualValues(t, 2, blocks)
+	assert.EqualValues(t, 5, bytes)
+	snapshot := st.progressSnapshot()
+	assert.EqualValues(t, 2, snapshot.crcDiscoveredBlocks)
+	assert.EqualValues(t, 5, snapshot.crcDiscoveredBytes)
 }
 
 func TestDedupeJobSummaryMessageEnforce(t *testing.T) {

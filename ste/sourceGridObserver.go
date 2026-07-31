@@ -35,8 +35,8 @@ import (
 // transfers, builds a "source-grid" chunk plan from the source's committed block list and
 // logs how those content-defined boundaries compare to AzCopy's uniform chunk grid.
 //
-// It never changes transfer behavior. Its purpose is to gather real alignment and would-be
-// dedupe-hit measurements independently of act mode.
+// It never changes transfer behavior. Its purpose is to gather real alignment and CRC discovery
+// measurements independently of act mode without treating CRC collisions as dedupe hits.
 
 // PlannedBlock describes one block of a source-grid chunk plan: a contiguous range of the
 // source blob whose boundaries match the source's committed block list rather than AzCopy's
@@ -46,10 +46,14 @@ type PlannedBlock struct {
 	Size         int64
 	SrcBlockName string
 
-	// CRC64 and SHA256 are intended to be populated from the extended GetBlockList response
-	// (include=crc64,sha256). HasHashes is true only when both hashes were present and valid.
+	// Source discovery requests CRC64 only. SHA256 remains for compatibility with synthetic and
+	// legacy responses. Presence is explicit because an all-zero hash is valid.
 	CRC64     uint64
+	HasCRC64  bool
 	SHA256    [32]byte
+	HasSHA256 bool
+
+	// HasHashes is retained for compatibility and is true only when both hashes are present.
 	HasHashes bool
 }
 
@@ -61,14 +65,16 @@ type SourceGridPlan struct {
 }
 
 // rawCommittedBlock is the minimal block info needed to build a plan: the committed block name,
-// size, optional service-provided offset, and optional per-block content hashes.
+// size, optional service-provided offset, requested CRC64, and any legacy SHA256 fixture data.
 type rawCommittedBlock struct {
 	Name      string
 	Size      int64
 	Offset    int64
 	HasOffset bool
 	CRC64     uint64
+	HasCRC64  bool
 	SHA256    [32]byte
+	HasSHA256 bool
 	HasHashes bool
 }
 
@@ -114,8 +120,10 @@ func buildSourceGridPlan(blocks []rawCommittedBlock) (*SourceGridPlan, error) {
 			Size:         b.Size,
 			SrcBlockName: b.Name,
 			CRC64:        b.CRC64,
+			HasCRC64:     b.HasCRC64,
 			SHA256:       b.SHA256,
-			HasHashes:    b.HasHashes,
+			HasSHA256:    b.HasSHA256,
+			HasHashes:    b.HasCRC64 && b.HasSHA256,
 		})
 		expectedOffset = blockOffset + b.Size
 	}
@@ -212,12 +220,11 @@ func observeSourceGrid(jptm IJobPartTransferMgr) {
 		return
 	}
 
-	// Fetch the source committed block list, requesting the per-block content hashes
-	// (include=crc64,sha256). The service only returns them when the GetHash feature is enabled;
-	// otherwise the fields are nil and we simply observe zero hashes.
+	// Fetch the source committed block list, requesting only per-block CRC64 (include=crc64). The
+	// service returns it only when the GetHash feature is enabled; otherwise the field is nil.
 	resp, err := getSourceBlockList(jptm)
 	if err != nil {
-		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "dedupe-observe: GetBlockList(committed, include=crc64,sha256) failed: "+err.Error())
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "dedupe-observe: GetBlockList(committed, include=crc64) failed: "+err.Error())
 		return
 	}
 
@@ -228,23 +235,23 @@ func observeSourceGrid(jptm IJobPartTransferMgr) {
 	}
 
 	raw := rawCommittedBlocksFromResponse(resp)
-	hashedBlocks := 0
+	crc64Blocks := 0
 	for i, b := range resp.CommittedBlocks {
 		rb := raw[i]
-		if rb.HasHashes {
-			hashedBlocks++
+		if rb.HasCRC64 {
+			crc64Blocks++
 		}
 
-		// Phase 0 read-only log of the extended per-block fields exactly as returned by the service.
+		// Phase 0 read-only log of the requested per-block CRC64 field.
 		jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
-			"dedupe-observe: block[%d] name=%s offset=%d size=%d hasCompleteHashes=%t crc64=%016x sha256=%x crc64LE=%s",
+			"dedupe-observe: block[%d] name=%s offset=%d size=%d hasCRC64=%t crc64=%016x crc64LE=%s",
 			i, rb.Name, common.IffNotNil(b.Offset, -1), rb.Size,
-			rb.HasHashes, rb.CRC64, rb.SHA256, hex.EncodeToString(b.Crc64)))
+			rb.HasCRC64, rb.CRC64, hex.EncodeToString(b.Crc64)))
 	}
 
 	jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
-		"dedupe-observe: %d/%d committed blocks carried crc64+sha256 hashes (0 means the service GetHash feature is off or include was not honored)",
-		hashedBlocks, len(resp.CommittedBlocks)))
+		"dedupe-observe: %d/%d committed blocks carried CRC64 (0 means the service GetHash feature is off or include=crc64 was not honored)",
+		crc64Blocks, len(resp.CommittedBlocks)))
 
 	plan, err := buildSourceGridPlan(raw)
 	if err != nil {
@@ -255,7 +262,9 @@ func observeSourceGrid(jptm IJobPartTransferMgr) {
 	stats := plan.AlignmentToUniformGrid(info.BlockSize)
 	jptm.LogAtLevelForCurrentTransfer(common.LogInfo, stats.String())
 
-	// Phase 1: record these committed blocks into the per-job dedupe table and log the running
-	// would-be-hit rate. This is still read-only with respect to the transfer (no bytes skipped).
-	recordSourceGridForDedupe(jptm, plan)
+	// CRC64 is only a candidate filter. Strong-match measurement now happens in the act path after
+	// a CRC64+size candidate triggers GetBlobHash; observe mode does not report CRC collisions as
+	// dedupe hits.
+	jptm.LogAtLevelForCurrentTransfer(common.LogInfo,
+		"dedupe-observe: CRC-only discovery complete; SHA256 is deferred until an act-mode CRC candidate hit")
 }

@@ -22,8 +22,11 @@ package ste
 
 import (
 	"encoding/binary"
+	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -34,7 +37,7 @@ import (
 // It builds on the read-only Phase 0/1 observer+recorder. When AZCOPY_DEDUPE_ACT is set, a
 // block-blob -> block-blob S2S transfer is chunked on the source's committed block boundaries
 // (Phase 3) instead of AzCopy's uniform grid, so that every chunk lines up with a source block
-// that carries content hashes. Each such chunk is then looked up against the job's committed
+// that carries CRC64 metadata. Each such chunk is then looked up against the job's committed
 // table (Phase 2): on a hit, the block can be staged from the already-migrated destination blob
 // instead of re-read from the source.
 //
@@ -95,10 +98,9 @@ func parseDedupeActMode(raw string) dedupeActMode {
 	}
 }
 
-// getSourceBlockList fetches the source blob's committed block list, requesting the per-block
-// content hashes (include=crc64,sha256). The hashes are only populated when the service GetHash
-// feature is enabled; otherwise the fields come back empty and callers simply see zero hashes.
-// It is shared by the read-only observer and the act path.
+// getSourceBlockList fetches the source blob's committed block list, requesting only per-block
+// CRC64 metadata (include=crc64). CRC64 is populated only when the service GetHash feature is
+// enabled; otherwise it comes back empty. It is shared by the read-only observer and the act path.
 func getSourceBlockList(jptm IJobPartTransferMgr) (blockblob.GetBlockListResponse, error) {
 	info := jptm.Info()
 	bsc, err := jptm.SrcServiceClient().BlobServiceClient()
@@ -110,12 +112,15 @@ func getSourceBlockList(jptm IJobPartTransferMgr) (blockblob.GetBlockListRespons
 	if err != nil {
 		return blockblob.GetBlockListResponse{}, err
 	}
-	return srcClient.GetBlockList(jptm.Context(), blockblob.BlockListTypeCommitted, &blockblob.GetBlockListOptions{
+	return srcClient.GetBlockList(jptm.Context(), blockblob.BlockListTypeCommitted, sourceBlockListOptions())
+}
+
+func sourceBlockListOptions() *blockblob.GetBlockListOptions {
+	return &blockblob.GetBlockListOptions{
 		Include: []blockblob.BlockListIncludeItem{
 			blockblob.BlockListIncludeItemCrc64,
-			blockblob.BlockListIncludeItemSha256,
 		},
-	})
+	}
 }
 
 func sourceBlockBlobClientForTransfer(srcClient *blockblob.Client, info *TransferInfo) (*blockblob.Client, error) {
@@ -128,6 +133,28 @@ func sourceBlockBlobClientForTransfer(srcClient *blockblob.Client, info *Transfe
 	return srcClient, nil
 }
 
+func validateDedupeSourceETag(jptm IJobPartTransferMgr, etag azcore.ETag) error {
+	if etag == "" {
+		return fmt.Errorf("dedupe source ETag is missing")
+	}
+	info := jptm.Info()
+	service, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
+		return err
+	}
+	client := service.NewContainerClient(info.SrcContainer).NewBlockBlobClient(info.SrcFilePath)
+	client, err = sourceBlockBlobClientForTransfer(client, info)
+	if err != nil {
+		return err
+	}
+	_, err = client.GetProperties(jptm.Context(), &blob.GetPropertiesOptions{
+		AccessConditions: &blob.AccessConditions{
+			ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfMatch: &etag},
+		},
+	})
+	return err
+}
+
 func dedupeActDestinationReady(mode dedupeActMode, destinationSAS string) bool {
 	if mode != dedupeActEnforce {
 		return true
@@ -135,9 +162,9 @@ func dedupeActDestinationReady(mode dedupeActMode, destinationSAS string) bool {
 	return strings.TrimPrefix(strings.TrimSpace(destinationSAS), "?") != ""
 }
 
-// rawCommittedBlocksFromResponse extracts the minimal per-block info (name, size, and the optional
-// content hashes) from a committed block list response. Azure Storage encodes the per-block CRC64
-// little-endian.
+// rawCommittedBlocksFromResponse extracts the minimal per-block info from a committed block list
+// response. Azure Storage encodes per-block CRC64 little-endian. SHA256 is parsed independently for
+// compatibility with synthetic and legacy responses, but source discovery requests only CRC64.
 func rawCommittedBlocksFromResponse(resp blockblob.GetBlockListResponse) []rawCommittedBlock {
 	raw := make([]rawCommittedBlock, 0, len(resp.CommittedBlocks))
 	for _, b := range resp.CommittedBlocks {
@@ -153,20 +180,24 @@ func rawCommittedBlocksFromResponse(resp blockblob.GetBlockListResponse) []rawCo
 			rb.Offset = *b.Offset
 			rb.HasOffset = true
 		}
-		if len(b.Crc64) == 8 && len(b.Sha256) == 32 {
+		if len(b.Crc64) == 8 {
 			rb.CRC64 = binary.LittleEndian.Uint64(b.Crc64)
-			copy(rb.SHA256[:], b.Sha256)
-			rb.HasHashes = true
+			rb.HasCRC64 = true
 		}
+		if len(b.Sha256) == 32 {
+			copy(rb.SHA256[:], b.Sha256)
+			rb.HasSHA256 = true
+		}
+		rb.HasHashes = rb.HasCRC64 && rb.HasSHA256
 		raw = append(raw, rb)
 	}
 	return raw
 }
 
 // fetchSourceGridPlan fetches the source committed block list and turns it into a SourceGridPlan
-// (boundaries plus any per-block hashes). It returns a nil plan with no error when the source has no
-// committed named blocks (e.g. a single-PutBlob or empty blob), which simply means the blob is not
-// eligible for source-grid chunking.
+// (boundaries plus per-block CRC64 metadata when available). It returns a nil plan with no error
+// when the source has no committed named blocks (e.g. a single-PutBlob or empty blob), which simply
+// means the blob is not eligible for source-grid chunking.
 func fetchSourceGridPlan(jptm IJobPartTransferMgr) (*SourceGridPlan, error) {
 	resp, err := getSourceBlockList(jptm)
 	if err != nil {
