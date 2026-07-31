@@ -46,10 +46,19 @@ func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
 		if !shouldPreserveRequestServiceVersion(req.Raw()) {
-			req.Raw().Header.Set("x-ms-version", value.(string))
+			setServiceVersionHeader(req.Raw(), value.(string))
 		}
 	}
 	return req.Next()
+}
+
+func setServiceVersionHeader(req *http.Request, version string) {
+	for name := range req.Header {
+		if strings.EqualFold(name, "x-ms-version") {
+			delete(req.Header, name)
+		}
+	}
+	req.Header["x-ms-version"] = []string{version}
 }
 
 func shouldPreserveRequestServiceVersion(req *http.Request) bool {

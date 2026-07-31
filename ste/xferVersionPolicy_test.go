@@ -22,6 +22,7 @@ package ste
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,4 +75,21 @@ func TestShouldPreserveRequestServiceVersion(t *testing.T) {
 			assert.Equal(t, test.expected, shouldPreserveRequestServiceVersion(req))
 		})
 	}
+}
+
+func TestSetServiceVersionHeaderRemovesCaseVariants(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://acct.blob.core.windows.net/c", nil)
+	assert.NoError(t, err)
+	req.Header["x-ms-version"] = []string{"2025-11-05"}
+	req.Header["X-Ms-Version"] = []string{"duplicate"}
+
+	setServiceVersionHeader(req, "2025-05-05")
+
+	var values []string
+	for name, headerValues := range req.Header {
+		if strings.EqualFold(name, "x-ms-version") {
+			values = append(values, headerValues...)
+		}
+	}
+	assert.Equal(t, []string{"2025-05-05"}, values)
 }
