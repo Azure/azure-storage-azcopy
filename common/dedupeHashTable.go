@@ -39,8 +39,12 @@ type BlockEntry struct {
 	// collision-free, so a match must always be confirmed with SHA256.
 	CRC64 uint64
 	// SHA256 is the strong content hash of the block. Two blocks are considered
-	// identical (a dedupe hit) only when both CRC64 and SHA256 match.
+	// identical (a dedupe hit) only when both CRC64 and SHA256 match. It is only
+	// meaningful when HasSHA256 is true.
 	SHA256 [32]byte
+	// HasSHA256 distinguishes a CRC-only entry from an entry whose valid SHA256
+	// happens to be all zeroes.
+	HasSHA256 bool
 	// TargetURI is the location of the already-stored block content that a hit
 	// can be served from / referenced against.
 	TargetURI string
@@ -61,8 +65,9 @@ type BlockEntry struct {
 	// CreatedAt is the time the entry was recorded. It is set automatically on
 	// insert when left as the zero value.
 	CreatedAt time.Time
-	// RefCount counts insertions/references to this fingerprint. Insert initializes it
-	// to one and increments it when the same fingerprint is inserted again.
+	// RefCount counts insertions/references to this target occurrence. Insert
+	// initializes it to one and increments it when the same target epoch and
+	// range are inserted again.
 	RefCount int64
 }
 
@@ -83,9 +88,9 @@ func (e *BlockEntry) IsExpired() bool {
 // migration completes so the memory is released until the next migration starts.
 //
 // Entries are bucketed by their CRC64 so that a caller can do a cheap first-pass
-// check (LookupByCRC64) using only the weak checksum, and confirm a true match
-// with the strong SHA256 hash (Lookup). Within a bucket, entries are uniquely
-// identified by their SHA256, so CRC64 collisions are handled correctly.
+// check (LookupByCRC64 or LookupByCRC64AndLength) using only the weak checksum,
+// and confirm a true match with the strong SHA256 hash (Lookup). Distinct target
+// occurrences remain separate even when they contain identical data.
 type DedupeHashTable struct {
 	mu sync.RWMutex
 	// buckets maps a CRC64 checksum to the entries sharing it. The slice is
@@ -110,12 +115,32 @@ func NewDedupeHashTable() *DedupeHashTable {
 	}
 }
 
-// findLocked returns the entry matching both crc64 and sha256 along with its
-// index inside its bucket, or (nil, -1) if not present. Callers must hold the
-// appropriate lock.
+// findLocked returns a SHA-bearing entry matching both crc64 and sha256 along
+// with its index inside its bucket, or (nil, -1) if not present. Callers must
+// hold the appropriate lock.
 func (t *DedupeHashTable) findLocked(crc64 uint64, sha256 [32]byte) (*BlockEntry, int) {
 	for i, e := range t.buckets[crc64] {
-		if e.SHA256 == sha256 {
+		if e.HasSHA256 && e.SHA256 == sha256 {
+			return e, i
+		}
+	}
+	return nil, -1
+}
+
+// findOccurrenceLocked returns the entry for an exact target epoch and range
+// within a CRC64 bucket. Callers must hold the appropriate lock.
+func (t *DedupeHashTable) findOccurrenceLocked(
+	crc64 uint64,
+	targetURI string,
+	targetOffset int64,
+	targetLength int64,
+	etag azcore.ETag,
+) (*BlockEntry, int) {
+	for i, e := range t.buckets[crc64] {
+		if e.TargetURI == targetURI &&
+			e.ETag == etag &&
+			e.TargetOffset == targetOffset &&
+			e.TargetLength == targetLength {
 			return e, i
 		}
 	}
@@ -138,17 +163,36 @@ func (t *DedupeHashTable) removeAtLocked(crc64 uint64, idx int) {
 
 // Insert records a block in the table.
 //
-// If a block with the same CRC64 and SHA256 is already present, its RefCount is
-// incremented and the existing (now updated) entry is returned with inserted set
-// to false. Otherwise the supplied entry is stored — defaulting CreatedAt to the
-// current time and RefCount to 1 when left unset — and returned with inserted set
-// to true.
+// If the same target epoch and range already exist in the CRC64 bucket, its
+// RefCount is incremented and a newly supplied SHA256 enriches a CRC-only entry.
+// The existing (now updated) entry is returned with inserted set to false.
+// Otherwise the supplied occurrence is stored — defaulting CreatedAt to the
+// current time and RefCount to 1 when left unset — and returned with inserted
+// set to true.
+//
+// For backward compatibility, a nonzero SHA256 implies HasSHA256 even when the
+// caller leaves HasSHA256 false. Callers with a valid all-zero SHA256 must set
+// HasSHA256 explicitly.
 func (t *DedupeHashTable) Insert(entry BlockEntry) (stored BlockEntry, inserted bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if existing, idx := t.findLocked(entry.CRC64, entry.SHA256); existing != nil {
+	if !entry.HasSHA256 && entry.SHA256 != ([32]byte{}) {
+		entry.HasSHA256 = true
+	}
+
+	if existing, idx := t.findOccurrenceLocked(
+		entry.CRC64,
+		entry.TargetURI,
+		entry.TargetOffset,
+		entry.TargetLength,
+		entry.ETag,
+	); existing != nil {
 		if !existing.IsExpired() {
+			if entry.HasSHA256 && !existing.HasSHA256 {
+				existing.SHA256 = entry.SHA256
+				existing.HasSHA256 = true
+			}
 			existing.RefCount++
 			return *existing, false
 		}
@@ -169,17 +213,19 @@ func (t *DedupeHashTable) Insert(entry BlockEntry) (stored BlockEntry, inserted 
 }
 
 // Lookup reports whether a candidate block with the given CRC64 and SHA256 has a
-// matching, non-expired entry in the table. The returned BlockEntry is a snapshot
-// copy; use IncrementRefCount / DecrementRefCount to mutate reference counts.
+// matching, non-expired entry with HasSHA256 set in the table. The returned
+// BlockEntry is a snapshot copy; use IncrementRefCount / DecrementRefCount to
+// mutate reference counts.
 func (t *DedupeHashTable) Lookup(crc64 uint64, sha256 [32]byte) (BlockEntry, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	e, _ := t.findLocked(crc64, sha256)
-	if e == nil || e.IsExpired() {
-		return BlockEntry{}, false
+	for _, e := range t.buckets[crc64] {
+		if e.HasSHA256 && e.SHA256 == sha256 && !e.IsExpired() {
+			return *e, true
+		}
 	}
-	return *e, true
+	return BlockEntry{}, false
 }
 
 // LookupByCRC64 returns snapshot copies of all non-expired entries that share the
@@ -197,6 +243,133 @@ func (t *DedupeHashTable) LookupByCRC64(crc64 uint64) []BlockEntry {
 		}
 	}
 	return out
+}
+
+// LookupByCRC64AndLength returns snapshot copies of all non-expired entries
+// whose CRC64 and positive target length exactly match the supplied values.
+func (t *DedupeHashTable) LookupByCRC64AndLength(crc64 uint64, length int64) []BlockEntry {
+	if length <= 0 {
+		return nil
+	}
+
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	var out []BlockEntry
+	for _, e := range t.buckets[crc64] {
+		if e.TargetLength == length && !e.IsExpired() {
+			out = append(out, *e)
+		}
+	}
+	return out
+}
+
+// SetSHA256 records the strong hash for every exact, non-expired target
+// occurrence found across the CRC64 buckets. It returns false when no such
+// occurrence is present.
+func (t *DedupeHashTable) SetSHA256(
+	targetURI string,
+	targetOffset int64,
+	targetLength int64,
+	etag azcore.ETag,
+	sha256 [32]byte,
+) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	found := false
+	for _, bucket := range t.buckets {
+		for _, e := range bucket {
+			if e.TargetURI == targetURI &&
+				e.ETag == etag &&
+				e.TargetOffset == targetOffset &&
+				e.TargetLength == targetLength &&
+				!e.IsExpired() {
+				e.SHA256 = sha256
+				e.HasSHA256 = true
+				found = true
+			}
+		}
+	}
+	return found
+}
+
+// SetSHA256ForCRC64 records the strong hash for an exact, non-expired target
+// occurrence in one CRC64 bucket. It avoids scanning unrelated candidates.
+func (t *DedupeHashTable) SetSHA256ForCRC64(
+	crc64 uint64,
+	targetURI string,
+	targetOffset int64,
+	targetLength int64,
+	etag azcore.ETag,
+	sha256 [32]byte,
+) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for _, e := range t.buckets[crc64] {
+		if e.TargetURI == targetURI &&
+			e.ETag == etag &&
+			e.TargetOffset == targetOffset &&
+			e.TargetLength == targetLength &&
+			!e.IsExpired() {
+			e.SHA256 = sha256
+			e.HasSHA256 = true
+			return true
+		}
+	}
+	return false
+}
+
+// RemoveTargetEpoch removes every occurrence recorded for the supplied target
+// URI and ETag, and returns the number removed.
+func (t *DedupeHashTable) RemoveTargetEpoch(targetURI string, etag azcore.ETag) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	removed := 0
+	for crc64, bucket := range t.buckets {
+		kept := bucket[:0]
+		for _, e := range bucket {
+			if e.TargetURI == targetURI && e.ETag == etag {
+				removed++
+				continue
+			}
+			kept = append(kept, e)
+		}
+		if len(kept) == 0 {
+			delete(t.buckets, crc64)
+		} else {
+			t.buckets[crc64] = kept
+		}
+	}
+	t.entries -= removed
+	return removed
+}
+
+// RemoveTargetOccurrence removes one exact target epoch/range occurrence,
+// regardless of its CRC64 or SHA256, and reports whether it was present.
+func (t *DedupeHashTable) RemoveTargetOccurrence(
+	targetURI string,
+	targetOffset int64,
+	targetLength int64,
+	etag azcore.ETag,
+) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for crc64, bucket := range t.buckets {
+		for i, entry := range bucket {
+			if entry.TargetURI == targetURI &&
+				entry.TargetOffset == targetOffset &&
+				entry.TargetLength == targetLength &&
+				entry.ETag == etag {
+				t.removeAtLocked(crc64, i)
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // StatsForCRC64 returns table growth details for logging/diagnostics.

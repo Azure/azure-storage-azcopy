@@ -63,9 +63,11 @@ one-shot Storage Mover worker
     |-- starts embedded AzCopy with mover,smslidingwindow build tags
     v
 ProgramPedro AzCopy fork
-    |-- reads source committed blocks and CRC64/SHA256 hashes
+    |-- reads source committed blocks and CRC64 only
     |-- builds the source-grid chunk plan
-    |-- looks each block up in the job-local committed hash table
+    |-- finds CRC64+size candidates in the job-local committed table
+    |-- requests source/target SHA256 only for candidate ranges
+    |-- confirms reuse with exact SHA256
     |-- stages a miss from sourceURI
     |-- stages a hit from an already-committed targetURI
     |-- commits the new destination blob and indexes its blocks
@@ -74,9 +76,9 @@ DevFabric Blob endpoints through the test proxy
 ```
 
 For the local DevFabric E2E, the worker sends Blob requests to the host-style
-proxy endpoint. Normal Blob operations are routed to the managed frontend, and
-hash-bearing committed-block-list requests are routed to the native frontend
-that implements `GetBlockList(include=crc64,sha256)`.
+proxy endpoint. Normal Blob operations are routed to the managed frontend.
+CRC discovery and selective SHA requests are routed to the native frontend that
+implements `GetBlockList(include=crc64)` and `GetBlobHash(comp=hash)`.
 
 ### End-to-end transfer flow
 
@@ -85,26 +87,37 @@ that implements `GetBlockList(include=crc64,sha256)`.
 2. Mover resolves both SAS tokens and passes them to AzCopy as runtime-only
    authentication. The values are not serialized into an AzCopy plan file.
 3. For an eligible source block blob, AzCopy requests the committed block list
-   with `include=crc64,sha256`.
+   with `include=crc64`. This request does not calculate SHA256.
 4. AzCopy converts the ordered committed block list into a source-grid plan.
-   Each planned block contains its source offset, size, block name, CRC64, and
-   SHA256.
+   Each planned block contains its source offset, size, block name, and CRC64.
 5. The normal uniform chunk grid is replaced with one transfer chunk per source
    committed block.
-6. Before staging a chunk, AzCopy uses its `(offset, size)` to obtain the source
-   block hashes and looks those hashes up in the job's committed dedupe table.
-7. On a miss, AzCopy stages the range from the original source URI.
-8. On a hit in enforce mode, AzCopy stages the matching range from an
+6. AzCopy uses `(CRC64, size)` to find candidate occurrences in the job's
+   committed destination table. If no candidate exists, no SHA256 request is
+   issued.
+7. When candidates exist, AzCopy batches their source and destination ranges
+   into `GetBlobHash` calls using `x-ms-multi-range`. Every request carries the
+   exact ETag from discovery in `If-Match`.
+8. The returned SHA256 values are correlated by `(offset, length)`, never by
+   block ID or response position. Only exact CRC64, size, and SHA256 matches are
+   reusable.
+9. On a miss or SHA mismatch, AzCopy stages the range from the original source
+   URI.
+10. On a confirmed hit in enforce mode, AzCopy stages the matching range from an
    already-committed destination blob. The copy source is guarded with the
    recorded ETag.
-9. If target reuse fails, AzCopy falls back to the original source for that
-   block. Dedupe must not turn a reusable-block failure into a transfer failure.
-10. After `CommitBlockList` succeeds for the new blob, its hashed blocks,
+11. If hash retrieval or target reuse fails, AzCopy falls back to the original
+    source. A 412 invalidates the source discovery epoch or evicts the stale
+    target ETag epoch.
+12. SHA256 values calculated for a candidate are cached on the exact
+    blob/ETag/range occurrence for later files in the same job.
+13. After `CommitBlockList` succeeds for the new blob, its CRC-indexed blocks,
     destination ranges, and ETag are added to the committed table for later
-    blobs in the same job.
-11. When the job reaches a terminal state, AzCopy writes the final dedupe
-    summary, closes the dedicated dedupe log, clears both in-memory tables, and
-    releases their memory.
+    blobs in the same job. SHA256 is stored only for ranges that needed
+    confirmation.
+14. When the job reaches a terminal state, AzCopy writes the final dedupe
+    and hash-CPU summary, closes the dedicated dedupe log, clears both
+    in-memory tables, and releases their memory.
 
 ### Source-grid chunking
 
@@ -122,6 +135,9 @@ Derived source ranges:         [0,4), [4,8), [8,10) MiB
 Scheduled AzCopy chunks:       [0,4), [4,8), [8,10) MiB
 ```
 
+These sizes are illustrative only; committed blocks may have different and
+unequal positive lengths.
+
 `buildSourceGridPlan` uses the offset returned by XStore when it is present.
 For compatibility with legacy Azure responses that omit `Offset`, it derives
 only the missing value from the preceding block ranges. It rejects negative
@@ -130,7 +146,7 @@ enabling source-grid chunking for a transfer, the implementation also requires:
 
 - a block-blob to block-blob service-to-service transfer;
 - a committed named-block list;
-- a complete CRC64 and SHA256 pair for at least one block;
+- a valid CRC64 for at least one block;
 - a plan total equal to the reported source blob size;
 - no more than Azure's maximum number of blocks per block blob; and
 - a destination SAS in enforce mode, because a hit is read from a destination
@@ -152,29 +168,32 @@ Each `BlockEntry` stores:
 | Field | Purpose |
 | --- | --- |
 | `CRC64` | Fast first-pass bucket key. |
-| `SHA256` | Strong equality check within a CRC64 bucket; prevents CRC64 collisions from becoming false hits. |
+| `SHA256` / `HasSHA256` | Optional cached strong hash. SHA256 is populated only after a CRC64+size candidate triggers `GetBlobHash`; it prevents CRC64 collisions from becoming false hits. |
 | `TargetURI` | Authenticated location of the previously committed destination blob. It remains in memory and is sanitized before logging. |
 | `TargetOffset` / `TargetLength` | Exact source range for `StageBlockFromURL`. Block IDs cannot be reused across blobs, so reuse occurs by copying this byte range. |
 | `ETag` | Version guard supplied as `SourceIfMatch` when staging from the target URI. |
-| `RefCount` | Number of insertions of the same fingerprint. |
+| `RefCount` | Number of insertions of the same target epoch/range occurrence. |
 | `CreatedAt` / `TTL` | Optional expiry metadata. Prototype entries currently use a non-positive TTL and live until job cleanup. |
 
-The table maps CRC64 values to small collision buckets. A lookup first selects
-the CRC64 bucket and then requires an exact SHA256 match. Insert and lookup are
-protected by an RW mutex. An existing fingerprint increments its reference
-count rather than adding a duplicate entry.
+The table maps CRC64 values to collision buckets and preserves distinct target
+blob/ETag/range occurrences even when their content is identical. Candidate
+lookup also requires equal range length. SHA256 is added to an exact occurrence
+after `GetBlobHash`, and final lookup requires an exact strong-hash match.
+Insert, lookup, enrichment, and ETag-epoch eviction are protected by an RW
+mutex.
 
 The per-job state currently owns two tables:
 
-- `table` is used only by observe mode to measure would-be hits before data is
-  written. It must never be used for a real target reference.
+- `table` is retained for legacy complete-hash diagnostic helpers. CRC-only
+  observe mode does not classify candidates as hits, and this table must never
+  be used for a real target reference.
 - `committed` contains only blocks from destination blobs whose
   `CommitBlockList` operation succeeded. Enforce mode consults only this table.
 
-The first committed occurrence of a fingerprint remains the reusable target.
-The implementation rejects missing ETags, invalid ranges, differently-sized
-entries, and reuse of the blob currently being written. Consequently, only
-content in another already-committed destination blob can be reused.
+The implementation can choose any safe matching occurrence. It rejects missing
+ETags, invalid ranges, differently-sized entries, and reuse of the blob
+currently being written. Consequently, only content in another
+already-committed destination blob can be reused.
 
 The table is job-local. Separate jobs, worker restarts, and separate worker
 processes do not share candidates.
@@ -188,7 +207,7 @@ worker image selects enforce mode:
 | --- | --- |
 | `AZCOPY_DEDUPE_ACT=enforce` | Uses source-grid chunks and stages a matching block from a committed destination range. Falls back to the original source on reuse failure. |
 | `AZCOPY_DEDUPE_ACT=shadow` | Uses the source grid and reports reusable blocks, but still stages all data from the original source. |
-| `AZCOPY_DEDUPE_OBSERVE=true` | Read-only alignment and would-be-hit measurement. It does not alter transfer behavior. |
+| `AZCOPY_DEDUPE_OBSERVE=true` | Read-only alignment and CRC-discovery measurement. It does not calculate SHA256 or alter transfer behavior. |
 | Variables unset | Standard AzCopy behavior. |
 
 The Storage Mover Dockerfile currently sets
@@ -232,7 +251,8 @@ For this E2E path:
 | `ste/mgr-JobMgr.go` | Stores runtime SAS values on each `jobPartMgr` and finalizes/clears dedupe state when the job terminates. |
 | `ste/mgr-JobPartTransferMgr.go` | Exposes runtime SAS values to transfer and sender code through `SAS()`. |
 | `ste/sourceGridObserver.go` | Defines source-grid plan types and construction, alignment diagnostics, and observe-mode collection. |
-| `ste/dedupeAct.go` | Parses act mode, retrieves the extended committed block list, extracts hashes, and produces source-grid chunk specifications. |
+| `ste/dedupeAct.go` | Parses act mode, retrieves CRC-only committed block lists, preserves source ETags, and produces source-grid chunk specifications. |
+| `ste/dedupeHashResolver.go` | Filters CRC64+size candidates, batches multi-range GetBlobHash requests, correlates range results, caches target SHA256, and invalidates stale ETag epochs. |
 | `ste/dedupeRecorder.go` | Owns per-job tables and counters, records committed targets, makes the core hit decision, calculates savings, sanitizes output, and writes external per-job logs. |
 | `ste/sender-blockBlobFromURL.go` | Arms dedupe for eligible S2S transfers and chooses source staging, shadow reporting, target reuse, or fallback for each block. |
 | `ste/sender-blockBlob.go` | Captures the destination ETag after `CommitBlockList`, indexes the newly committed blocks, and emits file-level progress. |
@@ -325,6 +345,15 @@ Important events include:
 
 | Event | Meaning |
 | --- | --- |
+| `crc_only_discovery` | GetBlockList returned the source grid and CRC64 values without calculating SHA256. |
+| `crc_candidate_miss` | No committed target matched CRC64 and size; no GetBlobHash call was needed. |
+| `crc_candidate_hit` | One or more committed target occurrences matched CRC64 and size. |
+| `get_blob_hash_complete` | Selective source/target SHA256 batches completed; includes range, batch, cache, and invalidation counts. |
+| `get_blob_hash_failed` | Source SHA retrieval failed and transfer falls back to normal source staging. |
+| `sha_confirmed` | Source and target ranges matched CRC64, size, and SHA256. |
+| `sha_mismatch` | CRC64 and size matched but SHA256 did not. |
+| `epoch_invalidated_412` | A source or target ETag became stale; cached entries for the target epoch were evicted. |
+| `hash_cpu_time` | Per-response and cumulative server CRC64/SHA256 CPU microseconds. `operation` distinguishes GetBlockList from GetBlobHash and `role` distinguishes source from target. |
 | `file_start` | Source-grid dedupe was armed for a blob. |
 | `small_file_transfer_start` | A Blob-to-Blob file smaller than 4 MiB entered transfer handling. Includes its size and cumulative small-file progress. |
 | `small_file_transfer_complete` | A file smaller than 4 MiB completed successfully. |
@@ -351,11 +380,18 @@ byte counts. These fields are appended alongside the existing block-level
 dedupe and WAN-savings counters, so one log shows both small-file transfer
 progress and dedupe reuse progress.
 
+The CRC64 CPU value comes from
+`x-ms-test-dedupe-crc64-cpu-time-us` on GetBlockList. SHA256 CPU values come
+from `x-ms-test-dedupe-sha256-cpu-time-us` on each GetBlobHash batch. These are
+server CPU microseconds, not client wall-clock latency. Missing, malformed,
+negative, and duplicate-request-ID responses are tracked without failing a
+transfer.
+
 ### Current limitations
 
 - Dedupe supports block-blob to block-blob S2S transfers only.
 - A source blob created with a single `PutBlob`, or a committed block list with
-  no complete hash pairs, is not eligible.
+  no valid CRC64 values, is not eligible.
 - Candidates are shared only within one in-memory AzCopy job.
 - A worker restart loses the committed table. SAS values can be refreshed for
   resume, but the dedupe candidate index is not persisted.

@@ -65,6 +65,49 @@ func TestBuildSourceGridPlan_UsesServiceOffsetsAndDerivesMissingOffsets(t *testi
 	a.EqualValues(350, plan.Blocks[2].Offset)
 }
 
+func TestBuildSourceGridPlan_PreservesHashPresenceForIrregularBlocks(t *testing.T) {
+	a := assert.New(t)
+	sha := [32]byte{0: 0xAA, 31: 0xBB}
+
+	plan, err := buildSourceGridPlan([]rawCommittedBlock{
+		{Name: "crc-only", Size: 37, Offset: 0, HasOffset: true, CRC64: 0x0102030405060708, HasCRC64: true},
+		{Name: "sha-only", Size: 513, SHA256: sha, HasSHA256: true},
+		{
+			Name:      "legacy-both",
+			Size:      19,
+			Offset:    550,
+			HasOffset: true,
+			CRC64:     0x1112131415161718,
+			HasCRC64:  true,
+			SHA256:    sha,
+			HasSHA256: true,
+			HasHashes: true,
+		},
+	})
+
+	a.NoError(err)
+	a.EqualValues(569, plan.TotalSize)
+	a.Equal([]int64{0, 37, 550}, []int64{
+		plan.Blocks[0].Offset,
+		plan.Blocks[1].Offset,
+		plan.Blocks[2].Offset,
+	})
+
+	a.Equal(uint64(0x0102030405060708), plan.Blocks[0].CRC64)
+	a.True(plan.Blocks[0].HasCRC64)
+	a.False(plan.Blocks[0].HasSHA256)
+	a.False(plan.Blocks[0].HasHashes)
+
+	a.Equal(sha, plan.Blocks[1].SHA256)
+	a.False(plan.Blocks[1].HasCRC64)
+	a.True(plan.Blocks[1].HasSHA256)
+	a.False(plan.Blocks[1].HasHashes)
+
+	a.True(plan.Blocks[2].HasCRC64)
+	a.True(plan.Blocks[2].HasSHA256)
+	a.True(plan.Blocks[2].HasHashes)
+}
+
 func TestBuildSourceGridPlan_RejectsInvalidServiceOffsets(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -47,6 +47,9 @@ type dedupeJobState struct {
 	smallProgressMu sync.Mutex
 	hashCPU         dedupeHashCPUState
 
+	targetHashMu         sync.Mutex
+	targetHashEpochLocks map[dedupeTargetEpoch]*sync.Mutex
+
 	// table is the Phase 1 measurement table: blocks are recorded pre-write purely to count the
 	// would-be-hit rate, so it must NOT be used to decide a real reference (the content may not yet
 	// exist at the destination).
@@ -72,6 +75,20 @@ type dedupeJobState struct {
 	sourceStagedBlocks      int64 // blocks staged from the source (real source reads)
 	sourceStagedBytes       int64 // bytes staged from the source
 	fallbackBlocks          int64 // enforce: hits whose target reference failed and fell back to source
+	crcDiscoveredBlocks     int64
+	crcDiscoveredBytes      int64
+	crcCandidateBlocks      int64
+	crcCandidateOccurrences int64
+	sourceHashRanges        int64
+	sourceHashBatches       int64
+	targetHashRanges        int64
+	targetHashBatches       int64
+	targetHashCacheHits     int64
+	targetHashCacheMisses   int64
+	targetHashFailures      int64
+	epochInvalidations      int64
+	shaConfirmedBlocks      int64
+	shaMismatchBlocks       int64
 	filesStarted            int64 // files armed for source-grid dedupe
 	filesCommitted          int64 // files whose destination block list was committed
 	smallFilesStarted       int64 // Blob-to-Blob files smaller than 4 MiB that entered transfer handling
@@ -110,6 +127,60 @@ func (s *dedupeJobState) addSourceStaged(size int64) {
 // addFallback records an enforce hit whose target reference failed and fell back to the source.
 func (s *dedupeJobState) addFallback() {
 	atomic.AddInt64(&s.fallbackBlocks, 1)
+}
+
+func (s *dedupeJobState) addCRCDiscovery(plan *SourceGridPlan) (blocks, bytes int64) {
+	if plan == nil {
+		return 0, 0
+	}
+	for _, block := range plan.Blocks {
+		if !blockHasCRC64(block) {
+			continue
+		}
+		blocks++
+		bytes += block.Size
+	}
+	atomic.AddInt64(&s.crcDiscoveredBlocks, blocks)
+	atomic.AddInt64(&s.crcDiscoveredBytes, bytes)
+	return blocks, bytes
+}
+
+func (s *dedupeJobState) addHashResolution(stats dedupeHashResolutionStats) {
+	atomic.AddInt64(&s.crcCandidateBlocks, int64(stats.candidateBlocks))
+	atomic.AddInt64(&s.crcCandidateOccurrences, int64(stats.candidateOccurrences))
+	atomic.AddInt64(&s.sourceHashRanges, int64(stats.sourceHashRanges))
+	atomic.AddInt64(&s.sourceHashBatches, int64(stats.sourceHashBatches))
+	atomic.AddInt64(&s.targetHashRanges, int64(stats.targetHashRanges))
+	atomic.AddInt64(&s.targetHashBatches, int64(stats.targetHashBatches))
+	atomic.AddInt64(&s.targetHashCacheHits, int64(stats.targetHashCacheHits))
+	atomic.AddInt64(&s.targetHashCacheMisses, int64(stats.targetHashCacheMisses))
+	atomic.AddInt64(&s.targetHashFailures, int64(stats.targetHashFailures))
+	atomic.AddInt64(
+		&s.epochInvalidations,
+		int64(stats.sourceEpochInvalidations+stats.targetEpochInvalidations),
+	)
+}
+
+func (s *dedupeJobState) addSHAConfirmed() {
+	atomic.AddInt64(&s.shaConfirmedBlocks, 1)
+}
+
+func (s *dedupeJobState) addSHAMismatch() {
+	atomic.AddInt64(&s.shaMismatchBlocks, 1)
+}
+
+func (s *dedupeJobState) targetHashEpochLock(epoch dedupeTargetEpoch) *sync.Mutex {
+	s.targetHashMu.Lock()
+	defer s.targetHashMu.Unlock()
+	if s.targetHashEpochLocks == nil {
+		s.targetHashEpochLocks = make(map[dedupeTargetEpoch]*sync.Mutex)
+	}
+	lock, ok := s.targetHashEpochLocks[epoch]
+	if !ok {
+		lock = &sync.Mutex{}
+		s.targetHashEpochLocks[epoch] = lock
+	}
+	return lock
 }
 
 func (s *dedupeJobState) addFileStarted() {
@@ -275,6 +346,56 @@ func hashCPUResponseDelta(resp blockblob.GetBlockListResponse) dedupeHashCPUResp
 			continue
 		}
 		delta.hashedBytes, overflow = satAddNonNegative(delta.hashedBytes, *block.Size)
+		delta.hashedBytesOverflowed = delta.hashedBytesOverflowed || overflow
+	}
+	return delta
+}
+
+func getBlockListCRCResponseDelta(resp blockblob.GetBlockListResponse) dedupeHashCPUResponseDelta {
+	delta := dedupeHashCPUResponseDelta{}
+	if resp.RequestID != nil {
+		delta.requestID = strings.TrimSpace(*resp.RequestID)
+	}
+	delta.crc64CPUTimeUS, delta.crc64CPUTimeMissing, delta.crc64CPUTimeInvalid =
+		hashCPUTimeDelta(resp.CRC64CPUTimeUS)
+	delta.hashCPUTimeUS = delta.crc64CPUTimeUS
+
+	for _, block := range resp.CommittedBlocks {
+		if block == nil || len(block.Crc64) != 8 {
+			continue
+		}
+		var overflow bool
+		delta.hashedBlocks, overflow = satAddNonNegative(delta.hashedBlocks, 1)
+		delta.hashedBlocksOverflowed = delta.hashedBlocksOverflowed || overflow
+		if block.Size == nil || *block.Size <= 0 {
+			continue
+		}
+		delta.hashedBytes, overflow = satAddNonNegative(delta.hashedBytes, *block.Size)
+		delta.hashedBytesOverflowed = delta.hashedBytesOverflowed || overflow
+	}
+	return delta
+}
+
+func getBlobHashSHAResponseDelta(resp blockblob.GetBlobHashResponse) dedupeHashCPUResponseDelta {
+	delta := dedupeHashCPUResponseDelta{}
+	if resp.RequestID != nil {
+		delta.requestID = strings.TrimSpace(*resp.RequestID)
+	}
+	delta.sha256CPUTimeUS, delta.sha256CPUTimeMissing, delta.sha256CPUTimeInvalid =
+		hashCPUTimeDelta(resp.SHA256CPUTimeUS)
+	delta.hashCPUTimeUS = delta.sha256CPUTimeUS
+
+	for _, result := range resp.RangeHashes {
+		if len(result.SHA256) != 32 {
+			continue
+		}
+		var overflow bool
+		delta.hashedBlocks, overflow = satAddNonNegative(delta.hashedBlocks, 1)
+		delta.hashedBlocksOverflowed = delta.hashedBlocksOverflowed || overflow
+		if result.Count <= 0 {
+			continue
+		}
+		delta.hashedBytes, overflow = satAddNonNegative(delta.hashedBytes, result.Count)
 		delta.hashedBytesOverflowed = delta.hashedBytesOverflowed || overflow
 	}
 	return delta
@@ -455,6 +576,20 @@ type dedupeProgressSnapshot struct {
 	sourceStagedBlocks      int64
 	sourceStagedBytes       int64
 	fallbackBlocks          int64
+	crcDiscoveredBlocks     int64
+	crcDiscoveredBytes      int64
+	crcCandidateBlocks      int64
+	crcCandidateOccurrences int64
+	sourceHashRanges        int64
+	sourceHashBatches       int64
+	targetHashRanges        int64
+	targetHashBatches       int64
+	targetHashCacheHits     int64
+	targetHashCacheMisses   int64
+	targetHashFailures      int64
+	epochInvalidations      int64
+	shaConfirmedBlocks      int64
+	shaMismatchBlocks       int64
 	filesStarted            int64
 	filesCommitted          int64
 	smallFilesStarted       int64
@@ -484,6 +619,20 @@ func (s *dedupeJobState) progressSnapshotLocked() dedupeProgressSnapshot {
 		sourceStagedBlocks:      atomic.LoadInt64(&s.sourceStagedBlocks),
 		sourceStagedBytes:       atomic.LoadInt64(&s.sourceStagedBytes),
 		fallbackBlocks:          atomic.LoadInt64(&s.fallbackBlocks),
+		crcDiscoveredBlocks:     atomic.LoadInt64(&s.crcDiscoveredBlocks),
+		crcDiscoveredBytes:      atomic.LoadInt64(&s.crcDiscoveredBytes),
+		crcCandidateBlocks:      atomic.LoadInt64(&s.crcCandidateBlocks),
+		crcCandidateOccurrences: atomic.LoadInt64(&s.crcCandidateOccurrences),
+		sourceHashRanges:        atomic.LoadInt64(&s.sourceHashRanges),
+		sourceHashBatches:       atomic.LoadInt64(&s.sourceHashBatches),
+		targetHashRanges:        atomic.LoadInt64(&s.targetHashRanges),
+		targetHashBatches:       atomic.LoadInt64(&s.targetHashBatches),
+		targetHashCacheHits:     atomic.LoadInt64(&s.targetHashCacheHits),
+		targetHashCacheMisses:   atomic.LoadInt64(&s.targetHashCacheMisses),
+		targetHashFailures:      atomic.LoadInt64(&s.targetHashFailures),
+		epochInvalidations:      atomic.LoadInt64(&s.epochInvalidations),
+		shaConfirmedBlocks:      atomic.LoadInt64(&s.shaConfirmedBlocks),
+		shaMismatchBlocks:       atomic.LoadInt64(&s.shaMismatchBlocks),
 		filesStarted:            atomic.LoadInt64(&s.filesStarted),
 		filesCommitted:          atomic.LoadInt64(&s.filesCommitted),
 		smallFilesStarted:       s.smallFilesStarted,
@@ -530,7 +679,12 @@ func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
 	return fmt.Sprintf(
 		"filesStarted=%d filesCommitted=%d targetURIBlocks=%d targetURIBytes=%d "+
 			"sourceURIBlocks=%d sourceURIBytes=%d fallbackBlocks=%d transferredBlocks=%d "+
-			"transferredBytes=%d wanSavingsPercent=%.1f smallFilesStarted=%d "+
+			"transferredBytes=%d wanSavingsPercent=%.1f crcDiscoveredBlocks=%d "+
+			"crcDiscoveredBytes=%d crcCandidateBlocks=%d crcCandidateOccurrences=%d "+
+			"sourceHashRanges=%d sourceHashBatches=%d targetHashRanges=%d "+
+			"targetHashBatches=%d targetHashCacheHits=%d targetHashCacheMisses=%d "+
+			"targetHashFailures=%d epochInvalidations=%d "+
+			"shaConfirmedBlocks=%d shaMismatchBlocks=%d smallFilesStarted=%d "+
 			"smallFilesCompleted=%d smallFilesFailed=%d smallFilesSkipped=%d "+
 			"smallFilesCanceled=%d smallFilesInProgress=%d smallFileBytesStarted=%d "+
 			"smallFileBytesCompleted=%d smallFileBytesFailed=%d smallFileBytesSkipped=%d "+
@@ -538,6 +692,11 @@ func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
 		s.filesStarted, s.filesCommitted, targetBlocks, targetBytes,
 		s.sourceStagedBlocks, s.sourceStagedBytes, s.fallbackBlocks, transferredBlocks,
 		transferredBytes, dedupePercent(targetBytes, transferredBytes),
+		s.crcDiscoveredBlocks, s.crcDiscoveredBytes, s.crcCandidateBlocks,
+		s.crcCandidateOccurrences, s.sourceHashRanges, s.sourceHashBatches,
+		s.targetHashRanges, s.targetHashBatches, s.targetHashCacheHits,
+		s.targetHashCacheMisses, s.targetHashFailures,
+		s.epochInvalidations, s.shaConfirmedBlocks, s.shaMismatchBlocks,
 		s.smallFilesStarted, s.smallFilesCompleted, s.smallFilesFailed,
 		s.smallFilesSkipped, s.smallFilesCanceled, smallFilesInProgress,
 		s.smallFileBytesStarted, s.smallFileBytesCompleted, s.smallFileBytesFailed,
@@ -759,6 +918,26 @@ func dedupeHashCPUTimeMessage(
 	)
 }
 
+func dedupeHashCPUTimeMessageForOperation(
+	mode dedupeActMode,
+	info *TransferInfo,
+	operation string,
+	role string,
+	snapshot dedupeHashCPUEventSnapshot,
+) string {
+	return fmt.Sprintf(
+		"%s event=hash_cpu_time mode=%s jobId=%s file=%q destination=%q operation=%q role=%q %s",
+		dedupeProgressPrefix,
+		mode,
+		info.JobID.String(),
+		info.DstFilePath,
+		sanitizedDestForDedupe(info.Destination),
+		operation,
+		role,
+		snapshot.fields(),
+	)
+}
+
 func emitHashCPUTime(
 	jptm IJobPartTransferMgr,
 	mode dedupeActMode,
@@ -769,11 +948,120 @@ func emitHashCPUTime(
 	}
 
 	st := dedupeStateForJob(jptm.Info().JobID)
-	snapshot, accepted := st.hashCPU.record(hashCPUResponseDelta(resp))
+	snapshot, accepted := st.hashCPU.record(getBlockListCRCResponseDelta(resp))
 	if !accepted {
 		return
 	}
-	emitDedupeProgress(jptm, dedupeHashCPUTimeMessage(mode, jptm.Info(), snapshot))
+	emitDedupeProgress(jptm, dedupeHashCPUTimeMessageForOperation(
+		mode,
+		jptm.Info(),
+		"get_block_list",
+		"source",
+		snapshot,
+	))
+}
+
+func emitGetBlobHashCPUTime(
+	jptm IJobPartTransferMgr,
+	mode dedupeActMode,
+	role string,
+	resp blockblob.GetBlobHashResponse,
+) {
+	if mode != dedupeActEnforce {
+		return
+	}
+
+	st := dedupeStateForJob(jptm.Info().JobID)
+	snapshot, accepted := st.hashCPU.record(getBlobHashSHAResponseDelta(resp))
+	if !accepted {
+		return
+	}
+	emitDedupeProgress(jptm, dedupeHashCPUTimeMessageForOperation(
+		mode,
+		jptm.Info(),
+		"get_blob_hash",
+		role,
+		snapshot,
+	))
+}
+
+func emitDedupeHashResolutionProgress(
+	jptm IJobPartTransferMgr,
+	mode dedupeActMode,
+	stats dedupeHashResolutionStats,
+	err error,
+) {
+	st := dedupeStateForJob(jptm.Info().JobID)
+	st.addHashResolution(stats)
+	if stats.candidateBlocks == 0 {
+		emitDedupeProgress(jptm, dedupeProgressMessage(
+			"crc_candidate_miss",
+			mode,
+			jptm.Info(),
+			"candidateBlocks=0 candidateOccurrences=0",
+			st.progressSnapshot(),
+		))
+		return
+	}
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		"crc_candidate_hit",
+		mode,
+		jptm.Info(),
+		fmt.Sprintf(
+			"candidateBlocks=%d candidateOccurrences=%d",
+			stats.candidateBlocks,
+			stats.candidateOccurrences,
+		),
+		st.progressSnapshot(),
+	))
+	if stats.sourceEpochInvalidations > 0 {
+		emitDedupeProgress(jptm, dedupeProgressMessage(
+			"epoch_invalidated_412",
+			mode,
+			jptm.Info(),
+			fmt.Sprintf("role=%q count=%d", "source_hash", stats.sourceEpochInvalidations),
+			st.progressSnapshot(),
+		))
+	}
+	if stats.targetEpochInvalidations > 0 {
+		emitDedupeProgress(jptm, dedupeProgressMessage(
+			"epoch_invalidated_412",
+			mode,
+			jptm.Info(),
+			fmt.Sprintf("role=%q count=%d", "target_hash", stats.targetEpochInvalidations),
+			st.progressSnapshot(),
+		))
+	}
+	event := "get_blob_hash_complete"
+	reason := ""
+	if err != nil {
+		event = "get_blob_hash_failed"
+		reason = err.Error()
+	}
+	emitDedupeProgress(jptm, dedupeProgressMessage(
+		event,
+		mode,
+		jptm.Info(),
+		fmt.Sprintf(
+			"candidateBlocks=%d candidateOccurrences=%d sourceRanges=%d sourceBatches=%d "+
+				"targetRanges=%d targetBatches=%d targetCacheHits=%d targetCacheMisses=%d "+
+				"targetFailures=%d "+
+				"sourceEpochInvalidations=%d targetEpochInvalidations=%d reason=%q",
+			stats.candidateBlocks,
+			stats.candidateOccurrences,
+			stats.sourceHashRanges,
+			stats.sourceHashBatches,
+			stats.targetHashRanges,
+			stats.targetHashBatches,
+			stats.targetHashCacheHits,
+			stats.targetHashCacheMisses,
+			stats.targetHashFailures,
+			stats.sourceEpochInvalidations,
+			stats.targetEpochInvalidations,
+			reason,
+		),
+		st.progressSnapshot(),
+	))
 }
 
 func isSmallFileProgressTransfer(jptm IJobPartTransferMgr) bool {
@@ -978,7 +1266,7 @@ func clearDedupeStateForJob(jobID common.JobID) {
 	}
 }
 
-// recordCommittedBlocks records a freshly-committed destination blob's hashed blocks into the job's
+// recordCommittedBlocks records a freshly-committed destination blob's CRC-indexed blocks into the job's
 // committed table, so that later blocks with identical content can be served from this blob. It is
 // called from the sender Epilogue after CommitBlockList succeeds, with the destination's real ETag.
 // Because the destination is a byte-identical copy of the source, each block lives at the same
@@ -1003,13 +1291,14 @@ func recordCommittedBlocksWithObserver(jobID common.JobID, destURI, destinationS
 	st := dedupeStateForJob(jobID)
 	target := destinationWithSASForDedupe(destURI, destinationSAS)
 	for _, b := range plan.Blocks {
-		if !blockHasHashes(b) {
+		if !blockHasCRC64(b) {
 			continue
 		}
 		stored, inserted := st.committed.Insert(common.BlockEntry{
 			JobID:        jobID,
 			CRC64:        b.CRC64,
 			SHA256:       b.SHA256,
+			HasSHA256:    blockHasHashes(b),
 			TargetURI:    target,
 			TargetOffset: b.Offset,
 			TargetLength: b.Size,
@@ -1176,7 +1465,11 @@ func dedupeJobSummaryMessage(mode dedupeActMode, st *dedupeJobState) string {
 // blockHasHashes reports whether a planned block carried both content hashes in the extended
 // GetBlockList response. Presence is tracked separately because an all-zero hash is valid.
 func blockHasHashes(b PlannedBlock) bool {
-	return b.HasHashes
+	return b.HasSHA256 || b.HasHashes
+}
+
+func blockHasCRC64(b PlannedBlock) bool {
+	return b.HasCRC64 || b.HasHashes
 }
 
 // measureAndRecord performs the Phase 1 lookup-then-record over a set of planned blocks against
@@ -1334,21 +1627,64 @@ func buildSourceBlockHashIndex(plan *SourceGridPlan) map[srcBlockKey]srcBlockHas
 // a cross-blob reuse candidate and must be ignored; same-blob hits are intentionally observe-only in
 // this targetURI design because the current blob's destination ranges are not committed/readable yet.
 func decideStaging(index map[srcBlockKey]srcBlockHashes, committed *common.DedupeHashTable, offset, size int64, currentTargetURI string) (target common.BlockEntry, reference bool) {
+	targets := matchingDedupeTargets(index, committed, offset, size, currentTargetURI)
+	if len(targets) == 0 {
+		return common.BlockEntry{}, false
+	}
+	return targets[0], true
+}
+
+func matchingDedupeTargets(
+	index map[srcBlockKey]srcBlockHashes,
+	committed *common.DedupeHashTable,
+	offset int64,
+	size int64,
+	currentTargetURI string,
+) []common.BlockEntry {
 	h, ok := index[srcBlockKey{offset: offset, size: size}]
 	if !ok {
-		return common.BlockEntry{}, false // no known hash for this chunk (not aligned to a source block)
+		return nil
 	}
-	entry, hit := committed.Lookup(h.crc64, h.sha256)
-	if !hit {
-		return common.BlockEntry{}, false // identical content not yet migrated to the destination
+	var targets []common.BlockEntry
+	for _, entry := range committed.LookupByCRC64AndLength(h.crc64, size) {
+		if !entry.HasSHA256 || entry.SHA256 != h.sha256 {
+			continue
+		}
+		if entry.TargetURI == "" || entry.TargetOffset < 0 || entry.ETag == "" {
+			continue // never reuse an unversioned target range
+		}
+		if sameDedupeTarget(entry.TargetURI, currentTargetURI) {
+			continue // avoid unsafe same-blob/self reuse; another occurrence can still be used
+		}
+		targets = append(targets, entry)
 	}
-	if entry.TargetURI == "" || entry.TargetOffset < 0 || entry.ETag == "" || entry.TargetLength != size {
-		return common.BlockEntry{}, false // never reuse an unversioned or differently-sized target range
+	return targets
+}
+
+func hasDedupeSHAMismatch(
+	index map[srcBlockKey]srcBlockHashes,
+	committed *common.DedupeHashTable,
+	offset int64,
+	size int64,
+	currentTargetURI string,
+) bool {
+	h, ok := index[srcBlockKey{offset: offset, size: size}]
+	if !ok {
+		return false
 	}
-	if sameDedupeTarget(entry.TargetURI, currentTargetURI) {
-		return common.BlockEntry{}, false // avoid unsafe same-blob/self reuse; wait for a committed target blob
+	for _, entry := range committed.LookupByCRC64AndLength(h.crc64, size) {
+		if !entry.HasSHA256 ||
+			entry.TargetURI == "" ||
+			entry.TargetOffset < 0 ||
+			entry.ETag == "" ||
+			sameDedupeTarget(entry.TargetURI, currentTargetURI) {
+			continue
+		}
+		if entry.SHA256 != h.sha256 {
+			return true
+		}
 	}
-	return entry, true
+	return false
 }
 
 func sameDedupeTarget(a, b string) bool {

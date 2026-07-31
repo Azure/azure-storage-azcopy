@@ -51,7 +51,9 @@ func hashedBlock(content string, offset, size int64) PlannedBlock {
 		Size:         size,
 		SrcBlockName: content,
 		CRC64:        crc,
+		HasCRC64:     true,
 		SHA256:       sum,
+		HasSHA256:    true,
 		HasHashes:    true,
 	}
 }
@@ -182,6 +184,39 @@ func TestHashCPUResponseDeltaCPUValues(t *testing.T) {
 			assert.False(t, delta.hashCPUTimeOverflowed)
 		})
 	}
+}
+
+func TestGetBlockListCRCResponseDeltaIgnoresSHA(t *testing.T) {
+	response := blockblob.GetBlockListResponse{
+		CRC64CPUTimeUS:  ptrTo(int64(7)),
+		SHA256CPUTimeUS: ptrTo(int64(999)),
+		RequestID:       ptrTo("crc-only-request"),
+		BlockList: blockblob.BlockList{CommittedBlocks: []*blockblob.Block{
+			{Size: ptrTo(int64(37)), Crc64: make([]byte, 8), Sha256: make([]byte, 32)},
+		}},
+	}
+
+	delta := getBlockListCRCResponseDelta(response)
+
+	assert.EqualValues(t, 7, delta.crc64CPUTimeUS)
+	assert.Zero(t, delta.sha256CPUTimeUS)
+	assert.EqualValues(t, 7, delta.hashCPUTimeUS)
+	assert.False(t, delta.sha256CPUTimeMissing)
+	assert.EqualValues(t, 1, delta.hashedBlocks)
+	assert.EqualValues(t, 37, delta.hashedBytes)
+}
+
+func TestGetBlobHashSHAResponseDeltaDiagnostics(t *testing.T) {
+	missing := getBlobHashSHAResponseDelta(blockblob.GetBlobHashResponse{})
+	assert.True(t, missing.sha256CPUTimeMissing)
+	assert.False(t, missing.crc64CPUTimeMissing)
+
+	invalid := getBlobHashSHAResponseDelta(blockblob.GetBlobHashResponse{
+		SHA256CPUTimeUS: ptrTo(int64(-1)),
+	})
+	assert.True(t, invalid.sha256CPUTimeInvalid)
+	assert.False(t, invalid.sha256CPUTimeMissing)
+	assert.Zero(t, invalid.sha256CPUTimeUS)
 }
 
 func TestHashCPUResponseDeltaCountsOnlyCompleteHashes(t *testing.T) {
@@ -552,8 +587,8 @@ func TestHashCPUEmitterScopesModesAndAcceptedResponses(t *testing.T) {
 	emitHashCPUTime(manager, dedupeActEnforce, response)
 	snapshot := state.hashCPU.snapshot()
 	assert.EqualValues(t, 7, snapshot.crc64CPUTimeUS)
-	assert.EqualValues(t, 11, snapshot.sha256CPUTimeUS)
-	assert.EqualValues(t, 18, snapshot.hashCPUTimeUS)
+	assert.Zero(t, snapshot.sha256CPUTimeUS)
+	assert.EqualValues(t, 7, snapshot.hashCPUTimeUS)
 	assert.Zero(t, snapshot.hashedBlocks)
 	assert.Zero(t, snapshot.hashedBytes)
 	assert.EqualValues(t, 1, snapshot.hashCPUTimeResponses)
@@ -561,6 +596,7 @@ func TestHashCPUEmitterScopesModesAndAcceptedResponses(t *testing.T) {
 	assert.Len(t, manager.logMessages(), 1)
 	first := <-queue
 	assert.Contains(t, first.message, "event=hash_cpu_time")
+	assert.Contains(t, first.message, `operation="get_block_list" role="source"`)
 	assert.Contains(t, first.message, `requestId="request-empty-list"`)
 
 	emitHashCPUTime(manager, dedupeActEnforce, response)
@@ -574,6 +610,148 @@ func TestHashCPUEmitterScopesModesAndAcceptedResponses(t *testing.T) {
 	assert.Len(t, queue, 1)
 	assert.Len(t, manager.logMessages(), 2)
 	assert.EqualValues(t, 2, state.hashCPU.snapshot().hashCPUTimeResponses)
+}
+
+func TestGetBlobHashCPUEmitterRecordsSHAOnly(t *testing.T) {
+	oldQueue := dedupeProgressQueue
+	queue := make(chan dedupeProgressEntry, 2)
+	dedupeProgressQueue = queue
+	t.Cleanup(func() {
+		dedupeProgressQueue = oldQueue
+	})
+
+	jobID := common.NewJobID()
+	t.Cleanup(func() {
+		clearDedupeStateForJob(jobID)
+	})
+	manager := &hashCPUTestTransferManager{
+		testJobPartTransferManager: &testJobPartTransferManager{
+			info: &TransferInfo{
+				JobID:       jobID,
+				DstFilePath: "candidate.bin",
+				Destination: "https://acct.blob.core.windows.net/c/candidate.bin",
+			},
+		},
+	}
+	response := blockblob.GetBlobHashResponse{
+		SHA256CPUTimeUS: ptrTo(int64(23)),
+		RequestID:       ptrTo("request-get-blob-hash"),
+		RangeHashes: []blockblob.BlobHashResult{
+			{Offset: 0, Count: 3, SHA256: make([]byte, 32)},
+			{Offset: 10, Count: 7, SHA256: make([]byte, 32)},
+		},
+	}
+
+	emitGetBlobHashCPUTime(manager, dedupeActEnforce, "target", response)
+
+	snapshot := dedupeStateForJob(jobID).hashCPU.snapshot()
+	assert.Zero(t, snapshot.crc64CPUTimeUS)
+	assert.EqualValues(t, 23, snapshot.sha256CPUTimeUS)
+	assert.EqualValues(t, 23, snapshot.hashCPUTimeUS)
+	assert.EqualValues(t, 2, snapshot.hashedBlocks)
+	assert.EqualValues(t, 10, snapshot.hashedBytes)
+	assert.Zero(t, snapshot.crc64CPUTimeMissingResponses)
+	assert.Zero(t, snapshot.sha256CPUTimeMissingResponses)
+	assert.Len(t, queue, 1)
+	assert.Len(t, manager.logMessages(), 1)
+	message := (<-queue).message
+	assert.Contains(t, message, `operation="get_blob_hash" role="target"`)
+	assert.Contains(t, message, `sha256CpuTimeUsDelta=23`)
+	assert.Contains(t, message, `hashedBlocksDelta=2`)
+	assert.Contains(t, message, `hashedBytesDelta=10`)
+}
+
+func TestDedupeHashResolutionProgressCounters(t *testing.T) {
+	oldQueue := dedupeProgressQueue
+	queue := make(chan dedupeProgressEntry, 4)
+	dedupeProgressQueue = queue
+	t.Cleanup(func() {
+		dedupeProgressQueue = oldQueue
+	})
+
+	jobID := common.NewJobID()
+	t.Cleanup(func() {
+		clearDedupeStateForJob(jobID)
+	})
+	manager := &hashCPUTestTransferManager{
+		testJobPartTransferManager: &testJobPartTransferManager{
+			info: &TransferInfo{
+				JobID:       jobID,
+				DstFilePath: "candidate.bin",
+				Destination: "https://acct.blob.core.windows.net/c/candidate.bin?sig=secret",
+			},
+		},
+	}
+	stats := dedupeHashResolutionStats{
+		candidateBlocks:          2,
+		candidateOccurrences:     3,
+		sourceHashRanges:         2,
+		sourceHashBatches:        1,
+		targetHashRanges:         3,
+		targetHashBatches:        2,
+		targetHashCacheHits:      4,
+		targetHashCacheMisses:    3,
+		targetHashFailures:       1,
+		sourceEpochInvalidations: 1,
+		targetEpochInvalidations: 2,
+	}
+
+	emitDedupeHashResolutionProgress(manager, dedupeActEnforce, stats, nil)
+
+	snapshot := dedupeStateForJob(jobID).progressSnapshot()
+	assert.EqualValues(t, 2, snapshot.crcCandidateBlocks)
+	assert.EqualValues(t, 3, snapshot.crcCandidateOccurrences)
+	assert.EqualValues(t, 2, snapshot.sourceHashRanges)
+	assert.EqualValues(t, 1, snapshot.sourceHashBatches)
+	assert.EqualValues(t, 3, snapshot.targetHashRanges)
+	assert.EqualValues(t, 2, snapshot.targetHashBatches)
+	assert.EqualValues(t, 4, snapshot.targetHashCacheHits)
+	assert.EqualValues(t, 3, snapshot.targetHashCacheMisses)
+	assert.EqualValues(t, 1, snapshot.targetHashFailures)
+	assert.EqualValues(t, 3, snapshot.epochInvalidations)
+
+	assert.Len(t, queue, 4)
+	messages := []string{(<-queue).message, (<-queue).message, (<-queue).message, (<-queue).message}
+	combined := strings.Join(messages, "\n")
+	assert.Contains(t, combined, "event=crc_candidate_hit")
+	assert.Contains(t, combined, `event=epoch_invalidated_412`)
+	assert.Contains(t, combined, `role="source_hash"`)
+	assert.Contains(t, combined, `role="target_hash"`)
+	assert.Contains(t, combined, "event=get_blob_hash_complete")
+	assert.NotContains(t, combined, "sig=secret")
+}
+
+func TestDedupeHashResolutionProgressNoCandidate(t *testing.T) {
+	oldQueue := dedupeProgressQueue
+	queue := make(chan dedupeProgressEntry, 1)
+	dedupeProgressQueue = queue
+	t.Cleanup(func() {
+		dedupeProgressQueue = oldQueue
+	})
+
+	jobID := common.NewJobID()
+	t.Cleanup(func() {
+		clearDedupeStateForJob(jobID)
+	})
+	manager := &hashCPUTestTransferManager{
+		testJobPartTransferManager: &testJobPartTransferManager{
+			info: &TransferInfo{
+				JobID:       jobID,
+				DstFilePath: "miss.bin",
+				Destination: "https://acct.blob.core.windows.net/c/miss.bin",
+			},
+		},
+	}
+
+	emitDedupeHashResolutionProgress(
+		manager,
+		dedupeActEnforce,
+		dedupeHashResolutionStats{},
+		nil,
+	)
+
+	assert.Len(t, queue, 1)
+	assert.Contains(t, (<-queue).message, "event=crc_candidate_miss")
 }
 
 func TestHashCPUFieldsAreIsolatedFromGenericProgressEvents(t *testing.T) {
@@ -618,7 +796,12 @@ func TestDedupeProgressSnapshotEnforce(t *testing.T) {
 	a.Equal(
 		"filesStarted=2 filesCommitted=1 targetURIBlocks=2 targetURIBytes=150 "+
 			"sourceURIBlocks=1 sourceURIBytes=100 fallbackBlocks=1 transferredBlocks=3 "+
-			"transferredBytes=250 wanSavingsPercent=60.0 smallFilesStarted=1 "+
+			"transferredBytes=250 wanSavingsPercent=60.0 crcDiscoveredBlocks=0 "+
+			"crcDiscoveredBytes=0 crcCandidateBlocks=0 crcCandidateOccurrences=0 "+
+			"sourceHashRanges=0 sourceHashBatches=0 targetHashRanges=0 "+
+			"targetHashBatches=0 targetHashCacheHits=0 targetHashCacheMisses=0 "+
+			"targetHashFailures=0 epochInvalidations=0 "+
+			"shaConfirmedBlocks=0 shaMismatchBlocks=0 smallFilesStarted=1 "+
 			"smallFilesCompleted=1 smallFilesFailed=0 smallFilesSkipped=0 "+
 			"smallFilesCanceled=0 smallFilesInProgress=0 smallFileBytesStarted=1024 "+
 			"smallFileBytesCompleted=1024 smallFileBytesFailed=0 smallFileBytesSkipped=0 "+
@@ -867,7 +1050,7 @@ func TestMeasureAndRecord_IntraBlobDuplicate(t *testing.T) {
 	a.EqualValues(3, hashed)
 	a.EqualValues(1, hits)
 	a.EqualValues(10, bytes)
-	a.Equal(2, tbl.Len()) // only two distinct contents stored
+	a.Equal(3, tbl.Len()) // every target occurrence is preserved, including the duplicate range
 }
 
 func TestMeasureAndRecord_CrossBlobAccumulation(t *testing.T) {
@@ -893,7 +1076,7 @@ func TestMeasureAndRecord_CrossBlobAccumulation(t *testing.T) {
 	a.EqualValues(1, hit2)
 	a.EqualValues(50, b2)
 
-	a.Equal(3, tbl.Len()) // shared + unique1 + unique2
+	a.Equal(4, tbl.Len()) // shared is preserved at both target occurrences
 }
 
 func TestMeasureAndRecord_PopulatesTargetRange(t *testing.T) {
@@ -1099,4 +1282,90 @@ func TestDecideStaging_SameTargetIsNotReusable(t *testing.T) {
 
 	_, reference := decideStaging(idx, committed, 0, 100, "https://acct.blob.core.windows.net/c/current?sig=secret")
 	a.False(reference)
+}
+
+func TestDecideStaging_SkipsSameTargetAndUsesAnotherOccurrence(t *testing.T) {
+	a := assert.New(t)
+
+	b := hashedBlock("a", 0, 100)
+	idx := buildSourceBlockHashIndex(&SourceGridPlan{Blocks: []PlannedBlock{b}})
+	committed := common.NewDedupeHashTable()
+	committed.Insert(common.BlockEntry{
+		CRC64:        b.CRC64,
+		SHA256:       b.SHA256,
+		HasSHA256:    true,
+		TargetURI:    "https://acct.blob.core.windows.net/c/current",
+		TargetOffset: 0,
+		TargetLength: 100,
+		ETag:         azcore.ETag("etag-current"),
+	})
+	committed.Insert(common.BlockEntry{
+		CRC64:        b.CRC64,
+		SHA256:       b.SHA256,
+		HasSHA256:    true,
+		TargetURI:    "https://acct.blob.core.windows.net/c/previous",
+		TargetOffset: 200,
+		TargetLength: 100,
+		ETag:         azcore.ETag("etag-previous"),
+	})
+
+	target, reference := decideStaging(
+		idx,
+		committed,
+		0,
+		100,
+		"https://acct.blob.core.windows.net/c/current?sig=secret",
+	)
+	a.True(reference)
+	a.Equal("https://acct.blob.core.windows.net/c/previous", target.TargetURI)
+	a.EqualValues(200, target.TargetOffset)
+}
+
+func TestHasDedupeSHAMismatchRequiresComparableTargetSHA(t *testing.T) {
+	source := hashedBlock("source", 0, 100)
+	idx := buildSourceBlockHashIndex(&SourceGridPlan{Blocks: []PlannedBlock{source}})
+	committed := common.NewDedupeHashTable()
+	targetURI := "https://acct.blob.core.windows.net/c/previous"
+	entry := common.BlockEntry{
+		CRC64:        source.CRC64,
+		TargetURI:    targetURI,
+		TargetOffset: 0,
+		TargetLength: 100,
+		ETag:         azcore.ETag("etag"),
+	}
+	committed.Insert(entry)
+
+	assert.False(t, hasDedupeSHAMismatch(
+		idx,
+		committed,
+		0,
+		100,
+		"https://acct.blob.core.windows.net/c/current",
+	))
+
+	mismatch := sha256.Sum256([]byte("different"))
+	assert.True(t, committed.SetSHA256ForCRC64(
+		source.CRC64,
+		targetURI,
+		0,
+		100,
+		azcore.ETag("etag"),
+		mismatch,
+	))
+	assert.True(t, hasDedupeSHAMismatch(
+		idx,
+		committed,
+		0,
+		100,
+		"https://acct.blob.core.windows.net/c/current",
+	))
+
+	committed.RemoveTargetEpoch(targetURI, azcore.ETag("etag"))
+	assert.False(t, hasDedupeSHAMismatch(
+		idx,
+		committed,
+		0,
+		100,
+		"https://acct.blob.core.windows.net/c/current",
+	))
 }

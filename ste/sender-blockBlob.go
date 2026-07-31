@@ -72,6 +72,11 @@ type blockBlobSenderBase struct {
 	dedupeMode  dedupeActMode
 	dedupePlan  *SourceGridPlan
 	dedupeIndex map[srcBlockKey]srcBlockHashes
+	dedupeETag  azcore.ETag
+
+	dedupeResolveOnce  sync.Once
+	dedupeResolveErr   error
+	dedupeResolveStats dedupeHashResolutionStats
 }
 
 func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -266,6 +271,13 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// commit block list if necessary
 	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
+		if s.dedupeMode != dedupeActOff && s.dedupeETag != "" {
+			if err := validateDedupeSourceETag(jptm, s.dedupeETag); err != nil {
+				jptm.FailActiveSend("Validating dedupe source ETag before commit", err)
+				return
+			}
+		}
+
 		// commit the blocks.
 		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient.BlobClient(), s.jptm.Context(), false) {
 			s.destBlobTier = nil
@@ -367,9 +379,9 @@ func (s *blockBlobSenderBase) Epilogue() {
 				recorded = recordCommittedBlocksWithObserver(jptm.Info().JobID, s.destBlockBlobClient.URL(), destinationSAS, etag, s.dedupePlan, func(event dedupeTableRecordEvent) {
 					jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
 						"dedupe-table(committed): record=%d inserted=%t entries=%d buckets=%d bucketEntries=%d refCount=%d "+
-							"crc64=%016x sha256=%x target=%s offset=%d size=%d etag=%q",
+							"crc64=%016x hasSha256=%t target=%s offset=%d size=%d etag=%q",
 						event.RecordIndex, event.Inserted, event.TableStats.Entries, event.TableStats.Buckets,
-						event.TableStats.BucketEntries, event.Stored.RefCount, event.Block.CRC64, event.Block.SHA256,
+						event.TableStats.BucketEntries, event.Stored.RefCount, event.Block.CRC64, event.Block.HasSHA256,
 						sanitizedDestForDedupe(event.Stored.TargetURI), event.Stored.TargetOffset, event.Stored.TargetLength, event.Stored.ETag))
 				})
 				jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
