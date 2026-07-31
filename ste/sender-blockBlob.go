@@ -74,9 +74,31 @@ type blockBlobSenderBase struct {
 	dedupeIndex map[srcBlockKey]srcBlockHashes
 	dedupeETag  azcore.ETag
 
-	dedupeResolveOnce  sync.Once
+	dedupeResolveState int32
+	dedupeResolveDone  chan struct{}
 	dedupeResolveErr   error
 	dedupeResolveStats dedupeHashResolutionStats
+}
+
+const (
+	dedupeResolveIdle int32 = iota
+	dedupeResolveInProgress
+	dedupeResolveComplete
+)
+
+func (s *blockBlobSenderBase) tryStartDedupeResolution() bool {
+	return atomic.CompareAndSwapInt32(&s.dedupeResolveState, dedupeResolveIdle, dedupeResolveInProgress)
+}
+
+func (s *blockBlobSenderBase) finishDedupeResolution() {
+	atomic.StoreInt32(&s.dedupeResolveState, dedupeResolveComplete)
+	if s.dedupeResolveDone != nil {
+		close(s.dedupeResolveDone)
+	}
+}
+
+func (s *blockBlobSenderBase) dedupeResolutionState() int32 {
+	return atomic.LoadInt32(&s.dedupeResolveState)
 }
 
 func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
