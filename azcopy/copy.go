@@ -128,6 +128,10 @@ func (c *CopyOptions) SetInternalOptions(listOfFiles string, s2sGetPropertiesInB
 	c.commandString = cmd
 }
 
+func shouldSetConcurrencySettingsToAuto(fromTo common.FromTo, concurrencyValue string) bool {
+	return (fromTo.From().IsFile() || fromTo.To().IsFile()) && concurrencyValue == ""
+}
+
 // Copy copies the contents from source to destination.
 func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (CopyResult, error) {
 	// Input
@@ -192,8 +196,9 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 
 		// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 		if jobsAdmin.JobsAdmin != nil &&
-			(t.opts.fromTo.From().IsFile() || (t.opts.fromTo.To().IsFile() &&
-				common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "")) {
+			shouldSetConcurrencySettingsToAuto(
+				t.opts.fromTo,
+				common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())) {
 			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 		}
 
