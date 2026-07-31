@@ -6,6 +6,8 @@ echo "Building azcopy"
 ls -l azcopy
 
 ver=`./azcopy --version | cut -d " " -f 3`
+# (~) to be replaced by (-) as tilde is not supported in docker image tags (e.g. pre-release versions)
+ver=`echo $ver | sed 's/~/-/'`
 tag="azure-azcopy-$2:$ver"
 
 # Cleanup older container image from docker
