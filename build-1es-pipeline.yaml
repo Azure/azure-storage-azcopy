@@ -1373,8 +1373,8 @@ extends:
                 - script: |
                     arm64file=$(ls "$(signed)/azure-linux/azcopy"*.arm64.rpm)
                     amd64file=$(ls "$(signed)/azure-linux/azcopy"*.x86_64.rpm)
-                    azureLinuxArmFileName="${arm64file/.arm64.rpm/-al.arm64.rpm}"
-                    azureLinuxAmdFileName="${amd64file/.x86_64.rpm/-al.x86_64.rpm}"
+                    azureLinuxArmFileName="${arm64file/.arm64.rpm/-azl3.arm64.rpm}"
+                    azureLinuxAmdFileName="${amd64file/.x86_64.rpm/-azl3.x86_64.rpm}"
 
                     mv -v "$(signed)/azure-linux/azcopy"*.arm64.rpm "$azureLinuxArmFileName"
                     mv -v "$(signed)/azure-linux/azcopy"*.x86_64.rpm "$azureLinuxAmdFileName"
@@ -1422,22 +1422,22 @@ extends:
                       scriptLocation: inlineScript
                       workingDirectory: $(signed)
                       inlineScript: |
-                        azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.x86_64\.deb')
+                        azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|azl3' | grep '\.x86_64\.deb')
                         echo "Azcopy AMD DEB File: $azcopyAmdDebFile"
                         
-                        azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.x86_64\.rpm')
+                        azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|azl3' | grep '\.x86_64\.rpm')
                         echo "Azcopy AMD RPM File: $azcopyAmdRpmFile"
                         
-                        azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.arm64\.deb')
+                        azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|azl3' | grep '\.arm64\.deb')
                         echo "Azcopy ARM DEB File: $azcopyArmDebFile"
 
-                        azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.arm64\.rpm')
+                        azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|azl3' | grep '\.arm64\.rpm')
                         echo "Azcopy ARM RPM File: $azcopyArmRpmFile"
                         
-                        azureLinuxAmdRpmFile=$(ls azcopy-* | grep -- '-al\.x86_64\.rpm')
+                        azureLinuxAmdRpmFile=$(ls azcopy-* | grep 'azl3\.x86_64\.rpm')
                         echo "Azcopy Azure Linux AMD RPM File: $azureLinuxAmdRpmFile"
                         
-                        azureLinuxArmRpmFile=$(ls azcopy-* | grep -- '-al\.arm64\.rpm')
+                        azureLinuxArmRpmFile=$(ls azcopy-* | grep 'azl3\.arm64\.rpm')
                         echo "Azcopy Azure Linux ARM RPM File: $azureLinuxArmRpmFile"
                         
                         azureLinuxFipsAmdRpmFile=$(ls azcopy-fips-* | grep '\.x86_64\.rpm')
