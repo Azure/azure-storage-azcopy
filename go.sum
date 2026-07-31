@@ -56,8 +56,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapp
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1/go.mod h1:viRWSEhtMZqz1rhwmOVKkWl6SwmVowfL9O2YR5gI2PE=
 github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda h1:NOo6+gM9NNPJ3W56nxOKb4164LEw094U0C8zYQM8mQU=
 github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda/go.mod h1:2CaSFTh2ph9ymS6goiOKIBdfhwWUVsX4nQ5QjIYFHHs=
-github.com/ProgramPedro/azure-sdk-for-go/sdk/storage/azblob v1.6.3-0.20260727190053-93e310a26728 h1:8hcQ2DsBHpQqw3qtpFUmc4kR9wguxH421CnFjLMvzVg=
-github.com/ProgramPedro/azure-sdk-for-go/sdk/storage/azblob v1.6.3-0.20260727190053-93e310a26728/go.mod h1:vv5Ad0RrIoT1lJFdWBZwt4mB1+j+V8DUroixmKDTCdk=
+github.com/ProgramPedro/azure-sdk-for-go/sdk/storage/azblob v1.6.3-0.20260731063207-dbae4229a0d2 h1:SG9P+0MDjj1dZOaqcb0pzdWeiRDqI+Abnb/TzEt9/y0=
+github.com/ProgramPedro/azure-sdk-for-go/sdk/storage/azblob v1.6.3-0.20260731063207-dbae4229a0d2/go.mod h1:vv5Ad0RrIoT1lJFdWBZwt4mB1+j+V8DUroixmKDTCdk=
 github.com/PuerkitoBio/goquery v1.7.1/go.mod h1:XY0pP4kfraEmmV1O7Uf6XyjoslwsneBbgeDjLYuN8xY=
 github.com/andybalholm/cascadia v1.2.0/go.mod h1:YCyR8vOZT9aZ1CHEd8ap0gMVm2aFgxBp0T0eFw1RUQY=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=

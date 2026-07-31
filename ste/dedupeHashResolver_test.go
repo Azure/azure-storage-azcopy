@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -219,6 +220,46 @@ func TestSDKDedupeRangeHasherWireContractAndCPUCallback(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, encryptionKey, headerValueFold(transport.request.Header, "x-ms-encryption-key"))
 	assert.Equal(t, encryptionKeySHA256, headerValueFold(transport.request.Header, "x-ms-encryption-key-sha256"))
+}
+
+func TestDedupeResolutionAllowsOneResolverWithoutBlockingSiblings(t *testing.T) {
+	copier := &urlToBlockBlobCopier{
+		blockBlobSenderBase: blockBlobSenderBase{
+			dedupeResolveDone: make(chan struct{}),
+		},
+	}
+	const workers = 32
+
+	start := make(chan struct{})
+	results := make(chan bool, workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			<-start
+			results <- copier.tryStartDedupeResolution()
+		}()
+	}
+	close(start)
+
+	owners := 0
+	for i := 0; i < workers; i++ {
+		if <-results {
+			owners++
+		}
+	}
+	assert.Equal(t, 1, owners)
+	assert.Equal(t, dedupeResolveInProgress, copier.dedupeResolutionState())
+
+	started := time.Now()
+	assert.False(t, copier.ensureDedupeHashesResolved(nil))
+	assert.Less(t, time.Since(started), 100*time.Millisecond)
+
+	copier.finishDedupeResolution()
+	assert.Equal(t, dedupeResolveComplete, copier.dedupeResolutionState())
+	select {
+	case <-copier.dedupeResolveDone:
+	default:
+		t.Fatal("resolution completion channel was not closed")
+	}
 }
 
 func TestResolveDedupeCandidateHashesNoCRCHitAvoidsSHA(t *testing.T) {
