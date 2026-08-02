@@ -209,9 +209,8 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 	c.blockIDs = make([]string, c.numChunks)
 	c.dedupeMode = mode
 	c.dedupePlan = plan
-	c.dedupeIndex = make(map[srcBlockKey]srcBlockHashes)
+	c.dedupeSourceCache = cloneDedupeSourceHashCache(dedupeSourceHashCache{})
 	c.dedupeETag = *resp.ETag
-	c.dedupeResolveDone = make(chan struct{})
 	st.addFileStarted()
 
 	jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
@@ -361,36 +360,39 @@ func (c *urlToBlockBlobCopier) sourceStageBlockOptions(
 // the block from the source as usual.
 func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, blockIndex int32, encodedBlockID string, size int64) (handled bool) {
 	st := dedupeStateForJob(c.jptm.Info().JobID)
-	if !c.ensureDedupeHashesResolved(st) {
-		if c.dedupeMode == dedupeActShadow {
+	resolutionReady := c.ensureDedupeHashesResolved(st)
+	if !resolutionReady && c.dedupeMode == dedupeActShadow {
+		done := c.dedupeResolutionDone()
+		if done != nil {
 			select {
-			case <-c.dedupeResolveDone:
+			case <-done:
+				resolutionReady = true
 			case <-c.jptm.Context().Done():
 				return false
 			}
-		} else {
+		}
+	}
+	index, resolveErr := c.dedupeResolutionSnapshot()
+	if _, resolved := index[srcBlockKey{offset: id.OffsetInFile(), size: size}]; !resolved {
+		if !resolutionReady {
 			c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
 				"dedupe-act: GetBlobHash resolution is in progress; staging this block from source")
 			return false
 		}
-	}
-	if c.dedupeResolutionState() != dedupeResolveComplete {
-		c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
-			"dedupe-act: GetBlobHash resolution did not complete; staging this block from source")
-		return false
-	}
-	if c.dedupeResolveErr != nil {
-		if isDedupePreconditionFailure(c.dedupeResolveErr) {
+		if resolveErr == nil {
+			return false
+		}
+		if isDedupePreconditionFailure(resolveErr) {
 			c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo,
 				"dedupe-act: source changed before GetBlobHash; staging from source")
 		} else {
 			c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
-				"dedupe-act: GetBlobHash failed; staging from source: "+c.dedupeResolveErr.Error())
+				"dedupe-act: GetBlobHash did not resolve this source range; staging from source: "+resolveErr.Error())
 		}
 		return false
 	}
 	targets := matchingDedupeTargets(
-		c.dedupeIndex,
+		index,
 		st.committed,
 		id.OffsetInFile(),
 		size,
@@ -398,7 +400,7 @@ func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, blockIndex int3
 	)
 	if len(targets) == 0 {
 		if hasDedupeSHAMismatch(
-			c.dedupeIndex,
+			index,
 			st.committed,
 			id.OffsetInFile(),
 			size,
@@ -536,46 +538,79 @@ func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, blockIndex int3
 }
 
 func (c *urlToBlockBlobCopier) ensureDedupeHashesResolved(st *dedupeJobState) bool {
-	switch c.dedupeResolutionState() {
-	case dedupeResolveComplete:
+	if st == nil {
 		return true
-	case dedupeResolveInProgress:
+	}
+
+	generation := st.committedGenerationValue()
+	c.dedupeResolveMu.Lock()
+	if c.dedupeResolveInProgress {
+		c.dedupeResolveMu.Unlock()
 		return false
 	}
-
-	if !c.tryStartDedupeResolution() {
-		return c.dedupeResolutionState() == dedupeResolveComplete
+	if c.dedupeResolveAttempted && c.dedupeResolvedGeneration >= generation {
+		c.dedupeResolveMu.Unlock()
+		return true
 	}
-	defer c.finishDedupeResolution()
-
-	hasher, err := newSDKDedupeRangeHasher(c.jptm, func(role string, response blockblob.GetBlobHashResponse) {
-		emitGetBlobHashCPUTime(c.jptm, c.dedupeMode, role, response)
-	})
-	if err != nil {
-		c.dedupeResolveErr = err
+	if c.dedupeSourceCache.invalid {
+		c.dedupeResolveAttempted = true
+		c.dedupeResolvedGeneration = generation
+		c.dedupeResolveMu.Unlock()
 		return true
 	}
 
-	ctx, cancel := context.WithTimeout(c.jptm.Context(), dedupeHashResolutionTimeout)
-	defer cancel()
-	c.dedupeIndex, c.dedupeResolveStats, c.dedupeResolveErr = resolveDedupeCandidateHashes(
-		ctx,
-		st,
-		c.dedupePlan,
-		c.dedupeETag,
-		c.jptm.Info().Destination,
-		hasher,
-	)
-	if c.dedupeResolveErr == nil {
-		applyResolvedSourceHashes(c.dedupePlan, c.dedupeIndex)
+	c.dedupeResolveInProgress = true
+	c.dedupeResolveDone = make(chan struct{})
+	cache := cloneDedupeSourceHashCache(c.dedupeSourceCache)
+	hasher := c.dedupeHasher
+	c.dedupeResolveMu.Unlock()
+
+	var stats dedupeHashResolutionStats
+	var err error
+	if hasher == nil {
+		hasher, err = newSDKDedupeRangeHasher(c.jptm, func(role string, response blockblob.GetBlobHashResponse) {
+			emitGetBlobHashCPUTime(c.jptm, c.dedupeMode, role, response)
+		})
 	}
-	emitDedupeHashResolutionProgress(
-		c.jptm,
-		c.dedupeMode,
-		c.dedupeResolveStats,
-		c.dedupeResolveErr,
-	)
+	if err == nil {
+		ctx, cancel := context.WithTimeout(c.jptm.Context(), dedupeHashResolutionTimeout)
+		cache, stats, err = resolveDedupeCandidateHashesIncremental(
+			ctx,
+			st,
+			c.dedupePlan,
+			c.dedupeETag,
+			c.jptm.Info().Destination,
+			hasher,
+			cache,
+		)
+		cancel()
+		applyResolvedSourceHashes(c.dedupePlan, cache.hashes)
+	}
+
+	c.dedupeResolveMu.Lock()
+	c.dedupeSourceCache = cache
+	c.dedupeResolveStats = stats
+	c.dedupeResolveErr = err
+	c.dedupeResolveAttempted = true
+	c.dedupeResolvedGeneration = generation
+	c.dedupeResolveInProgress = false
+	close(c.dedupeResolveDone)
+	c.dedupeResolveMu.Unlock()
+
+	emitDedupeHashResolutionProgress(c.jptm, c.dedupeMode, stats, err)
 	return true
+}
+
+func (c *urlToBlockBlobCopier) dedupeResolutionSnapshot() (map[srcBlockKey]srcBlockHashes, error) {
+	c.dedupeResolveMu.Lock()
+	defer c.dedupeResolveMu.Unlock()
+	return c.dedupeSourceCache.hashes, c.dedupeResolveErr
+}
+
+func (c *urlToBlockBlobCopier) dedupeResolutionDone() <-chan struct{} {
+	c.dedupeResolveMu.Lock()
+	defer c.dedupeResolveMu.Unlock()
+	return c.dedupeResolveDone
 }
 
 type dedupeTargetStageAttempt struct {
