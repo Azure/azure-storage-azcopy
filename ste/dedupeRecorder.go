@@ -47,8 +47,11 @@ type dedupeJobState struct {
 	smallProgressMu sync.Mutex
 	hashCPU         dedupeHashCPUState
 
-	targetHashMu         sync.Mutex
-	targetHashEpochLocks map[dedupeTargetEpoch]*sync.Mutex
+	targetHashMu           sync.Mutex
+	targetHashEpochLocks   map[dedupeTargetEpoch]*sync.Mutex
+	targetHashFailedRanges map[dedupeTargetEpoch]map[srcBlockKey]struct{}
+
+	committedGeneration uint64
 
 	// table is the Phase 1 measurement table: blocks are recorded pre-write purely to count the
 	// would-be-hit rate, so it must NOT be used to decide a real reference (the content may not yet
@@ -146,8 +149,8 @@ func (s *dedupeJobState) addCRCDiscovery(plan *SourceGridPlan) (blocks, bytes in
 }
 
 func (s *dedupeJobState) addHashResolution(stats dedupeHashResolutionStats) {
-	atomic.AddInt64(&s.crcCandidateBlocks, int64(stats.candidateBlocks))
-	atomic.AddInt64(&s.crcCandidateOccurrences, int64(stats.candidateOccurrences))
+	atomic.AddInt64(&s.crcCandidateBlocks, int64(stats.newCandidateBlocks))
+	atomic.AddInt64(&s.crcCandidateOccurrences, int64(stats.newCandidateOccurrences))
 	atomic.AddInt64(&s.sourceHashRanges, int64(stats.sourceHashRanges))
 	atomic.AddInt64(&s.sourceHashBatches, int64(stats.sourceHashBatches))
 	atomic.AddInt64(&s.targetHashRanges, int64(stats.targetHashRanges))
@@ -181,6 +184,44 @@ func (s *dedupeJobState) targetHashEpochLock(epoch dedupeTargetEpoch) *sync.Mute
 		s.targetHashEpochLocks[epoch] = lock
 	}
 	return lock
+}
+
+func (s *dedupeJobState) committedGenerationValue() uint64 {
+	return atomic.LoadUint64(&s.committedGeneration)
+}
+
+func (s *dedupeJobState) markCommittedPublication() {
+	atomic.AddUint64(&s.committedGeneration, 1)
+}
+
+func (s *dedupeJobState) targetHashRangeFailed(epoch dedupeTargetEpoch, key srcBlockKey) bool {
+	s.targetHashMu.Lock()
+	defer s.targetHashMu.Unlock()
+	_, failed := s.targetHashFailedRanges[epoch][key]
+	return failed
+}
+
+func (s *dedupeJobState) markTargetHashRangesFailed(epoch dedupeTargetEpoch, keys []srcBlockKey) {
+	if len(keys) == 0 {
+		return
+	}
+	s.targetHashMu.Lock()
+	defer s.targetHashMu.Unlock()
+	if s.targetHashFailedRanges == nil {
+		s.targetHashFailedRanges = make(map[dedupeTargetEpoch]map[srcBlockKey]struct{})
+	}
+	if s.targetHashFailedRanges[epoch] == nil {
+		s.targetHashFailedRanges[epoch] = make(map[srcBlockKey]struct{})
+	}
+	for _, key := range keys {
+		s.targetHashFailedRanges[epoch][key] = struct{}{}
+	}
+}
+
+func (s *dedupeJobState) clearTargetHashFailures(epoch dedupeTargetEpoch) {
+	s.targetHashMu.Lock()
+	defer s.targetHashMu.Unlock()
+	delete(s.targetHashFailedRanges, epoch)
 }
 
 func (s *dedupeJobState) addFileStarted() {
@@ -1314,6 +1355,9 @@ func recordCommittedBlocksWithObserver(jobID common.JobID, destURI, destinationS
 				RecordIndex: recorded,
 			})
 		}
+	}
+	if recorded > 0 {
+		st.markCommittedPublication()
 	}
 	return recorded
 }

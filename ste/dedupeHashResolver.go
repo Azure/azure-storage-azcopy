@@ -40,11 +40,22 @@ const (
 	dedupeGetBlobHashMaxRanges      = 256
 	dedupeGetBlobHashMaxHeaderBytes = 8192
 	dedupeGetBlobHashMaxBytes       = int64(4000 * 1024 * 1024)
+
+	// GetBlobHash hashes ranges sequentially on the service. The 10 GiB workload
+	// timed out with requests starting at 15 ranges, so cap requests at roughly
+	// half that failure floor while retaining protocol limits as validation.
+	dedupeGetBlobHashOperationalMaxRanges = 8
 )
 
 type dedupeRangeHasher interface {
-	HashSource(context.Context, azcore.ETag, []blockblob.BlobHashRange) (blockblob.GetBlobHashResponse, int, error)
-	HashTarget(context.Context, string, azcore.ETag, []blockblob.BlobHashRange) (blockblob.GetBlobHashResponse, int, error)
+	HashSource(context.Context, azcore.ETag, []blockblob.BlobHashRange) (dedupeRangeHashResult, error)
+	HashTarget(context.Context, string, azcore.ETag, []blockblob.BlobHashRange) (dedupeRangeHashResult, error)
+}
+
+type dedupeRangeHashResult struct {
+	response        blockblob.GetBlobHashResponse
+	attemptedRanges []blockblob.BlobHashRange
+	batches         int
 }
 
 type sdkDedupeRangeHasher struct {
@@ -78,7 +89,7 @@ func (h *sdkDedupeRangeHasher) HashSource(
 	ctx context.Context,
 	etag azcore.ETag,
 	ranges []blockblob.BlobHashRange,
-) (blockblob.GetBlobHashResponse, int, error) {
+) (dedupeRangeHashResult, error) {
 	return h.hashRanges(ctx, "source", h.source, etag, ranges, nil)
 }
 
@@ -87,10 +98,10 @@ func (h *sdkDedupeRangeHasher) HashTarget(
 	targetURI string,
 	etag azcore.ETag,
 	ranges []blockblob.BlobHashRange,
-) (blockblob.GetBlobHashResponse, int, error) {
+) (dedupeRangeHashResult, error) {
 	target, err := h.targetClient(targetURI)
 	if err != nil {
-		return blockblob.GetBlobHashResponse{}, 0, err
+		return dedupeRangeHashResult{}, err
 	}
 	return h.hashRanges(ctx, "target", target, etag, ranges, h.jptm.CpkInfo())
 }
@@ -118,16 +129,21 @@ func (h *sdkDedupeRangeHasher) hashRanges(
 	etag azcore.ETag,
 	ranges []blockblob.BlobHashRange,
 	cpkInfo *blob.CPKInfo,
-) (blockblob.GetBlobHashResponse, int, error) {
+) (dedupeRangeHashResult, error) {
 	batches, err := batchDedupeBlobHashRanges(ranges)
 	if err != nil {
-		return blockblob.GetBlobHashResponse{}, 0, err
+		return dedupeRangeHashResult{}, err
 	}
 
-	combined := blockblob.GetBlobHashResponse{
-		RangeHashes: make([]blockblob.BlobHashResult, 0, len(ranges)),
+	result := dedupeRangeHashResult{
+		response: blockblob.GetBlobHashResponse{
+			RangeHashes: make([]blockblob.BlobHashResult, 0, len(ranges)),
+		},
+		attemptedRanges: make([]blockblob.BlobHashRange, 0, len(ranges)),
 	}
-	for i, batch := range batches {
+	for _, batch := range batches {
+		result.attemptedRanges = append(result.attemptedRanges, batch...)
+		result.batches++
 		response, err := client.GetBlobHash(ctx, batch, &blockblob.GetBlobHashOptions{
 			AccessConditions: &blob.AccessConditions{
 				ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfMatch: &etag},
@@ -135,21 +151,21 @@ func (h *sdkDedupeRangeHasher) hashRanges(
 			CPKInfo: cpkInfo,
 		})
 		if err != nil {
-			return blockblob.GetBlobHashResponse{}, i + 1, err
+			return result, err
 		}
 		if h.onResponse != nil {
 			h.onResponse(role, response)
 		}
-		combined.RangeHashes = append(combined.RangeHashes, response.RangeHashes...)
-		combined.ETag = response.ETag
-		combined.LastModified = response.LastModified
-		combined.BlobContentLength = response.BlobContentLength
-		combined.HashAlgorithm = response.HashAlgorithm
-		combined.RequestID = response.RequestID
-		combined.ClientRequestID = response.ClientRequestID
-		combined.Version = response.Version
+		result.response.RangeHashes = append(result.response.RangeHashes, response.RangeHashes...)
+		result.response.ETag = response.ETag
+		result.response.LastModified = response.LastModified
+		result.response.BlobContentLength = response.BlobContentLength
+		result.response.HashAlgorithm = response.HashAlgorithm
+		result.response.RequestID = response.RequestID
+		result.response.ClientRequestID = response.ClientRequestID
+		result.response.Version = response.Version
 	}
-	return combined, len(batches), nil
+	return result, nil
 }
 
 func batchDedupeBlobHashRanges(ranges []blockblob.BlobHashRange) ([][]blockblob.BlobHashRange, error) {
@@ -193,7 +209,7 @@ func batchDedupeBlobHashRanges(ranges []blockblob.BlobHashRange) ([][]blockblob.
 			serializedBytes++
 		}
 
-		if len(batch) == dedupeGetBlobHashMaxRanges ||
+		if len(batch) == dedupeGetBlobHashOperationalMaxRanges ||
 			headerBytes+serializedBytes > dedupeGetBlobHashMaxHeaderBytes ||
 			batchBytes > dedupeGetBlobHashMaxBytes-rnge.Count {
 			flush()
@@ -211,9 +227,25 @@ func batchDedupeBlobHashRanges(ranges []blockblob.BlobHashRange) ([][]blockblob.
 	return batches, nil
 }
 
+func attemptedDedupeHashRanges(
+	attempted []blockblob.BlobHashRange,
+	requested map[srcBlockKey]uint64,
+) map[srcBlockKey]uint64 {
+	matched := make(map[srcBlockKey]uint64, len(attempted))
+	for _, rnge := range attempted {
+		key := srcBlockKey{offset: rnge.Offset, size: rnge.Count}
+		if crc64, ok := requested[key]; ok {
+			matched[key] = crc64
+		}
+	}
+	return matched
+}
+
 type dedupeHashResolutionStats struct {
 	candidateBlocks          int
 	candidateOccurrences     int
+	newCandidateBlocks       int
+	newCandidateOccurrences  int
 	sourceHashRanges         int
 	sourceHashBatches        int
 	targetHashRanges         int
@@ -230,6 +262,62 @@ type dedupeTargetEpoch struct {
 	etag      azcore.ETag
 }
 
+type dedupeCandidateOccurrenceKey struct {
+	source       srcBlockKey
+	crc64        uint64
+	targetURI    string
+	targetOffset int64
+	targetLength int64
+	etag         azcore.ETag
+}
+
+func newDedupeCandidateOccurrenceKey(
+	source srcBlockKey,
+	candidate common.BlockEntry,
+) dedupeCandidateOccurrenceKey {
+	return dedupeCandidateOccurrenceKey{
+		source: source,
+		crc64:  candidate.CRC64,
+		// SAS rotation must not turn one target occurrence into multiple telemetry entries.
+		targetURI:    sanitizedDestForDedupe(candidate.TargetURI),
+		targetOffset: candidate.TargetOffset,
+		targetLength: candidate.TargetLength,
+		etag:         candidate.ETag,
+	}
+}
+
+type dedupeSourceHashCache struct {
+	hashes    map[srcBlockKey]srcBlockHashes
+	attempted map[srcBlockKey]struct{}
+	// These sets live with one source file and prevent committed-table generations from being recounted.
+	seenCandidateBlocks      map[srcBlockKey]struct{}
+	seenCandidateOccurrences map[dedupeCandidateOccurrenceKey]struct{}
+	invalid                  bool
+}
+
+func cloneDedupeSourceHashCache(cache dedupeSourceHashCache) dedupeSourceHashCache {
+	cloned := dedupeSourceHashCache{
+		hashes:                   make(map[srcBlockKey]srcBlockHashes, len(cache.hashes)),
+		attempted:                make(map[srcBlockKey]struct{}, len(cache.attempted)),
+		seenCandidateBlocks:      make(map[srcBlockKey]struct{}, len(cache.seenCandidateBlocks)),
+		seenCandidateOccurrences: make(map[dedupeCandidateOccurrenceKey]struct{}, len(cache.seenCandidateOccurrences)),
+		invalid:                  cache.invalid,
+	}
+	for key, hashes := range cache.hashes {
+		cloned.hashes[key] = hashes
+	}
+	for key := range cache.attempted {
+		cloned.attempted[key] = struct{}{}
+	}
+	for key := range cache.seenCandidateBlocks {
+		cloned.seenCandidateBlocks[key] = struct{}{}
+	}
+	for key := range cache.seenCandidateOccurrences {
+		cloned.seenCandidateOccurrences[key] = struct{}{}
+	}
+	return cloned
+}
+
 func resolveDedupeCandidateHashes(
 	ctx context.Context,
 	state *dedupeJobState,
@@ -238,14 +326,38 @@ func resolveDedupeCandidateHashes(
 	currentTargetURI string,
 	hasher dedupeRangeHasher,
 ) (map[srcBlockKey]srcBlockHashes, dedupeHashResolutionStats, error) {
-	index := make(map[srcBlockKey]srcBlockHashes)
+	cache, stats, err := resolveDedupeCandidateHashesIncremental(
+		ctx,
+		state,
+		plan,
+		sourceETag,
+		currentTargetURI,
+		hasher,
+		dedupeSourceHashCache{},
+	)
+	return cache.hashes, stats, err
+}
+
+func resolveDedupeCandidateHashesIncremental(
+	ctx context.Context,
+	state *dedupeJobState,
+	plan *SourceGridPlan,
+	sourceETag azcore.ETag,
+	currentTargetURI string,
+	hasher dedupeRangeHasher,
+	existing dedupeSourceHashCache,
+) (dedupeSourceHashCache, dedupeHashResolutionStats, error) {
+	cache := cloneDedupeSourceHashCache(existing)
 	stats := dedupeHashResolutionStats{}
 	if state == nil || plan == nil || hasher == nil {
-		return index, stats, nil
+		return cache, stats, nil
+	}
+	if cache.invalid {
+		return cache, stats, nil
 	}
 
 	candidatesBySource := make(map[srcBlockKey][]common.BlockEntry)
-	sourceCRC := make(map[srcBlockKey]uint64)
+	sourceRequested := make(map[srcBlockKey]uint64)
 	sourceRanges := make([]blockblob.BlobHashRange, 0)
 	for _, block := range plan.Blocks {
 		if !blockHasCRC64(block) {
@@ -268,47 +380,118 @@ func resolveDedupeCandidateHashes(
 		}
 		stats.candidateBlocks++
 		stats.candidateOccurrences += len(candidatesBySource[key])
-		sourceCRC[key] = block.CRC64
+		if _, seen := cache.seenCandidateBlocks[key]; !seen {
+			cache.seenCandidateBlocks[key] = struct{}{}
+			stats.newCandidateBlocks++
+		}
+		for _, candidate := range candidatesBySource[key] {
+			occurrence := newDedupeCandidateOccurrenceKey(key, candidate)
+			if _, seen := cache.seenCandidateOccurrences[occurrence]; seen {
+				continue
+			}
+			cache.seenCandidateOccurrences[occurrence] = struct{}{}
+			stats.newCandidateOccurrences++
+		}
+		if _, resolved := cache.hashes[key]; resolved {
+			continue
+		}
+		if _, attempted := cache.attempted[key]; attempted {
+			continue
+		}
+		sourceRequested[key] = block.CRC64
 		sourceRanges = append(sourceRanges, blockblob.BlobHashRange{Offset: block.Offset, Count: block.Size})
 	}
-	if len(sourceRanges) == 0 {
-		return index, stats, nil
-	}
-	if sourceETag == "" {
-		return index, stats, fmt.Errorf("source GetBlockList response did not include an ETag")
+	if len(candidatesBySource) == 0 {
+		return cache, stats, nil
 	}
 
-	sourceResponse, batches, err := hasher.HashSource(ctx, sourceETag, sourceRanges)
-	stats.sourceHashRanges = len(sourceRanges)
-	stats.sourceHashBatches = batches
-	if err != nil {
+	var resolutionErr error
+	if len(sourceRanges) > 0 {
+		if sourceETag == "" {
+			cache.hashes = make(map[srcBlockKey]srcBlockHashes)
+			cache.invalid = true
+			return cache, stats, fmt.Errorf("source GetBlockList response did not include an ETag")
+		}
+		sourceResult, err := hasher.HashSource(ctx, sourceETag, sourceRanges)
+		attemptedSourceRanges := attemptedDedupeHashRanges(
+			sourceResult.attemptedRanges,
+			sourceRequested,
+		)
+		stats.sourceHashRanges = len(attemptedSourceRanges)
+		stats.sourceHashBatches = sourceResult.batches
+		for key := range attemptedSourceRanges {
+			cache.attempted[key] = struct{}{}
+		}
 		if isDedupePreconditionFailure(err) {
 			stats.sourceEpochInvalidations++
+			cache.hashes = make(map[srcBlockKey]srcBlockHashes)
+			cache.invalid = true
+			return cache, stats, err
 		}
-		return index, stats, err
-	}
-	for _, result := range sourceResponse.RangeHashes {
-		if len(result.SHA256) != 32 {
-			return index, stats, fmt.Errorf(
-				"source GetBlobHash returned a %d-byte SHA256 for offset=%d count=%d",
-				len(result.SHA256), result.Offset, result.Count)
+		sourceResponseHashes := make(map[srcBlockKey][32]byte, len(sourceResult.response.RangeHashes))
+		invalidSourceRanges := make(map[srcBlockKey]struct{})
+		for _, result := range sourceResult.response.RangeHashes {
+			key := srcBlockKey{offset: result.Offset, size: result.Count}
+			_, requested := attemptedSourceRanges[key]
+			if !requested {
+				if resolutionErr == nil {
+					resolutionErr = fmt.Errorf(
+						"source GetBlobHash returned an unrequested range offset=%d count=%d",
+						result.Offset,
+						result.Count,
+					)
+				}
+				continue
+			}
+			if _, seen := sourceResponseHashes[key]; seen {
+				delete(sourceResponseHashes, key)
+				invalidSourceRanges[key] = struct{}{}
+				if resolutionErr == nil {
+					resolutionErr = fmt.Errorf(
+						"source GetBlobHash returned duplicate results for offset=%d count=%d",
+						result.Offset,
+						result.Count,
+					)
+				}
+				continue
+			}
+			if _, invalid := invalidSourceRanges[key]; invalid {
+				continue
+			}
+			if len(result.SHA256) != 32 {
+				invalidSourceRanges[key] = struct{}{}
+				if resolutionErr == nil {
+					resolutionErr = fmt.Errorf(
+						"source GetBlobHash returned a %d-byte SHA256 for offset=%d count=%d",
+						len(result.SHA256), result.Offset, result.Count)
+				}
+				continue
+			}
+			var sha [32]byte
+			copy(sha[:], result.SHA256)
+			sourceResponseHashes[key] = sha
 		}
-		var sha [32]byte
-		copy(sha[:], result.SHA256)
-		key := srcBlockKey{offset: result.Offset, size: result.Count}
-		crc64, requested := sourceCRC[key]
-		if !requested {
-			return index, stats, fmt.Errorf(
-				"source GetBlobHash returned an unrequested range offset=%d count=%d",
-				result.Offset,
-				result.Count,
+		resolvedThisCall := make(map[srcBlockKey]struct{}, len(sourceResponseHashes))
+		for key, sha := range sourceResponseHashes {
+			crc64 := attemptedSourceRanges[key]
+			cache.hashes[key] = srcBlockHashes{crc64: crc64, sha256: sha}
+			resolvedThisCall[key] = struct{}{}
+		}
+		if err != nil {
+			resolutionErr = err
+		} else if len(resolvedThisCall) != len(attemptedSourceRanges) && resolutionErr == nil {
+			resolutionErr = fmt.Errorf(
+				"source GetBlobHash omitted %d requested range(s)",
+				len(attemptedSourceRanges)-len(resolvedThisCall),
 			)
 		}
-		index[key] = srcBlockHashes{crc64: crc64, sha256: sha}
 	}
 
 	targetRanges := make(map[dedupeTargetEpoch]map[srcBlockKey]uint64)
-	for _, candidates := range candidatesBySource {
+	for sourceKey, candidates := range candidatesBySource {
+		if _, resolved := cache.hashes[sourceKey]; !resolved {
+			continue
+		}
 		for _, candidate := range candidates {
 			epoch := dedupeTargetEpoch{targetURI: candidate.TargetURI, etag: candidate.ETag}
 			if targetRanges[epoch] == nil {
@@ -333,8 +516,15 @@ func resolveDedupeCandidateHashes(
 	})
 
 	for _, epoch := range epochs {
+		if ctx.Err() != nil {
+			break
+		}
 		epochLock := state.targetHashEpochLock(epoch)
 		epochLock.Lock()
+		if ctx.Err() != nil {
+			epochLock.Unlock()
+			break
+		}
 
 		unknownRanges := make(map[srcBlockKey]uint64)
 		for key, crc64 := range targetRanges[epoch] {
@@ -349,6 +539,9 @@ func resolveDedupeCandidateHashes(
 			}
 			if candidate.HasSHA256 {
 				stats.targetHashCacheHits++
+				continue
+			}
+			if state.targetHashRangeFailed(epoch, key) {
 				continue
 			}
 			stats.targetHashCacheMisses++
@@ -373,49 +566,87 @@ func resolveDedupeCandidateHashes(
 		for i, key := range keys {
 			ranges[i] = blockblob.BlobHashRange{Offset: key.offset, Count: key.size}
 		}
+		if ctx.Err() != nil {
+			epochLock.Unlock()
+			break
+		}
 
-		response, batches, err := hasher.HashTarget(ctx, epoch.targetURI, epoch.etag, ranges)
-		stats.targetHashRanges += len(ranges)
-		stats.targetHashBatches += batches
-		if err != nil {
-			if isDedupePreconditionFailure(err) {
-				stats.targetEpochInvalidations++
-				state.committed.RemoveTargetEpoch(epoch.targetURI, epoch.etag)
-			} else {
-				stats.targetHashFailures++
-			}
+		targetResult, err := hasher.HashTarget(ctx, epoch.targetURI, epoch.etag, ranges)
+		attemptedTargetRanges := attemptedDedupeHashRanges(
+			targetResult.attemptedRanges,
+			unknownRanges,
+		)
+		stats.targetHashRanges += len(attemptedTargetRanges)
+		stats.targetHashBatches += targetResult.batches
+		requestAttempted := len(attemptedTargetRanges) > 0
+		if requestAttempted && isDedupePreconditionFailure(err) {
+			stats.targetEpochInvalidations++
+			state.committed.RemoveTargetEpoch(epoch.targetURI, epoch.etag)
+			state.clearTargetHashFailures(epoch)
 			epochLock.Unlock()
 			continue
 		}
 
-		for _, result := range response.RangeHashes {
-			if len(result.SHA256) != 32 {
-				stats.targetHashFailures++
-				continue
-			}
-			var sha [32]byte
-			copy(sha[:], result.SHA256)
+		targetResponseHashes := make(map[srcBlockKey][32]byte, len(targetResult.response.RangeHashes))
+		invalidTargetRanges := make(map[srcBlockKey]struct{})
+		for _, result := range targetResult.response.RangeHashes {
 			key := srcBlockKey{offset: result.Offset, size: result.Count}
-			crc64, requested := unknownRanges[key]
+			_, requested := attemptedTargetRanges[key]
 			if !requested {
 				stats.targetHashFailures++
 				continue
 			}
+			if _, seen := targetResponseHashes[key]; seen {
+				delete(targetResponseHashes, key)
+				invalidTargetRanges[key] = struct{}{}
+				continue
+			}
+			if _, invalid := invalidTargetRanges[key]; invalid {
+				continue
+			}
+			if len(result.SHA256) != 32 {
+				invalidTargetRanges[key] = struct{}{}
+				continue
+			}
+			var sha [32]byte
+			copy(sha[:], result.SHA256)
+			targetResponseHashes[key] = sha
+		}
+
+		resolvedTargetRanges := make(map[srcBlockKey]struct{}, len(targetResponseHashes))
+		for key, sha := range targetResponseHashes {
+			crc64 := attemptedTargetRanges[key]
 			if !state.committed.SetSHA256ForCRC64(
 				crc64,
 				epoch.targetURI,
-				result.Offset,
-				result.Count,
+				key.offset,
+				key.size,
 				epoch.etag,
 				sha,
 			) {
-				stats.targetHashFailures++
+				continue
 			}
+			resolvedTargetRanges[key] = struct{}{}
+		}
+
+		failedRanges := make([]srcBlockKey, 0, len(attemptedTargetRanges)-len(resolvedTargetRanges))
+		for key := range attemptedTargetRanges {
+			if _, resolved := resolvedTargetRanges[key]; !resolved {
+				failedRanges = append(failedRanges, key)
+			}
+		}
+		if requestAttempted {
+			state.markTargetHashRangesFailed(epoch, failedRanges)
+		}
+		if err != nil {
+			stats.targetHashFailures++
+		} else {
+			stats.targetHashFailures += len(failedRanges)
 		}
 		epochLock.Unlock()
 	}
 
-	return index, stats, nil
+	return cache, stats, resolutionErr
 }
 
 func exactDedupeTargetOccurrence(
@@ -442,6 +673,9 @@ func applyResolvedSourceHashes(plan *SourceGridPlan, index map[srcBlockKey]srcBl
 		key := srcBlockKey{offset: plan.Blocks[i].Offset, size: plan.Blocks[i].Size}
 		hashes, ok := index[key]
 		if !ok {
+			plan.Blocks[i].SHA256 = [32]byte{}
+			plan.Blocks[i].HasSHA256 = false
+			plan.Blocks[i].HasHashes = false
 			continue
 		}
 		plan.Blocks[i].SHA256 = hashes.sha256

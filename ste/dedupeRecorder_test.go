@@ -685,6 +685,8 @@ func TestDedupeHashResolutionProgressCounters(t *testing.T) {
 	stats := dedupeHashResolutionStats{
 		candidateBlocks:          2,
 		candidateOccurrences:     3,
+		newCandidateBlocks:       2,
+		newCandidateOccurrences:  3,
 		sourceHashRanges:         2,
 		sourceHashBatches:        1,
 		targetHashRanges:         3,

@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -70,6 +71,56 @@ func (t *dedupeHashWireTransport) Do(req *http.Request) (*http.Response, error) 
 	}, nil
 }
 
+type dedupeHashPartialTransport struct {
+	mu            sync.Mutex
+	requests      []*http.Request
+	successRanges []blockblob.BlobHashRange
+}
+
+func (t *dedupeHashPartialTransport) Do(req *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	cloned := req.Clone(req.Context())
+	cloned.Header = req.Header.Clone()
+	t.requests = append(t.requests, cloned)
+	call := len(t.requests)
+	t.mu.Unlock()
+
+	if call == 2 {
+		return nil, context.DeadlineExceeded
+	}
+
+	var body strings.Builder
+	body.WriteString("<RangeHashList>")
+	for _, rnge := range t.successRanges {
+		hash := sha256.Sum256([]byte(fmt.Sprintf("%d:%d", rnge.Offset, rnge.Count)))
+		fmt.Fprintf(
+			&body,
+			"<RangeHash><Offset>%d</Offset><Length>%d</Length><Sha256>%s</Sha256></RangeHash>",
+			rnge.Offset,
+			rnge.Count,
+			base64.StdEncoding.EncodeToString(hash[:]),
+		)
+	}
+	body.WriteString("</RangeHashList>")
+
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/xml")
+	headers.Set("x-ms-request-id", "partial-hash-request")
+	return &http.Response{
+		Request:    req,
+		StatusCode: http.StatusOK,
+		Status:     "200 OK",
+		Header:     headers,
+		Body:       io.NopCloser(strings.NewReader(body.String())),
+	}, nil
+}
+
+func (t *dedupeHashPartialTransport) snapshotRequests() []*http.Request {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]*http.Request(nil), t.requests...)
+}
+
 func headerValueFold(header http.Header, name string) string {
 	for headerName, values := range header {
 		if strings.EqualFold(headerName, name) && len(values) > 0 {
@@ -85,66 +136,295 @@ type fakeDedupeRangeHasher struct {
 	sourceCalls int
 	targetCalls int
 
-	sourceRanges []blockblob.BlobHashRange
-	targetRanges map[string][]blockblob.BlobHashRange
-	sourceHashes map[srcBlockKey][32]byte
-	targetHashes map[string]map[srcBlockKey][32]byte
-	sourceErr    error
-	targetErr    map[string]error
+	sourceRanges     []blockblob.BlobHashRange
+	targetRanges     map[string][]blockblob.BlobHashRange
+	targetCallCounts map[string]int
+	sourceHashes     map[srcBlockKey][32]byte
+	targetHashes     map[string]map[srcBlockKey][32]byte
+	sourceErr        error
+	targetErr        map[string]error
+
+	sourceResponse  *blockblob.GetBlobHashResponse
+	targetResponses map[string]blockblob.GetBlobHashResponse
+	sourceStarted   chan<- struct{}
+	sourceRelease   <-chan struct{}
+}
+
+type dedupeResolutionTestTransferManager struct {
+	*testJobPartTransferManager
+	ctx context.Context
+}
+
+func (m *dedupeResolutionTestTransferManager) LogAtLevelForCurrentTransfer(common.LogLevel, string) {
+}
+
+func (m *dedupeResolutionTestTransferManager) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
 }
 
 func (h *fakeDedupeRangeHasher) HashSource(
 	_ context.Context,
 	_ azcore.ETag,
 	ranges []blockblob.BlobHashRange,
-) (blockblob.GetBlobHashResponse, int, error) {
+) (dedupeRangeHashResult, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.sourceCalls++
 	h.sourceRanges = append([]blockblob.BlobHashRange(nil), ranges...)
-	if h.sourceErr != nil {
-		return blockblob.GetBlobHashResponse{}, 1, h.sourceErr
+	response := h.sourceResponse
+	err := h.sourceErr
+	started := h.sourceStarted
+	release := h.sourceRelease
+	sourceHashes := h.sourceHashes
+	h.mu.Unlock()
+
+	if started != nil {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+	}
+	if release != nil {
+		<-release
+	}
+	if response != nil {
+		return dedupeRangeHashResult{
+			response:        *response,
+			attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+			batches:         1,
+		}, err
+	}
+	if err != nil {
+		return dedupeRangeHashResult{
+			attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+			batches:         1,
+		}, err
 	}
 	results := make([]blockblob.BlobHashResult, 0, len(ranges))
 	for i := len(ranges) - 1; i >= 0; i-- {
 		rnge := ranges[i]
-		hash := h.sourceHashes[srcBlockKey{offset: rnge.Offset, size: rnge.Count}]
+		hash := sourceHashes[srcBlockKey{offset: rnge.Offset, size: rnge.Count}]
 		results = append(results, blockblob.BlobHashResult{
 			Offset: rnge.Offset,
 			Count:  rnge.Count,
 			SHA256: append([]byte(nil), hash[:]...),
 		})
 	}
-	return blockblob.GetBlobHashResponse{RangeHashes: results}, 1, nil
+	return dedupeRangeHashResult{
+		response:        blockblob.GetBlobHashResponse{RangeHashes: results},
+		attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+		batches:         1,
+	}, nil
 }
 
 func (h *fakeDedupeRangeHasher) HashTarget(
-	_ context.Context,
+	ctx context.Context,
 	targetURI string,
 	_ azcore.ETag,
 	ranges []blockblob.BlobHashRange,
-) (blockblob.GetBlobHashResponse, int, error) {
+) (dedupeRangeHashResult, error) {
+	contextErr := ctx.Err()
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.targetCalls++
 	if h.targetRanges == nil {
 		h.targetRanges = make(map[string][]blockblob.BlobHashRange)
 	}
+	if h.targetCallCounts == nil {
+		h.targetCallCounts = make(map[string]int)
+	}
 	h.targetRanges[targetURI] = append([]blockblob.BlobHashRange(nil), ranges...)
-	if err := h.targetErr[targetURI]; err != nil {
-		return blockblob.GetBlobHashResponse{}, 1, err
+	h.targetCallCounts[targetURI]++
+	response, hasResponse := h.targetResponses[targetURI]
+	err := h.targetErr[targetURI]
+	targetHashes := h.targetHashes[targetURI]
+	h.mu.Unlock()
+
+	if contextErr != nil {
+		return dedupeRangeHashResult{}, contextErr
+	}
+	if hasResponse {
+		return dedupeRangeHashResult{
+			response:        response,
+			attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+			batches:         1,
+		}, err
+	}
+	if err != nil {
+		return dedupeRangeHashResult{
+			attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+			batches:         1,
+		}, err
 	}
 	results := make([]blockblob.BlobHashResult, 0, len(ranges))
 	for i := len(ranges) - 1; i >= 0; i-- {
 		rnge := ranges[i]
-		hash := h.targetHashes[targetURI][srcBlockKey{offset: rnge.Offset, size: rnge.Count}]
+		hash := targetHashes[srcBlockKey{offset: rnge.Offset, size: rnge.Count}]
 		results = append(results, blockblob.BlobHashResult{
 			Offset: rnge.Offset,
 			Count:  rnge.Count,
 			SHA256: append([]byte(nil), hash[:]...),
 		})
 	}
-	return blockblob.GetBlobHashResponse{RangeHashes: results}, 1, nil
+	return dedupeRangeHashResult{
+		response:        blockblob.GetBlobHashResponse{RangeHashes: results},
+		attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+		batches:         1,
+	}, nil
+}
+
+func (h *fakeDedupeRangeHasher) targetCallCount(targetURI string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.targetCallCounts[targetURI]
+}
+
+type cancelAfterTargetHasher struct {
+	*fakeDedupeRangeHasher
+	targetURI string
+	cancel    context.CancelFunc
+	once      sync.Once
+}
+
+func (h *cancelAfterTargetHasher) HashTarget(
+	ctx context.Context,
+	targetURI string,
+	etag azcore.ETag,
+	ranges []blockblob.BlobHashRange,
+) (dedupeRangeHashResult, error) {
+	result, err := h.fakeDedupeRangeHasher.HashTarget(ctx, targetURI, etag, ranges)
+	if targetURI == h.targetURI {
+		h.once.Do(h.cancel)
+	}
+	return result, err
+}
+
+type cancelSecondBatchDedupeRangeHasher struct {
+	mu sync.Mutex
+
+	cancelRole string
+	cancel     context.CancelFunc
+
+	sourceCalls    int
+	targetCalls    int
+	sourceRequests [][]blockblob.BlobHashRange
+	targetRequests map[string][][]blockblob.BlobHashRange
+	sourceHashes   map[srcBlockKey][32]byte
+	targetHashes   map[string]map[srcBlockKey][32]byte
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) HashSource(
+	ctx context.Context,
+	_ azcore.ETag,
+	ranges []blockblob.BlobHashRange,
+) (dedupeRangeHashResult, error) {
+	h.mu.Lock()
+	h.sourceCalls++
+	call := h.sourceCalls
+	h.sourceRequests = append(
+		h.sourceRequests,
+		append([]blockblob.BlobHashRange(nil), ranges...),
+	)
+	h.mu.Unlock()
+	return h.hash(ctx, "source", call, ranges, h.sourceHashes)
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) HashTarget(
+	ctx context.Context,
+	targetURI string,
+	_ azcore.ETag,
+	ranges []blockblob.BlobHashRange,
+) (dedupeRangeHashResult, error) {
+	h.mu.Lock()
+	h.targetCalls++
+	call := h.targetCalls
+	if h.targetRequests == nil {
+		h.targetRequests = make(map[string][][]blockblob.BlobHashRange)
+	}
+	h.targetRequests[targetURI] = append(
+		h.targetRequests[targetURI],
+		append([]blockblob.BlobHashRange(nil), ranges...),
+	)
+	hashes := h.targetHashes[targetURI]
+	h.mu.Unlock()
+	return h.hash(ctx, "target", call, ranges, hashes)
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) hash(
+	ctx context.Context,
+	role string,
+	call int,
+	ranges []blockblob.BlobHashRange,
+	hashes map[srcBlockKey][32]byte,
+) (dedupeRangeHashResult, error) {
+	batches, err := batchDedupeBlobHashRanges(ranges)
+	if err != nil {
+		return dedupeRangeHashResult{}, err
+	}
+	if role == h.cancelRole && call == 1 {
+		if len(batches) < 3 {
+			return dedupeRangeHashResult{}, fmt.Errorf(
+				"cancel-second-batch test requires at least three batches",
+			)
+		}
+		attempted := append([]blockblob.BlobHashRange(nil), batches[0]...)
+		attempted = append(attempted, batches[1]...)
+		h.cancel()
+		return dedupeRangeHashResult{
+			response:        dedupeHashResponseForRanges(batches[0], hashes),
+			attemptedRanges: attempted,
+			batches:         2,
+		}, ctx.Err()
+	}
+	return dedupeRangeHashResult{
+		response:        dedupeHashResponseForRanges(ranges, hashes),
+		attemptedRanges: append([]blockblob.BlobHashRange(nil), ranges...),
+		batches:         len(batches),
+	}, nil
+}
+
+func dedupeHashResponseForRanges(
+	ranges []blockblob.BlobHashRange,
+	hashes map[srcBlockKey][32]byte,
+) blockblob.GetBlobHashResponse {
+	results := make([]blockblob.BlobHashResult, 0, len(ranges))
+	for _, rnge := range ranges {
+		hash := hashes[srcBlockKey{offset: rnge.Offset, size: rnge.Count}]
+		results = append(results, blockblob.BlobHashResult{
+			Offset: rnge.Offset,
+			Count:  rnge.Count,
+			SHA256: append([]byte(nil), hash[:]...),
+		})
+	}
+	return blockblob.GetBlobHashResponse{RangeHashes: results}
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) sourceRequest(call int) []blockblob.BlobHashRange {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]blockblob.BlobHashRange(nil), h.sourceRequests[call]...)
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) sourceRequestCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.sourceRequests)
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) targetRequest(
+	targetURI string,
+	call int,
+) []blockblob.BlobHashRange {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]blockblob.BlobHashRange(nil), h.targetRequests[targetURI][call]...)
+}
+
+func (h *cancelSecondBatchDedupeRangeHasher) targetRequestCount(targetURI string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.targetRequests[targetURI])
 }
 
 func crcOnlyBlock(offset, size int64, crc uint64) PlannedBlock {
@@ -155,6 +435,40 @@ func crcOnlyBlock(offset, size int64, crc uint64) PlannedBlock {
 		HasCRC64:  true,
 		HasSHA256: false,
 	}
+}
+
+func newDedupeBatchCancellationFixture(
+	cacheTargetSHA bool,
+) (
+	*SourceGridPlan,
+	*SourceGridPlan,
+	map[srcBlockKey][32]byte,
+	map[srcBlockKey][32]byte,
+) {
+	count := 2*dedupeGetBlobHashOperationalMaxRanges + 1
+	sourceBlocks := make([]PlannedBlock, count)
+	targetBlocks := make([]PlannedBlock, count)
+	sourceHashes := make(map[srcBlockKey][32]byte, count)
+	targetHashes := make(map[srcBlockKey][32]byte, count)
+	for i := 0; i < count; i++ {
+		crc64 := uint64(i + 1)
+		sourceOffset := int64(i * 2)
+		targetOffset := int64(1000 + i*2)
+		hash := sha256.Sum256([]byte(fmt.Sprintf("batch-range-%d", i)))
+		sourceBlocks[i] = crcOnlyBlock(sourceOffset, 1, crc64)
+		targetBlocks[i] = crcOnlyBlock(targetOffset, 1, crc64)
+		if cacheTargetSHA {
+			targetBlocks[i].SHA256 = hash
+			targetBlocks[i].HasSHA256 = true
+			targetBlocks[i].HasHashes = true
+		}
+		sourceHashes[srcBlockKey{offset: sourceOffset, size: 1}] = hash
+		targetHashes[srcBlockKey{offset: targetOffset, size: 1}] = hash
+	}
+	return &SourceGridPlan{Blocks: sourceBlocks},
+		&SourceGridPlan{Blocks: targetBlocks},
+		sourceHashes,
+		targetHashes
 }
 
 func TestSDKDedupeRangeHasherWireContractAndCPUCallback(t *testing.T) {
@@ -175,7 +489,7 @@ func TestSDKDedupeRangeHasherWireContractAndCPUCallback(t *testing.T) {
 		},
 	}
 	ranges := []blockblob.BlobHashRange{{Offset: 0, Count: 3}, {Offset: 10, Count: 7}}
-	response, batches, err := hasher.hashRanges(
+	result, err := hasher.hashRanges(
 		context.Background(),
 		"source",
 		client,
@@ -185,8 +499,9 @@ func TestSDKDedupeRangeHasherWireContractAndCPUCallback(t *testing.T) {
 	)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 1, batches)
-	assert.Len(t, response.RangeHashes, 2)
+	assert.Equal(t, 1, result.batches)
+	assert.Equal(t, ranges, result.attemptedRanges)
+	assert.Len(t, result.response.RangeHashes, 2)
 	assert.Equal(t, "source", callbackRole)
 	assert.Equal(t, int64(17), *callbackResponse.SHA256CPUTimeUS)
 	assert.Equal(t, "hash-request", *callbackResponse.RequestID)
@@ -205,7 +520,7 @@ func TestSDKDedupeRangeHasherWireContractAndCPUCallback(t *testing.T) {
 	algorithm := blob.EncryptionAlgorithmTypeAES256
 	encryptionKey := "destination-key"
 	encryptionKeySHA256 := "destination-key-sha256"
-	_, _, err = hasher.hashRanges(
+	_, err = hasher.hashRanges(
 		context.Background(),
 		"target",
 		client,
@@ -222,43 +537,44 @@ func TestSDKDedupeRangeHasherWireContractAndCPUCallback(t *testing.T) {
 	assert.Equal(t, encryptionKeySHA256, headerValueFold(transport.request.Header, "x-ms-encryption-key-sha256"))
 }
 
-func TestDedupeResolutionAllowsOneResolverWithoutBlockingSiblings(t *testing.T) {
-	copier := &urlToBlockBlobCopier{
-		blockBlobSenderBase: blockBlobSenderBase{
-			dedupeResolveDone: make(chan struct{}),
-		},
+func TestSDKDedupeRangeHasherPreservesSuccessfulBatchesOnLaterTimeout(t *testing.T) {
+	ranges := make([]blockblob.BlobHashRange, 2*dedupeGetBlobHashOperationalMaxRanges+1)
+	for i := range ranges {
+		ranges[i] = blockblob.BlobHashRange{Offset: int64(i * 2), Count: 1}
 	}
-	const workers = 32
+	transport := &dedupeHashPartialTransport{successRanges: ranges[:dedupeGetBlobHashOperationalMaxRanges]}
+	client, err := blockblob.NewClientWithNoCredential(
+		"https://acct.blob.core.windows.net/c/source",
+		&blockblob.ClientOptions{ClientOptions: policy.ClientOptions{
+			Transport: transport,
+			Retry:     policy.RetryOptions{MaxRetries: -1},
+		}},
+	)
+	assert.NoError(t, err)
 
-	start := make(chan struct{})
-	results := make(chan bool, workers)
-	for i := 0; i < workers; i++ {
-		go func() {
-			<-start
-			results <- copier.tryStartDedupeResolution()
-		}()
-	}
-	close(start)
+	hasher := &sdkDedupeRangeHasher{}
+	result, err := hasher.hashRanges(
+		context.Background(),
+		"source",
+		client,
+		azcore.ETag(`"source-etag"`),
+		ranges,
+		nil,
+	)
 
-	owners := 0
-	for i := 0; i < workers; i++ {
-		if <-results {
-			owners++
-		}
-	}
-	assert.Equal(t, 1, owners)
-	assert.Equal(t, dedupeResolveInProgress, copier.dedupeResolutionState())
+	assert.Error(t, err)
+	assert.Equal(t, 2, result.batches)
+	assert.Equal(t, ranges[:2*dedupeGetBlobHashOperationalMaxRanges], result.attemptedRanges)
+	assert.Len(t, result.response.RangeHashes, dedupeGetBlobHashOperationalMaxRanges)
 
-	started := time.Now()
-	assert.False(t, copier.ensureDedupeHashesResolved(nil))
-	assert.Less(t, time.Since(started), 100*time.Millisecond)
-
-	copier.finishDedupeResolution()
-	assert.Equal(t, dedupeResolveComplete, copier.dedupeResolutionState())
-	select {
-	case <-copier.dedupeResolveDone:
-	default:
-		t.Fatal("resolution completion channel was not closed")
+	requests := transport.snapshotRequests()
+	if assert.Len(t, requests, 2) {
+		assert.Equal(t, `"source-etag"`, headerValueFold(requests[0].Header, "If-Match"))
+		assert.Equal(t, `"source-etag"`, headerValueFold(requests[1].Header, "If-Match"))
+		assert.Equal(t, "bytes=0-0,2-2,4-4,6-6,8-8,10-10,12-12,14-14",
+			headerValueFold(requests[0].Header, "x-ms-multi-range"))
+		assert.Equal(t, "bytes=16-16,18-18,20-20,22-22,24-24,26-26,28-28,30-30",
+			headerValueFold(requests[1].Header, "x-ms-multi-range"))
 	}
 }
 
@@ -345,6 +661,8 @@ func TestResolveDedupeCandidateHashesMatchesByRangeNotResultOrder(t *testing.T) 
 	assert.NoError(t, err)
 	assert.Equal(t, 2, stats.candidateBlocks)
 	assert.Equal(t, 2, stats.candidateOccurrences)
+	assert.Equal(t, 2, stats.newCandidateBlocks)
+	assert.Equal(t, 2, stats.newCandidateOccurrences)
 	assert.Zero(t, stats.targetHashCacheHits)
 	assert.Equal(t, 2, stats.targetHashCacheMisses)
 	assert.Equal(t, 1, hasher.sourceCalls)
@@ -470,7 +788,13 @@ func TestResolveDedupeCandidateHashesEvictsTargetEpochOn412(t *testing.T) {
 	hash := sha256.Sum256([]byte("source"))
 	hasher := &fakeDedupeRangeHasher{
 		sourceHashes: map[srcBlockKey][32]byte{{offset: 0, size: 3}: hash},
-		targetHashes: make(map[string]map[srcBlockKey][32]byte),
+		targetResponses: map[string]blockblob.GetBlobHashResponse{
+			targetURI: {RangeHashes: []blockblob.BlobHashResult{{
+				Offset: 100,
+				Count:  3,
+				SHA256: append([]byte(nil), hash[:]...),
+			}}},
+		},
 		targetErr: map[string]error{
 			targetURI: &azcore.ResponseError{StatusCode: http.StatusPreconditionFailed},
 		},
@@ -533,6 +857,175 @@ func TestResolveDedupeCandidateHashesTargetFailureFallsBackWithoutCaching(t *tes
 		3,
 		"https://acct.blob.core.windows.net/c/current",
 	))
+
+	_, _, err = resolveDedupeCandidateHashes(
+		context.Background(),
+		state,
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(0, 3, 10)}},
+		azcore.ETag(`"source"`),
+		"https://acct.blob.core.windows.net/c/current",
+		hasher,
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, hasher.targetCalls)
+}
+
+func TestResolveDedupeCandidateHashesPreservesPartialSourceResults(t *testing.T) {
+	firstHash := sha256.Sum256([]byte("first"))
+	secondHash := sha256.Sum256([]byte("second"))
+	targetURI := "https://acct.blob.core.windows.net/c/previous"
+	state := &dedupeJobState{committed: common.NewDedupeHashTable()}
+	for _, entry := range []common.BlockEntry{
+		{
+			CRC64:        10,
+			TargetURI:    targetURI,
+			TargetOffset: 100,
+			TargetLength: 3,
+			ETag:         azcore.ETag(`"target"`),
+		},
+		{
+			CRC64:        20,
+			TargetURI:    targetURI,
+			TargetOffset: 200,
+			TargetLength: 7,
+			ETag:         azcore.ETag(`"target"`),
+		},
+	} {
+		state.committed.Insert(entry)
+	}
+	hasher := &fakeDedupeRangeHasher{
+		sourceResponse: &blockblob.GetBlobHashResponse{RangeHashes: []blockblob.BlobHashResult{{
+			Offset: 0,
+			Count:  3,
+			SHA256: append([]byte(nil), firstHash[:]...),
+		}}},
+		sourceErr: context.DeadlineExceeded,
+		targetHashes: map[string]map[srcBlockKey][32]byte{
+			targetURI: {
+				{offset: 100, size: 3}: firstHash,
+				{offset: 200, size: 7}: secondHash,
+			},
+		},
+		targetErr: make(map[string]error),
+	}
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{
+		crcOnlyBlock(0, 3, 10),
+		crcOnlyBlock(3, 7, 20),
+	}}
+
+	cache, stats, err := resolveDedupeCandidateHashesIncremental(
+		context.Background(),
+		state,
+		plan,
+		azcore.ETag(`"source"`),
+		"https://acct.blob.core.windows.net/c/current",
+		hasher,
+		dedupeSourceHashCache{},
+	)
+
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Len(t, cache.hashes, 1)
+	assert.Equal(t, 2, stats.sourceHashRanges)
+	assert.Equal(t, []blockblob.BlobHashRange{{Offset: 100, Count: 3}}, hasher.targetRanges[targetURI])
+	_, firstHit := decideStaging(cache.hashes, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
+	_, secondHit := decideStaging(cache.hashes, state.committed, 3, 7, "https://acct.blob.core.windows.net/c/current")
+	assert.True(t, firstHit)
+	assert.False(t, secondHit)
+
+	cache, _, err = resolveDedupeCandidateHashesIncremental(
+		context.Background(),
+		state,
+		plan,
+		azcore.ETag(`"source"`),
+		"https://acct.blob.core.windows.net/c/current",
+		hasher,
+		cache,
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, hasher.sourceCalls)
+	assert.Equal(t, 1, hasher.targetCalls)
+}
+
+func TestResolveDedupeCandidateHashesPreservesPartialTargetResults(t *testing.T) {
+	firstHash := sha256.Sum256([]byte("first"))
+	secondHash := sha256.Sum256([]byte("second"))
+	targetURI := "https://acct.blob.core.windows.net/c/previous"
+	state := &dedupeJobState{committed: common.NewDedupeHashTable()}
+	for _, entry := range []common.BlockEntry{
+		{
+			CRC64:        10,
+			TargetURI:    targetURI,
+			TargetOffset: 100,
+			TargetLength: 3,
+			ETag:         azcore.ETag(`"target"`),
+		},
+		{
+			CRC64:        20,
+			TargetURI:    targetURI,
+			TargetOffset: 200,
+			TargetLength: 7,
+			ETag:         azcore.ETag(`"target"`),
+		},
+	} {
+		state.committed.Insert(entry)
+	}
+	hasher := &fakeDedupeRangeHasher{
+		sourceHashes: map[srcBlockKey][32]byte{
+			{offset: 0, size: 3}: firstHash,
+			{offset: 3, size: 7}: secondHash,
+		},
+		targetResponses: map[string]blockblob.GetBlobHashResponse{
+			targetURI: {RangeHashes: []blockblob.BlobHashResult{{
+				Offset: 100,
+				Count:  3,
+				SHA256: append([]byte(nil), firstHash[:]...),
+			}}},
+		},
+		targetErr: map[string]error{targetURI: context.DeadlineExceeded},
+	}
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{
+		crcOnlyBlock(0, 3, 10),
+		crcOnlyBlock(3, 7, 20),
+	}}
+
+	cache, stats, err := resolveDedupeCandidateHashesIncremental(
+		context.Background(),
+		state,
+		plan,
+		azcore.ETag(`"source"`),
+		"https://acct.blob.core.windows.net/c/current",
+		hasher,
+		dedupeSourceHashCache{},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, stats.targetHashFailures)
+	first := state.committed.LookupByCRC64AndLength(10, 3)
+	second := state.committed.LookupByCRC64AndLength(20, 7)
+	if assert.Len(t, first, 1) {
+		assert.True(t, first[0].HasSHA256)
+		assert.Equal(t, firstHash, first[0].SHA256)
+	}
+	if assert.Len(t, second, 1) {
+		assert.False(t, second[0].HasSHA256)
+	}
+	_, firstHit := decideStaging(cache.hashes, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
+	_, secondHit := decideStaging(cache.hashes, state.committed, 3, 7, "https://acct.blob.core.windows.net/c/current")
+	assert.True(t, firstHit)
+	assert.False(t, secondHit)
+
+	cache, _, err = resolveDedupeCandidateHashesIncremental(
+		context.Background(),
+		state,
+		plan,
+		azcore.ETag(`"source"`),
+		"https://acct.blob.core.windows.net/c/current",
+		hasher,
+		cache,
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, hasher.sourceCalls)
+	assert.Equal(t, 1, hasher.targetCalls)
 }
 
 func TestResolveDedupeCandidateHashesReportsSource412(t *testing.T) {
@@ -544,7 +1037,13 @@ func TestResolveDedupeCandidateHashesReportsSource412(t *testing.T) {
 		TargetLength: 3,
 		ETag:         azcore.ETag(`"target"`),
 	})
+	hash := sha256.Sum256([]byte("source"))
 	hasher := &fakeDedupeRangeHasher{
+		sourceResponse: &blockblob.GetBlobHashResponse{RangeHashes: []blockblob.BlobHashResult{{
+			Offset: 0,
+			Count:  3,
+			SHA256: append([]byte(nil), hash[:]...),
+		}}},
 		sourceErr: &azcore.ResponseError{StatusCode: http.StatusPreconditionFailed},
 	}
 
@@ -561,19 +1060,23 @@ func TestResolveDedupeCandidateHashesReportsSource412(t *testing.T) {
 	assert.Empty(t, index)
 	assert.Equal(t, 1, stats.sourceEpochInvalidations)
 	assert.Equal(t, 1, state.committed.Len())
+	assert.Equal(t, 1, hasher.sourceCalls)
+	assert.Zero(t, hasher.targetCalls)
 }
 
 func TestBatchDedupeBlobHashRanges(t *testing.T) {
 	t.Run("range count", func(t *testing.T) {
-		ranges := make([]blockblob.BlobHashRange, 257)
+		assert.Less(t, dedupeGetBlobHashOperationalMaxRanges, dedupeGetBlobHashMaxRanges)
+		ranges := make([]blockblob.BlobHashRange, 2*dedupeGetBlobHashOperationalMaxRanges+1)
 		for i := range ranges {
 			ranges[i] = blockblob.BlobHashRange{Offset: int64(i * 2), Count: 1}
 		}
 		batches, err := batchDedupeBlobHashRanges(ranges)
 		assert.NoError(t, err)
-		assert.Len(t, batches, 2)
-		assert.Len(t, batches[0], 256)
-		assert.Len(t, batches[1], 1)
+		assert.Len(t, batches, 3)
+		assert.Len(t, batches[0], dedupeGetBlobHashOperationalMaxRanges)
+		assert.Len(t, batches[1], dedupeGetBlobHashOperationalMaxRanges)
+		assert.Len(t, batches[2], 1)
 	})
 
 	t.Run("aggregate bytes", func(t *testing.T) {
@@ -596,8 +1099,9 @@ func TestBatchDedupeBlobHashRanges(t *testing.T) {
 		}
 		batches, err := batchDedupeBlobHashRanges(ranges)
 		assert.NoError(t, err)
-		assert.Len(t, batches, 2)
+		assert.Greater(t, len(batches), 2)
 		for _, batch := range batches {
+			assert.LessOrEqual(t, len(batch), dedupeGetBlobHashOperationalMaxRanges)
 			headerBytes := len("bytes=")
 			for i, rnge := range batch {
 				if i > 0 {
@@ -614,6 +1118,12 @@ func TestBatchDedupeBlobHashRanges(t *testing.T) {
 
 	t.Run("invalid", func(t *testing.T) {
 		_, err := batchDedupeBlobHashRanges([]blockblob.BlobHashRange{{Offset: -1, Count: 1}})
+		assert.Error(t, err)
+
+		_, err = batchDedupeBlobHashRanges([]blockblob.BlobHashRange{{
+			Offset: 0,
+			Count:  dedupeGetBlobHashMaxBytes + 1,
+		}})
 		assert.Error(t, err)
 	})
 
@@ -632,12 +1142,545 @@ func TestBatchDedupeBlobHashRanges(t *testing.T) {
 	})
 }
 
+func newDedupeResolutionTestCopier(
+	jobID common.JobID,
+	plan *SourceGridPlan,
+	hasher dedupeRangeHasher,
+) *urlToBlockBlobCopier {
+	manager := &dedupeResolutionTestTransferManager{testJobPartTransferManager: &testJobPartTransferManager{info: &TransferInfo{
+		JobID:       jobID,
+		Source:      "https://source.blob.core.windows.net/c/current",
+		Destination: "https://dest.blob.core.windows.net/c/current",
+		SrcFilePath: "current",
+		DstFilePath: "current",
+	}}}
+	return &urlToBlockBlobCopier{blockBlobSenderBase: blockBlobSenderBase{
+		jptm:         manager,
+		dedupeMode:   dedupeActEnforce,
+		dedupePlan:   plan,
+		dedupeETag:   azcore.ETag(`"source"`),
+		dedupeHasher: hasher,
+	}}
+}
+
+func TestDedupeResolutionReconsidersNewCommittedCandidates(t *testing.T) {
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+	state := dedupeStateForJob(jobID)
+	hash := sha256.Sum256([]byte("shared"))
+	firstTarget := "https://dest.blob.core.windows.net/c/first"
+	secondTarget := "https://dest.blob.core.windows.net/c/second"
+	hasher := &fakeDedupeRangeHasher{
+		sourceHashes: map[srcBlockKey][32]byte{{offset: 0, size: 3}: hash},
+		targetHashes: map[string]map[srcBlockKey][32]byte{
+			firstTarget:  {{offset: 100, size: 3}: hash},
+			secondTarget: {{offset: 200, size: 3}: hash},
+		},
+		targetErr: make(map[string]error),
+	}
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(0, 3, 10)}}
+	copier := newDedupeResolutionTestCopier(jobID, plan, hasher)
+
+	copier.ensureDedupeHashesResolved(state)
+	assert.Zero(t, hasher.sourceCalls)
+	assert.Zero(t, hasher.targetCalls)
+
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		firstTarget,
+		"",
+		azcore.ETag(`"first"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(100, 3, 10)}},
+	))
+	copier.ensureDedupeHashesResolved(state)
+	index, err := copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	_, hit := decideStaging(index, state.committed, 0, 3, "https://dest.blob.core.windows.net/c/current")
+	assert.True(t, hit)
+	assert.Equal(t, 1, hasher.sourceCalls)
+	assert.Equal(t, 1, hasher.targetCalls)
+	firstSnapshot := state.progressSnapshot()
+	assert.EqualValues(t, 1, firstSnapshot.crcCandidateBlocks)
+	assert.EqualValues(t, 1, firstSnapshot.crcCandidateOccurrences)
+
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		secondTarget,
+		"",
+		azcore.ETag(`"second"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(200, 3, 10)}},
+	))
+	copier.ensureDedupeHashesResolved(state)
+	assert.Equal(t, 1, hasher.sourceCalls)
+	assert.Equal(t, 2, hasher.targetCalls)
+	copier.dedupeResolveMu.Lock()
+	secondStats := copier.dedupeResolveStats
+	copier.dedupeResolveMu.Unlock()
+	assert.Equal(t, 1, secondStats.candidateBlocks)
+	assert.Equal(t, 2, secondStats.candidateOccurrences)
+	assert.Zero(t, secondStats.newCandidateBlocks)
+	assert.Equal(t, 1, secondStats.newCandidateOccurrences)
+	secondSnapshot := state.progressSnapshot()
+	assert.EqualValues(t, 1, secondSnapshot.crcCandidateBlocks)
+	assert.EqualValues(t, 2, secondSnapshot.crcCandidateOccurrences)
+}
+
+func TestDedupeResolutionCancellationLeavesLaterTargetEpochEligible(t *testing.T) {
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+	state := dedupeStateForJob(jobID)
+	firstHash := sha256.Sum256([]byte("first"))
+	secondHash := sha256.Sum256([]byte("second"))
+	firstTarget := "https://dest.blob.core.windows.net/c/a"
+	secondTarget := "https://dest.blob.core.windows.net/c/b"
+	fakeHasher := &fakeDedupeRangeHasher{
+		sourceHashes: map[srcBlockKey][32]byte{
+			{offset: 0, size: 3}: firstHash,
+			{offset: 3, size: 3}: secondHash,
+		},
+		targetHashes: map[string]map[srcBlockKey][32]byte{
+			firstTarget:  {{offset: 100, size: 3}: firstHash},
+			secondTarget: {{offset: 200, size: 3}: secondHash},
+		},
+		targetErr: make(map[string]error),
+	}
+	resolutionContext, cancelResolution := context.WithCancel(context.Background())
+	defer cancelResolution()
+	hasher := &cancelAfterTargetHasher{
+		fakeDedupeRangeHasher: fakeHasher,
+		targetURI:             firstTarget,
+		cancel:                cancelResolution,
+	}
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{
+		crcOnlyBlock(0, 3, 10),
+		crcOnlyBlock(3, 3, 20),
+	}}
+	copier := newDedupeResolutionTestCopier(jobID, plan, hasher)
+	manager := copier.jptm.(*dedupeResolutionTestTransferManager)
+	manager.ctx = resolutionContext
+
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		firstTarget,
+		"",
+		azcore.ETag(`"first"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(100, 3, 10)}},
+	))
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		secondTarget,
+		"",
+		azcore.ETag(`"second"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(200, 3, 20)}},
+	))
+
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	assert.Equal(t, 1, fakeHasher.targetCallCount(firstTarget))
+	assert.Zero(t, fakeHasher.targetCallCount(secondTarget))
+	assert.False(t, state.targetHashRangeFailed(
+		dedupeTargetEpoch{targetURI: secondTarget, etag: azcore.ETag(`"second"`)},
+		srcBlockKey{offset: 200, size: 3},
+	))
+
+	index, err := copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	_, firstHit := decideStaging(index, state.committed, 0, 3, "https://dest.blob.core.windows.net/c/current")
+	_, secondHit := decideStaging(index, state.committed, 3, 3, "https://dest.blob.core.windows.net/c/current")
+	assert.True(t, firstHit)
+	assert.False(t, secondHit)
+
+	manager.ctx = context.Background()
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		"https://dest.blob.core.windows.net/c/new-generation",
+		"",
+		azcore.ETag(`"new-generation"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(300, 3, 30)}},
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	assert.Equal(t, 1, fakeHasher.targetCallCount(firstTarget))
+	assert.Equal(t, 1, fakeHasher.targetCallCount(secondTarget))
+
+	index, err = copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	_, firstHit = decideStaging(index, state.committed, 0, 3, "https://dest.blob.core.windows.net/c/current")
+	_, secondHit = decideStaging(index, state.committed, 3, 3, "https://dest.blob.core.windows.net/c/current")
+	assert.True(t, firstHit)
+	assert.True(t, secondHit)
+}
+
+func TestDedupeResolutionCancellationLeavesUnstartedTargetBatchEligible(t *testing.T) {
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+	state := dedupeStateForJob(jobID)
+	sourcePlan, targetPlan, sourceHashes, targetHashes := newDedupeBatchCancellationFixture(false)
+	targetURI := "https://dest.blob.core.windows.net/c/target"
+	resolutionContext, cancelResolution := context.WithCancel(context.Background())
+	defer cancelResolution()
+	hasher := &cancelSecondBatchDedupeRangeHasher{
+		cancelRole:   "target",
+		cancel:       cancelResolution,
+		sourceHashes: sourceHashes,
+		targetHashes: map[string]map[srcBlockKey][32]byte{targetURI: targetHashes},
+	}
+	copier := newDedupeResolutionTestCopier(jobID, sourcePlan, hasher)
+	manager := copier.jptm.(*dedupeResolutionTestTransferManager)
+	manager.ctx = resolutionContext
+
+	assert.Equal(t, len(targetPlan.Blocks), recordCommittedBlocks(
+		jobID,
+		targetURI,
+		"",
+		azcore.ETag(`"target"`),
+		targetPlan,
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	assert.Equal(t, 1, hasher.targetRequestCount(targetURI))
+	assert.Len(t, hasher.targetRequest(targetURI, 0), len(targetPlan.Blocks))
+
+	copier.dedupeResolveMu.Lock()
+	firstStats := copier.dedupeResolveStats
+	copier.dedupeResolveMu.Unlock()
+	assert.Equal(t, 2*dedupeGetBlobHashOperationalMaxRanges, firstStats.targetHashRanges)
+	assert.Equal(t, 2, firstStats.targetHashBatches)
+	assert.Equal(t, 1, firstStats.targetHashFailures)
+
+	epoch := dedupeTargetEpoch{targetURI: targetURI, etag: azcore.ETag(`"target"`)}
+	for i, block := range targetPlan.Blocks {
+		candidates := state.committed.LookupByCRC64AndLength(block.CRC64, block.Size)
+		if assert.Len(t, candidates, 1) {
+			assert.Equal(t, i < dedupeGetBlobHashOperationalMaxRanges, candidates[0].HasSHA256)
+		}
+		key := srcBlockKey{offset: block.Offset, size: block.Size}
+		assert.Equal(
+			t,
+			i >= dedupeGetBlobHashOperationalMaxRanges &&
+				i < 2*dedupeGetBlobHashOperationalMaxRanges,
+			state.targetHashRangeFailed(epoch, key),
+		)
+	}
+
+	index, err := copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	_, firstHit := decideStaging(
+		index,
+		state.committed,
+		sourcePlan.Blocks[0].Offset,
+		sourcePlan.Blocks[0].Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	_, lastHit := decideStaging(
+		index,
+		state.committed,
+		sourcePlan.Blocks[len(sourcePlan.Blocks)-1].Offset,
+		sourcePlan.Blocks[len(sourcePlan.Blocks)-1].Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	assert.True(t, firstHit)
+	assert.False(t, lastHit)
+
+	manager.ctx = context.Background()
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		"https://dest.blob.core.windows.net/c/new-generation",
+		"",
+		azcore.ETag(`"new-generation"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(2000, 1, 1000)}},
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	assert.Equal(t, 2, hasher.targetRequestCount(targetURI))
+	lastTarget := targetPlan.Blocks[len(targetPlan.Blocks)-1]
+	assert.Equal(t, []blockblob.BlobHashRange{{
+		Offset: lastTarget.Offset,
+		Count:  lastTarget.Size,
+	}}, hasher.targetRequest(targetURI, 1))
+
+	index, err = copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	_, lastHit = decideStaging(
+		index,
+		state.committed,
+		sourcePlan.Blocks[len(sourcePlan.Blocks)-1].Offset,
+		sourcePlan.Blocks[len(sourcePlan.Blocks)-1].Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	assert.True(t, lastHit)
+	for i := dedupeGetBlobHashOperationalMaxRanges; i < 2*dedupeGetBlobHashOperationalMaxRanges; i++ {
+		block := targetPlan.Blocks[i]
+		assert.True(t, state.targetHashRangeFailed(
+			epoch,
+			srcBlockKey{offset: block.Offset, size: block.Size},
+		))
+	}
+	snapshot := state.progressSnapshot()
+	assert.EqualValues(t, len(targetPlan.Blocks), snapshot.targetHashRanges)
+	assert.EqualValues(t, 3, snapshot.targetHashBatches)
+	assert.EqualValues(t, len(targetPlan.Blocks), snapshot.crcCandidateBlocks)
+	assert.EqualValues(t, len(targetPlan.Blocks), snapshot.crcCandidateOccurrences)
+}
+
+func TestDedupeResolutionCancellationLeavesUnstartedSourceBatchEligible(t *testing.T) {
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+	state := dedupeStateForJob(jobID)
+	sourcePlan, targetPlan, sourceHashes, targetHashes := newDedupeBatchCancellationFixture(true)
+	targetURI := "https://dest.blob.core.windows.net/c/target"
+	resolutionContext, cancelResolution := context.WithCancel(context.Background())
+	defer cancelResolution()
+	hasher := &cancelSecondBatchDedupeRangeHasher{
+		cancelRole:   "source",
+		cancel:       cancelResolution,
+		sourceHashes: sourceHashes,
+		targetHashes: map[string]map[srcBlockKey][32]byte{targetURI: targetHashes},
+	}
+	copier := newDedupeResolutionTestCopier(jobID, sourcePlan, hasher)
+	manager := copier.jptm.(*dedupeResolutionTestTransferManager)
+	manager.ctx = resolutionContext
+
+	assert.Equal(t, len(targetPlan.Blocks), recordCommittedBlocks(
+		jobID,
+		targetURI,
+		"",
+		azcore.ETag(`"target"`),
+		targetPlan,
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	assert.Equal(t, 1, hasher.sourceRequestCount())
+	assert.Len(t, hasher.sourceRequest(0), len(sourcePlan.Blocks))
+	assert.Zero(t, hasher.targetRequestCount(targetURI))
+
+	copier.dedupeResolveMu.Lock()
+	firstStats := copier.dedupeResolveStats
+	copier.dedupeResolveMu.Unlock()
+	assert.Equal(t, 2*dedupeGetBlobHashOperationalMaxRanges, firstStats.sourceHashRanges)
+	assert.Equal(t, 2, firstStats.sourceHashBatches)
+
+	index, err := copier.dedupeResolutionSnapshot()
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Len(t, index, dedupeGetBlobHashOperationalMaxRanges)
+	_, firstHit := decideStaging(
+		index,
+		state.committed,
+		sourcePlan.Blocks[0].Offset,
+		sourcePlan.Blocks[0].Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	_, lastHit := decideStaging(
+		index,
+		state.committed,
+		sourcePlan.Blocks[len(sourcePlan.Blocks)-1].Offset,
+		sourcePlan.Blocks[len(sourcePlan.Blocks)-1].Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	assert.True(t, firstHit)
+	assert.False(t, lastHit)
+
+	manager.ctx = context.Background()
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		"https://dest.blob.core.windows.net/c/new-generation",
+		"",
+		azcore.ETag(`"new-generation"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(2000, 1, 1000)}},
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	assert.Equal(t, 2, hasher.sourceRequestCount())
+	lastSource := sourcePlan.Blocks[len(sourcePlan.Blocks)-1]
+	assert.Equal(t, []blockblob.BlobHashRange{{
+		Offset: lastSource.Offset,
+		Count:  lastSource.Size,
+	}}, hasher.sourceRequest(1))
+	assert.Zero(t, hasher.targetRequestCount(targetURI))
+
+	index, err = copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	assert.Len(t, index, dedupeGetBlobHashOperationalMaxRanges+1)
+	_, lastHit = decideStaging(
+		index,
+		state.committed,
+		lastSource.Offset,
+		lastSource.Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	assert.True(t, lastHit)
+	middleSource := sourcePlan.Blocks[dedupeGetBlobHashOperationalMaxRanges]
+	_, middleHit := decideStaging(
+		index,
+		state.committed,
+		middleSource.Offset,
+		middleSource.Size,
+		"https://dest.blob.core.windows.net/c/current",
+	)
+	assert.False(t, middleHit)
+	snapshot := state.progressSnapshot()
+	assert.EqualValues(t, len(sourcePlan.Blocks), snapshot.sourceHashRanges)
+	assert.EqualValues(t, 3, snapshot.sourceHashBatches)
+	assert.EqualValues(t, len(sourcePlan.Blocks), snapshot.crcCandidateBlocks)
+	assert.EqualValues(t, len(sourcePlan.Blocks), snapshot.crcCandidateOccurrences)
+}
+
+func TestDedupeResolutionCountsDistinctSourceTargetOccurrences(t *testing.T) {
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+	state := dedupeStateForJob(jobID)
+	hash := sha256.Sum256([]byte("shared"))
+	targetURI := "https://dest.blob.core.windows.net/c/target"
+	hasher := &fakeDedupeRangeHasher{
+		sourceHashes: map[srcBlockKey][32]byte{
+			{offset: 0, size: 3}: hash,
+			{offset: 3, size: 3}: hash,
+		},
+		targetHashes: map[string]map[srcBlockKey][32]byte{
+			targetURI: {{offset: 100, size: 3}: hash},
+		},
+		targetErr: make(map[string]error),
+	}
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{
+		crcOnlyBlock(0, 3, 10),
+		crcOnlyBlock(3, 3, 10),
+	}}
+	copier := newDedupeResolutionTestCopier(jobID, plan, hasher)
+
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		targetURI,
+		"",
+		azcore.ETag(`"target"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(100, 3, 10)}},
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+
+	copier.dedupeResolveMu.Lock()
+	stats := copier.dedupeResolveStats
+	copier.dedupeResolveMu.Unlock()
+	assert.Equal(t, 2, stats.candidateBlocks)
+	assert.Equal(t, 2, stats.candidateOccurrences)
+	assert.Equal(t, 2, stats.newCandidateBlocks)
+	assert.Equal(t, 2, stats.newCandidateOccurrences)
+	assert.Equal(t, 1, hasher.targetCallCount(targetURI))
+	snapshot := state.progressSnapshot()
+	assert.EqualValues(t, 2, snapshot.crcCandidateBlocks)
+	assert.EqualValues(t, 2, snapshot.crcCandidateOccurrences)
+
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		"https://dest.blob.core.windows.net/c/new-generation",
+		"",
+		azcore.ETag(`"new-generation"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(200, 3, 20)}},
+	))
+	assert.True(t, copier.ensureDedupeHashesResolved(state))
+	copier.dedupeResolveMu.Lock()
+	stats = copier.dedupeResolveStats
+	copier.dedupeResolveMu.Unlock()
+	assert.Zero(t, stats.newCandidateBlocks)
+	assert.Zero(t, stats.newCandidateOccurrences)
+	snapshot = state.progressSnapshot()
+	assert.EqualValues(t, 2, snapshot.crcCandidateBlocks)
+	assert.EqualValues(t, 2, snapshot.crcCandidateOccurrences)
+}
+
+func TestDedupeResolutionCoalescesConcurrentReresolution(t *testing.T) {
+	jobID := common.NewJobID()
+	defer clearDedupeStateForJob(jobID)
+	state := dedupeStateForJob(jobID)
+	hash := sha256.Sum256([]byte("shared"))
+	targetURI := "https://dest.blob.core.windows.net/c/target"
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	hasher := &fakeDedupeRangeHasher{
+		sourceHashes:  map[srcBlockKey][32]byte{{offset: 0, size: 3}: hash},
+		targetHashes:  map[string]map[srcBlockKey][32]byte{targetURI: {{offset: 100, size: 3}: hash}},
+		targetErr:     make(map[string]error),
+		sourceStarted: started,
+		sourceRelease: release,
+	}
+	plan := &SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(0, 3, 10)}}
+	copier := newDedupeResolutionTestCopier(jobID, plan, hasher)
+	copier.ensureDedupeHashesResolved(state)
+	assert.Equal(t, 1, recordCommittedBlocks(
+		jobID,
+		targetURI,
+		"",
+		azcore.ETag(`"target"`),
+		&SourceGridPlan{Blocks: []PlannedBlock{crcOnlyBlock(100, 3, 10)}},
+	))
+
+	const workers = 16
+	var waitGroup sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			copier.ensureDedupeHashesResolved(state)
+		}()
+	}
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for source hash resolution")
+	}
+	waitStarted := time.Now()
+	assert.False(t, copier.ensureDedupeHashesResolved(state))
+	assert.Less(t, time.Since(waitStarted), 100*time.Millisecond)
+	close(release)
+
+	done := make(chan struct{})
+	go func() {
+		waitGroup.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for concurrent resolvers")
+	}
+
+	assert.Equal(t, 1, hasher.sourceCalls)
+	assert.Equal(t, 1, hasher.targetCalls)
+	index, err := copier.dedupeResolutionSnapshot()
+	assert.NoError(t, err)
+	_, hit := decideStaging(index, state.committed, 0, 3, "https://dest.blob.core.windows.net/c/current")
+	assert.True(t, hit)
+	snapshot := state.progressSnapshot()
+	assert.EqualValues(t, 1, snapshot.crcCandidateBlocks)
+	assert.EqualValues(t, 1, snapshot.crcCandidateOccurrences)
+}
+
+func TestDedupeCandidateOccurrenceKeyExcludesCredentials(t *testing.T) {
+	source := srcBlockKey{offset: 0, size: 3}
+	entry := common.BlockEntry{
+		CRC64:        10,
+		TargetURI:    "https://dest.blob.core.windows.net/c/target?sv=2026&sig=first-secret",
+		TargetOffset: 100,
+		TargetLength: 3,
+		ETag:         azcore.ETag(`"target"`),
+	}
+	sameOccurrence := entry
+	sameOccurrence.TargetURI = "https://dest.blob.core.windows.net/c/target?sv=2027&sig=second-secret"
+
+	key := newDedupeCandidateOccurrenceKey(source, entry)
+	assert.Equal(t, key, newDedupeCandidateOccurrenceKey(source, sameOccurrence))
+	assert.Equal(t, "https://dest.blob.core.windows.net/c/target", key.targetURI)
+	assert.NotContains(t, key.targetURI, "secret")
+	assert.NotEqual(t, key, newDedupeCandidateOccurrenceKey(srcBlockKey{offset: 3, size: 3}, entry))
+
+	differentEpoch := entry
+	differentEpoch.ETag = azcore.ETag(`"new-target"`)
+	assert.NotEqual(t, key, newDedupeCandidateOccurrenceKey(source, differentEpoch))
+}
+
 func TestApplyResolvedSourceHashesPersistsOnlyCalculatedSHA(t *testing.T) {
 	first := sha256.Sum256([]byte("first"))
+	stale := sha256.Sum256([]byte("stale"))
 	plan := &SourceGridPlan{Blocks: []PlannedBlock{
 		crcOnlyBlock(0, 3, 10),
 		crcOnlyBlock(3, 7, 20),
 	}}
+	plan.Blocks[1].SHA256 = stale
+	plan.Blocks[1].HasSHA256 = true
+	plan.Blocks[1].HasHashes = true
 	applyResolvedSourceHashes(plan, map[srcBlockKey]srcBlockHashes{
 		{offset: 0, size: 3}: {crc64: 10, sha256: first},
 	})
@@ -649,4 +1692,5 @@ func TestApplyResolvedSourceHashesPersistsOnlyCalculatedSHA(t *testing.T) {
 	assert.True(t, plan.Blocks[1].HasCRC64)
 	assert.False(t, plan.Blocks[1].HasSHA256)
 	assert.False(t, plan.Blocks[1].HasHashes)
+	assert.Equal(t, [32]byte{}, plan.Blocks[1].SHA256)
 }
