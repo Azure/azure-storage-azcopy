@@ -471,7 +471,7 @@ func crcOnlyBlock(offset, size int64, crc uint64) PlannedBlock {
 }
 
 func newDedupeBatchCancellationFixture(
-	cacheTargetSHA bool,
+	indexTargetSHA bool,
 ) (
 	*SourceGridPlan,
 	*SourceGridPlan,
@@ -490,7 +490,7 @@ func newDedupeBatchCancellationFixture(
 		hash := sha256.Sum256([]byte(fmt.Sprintf("batch-range-%d", i)))
 		sourceBlocks[i] = crcOnlyBlock(sourceOffset, 1, crc64)
 		targetBlocks[i] = crcOnlyBlock(targetOffset, 1, crc64)
-		if cacheTargetSHA {
+		if indexTargetSHA {
 			targetBlocks[i].SHA256 = hash
 			targetBlocks[i].HasSHA256 = true
 			targetBlocks[i].HasHashes = true
@@ -696,8 +696,8 @@ func TestResolveDedupeCandidateHashesMatchesByRangeNotResultOrder(t *testing.T) 
 	assert.Equal(t, 2, stats.candidateOccurrences)
 	assert.Equal(t, 2, stats.newCandidateBlocks)
 	assert.Equal(t, 2, stats.newCandidateOccurrences)
-	assert.Zero(t, stats.targetHashCacheHits)
-	assert.Equal(t, 2, stats.targetHashCacheMisses)
+	assert.Zero(t, stats.targetSHAIndexHits)
+	assert.Equal(t, 2, stats.targetSHAIndexMisses)
 	assert.Equal(t, 1, hasher.sourceCalls)
 	assert.Equal(t, 1, hasher.targetCalls)
 	assert.Equal(t, []blockblob.BlobHashRange{{Offset: 0, Count: 3}, {Offset: 3, Count: 7}}, hasher.sourceRanges)
@@ -710,8 +710,8 @@ func TestResolveDedupeCandidateHashesMatchesByRangeNotResultOrder(t *testing.T) 
 	assert.False(t, hit)
 }
 
-func TestResolveDedupeCandidateHashesReusesCachedTargetSHA(t *testing.T) {
-	hash := sha256.Sum256([]byte("cached"))
+func TestResolveDedupeCandidateHashesReusesIndexedTargetSHA(t *testing.T) {
+	hash := sha256.Sum256([]byte("indexed"))
 	targetURI := "https://acct.blob.core.windows.net/c/previous"
 	state := &dedupeJobState{committed: common.NewDedupeHashTable()}
 	state.committed.Insert(common.BlockEntry{
@@ -741,8 +741,8 @@ func TestResolveDedupeCandidateHashesReusesCachedTargetSHA(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, hasher.sourceCalls)
 	assert.Zero(t, hasher.targetCalls)
-	assert.Equal(t, 1, stats.targetHashCacheHits)
-	assert.Zero(t, stats.targetHashCacheMisses)
+	assert.Equal(t, 1, stats.targetSHAIndexHits)
+	assert.Zero(t, stats.targetSHAIndexMisses)
 	_, hit := decideStaging(index, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
 	assert.True(t, hit)
 }
@@ -946,33 +946,33 @@ func TestResolveDedupeCandidateHashesPreservesPartialSourceResults(t *testing.T)
 		crcOnlyBlock(3, 7, 20),
 	}}
 
-	cache, stats, err := resolveDedupeCandidateHashesIncremental(
+	sourceState, stats, err := resolveDedupeCandidateHashesIncremental(
 		context.Background(),
 		state,
 		plan,
 		azcore.ETag(`"source"`),
 		"https://acct.blob.core.windows.net/c/current",
 		hasher,
-		dedupeSourceHashCache{},
+		dedupeSourceHashResolutionState{},
 	)
 
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Len(t, cache.hashes, 1)
+	assert.Len(t, sourceState.hashes, 1)
 	assert.Equal(t, 2, stats.sourceHashRanges)
 	assert.Equal(t, []blockblob.BlobHashRange{{Offset: 100, Count: 3}}, hasher.targetRanges[targetURI])
-	_, firstHit := decideStaging(cache.hashes, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
-	_, secondHit := decideStaging(cache.hashes, state.committed, 3, 7, "https://acct.blob.core.windows.net/c/current")
+	_, firstHit := decideStaging(sourceState.hashes, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
+	_, secondHit := decideStaging(sourceState.hashes, state.committed, 3, 7, "https://acct.blob.core.windows.net/c/current")
 	assert.True(t, firstHit)
 	assert.False(t, secondHit)
 
-	cache, _, err = resolveDedupeCandidateHashesIncremental(
+	sourceState, _, err = resolveDedupeCandidateHashesIncremental(
 		context.Background(),
 		state,
 		plan,
 		azcore.ETag(`"source"`),
 		"https://acct.blob.core.windows.net/c/current",
 		hasher,
-		cache,
+		sourceState,
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, hasher.sourceCalls)
@@ -1021,14 +1021,14 @@ func TestResolveDedupeCandidateHashesPreservesPartialTargetResults(t *testing.T)
 		crcOnlyBlock(3, 7, 20),
 	}}
 
-	cache, stats, err := resolveDedupeCandidateHashesIncremental(
+	sourceState, stats, err := resolveDedupeCandidateHashesIncremental(
 		context.Background(),
 		state,
 		plan,
 		azcore.ETag(`"source"`),
 		"https://acct.blob.core.windows.net/c/current",
 		hasher,
-		dedupeSourceHashCache{},
+		dedupeSourceHashResolutionState{},
 	)
 
 	assert.NoError(t, err)
@@ -1042,19 +1042,19 @@ func TestResolveDedupeCandidateHashesPreservesPartialTargetResults(t *testing.T)
 	if assert.Len(t, second, 1) {
 		assert.False(t, second[0].HasSHA256)
 	}
-	_, firstHit := decideStaging(cache.hashes, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
-	_, secondHit := decideStaging(cache.hashes, state.committed, 3, 7, "https://acct.blob.core.windows.net/c/current")
+	_, firstHit := decideStaging(sourceState.hashes, state.committed, 0, 3, "https://acct.blob.core.windows.net/c/current")
+	_, secondHit := decideStaging(sourceState.hashes, state.committed, 3, 7, "https://acct.blob.core.windows.net/c/current")
 	assert.True(t, firstHit)
 	assert.False(t, secondHit)
 
-	cache, _, err = resolveDedupeCandidateHashesIncremental(
+	sourceState, _, err = resolveDedupeCandidateHashesIncremental(
 		context.Background(),
 		state,
 		plan,
 		azcore.ETag(`"source"`),
 		"https://acct.blob.core.windows.net/c/current",
 		hasher,
-		cache,
+		sourceState,
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, hasher.sourceCalls)

@@ -691,8 +691,8 @@ func TestDedupeHashResolutionProgressCounters(t *testing.T) {
 		sourceHashBatches:        1,
 		targetHashRanges:         3,
 		targetHashBatches:        2,
-		targetHashCacheHits:      4,
-		targetHashCacheMisses:    3,
+		targetSHAIndexHits:       4,
+		targetSHAIndexMisses:     3,
 		targetHashFailures:       1,
 		sourceEpochInvalidations: 1,
 		targetEpochInvalidations: 2,
@@ -707,8 +707,8 @@ func TestDedupeHashResolutionProgressCounters(t *testing.T) {
 	assert.EqualValues(t, 1, snapshot.sourceHashBatches)
 	assert.EqualValues(t, 3, snapshot.targetHashRanges)
 	assert.EqualValues(t, 2, snapshot.targetHashBatches)
-	assert.EqualValues(t, 4, snapshot.targetHashCacheHits)
-	assert.EqualValues(t, 3, snapshot.targetHashCacheMisses)
+	assert.EqualValues(t, 4, snapshot.targetSHAIndexHits)
+	assert.EqualValues(t, 3, snapshot.targetSHAIndexMisses)
 	assert.EqualValues(t, 1, snapshot.targetHashFailures)
 	assert.EqualValues(t, 3, snapshot.epochInvalidations)
 
@@ -801,7 +801,7 @@ func TestDedupeProgressSnapshotEnforce(t *testing.T) {
 			"transferredBytes=250 wanSavingsPercent=60.0 crcDiscoveredBlocks=0 "+
 			"crcDiscoveredBytes=0 crcCandidateBlocks=0 crcCandidateOccurrences=0 "+
 			"sourceHashRanges=0 sourceHashBatches=0 targetHashRanges=0 "+
-			"targetHashBatches=0 targetHashCacheHits=0 targetHashCacheMisses=0 "+
+			"targetHashBatches=0 targetSHAIndexHits=0 targetSHAIndexMisses=0 "+
 			"targetHashFailures=0 epochInvalidations=0 "+
 			"shaConfirmedBlocks=0 shaMismatchBlocks=0 smallFilesStarted=1 "+
 			"smallFilesCompleted=1 smallFilesFailed=0 smallFilesSkipped=0 "+

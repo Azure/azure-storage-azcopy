@@ -86,8 +86,8 @@ type dedupeJobState struct {
 	sourceHashBatches       int64
 	targetHashRanges        int64
 	targetHashBatches       int64
-	targetHashCacheHits     int64
-	targetHashCacheMisses   int64
+	targetSHAIndexHits      int64
+	targetSHAIndexMisses    int64
 	targetHashFailures      int64
 	epochInvalidations      int64
 	shaConfirmedBlocks      int64
@@ -155,8 +155,8 @@ func (s *dedupeJobState) addHashResolution(stats dedupeHashResolutionStats) {
 	atomic.AddInt64(&s.sourceHashBatches, int64(stats.sourceHashBatches))
 	atomic.AddInt64(&s.targetHashRanges, int64(stats.targetHashRanges))
 	atomic.AddInt64(&s.targetHashBatches, int64(stats.targetHashBatches))
-	atomic.AddInt64(&s.targetHashCacheHits, int64(stats.targetHashCacheHits))
-	atomic.AddInt64(&s.targetHashCacheMisses, int64(stats.targetHashCacheMisses))
+	atomic.AddInt64(&s.targetSHAIndexHits, int64(stats.targetSHAIndexHits))
+	atomic.AddInt64(&s.targetSHAIndexMisses, int64(stats.targetSHAIndexMisses))
 	atomic.AddInt64(&s.targetHashFailures, int64(stats.targetHashFailures))
 	atomic.AddInt64(
 		&s.epochInvalidations,
@@ -625,8 +625,8 @@ type dedupeProgressSnapshot struct {
 	sourceHashBatches       int64
 	targetHashRanges        int64
 	targetHashBatches       int64
-	targetHashCacheHits     int64
-	targetHashCacheMisses   int64
+	targetSHAIndexHits      int64
+	targetSHAIndexMisses    int64
 	targetHashFailures      int64
 	epochInvalidations      int64
 	shaConfirmedBlocks      int64
@@ -668,8 +668,8 @@ func (s *dedupeJobState) progressSnapshotLocked() dedupeProgressSnapshot {
 		sourceHashBatches:       atomic.LoadInt64(&s.sourceHashBatches),
 		targetHashRanges:        atomic.LoadInt64(&s.targetHashRanges),
 		targetHashBatches:       atomic.LoadInt64(&s.targetHashBatches),
-		targetHashCacheHits:     atomic.LoadInt64(&s.targetHashCacheHits),
-		targetHashCacheMisses:   atomic.LoadInt64(&s.targetHashCacheMisses),
+		targetSHAIndexHits:      atomic.LoadInt64(&s.targetSHAIndexHits),
+		targetSHAIndexMisses:    atomic.LoadInt64(&s.targetSHAIndexMisses),
 		targetHashFailures:      atomic.LoadInt64(&s.targetHashFailures),
 		epochInvalidations:      atomic.LoadInt64(&s.epochInvalidations),
 		shaConfirmedBlocks:      atomic.LoadInt64(&s.shaConfirmedBlocks),
@@ -723,7 +723,7 @@ func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
 			"transferredBytes=%d wanSavingsPercent=%.1f crcDiscoveredBlocks=%d "+
 			"crcDiscoveredBytes=%d crcCandidateBlocks=%d crcCandidateOccurrences=%d "+
 			"sourceHashRanges=%d sourceHashBatches=%d targetHashRanges=%d "+
-			"targetHashBatches=%d targetHashCacheHits=%d targetHashCacheMisses=%d "+
+			"targetHashBatches=%d targetSHAIndexHits=%d targetSHAIndexMisses=%d "+
 			"targetHashFailures=%d epochInvalidations=%d "+
 			"shaConfirmedBlocks=%d shaMismatchBlocks=%d smallFilesStarted=%d "+
 			"smallFilesCompleted=%d smallFilesFailed=%d smallFilesSkipped=%d "+
@@ -735,8 +735,8 @@ func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
 		transferredBytes, dedupePercent(targetBytes, transferredBytes),
 		s.crcDiscoveredBlocks, s.crcDiscoveredBytes, s.crcCandidateBlocks,
 		s.crcCandidateOccurrences, s.sourceHashRanges, s.sourceHashBatches,
-		s.targetHashRanges, s.targetHashBatches, s.targetHashCacheHits,
-		s.targetHashCacheMisses, s.targetHashFailures,
+		s.targetHashRanges, s.targetHashBatches, s.targetSHAIndexHits,
+		s.targetSHAIndexMisses, s.targetHashFailures,
 		s.epochInvalidations, s.shaConfirmedBlocks, s.shaMismatchBlocks,
 		s.smallFilesStarted, s.smallFilesCompleted, s.smallFilesFailed,
 		s.smallFilesSkipped, s.smallFilesCanceled, smallFilesInProgress,
@@ -1085,7 +1085,7 @@ func emitDedupeHashResolutionProgress(
 		jptm.Info(),
 		fmt.Sprintf(
 			"candidateBlocks=%d candidateOccurrences=%d sourceRanges=%d sourceBatches=%d "+
-				"targetRanges=%d targetBatches=%d targetCacheHits=%d targetCacheMisses=%d "+
+				"targetRanges=%d targetBatches=%d targetSHAIndexHits=%d targetSHAIndexMisses=%d "+
 				"targetFailures=%d "+
 				"sourceEpochInvalidations=%d targetEpochInvalidations=%d reason=%q",
 			stats.candidateBlocks,
@@ -1094,8 +1094,8 @@ func emitDedupeHashResolutionProgress(
 			stats.sourceHashBatches,
 			stats.targetHashRanges,
 			stats.targetHashBatches,
-			stats.targetHashCacheHits,
-			stats.targetHashCacheMisses,
+			stats.targetSHAIndexHits,
+			stats.targetSHAIndexMisses,
 			stats.targetHashFailures,
 			stats.sourceEpochInvalidations,
 			stats.targetEpochInvalidations,
