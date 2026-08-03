@@ -110,7 +110,8 @@ func newSyncDestinationComparator(
 	}
 
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
-		orchestratorOptions.fromTo.From() == common.ELocation.Local()
+		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
+		 orchestratorOptions.fromTo.From() == common.ELocation.File())
 
 	return comp
 }
@@ -311,7 +312,6 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 ) (dataChanged, metadataChanged bool) {
 
 	// Check if data has changed by comparing size and modification time
-
 	if sourceObject.entityType != common.EEntityType.Folder() &&
 		sourceObject.size != destinationObject.size {
 		// Compare file sizes first
@@ -333,6 +333,30 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		// if metadata only sync is not enabled, return early
 		// and assume metadata change status to be same as data
 		return false, false
+	}
+
+	// Cloud-to-cloud (e.g. Azure Files -> Azure Files): ChangeTime is not
+	// reliably settable/preserved on the destination, so we cannot use it as the
+	// metadata-change signal. Instead we use LastModifiedTime (LMT), which the
+	// service bumps on any metadata/property change. At this point, size and
+	// LastWriteTime are already known to be equal, so if only the LMT differs we
+	// treat it as a metadata-only change.
+	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
+		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
+
+			if sourceObject.lastModifiedTime.IsZero() {
+				// invalid LMT
+				// assume metadata change
+				return false, true
+			} else {
+				// else check if source or target changed after last successful job start time
+				return false, sourceObject.lastModifiedTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
+			}
+		} else {
+			// If last successful job start time can't be used, we assume it's changed
+			// this will lead to more work but it is necessary to maintain fidelity
+			return false, true
+		}
 	}
 
 	if isNFSCopy {
