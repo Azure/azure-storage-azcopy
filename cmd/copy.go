@@ -1724,12 +1724,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false,
 		"False by default. Preserves Last Modified Time. Only available when destination is file system.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false,
-		"False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files SMB). "+
-			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner"+
-			"will not be the user running AzCopy.\n This flag applies to both files and folders, unless a file-only"+
-			"filter is specified (e.g. include-pattern).")
-
 	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true,
 		"True by default. Places folder sources as subdirectories under the destination.")
 
@@ -1885,9 +1879,10 @@ func init() {
 			"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
 			"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 
-		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). "+
-			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
-			"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files SMB). "+
+			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner"+
+			"will not be the user running AzCopy.\n This flag applies to both files and folders, unless a file-only"+
+			"filter is specified (e.g. include-pattern).")
 
 		// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 		cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

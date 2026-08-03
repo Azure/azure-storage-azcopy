@@ -263,7 +263,10 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		return cooked, err
 	}
 
-	if err = cooked.blobType.Parse(raw.blobType); err != nil {
+	if raw.blobType == "" {
+		// Detect _is_ the 0 value, but to be explicit with our defaulting behavior, we'll set it anyway.
+		cooked.blobType = common.EBlobType.Detect()
+	} else if err = cooked.blobType.Parse(raw.blobType); err != nil {
 		return cooked, err
 	}
 

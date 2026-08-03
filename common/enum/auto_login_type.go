@@ -82,7 +82,7 @@ func (a *AutoLoginType) UnmarshalJSON(data []byte) error {
 	if strValue, ok := v.(string); ok {
 		*a, ok = EAutoLoginType.Parse(strValue)
 		if !ok {
-			return fmt.Errorf("couldn't parse `%s` into a %s", strValue)
+			return fmt.Errorf("couldn't parse `%s` into a %s", strValue, "AutoLoginType")
 		}
 
 		return nil

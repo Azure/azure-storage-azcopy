@@ -282,7 +282,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	credManager := GetCredentialManager()
 
-	srcCredInfo, err := GetTargetCredInfo(source, fromTo.From(), GetTargetCredInfoOptions{
+	srcCredInfo, err = GetTargetCredInfo(source, fromTo.From(), GetTargetCredInfoOptions{
 		Context:            ctx,
 		CanBePublic:        true,  // source can be public
 		SharedKeyAllowed:   false, // but not shared key
@@ -291,7 +291,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		TokenManager:       credManager,
 	})
 
-	dstCredInfo, err := GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
+	dstCredInfo, err = GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
 		Context:            ctx,
 		CanBePublic:        true,  // source can be public
 		SharedKeyAllowed:   false, // but not shared key
@@ -435,8 +435,8 @@ func (rca resumeCmdArgs) process() error {
 		IncludeTransfer:  includeTransfer,
 		ExcludeTransfer:  excludeTransfer,
 
-		// upload is the only sort that uses the source as our target credential type
-		TargetCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsUpload(), srcCredInfo.CredentialType, dstCredInfo.CredentialType),
+		// download is the only sort that uses the source as our target credential type
+		TargetCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsDownload(), srcCredInfo.CredentialType, dstCredInfo.CredentialType),
 		// s2s is the only case where we need to provide this info; upload is "anonymous", download source is target
 		S2SSourceCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsS2S(), srcCredInfo.CredentialType, enum.ECredentialType.Anonymous()),
 	})

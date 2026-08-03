@@ -410,14 +410,6 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 	return raw.cook()
 }
 
-func InitializeAzCopyFolders(
-	logPathFolder,
-	jobPlanFolder,
-	appPathFolder string) (string, string) {
-	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders(logPathFolder, jobPlanFolder, appPathFolder)
-	return azcopyLogPathFolder, common.AzcopyJobPlanFolder
-}
-
 // ToStringMap returns a map representation of cookedSyncCmdArgs
 // It masks sensitive information and only includes non-empty/valid values
 func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
