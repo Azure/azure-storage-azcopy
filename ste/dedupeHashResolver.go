@@ -250,8 +250,8 @@ type dedupeHashResolutionStats struct {
 	sourceHashBatches        int
 	targetHashRanges         int
 	targetHashBatches        int
-	targetHashCacheHits      int
-	targetHashCacheMisses    int
+	targetSHAIndexHits       int
+	targetSHAIndexMisses     int
 	targetHashFailures       int
 	sourceEpochInvalidations int
 	targetEpochInvalidations int
@@ -286,7 +286,7 @@ func newDedupeCandidateOccurrenceKey(
 	}
 }
 
-type dedupeSourceHashCache struct {
+type dedupeSourceHashResolutionState struct {
 	hashes    map[srcBlockKey]srcBlockHashes
 	attempted map[srcBlockKey]struct{}
 	// These sets live with one source file and prevent committed-table generations from being recounted.
@@ -295,24 +295,26 @@ type dedupeSourceHashCache struct {
 	invalid                  bool
 }
 
-func cloneDedupeSourceHashCache(cache dedupeSourceHashCache) dedupeSourceHashCache {
-	cloned := dedupeSourceHashCache{
-		hashes:                   make(map[srcBlockKey]srcBlockHashes, len(cache.hashes)),
-		attempted:                make(map[srcBlockKey]struct{}, len(cache.attempted)),
-		seenCandidateBlocks:      make(map[srcBlockKey]struct{}, len(cache.seenCandidateBlocks)),
-		seenCandidateOccurrences: make(map[dedupeCandidateOccurrenceKey]struct{}, len(cache.seenCandidateOccurrences)),
-		invalid:                  cache.invalid,
+func cloneDedupeSourceHashResolutionState(
+	state dedupeSourceHashResolutionState,
+) dedupeSourceHashResolutionState {
+	cloned := dedupeSourceHashResolutionState{
+		hashes:                   make(map[srcBlockKey]srcBlockHashes, len(state.hashes)),
+		attempted:                make(map[srcBlockKey]struct{}, len(state.attempted)),
+		seenCandidateBlocks:      make(map[srcBlockKey]struct{}, len(state.seenCandidateBlocks)),
+		seenCandidateOccurrences: make(map[dedupeCandidateOccurrenceKey]struct{}, len(state.seenCandidateOccurrences)),
+		invalid:                  state.invalid,
 	}
-	for key, hashes := range cache.hashes {
+	for key, hashes := range state.hashes {
 		cloned.hashes[key] = hashes
 	}
-	for key := range cache.attempted {
+	for key := range state.attempted {
 		cloned.attempted[key] = struct{}{}
 	}
-	for key := range cache.seenCandidateBlocks {
+	for key := range state.seenCandidateBlocks {
 		cloned.seenCandidateBlocks[key] = struct{}{}
 	}
-	for key := range cache.seenCandidateOccurrences {
+	for key := range state.seenCandidateOccurrences {
 		cloned.seenCandidateOccurrences[key] = struct{}{}
 	}
 	return cloned
@@ -326,16 +328,16 @@ func resolveDedupeCandidateHashes(
 	currentTargetURI string,
 	hasher dedupeRangeHasher,
 ) (map[srcBlockKey]srcBlockHashes, dedupeHashResolutionStats, error) {
-	cache, stats, err := resolveDedupeCandidateHashesIncremental(
+	sourceState, stats, err := resolveDedupeCandidateHashesIncremental(
 		ctx,
 		state,
 		plan,
 		sourceETag,
 		currentTargetURI,
 		hasher,
-		dedupeSourceHashCache{},
+		dedupeSourceHashResolutionState{},
 	)
-	return cache.hashes, stats, err
+	return sourceState.hashes, stats, err
 }
 
 func resolveDedupeCandidateHashesIncremental(
@@ -345,15 +347,15 @@ func resolveDedupeCandidateHashesIncremental(
 	sourceETag azcore.ETag,
 	currentTargetURI string,
 	hasher dedupeRangeHasher,
-	existing dedupeSourceHashCache,
-) (dedupeSourceHashCache, dedupeHashResolutionStats, error) {
-	cache := cloneDedupeSourceHashCache(existing)
+	existing dedupeSourceHashResolutionState,
+) (dedupeSourceHashResolutionState, dedupeHashResolutionStats, error) {
+	sourceState := cloneDedupeSourceHashResolutionState(existing)
 	stats := dedupeHashResolutionStats{}
 	if state == nil || plan == nil || hasher == nil {
-		return cache, stats, nil
+		return sourceState, stats, nil
 	}
-	if cache.invalid {
-		return cache, stats, nil
+	if sourceState.invalid {
+		return sourceState, stats, nil
 	}
 
 	candidatesBySource := make(map[srcBlockKey][]common.BlockEntry)
@@ -380,37 +382,37 @@ func resolveDedupeCandidateHashesIncremental(
 		}
 		stats.candidateBlocks++
 		stats.candidateOccurrences += len(candidatesBySource[key])
-		if _, seen := cache.seenCandidateBlocks[key]; !seen {
-			cache.seenCandidateBlocks[key] = struct{}{}
+		if _, seen := sourceState.seenCandidateBlocks[key]; !seen {
+			sourceState.seenCandidateBlocks[key] = struct{}{}
 			stats.newCandidateBlocks++
 		}
 		for _, candidate := range candidatesBySource[key] {
 			occurrence := newDedupeCandidateOccurrenceKey(key, candidate)
-			if _, seen := cache.seenCandidateOccurrences[occurrence]; seen {
+			if _, seen := sourceState.seenCandidateOccurrences[occurrence]; seen {
 				continue
 			}
-			cache.seenCandidateOccurrences[occurrence] = struct{}{}
+			sourceState.seenCandidateOccurrences[occurrence] = struct{}{}
 			stats.newCandidateOccurrences++
 		}
-		if _, resolved := cache.hashes[key]; resolved {
+		if _, resolved := sourceState.hashes[key]; resolved {
 			continue
 		}
-		if _, attempted := cache.attempted[key]; attempted {
+		if _, attempted := sourceState.attempted[key]; attempted {
 			continue
 		}
 		sourceRequested[key] = block.CRC64
 		sourceRanges = append(sourceRanges, blockblob.BlobHashRange{Offset: block.Offset, Count: block.Size})
 	}
 	if len(candidatesBySource) == 0 {
-		return cache, stats, nil
+		return sourceState, stats, nil
 	}
 
 	var resolutionErr error
 	if len(sourceRanges) > 0 {
 		if sourceETag == "" {
-			cache.hashes = make(map[srcBlockKey]srcBlockHashes)
-			cache.invalid = true
-			return cache, stats, fmt.Errorf("source GetBlockList response did not include an ETag")
+			sourceState.hashes = make(map[srcBlockKey]srcBlockHashes)
+			sourceState.invalid = true
+			return sourceState, stats, fmt.Errorf("source GetBlockList response did not include an ETag")
 		}
 		sourceResult, err := hasher.HashSource(ctx, sourceETag, sourceRanges)
 		attemptedSourceRanges := attemptedDedupeHashRanges(
@@ -420,13 +422,13 @@ func resolveDedupeCandidateHashesIncremental(
 		stats.sourceHashRanges = len(attemptedSourceRanges)
 		stats.sourceHashBatches = sourceResult.batches
 		for key := range attemptedSourceRanges {
-			cache.attempted[key] = struct{}{}
+			sourceState.attempted[key] = struct{}{}
 		}
 		if isDedupePreconditionFailure(err) {
 			stats.sourceEpochInvalidations++
-			cache.hashes = make(map[srcBlockKey]srcBlockHashes)
-			cache.invalid = true
-			return cache, stats, err
+			sourceState.hashes = make(map[srcBlockKey]srcBlockHashes)
+			sourceState.invalid = true
+			return sourceState, stats, err
 		}
 		sourceResponseHashes := make(map[srcBlockKey][32]byte, len(sourceResult.response.RangeHashes))
 		invalidSourceRanges := make(map[srcBlockKey]struct{})
@@ -474,7 +476,7 @@ func resolveDedupeCandidateHashesIncremental(
 		resolvedThisCall := make(map[srcBlockKey]struct{}, len(sourceResponseHashes))
 		for key, sha := range sourceResponseHashes {
 			crc64 := attemptedSourceRanges[key]
-			cache.hashes[key] = srcBlockHashes{crc64: crc64, sha256: sha}
+			sourceState.hashes[key] = srcBlockHashes{crc64: crc64, sha256: sha}
 			resolvedThisCall[key] = struct{}{}
 		}
 		if err != nil {
@@ -489,7 +491,7 @@ func resolveDedupeCandidateHashesIncremental(
 
 	targetRanges := make(map[dedupeTargetEpoch]map[srcBlockKey]uint64)
 	for sourceKey, candidates := range candidatesBySource {
-		if _, resolved := cache.hashes[sourceKey]; !resolved {
+		if _, resolved := sourceState.hashes[sourceKey]; !resolved {
 			continue
 		}
 		for _, candidate := range candidates {
@@ -538,13 +540,13 @@ func resolveDedupeCandidateHashesIncremental(
 				continue
 			}
 			if candidate.HasSHA256 {
-				stats.targetHashCacheHits++
+				stats.targetSHAIndexHits++
 				continue
 			}
 			if state.targetHashRangeFailed(epoch, key) {
 				continue
 			}
-			stats.targetHashCacheMisses++
+			stats.targetSHAIndexMisses++
 			unknownRanges[key] = crc64
 		}
 
@@ -646,7 +648,7 @@ func resolveDedupeCandidateHashesIncremental(
 		epochLock.Unlock()
 	}
 
-	return cache, stats, resolutionErr
+	return sourceState, stats, resolutionErr
 }
 
 func exactDedupeTargetOccurrence(

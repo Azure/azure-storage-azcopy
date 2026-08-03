@@ -199,7 +199,9 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 	c.blockIDs = make([]string, c.numChunks)
 	c.dedupeMode = mode
 	c.dedupePlan = plan
-	c.dedupeSourceCache = cloneDedupeSourceHashCache(dedupeSourceHashCache{})
+	c.dedupeSourceHashState = cloneDedupeSourceHashResolutionState(
+		dedupeSourceHashResolutionState{},
+	)
 	c.dedupeETag = *resp.ETag
 	st.addFileStarted()
 
@@ -536,7 +538,7 @@ func (c *urlToBlockBlobCopier) ensureDedupeHashesResolved(st *dedupeJobState) bo
 		c.dedupeResolveMu.Unlock()
 		return true
 	}
-	if c.dedupeSourceCache.invalid {
+	if c.dedupeSourceHashState.invalid {
 		c.dedupeResolveAttempted = true
 		c.dedupeResolvedGeneration = generation
 		c.dedupeResolveMu.Unlock()
@@ -545,7 +547,7 @@ func (c *urlToBlockBlobCopier) ensureDedupeHashesResolved(st *dedupeJobState) bo
 
 	c.dedupeResolveInProgress = true
 	c.dedupeResolveDone = make(chan struct{})
-	cache := cloneDedupeSourceHashCache(c.dedupeSourceCache)
+	sourceState := cloneDedupeSourceHashResolutionState(c.dedupeSourceHashState)
 	hasher := c.dedupeHasher
 	c.dedupeResolveMu.Unlock()
 
@@ -558,21 +560,21 @@ func (c *urlToBlockBlobCopier) ensureDedupeHashesResolved(st *dedupeJobState) bo
 	}
 	if err == nil {
 		ctx, cancel := context.WithTimeout(c.jptm.Context(), dedupeHashResolutionTimeout)
-		cache, stats, err = resolveDedupeCandidateHashesIncremental(
+		sourceState, stats, err = resolveDedupeCandidateHashesIncremental(
 			ctx,
 			st,
 			c.dedupePlan,
 			c.dedupeETag,
 			c.jptm.Info().Destination,
 			hasher,
-			cache,
+			sourceState,
 		)
 		cancel()
-		applyResolvedSourceHashes(c.dedupePlan, cache.hashes)
+		applyResolvedSourceHashes(c.dedupePlan, sourceState.hashes)
 	}
 
 	c.dedupeResolveMu.Lock()
-	c.dedupeSourceCache = cache
+	c.dedupeSourceHashState = sourceState
 	c.dedupeResolveStats = stats
 	c.dedupeResolveErr = err
 	c.dedupeResolveAttempted = true
@@ -588,7 +590,7 @@ func (c *urlToBlockBlobCopier) ensureDedupeHashesResolved(st *dedupeJobState) bo
 func (c *urlToBlockBlobCopier) dedupeResolutionSnapshot() (map[srcBlockKey]srcBlockHashes, error) {
 	c.dedupeResolveMu.Lock()
 	defer c.dedupeResolveMu.Unlock()
-	return c.dedupeSourceCache.hashes, c.dedupeResolveErr
+	return c.dedupeSourceHashState.hashes, c.dedupeResolveErr
 }
 
 func (c *urlToBlockBlobCopier) dedupeResolutionDone() <-chan struct{} {

@@ -78,7 +78,7 @@ type blockBlobSenderBase struct {
 	dedupeResolveDone        chan struct{}
 	dedupeResolveAttempted   bool
 	dedupeResolvedGeneration uint64
-	dedupeSourceCache        dedupeSourceHashCache
+	dedupeSourceHashState    dedupeSourceHashResolutionState
 	dedupeResolveErr         error
 	dedupeResolveStats       dedupeHashResolutionStats
 	dedupeHasher             dedupeRangeHasher
