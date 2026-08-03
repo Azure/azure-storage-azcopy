@@ -345,7 +345,7 @@ func (c *urlToBlockBlobCopier) sourceStageBlockOptions(
 func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, blockIndex int32, encodedBlockID string, size int64) (handled bool) {
 	st := dedupeStateForJob(c.jptm.Info().JobID)
 	resolutionReady := c.ensureDedupeHashesResolved(st)
-	if !resolutionReady && c.dedupeMode == dedupeActShadow {
+	if !resolutionReady {
 		done := c.dedupeResolutionDone()
 		if done != nil {
 			select {

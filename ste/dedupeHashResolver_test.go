@@ -121,6 +121,35 @@ func (t *dedupeHashPartialTransport) snapshotRequests() []*http.Request {
 	return append([]*http.Request(nil), t.requests...)
 }
 
+type dedupeStageWireTransport struct {
+	mu       sync.Mutex
+	requests []*http.Request
+}
+
+func (t *dedupeStageWireTransport) Do(req *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	cloned := req.Clone(req.Context())
+	cloned.Header = req.Header.Clone()
+	t.requests = append(t.requests, cloned)
+	t.mu.Unlock()
+
+	headers := http.Header{}
+	headers.Set("x-ms-request-id", "stage-request")
+	return &http.Response{
+		Request:    req,
+		StatusCode: http.StatusCreated,
+		Status:     "201 Created",
+		Header:     headers,
+		Body:       io.NopCloser(strings.NewReader("")),
+	}, nil
+}
+
+func (t *dedupeStageWireTransport) snapshotRequests() []*http.Request {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]*http.Request(nil), t.requests...)
+}
+
 func headerValueFold(header http.Header, name string) string {
 	for headerName, values := range header {
 		if strings.EqualFold(headerName, name) && len(values) > 0 {
@@ -152,13 +181,17 @@ type fakeDedupeRangeHasher struct {
 
 type dedupeResolutionTestTransferManager struct {
 	*testJobPartTransferManager
-	ctx context.Context
+	ctx           context.Context
+	contextCalled chan<- struct{}
 }
 
 func (m *dedupeResolutionTestTransferManager) LogAtLevelForCurrentTransfer(common.LogLevel, string) {
 }
 
 func (m *dedupeResolutionTestTransferManager) Context() context.Context {
+	if m.contextCalled != nil {
+		m.contextCalled <- struct{}{}
+	}
 	if m.ctx != nil {
 		return m.ctx
 	}
@@ -1161,6 +1194,271 @@ func newDedupeResolutionTestCopier(
 		dedupeETag:   azcore.ETag(`"source"`),
 		dedupeHasher: hasher,
 	}}
+}
+
+type concurrentDedupeStageFixture struct {
+	state       *dedupeJobState
+	copier      *urlToBlockBlobCopier
+	hasher      *fakeDedupeRangeHasher
+	transport   *dedupeStageWireTransport
+	sourcePlan  *SourceGridPlan
+	targetURI   string
+	hashStarted chan struct{}
+	hashRelease chan struct{}
+	contextUsed chan struct{}
+}
+
+func newConcurrentDedupeStageFixture(
+	t *testing.T,
+	mode dedupeActMode,
+	blockCount int,
+) concurrentDedupeStageFixture {
+	t.Helper()
+
+	jobID := common.NewJobID()
+	t.Cleanup(func() {
+		clearDedupeStateForJob(jobID)
+	})
+
+	const blockSize = int64(3)
+	targetURI := "https://dest.blob.core.windows.net/c/target"
+	sourcePlan := &SourceGridPlan{Blocks: make([]PlannedBlock, blockCount)}
+	targetPlan := &SourceGridPlan{Blocks: make([]PlannedBlock, blockCount)}
+	sourceHashes := make(map[srcBlockKey][32]byte, blockCount)
+	targetHashes := make(map[srcBlockKey][32]byte, blockCount)
+	for i := 0; i < blockCount; i++ {
+		sourceOffset := int64(i) * blockSize
+		targetOffset := int64(1000+i) * blockSize
+		crc := uint64(100 + i)
+		hash := sha256.Sum256([]byte(fmt.Sprintf("concurrent-block-%d", i)))
+		sourcePlan.Blocks[i] = crcOnlyBlock(sourceOffset, blockSize, crc)
+		targetPlan.Blocks[i] = crcOnlyBlock(targetOffset, blockSize, crc)
+		sourceHashes[srcBlockKey{offset: sourceOffset, size: blockSize}] = hash
+		targetHashes[srcBlockKey{offset: targetOffset, size: blockSize}] = hash
+	}
+
+	hashStarted := make(chan struct{}, 1)
+	hashRelease := make(chan struct{})
+	hasher := &fakeDedupeRangeHasher{
+		sourceHashes:  sourceHashes,
+		targetHashes:  map[string]map[srcBlockKey][32]byte{targetURI: targetHashes},
+		targetErr:     make(map[string]error),
+		sourceStarted: hashStarted,
+		sourceRelease: hashRelease,
+	}
+	copier := newDedupeResolutionTestCopier(jobID, sourcePlan, hasher)
+	copier.dedupeMode = mode
+	contextUsed := make(chan struct{}, blockCount*4+4)
+	copier.jptm.(*dedupeResolutionTestTransferManager).contextCalled = contextUsed
+	transport := &dedupeStageWireTransport{}
+	client, err := blockblob.NewClientWithNoCredential(
+		"https://dest.blob.core.windows.net/c/current",
+		&blockblob.ClientOptions{ClientOptions: policy.ClientOptions{
+			Transport: transport,
+			Retry:     policy.RetryOptions{MaxRetries: -1},
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copier.destBlockBlobClient = client
+
+	if recorded := recordCommittedBlocks(
+		jobID,
+		targetURI,
+		"",
+		azcore.ETag(`"target"`),
+		targetPlan,
+	); recorded != blockCount {
+		t.Fatalf("recorded %d committed blocks, want %d", recorded, blockCount)
+	}
+
+	return concurrentDedupeStageFixture{
+		state:       dedupeStateForJob(jobID),
+		copier:      copier,
+		hasher:      hasher,
+		transport:   transport,
+		sourcePlan:  sourcePlan,
+		targetURI:   targetURI,
+		hashStarted: hashStarted,
+		hashRelease: hashRelease,
+		contextUsed: contextUsed,
+	}
+}
+
+type dedupeStageResult struct {
+	blockIndex int
+	handled    bool
+}
+
+func startDedupeStage(
+	copier *urlToBlockBlobCopier,
+	block PlannedBlock,
+	blockIndex int,
+	results chan<- dedupeStageResult,
+) {
+	encodedBlockID := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("block-%d", blockIndex)))
+	handled := copier.tryDedupeStage(
+		common.NewChunkID("current", block.Offset, block.Size),
+		int32(blockIndex),
+		encodedBlockID,
+		block.Size,
+	)
+	results <- dedupeStageResult{blockIndex: blockIndex, handled: handled}
+}
+
+func waitForDedupeStageResults(
+	t *testing.T,
+	results <-chan dedupeStageResult,
+	count int,
+) []dedupeStageResult {
+	t.Helper()
+	collected := make([]dedupeStageResult, 0, count)
+	for len(collected) < count {
+		select {
+		case result := <-results:
+			collected = append(collected, result)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for dedupe stage result %d/%d", len(collected), count)
+		}
+	}
+	return collected
+}
+
+func waitForDedupeContextCalls(t *testing.T, calls <-chan struct{}, count int) {
+	t.Helper()
+	for i := 0; i < count; i++ {
+		select {
+		case <-calls:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for dedupe context call %d/%d", i, count)
+		}
+	}
+}
+
+func TestTryDedupeStageEnforceWaitersReusePublishedHashes(t *testing.T) {
+	const blockCount = 17
+	fixture := newConcurrentDedupeStageFixture(t, dedupeActEnforce, blockCount)
+	results := make(chan dedupeStageResult, blockCount)
+
+	go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[0], 0, results)
+	select {
+	case <-fixture.hashStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hash resolution to start")
+	}
+	waitForDedupeContextCalls(t, fixture.contextUsed, 1)
+	for i := 1; i < blockCount; i++ {
+		go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[i], i, results)
+	}
+	waitForDedupeContextCalls(t, fixture.contextUsed, blockCount-1)
+	close(fixture.hashRelease)
+
+	seen := make([]bool, blockCount)
+	for _, result := range waitForDedupeStageResults(t, results, blockCount) {
+		assert.True(t, result.handled, "block %d should reuse the published target hash", result.blockIndex)
+		seen[result.blockIndex] = true
+	}
+	assert.NotContains(t, seen, false)
+	assert.Equal(t, 1, fixture.hasher.sourceCalls)
+	assert.Equal(t, 1, fixture.hasher.targetCalls)
+	assert.Len(t, fixture.hasher.sourceRanges, blockCount)
+	assert.Len(t, fixture.hasher.targetRanges[fixture.targetURI], blockCount)
+	requests := fixture.transport.snapshotRequests()
+	assert.Len(t, requests, blockCount)
+	expectedRanges := make(map[string]int, blockCount)
+	for i := range fixture.sourcePlan.Blocks {
+		targetOffset := int64(1000+i) * fixture.sourcePlan.Blocks[i].Size
+		expectedRanges[fmt.Sprintf("bytes=%d-%d", targetOffset, targetOffset+fixture.sourcePlan.Blocks[i].Size-1)]++
+	}
+	for _, request := range requests {
+		assert.Equal(t, fixture.targetURI, headerValueFold(request.Header, "x-ms-copy-source"))
+		sourceRange := headerValueFold(request.Header, "x-ms-source-range")
+		assert.Positive(t, expectedRanges[sourceRange], "unexpected or duplicate source range %q", sourceRange)
+		expectedRanges[sourceRange]--
+	}
+	for sourceRange, remaining := range expectedRanges {
+		assert.Zero(t, remaining, "source range %q was not reused", sourceRange)
+	}
+	assert.EqualValues(t, blockCount, fixture.state.progressSnapshot().referencedBlocks)
+}
+
+func TestTryDedupeStageWaiterCancellationDoesNotDeadlock(t *testing.T) {
+	fixture := newConcurrentDedupeStageFixture(t, dedupeActEnforce, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	fixture.copier.jptm.(*dedupeResolutionTestTransferManager).ctx = ctx
+	results := make(chan dedupeStageResult, 2)
+
+	go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[0], 0, results)
+	select {
+	case <-fixture.hashStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hash resolution to start")
+	}
+	waitForDedupeContextCalls(t, fixture.contextUsed, 1)
+	go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[1], 1, results)
+	waitForDedupeContextCalls(t, fixture.contextUsed, 1)
+	cancel()
+
+	select {
+	case result := <-results:
+		assert.Equal(t, 1, result.blockIndex)
+		assert.False(t, result.handled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled dedupe waiter did not unblock")
+	}
+	assert.Empty(t, fixture.transport.snapshotRequests())
+
+	close(fixture.hashRelease)
+	owner := waitForDedupeStageResults(t, results, 1)[0]
+	assert.Equal(t, 0, owner.blockIndex)
+	assert.False(t, owner.handled)
+}
+
+func TestTryDedupeStageResolutionTimeoutFallsBackToSource(t *testing.T) {
+	fixture := newConcurrentDedupeStageFixture(t, dedupeActEnforce, 1)
+	fixture.hasher.sourceRelease = nil
+	fixture.hasher.sourceErr = context.DeadlineExceeded
+
+	results := make(chan dedupeStageResult, 1)
+	go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[0], 0, results)
+	result := waitForDedupeStageResults(t, results, 1)[0]
+
+	assert.False(t, result.handled)
+	assert.Equal(t, 1, fixture.hasher.sourceCalls)
+	assert.Zero(t, fixture.hasher.targetCalls)
+	assert.Empty(t, fixture.transport.snapshotRequests())
+	_, resolveErr := fixture.copier.dedupeResolutionSnapshot()
+	assert.ErrorIs(t, resolveErr, context.DeadlineExceeded)
+}
+
+func TestTryDedupeStageShadowWaitersStillObservePublishedHashes(t *testing.T) {
+	const blockCount = 17
+	fixture := newConcurrentDedupeStageFixture(t, dedupeActShadow, blockCount)
+	results := make(chan dedupeStageResult, blockCount)
+
+	go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[0], 0, results)
+	select {
+	case <-fixture.hashStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hash resolution to start")
+	}
+	waitForDedupeContextCalls(t, fixture.contextUsed, 1)
+	for i := 1; i < blockCount; i++ {
+		go startDedupeStage(fixture.copier, fixture.sourcePlan.Blocks[i], i, results)
+	}
+	waitForDedupeContextCalls(t, fixture.contextUsed, blockCount-1)
+	close(fixture.hashRelease)
+
+	for _, result := range waitForDedupeStageResults(t, results, blockCount) {
+		assert.False(t, result.handled)
+	}
+	assert.Equal(t, 1, fixture.hasher.sourceCalls)
+	assert.Equal(t, 1, fixture.hasher.targetCalls)
+	assert.Empty(t, fixture.transport.snapshotRequests())
+	snapshot := fixture.state.progressSnapshot()
+	assert.EqualValues(t, blockCount, snapshot.wouldReferenceBlocks)
+	assert.Zero(t, snapshot.referencedBlocks)
 }
 
 func TestDedupeResolutionReconsidersNewCommittedCandidates(t *testing.T) {
