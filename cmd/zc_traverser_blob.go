@@ -131,6 +131,13 @@ func (t *blobTraverser) destIsBlobFS() bool {
 
 func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
 	if t.errorChannel != nil {
+		// Defense-in-depth: the orchestrator drains all traversers before the caller closes this
+		// channel, but recover in case a send still races a close during cancellation.
+		defer func() {
+			if r := recover(); r != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
+			}
+		}()
 		select {
 		case t.errorChannel <- err:
 		default:

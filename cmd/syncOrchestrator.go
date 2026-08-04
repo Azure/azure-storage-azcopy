@@ -1090,8 +1090,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
-	// Start parallel crawling with specified concurrency
-	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
+	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
+	// merge-join producers) has returned — the drain signal we use on cancellation below.
+	crawlOutput := parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
 
 	// Cancellation-aware wait
 	done := make(chan struct{})
@@ -1106,8 +1107,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
 
 	case <-mainCtx.Done():
-		// Cancellation occurred
-		syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected.")
+		// On cancel, drain crawlOutput until it closes so no producer is still alive to write to the
+		// caller-owned sync ErrorChannel after it is closed. (crawlWg can't be used here: the crawler
+		// abandons queued dirs on cancel, so it would never reach zero.)
+		syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected; waiting for in-flight traversers to drain.")
+		for range crawlOutput {
+		}
+		syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
 	}
 
