@@ -296,7 +296,7 @@ jobs:
         # Don't run if job is canceled
         condition: and(succeededOrFailed(), eq(variables.GOOS, 'linux'))
 
-      - task: PowerShell@2
+      - task: PowerShell@2 
         displayName: 'Install Azure CLI'
         inputs:
           targetType: 'inline'
