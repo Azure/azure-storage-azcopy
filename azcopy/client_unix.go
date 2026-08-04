@@ -25,6 +25,7 @@ package azcopy
 
 import (
 	"math"
+	"path"
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
