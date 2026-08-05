@@ -40,12 +40,9 @@ jobs:
     variables:
       coverageDir: 'coverage'
     steps:
-      - task: PowerShell@2
-        inputs:
-          targetType: 'inline'
-          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-          pwsh: 'true'
-        displayName: 'Install Powershell Az Module'
+      - pwsh: |
+          Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
+        displayName: 'Install PowerShell Az Module'
 
       - task: GoTool@0
         inputs:

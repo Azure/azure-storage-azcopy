@@ -301,44 +301,27 @@ jobs:
     strategy:
       matrix:
         Linux:
-          pool_name: 'blobfuse-ubuntu-pool'
-          image_name: 'blobfuse-ubuntu20'
+          image_name: 'ubuntu-latest'
           build_name: 'azcopy_linux_amd64'
           container_name: 'testcontainer1'
           GOOS: 'linux'
           GOARCH: 'amd64'
           CGO_ENABLED: '0'
         Windows:
-          pool_name: 'azcopy-windows-pool'
-          image_name: 'azcopy-windows-22'
+          image_name: 'windows-latest'
           build_name: 'azcopy_windows_amd64.exe'
           container_name: 'testcontainer2'
           GOOS: 'windows'
           GOARCH: 'amd64'
           CGO_ENABLED: '0'        
-        #TODO: Add MacOS after creating macos pool
+        #TODO: Add MacOS
     pool:
-      name: $(pool_name)
-      demands:
-        - ImageOverride -equals $(image_name)
+      vmImage: $(image_name)
 
     steps:
-      - script: |
-          sudo apt-get update
-          sudo apt-get install -y powershell
-          pwsh -Command "Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force"
+      - pwsh: |
+          Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
         displayName: 'Install PowerShell Az Module'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.GOOS, 'linux'))
-
-      - task: PowerShell@2
-        inputs:
-          targetType: 'inline'
-          script: |
-            Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
-        displayName: 'Install PowerShell Az Module'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.GOOS, 'windows'))
 
       - task: GoTool@0
         inputs:
@@ -348,7 +331,7 @@ jobs:
       - script: |
           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
           az --version
-        displayName: 'Install Azure CLI'
+        displayName: 'Install Azure CLI - Linux'
         # Don't run if job is canceled
         condition: and(succeededOrFailed(), eq(variables.GOOS, 'linux'))
 
@@ -358,7 +341,7 @@ jobs:
           script: |
             choco install azure-cli -y
             az --version
-        displayName: 'Install Azure CLI'
+        displayName: 'Install Azure CLI - Windows'
         # Don't run if job is canceled
         condition: and(succeededOrFailed(), eq(variables.GOOS, 'windows'))
 
