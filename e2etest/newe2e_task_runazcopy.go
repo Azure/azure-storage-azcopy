@@ -182,7 +182,7 @@ var RunAzCopyDefaultInheritEnvironment = map[string]bool{
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
-	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
+	env.InheritEnvironment = CloneMap(RunAzCopyDefaultInheritEnvironment)
 
 	return env.InheritEnvironment
 }
