@@ -199,6 +199,12 @@ jobs:
 
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
+          directory: 'azcopy'
+          coverage_name: 'azcopy'
+          isMutexSet: variables['isMutexSet']
+
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
           directory: 'cmd'
           coverage_name: 'cmd'
           isMutexSet: variables['isMutexSet']
@@ -217,6 +223,12 @@ jobs:
 
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
+          directory: 'mock_server'
+          coverage_name: 'mock_server'
+          isMutexSet: variables['isMutexSet']
+
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
           directory: 'sddl'
           coverage_name: 'sddl'
           isMutexSet: variables['isMutexSet']
@@ -226,6 +238,12 @@ jobs:
           directory: 'ste'
           coverage_name: 'ste'
           with_federated_credential: true
+          isMutexSet: variables['isMutexSet']
+
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'traverser'
+          coverage_name: 'traverser'
           isMutexSet: variables['isMutexSet']
 
       - script: |
