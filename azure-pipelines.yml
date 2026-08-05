@@ -38,7 +38,7 @@ jobs:
           echo 'Running GO Vet'
           go vet 
         workingDirectory: $(System.DefaultWorkingDirectory)
-        displayName: 'Golang Vet - Linux'
+        displayName: 'Golang Vet'
 
       - script: |
           sudo apt-get update
