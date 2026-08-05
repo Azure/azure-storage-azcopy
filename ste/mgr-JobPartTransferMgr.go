@@ -17,6 +17,7 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"	
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -145,7 +146,6 @@ type TransferInfo struct {
 	VersionID  string
 	SnapshotID string
 	Provider   credentials.Provider //custom Provider
-	IsNFSCopy  bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -447,7 +447,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 		VersionID:         versionID,
 		SnapshotID:        snapshotID,
-		IsNFSCopy:         plan.IsNFSCopy,
 	}
 }
 
@@ -877,7 +876,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.SetErrorMessage(fullMsg)
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
-		if status == http.StatusForbidden &&
+		if !buildmode.IsMover && status == http.StatusForbidden &&
 			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message

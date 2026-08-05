@@ -449,7 +449,9 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 	// Set up the scenario
 	a.InsertVariationSeparator("Blob->")
 	srcLoc := common.ELocation.Blob()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	// We cannot test it for File because if the file share does not exists at the destination, azcopy will fail the azcopy job.
+	// The user will have to manually create the destination file share.
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.BlobFS()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (

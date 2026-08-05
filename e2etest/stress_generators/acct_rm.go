@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	blobfsservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
@@ -83,6 +84,20 @@ func (a *OAuthAccountResourceManager) GetService(asserter e2etest.Asserter, loca
 		out = &e2etest.BlobFSServiceResourceManager{
 			InternalAccount: nil,
 			InternalClient:  c,
+		}
+	case common.ELocation.FileNFS():
+		c, err := fileservice.NewClient(uri, a.cred, &fileservice.ClientOptions{
+			ClientOptions: a.serviceClientOptions,
+		})
+		if err != nil {
+			asserter.NoError("create file service", err)
+			return nil
+		}
+
+		out = &e2etest.FileServiceResourceManager{
+			InternalAccount: nil,
+			InternalClient:  c,
+			Llocation:       common.ELocation.FileNFS(),
 		}
 	default:
 		asserter.Error("Invalid service specified: " + location.String())

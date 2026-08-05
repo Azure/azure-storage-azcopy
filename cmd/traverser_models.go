@@ -21,9 +21,15 @@
 package cmd
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+)
+
+const (
+	SkippedItemErrorPrefix     = "SkippedItemError"
+	UnsupportedItemErrorPrefix = "UnsupportedItemError"
 )
 
 // TraverserErrorItemInfo provides an interface for error information related to files and folders that failed enumeration.
@@ -46,4 +52,20 @@ type TraverserErrorItemInfo interface {
 	IsDir() bool
 	ErrorMessage() error
 	Location() common.Location
+}
+
+func GetSkippedFileErrorMessage(entityType common.EntityType, err error) error {
+	errMsg := ""
+	if err != nil {
+		errMsg = fmt.Sprintf("error: %s.", err.Error())
+	}
+	return fmt.Errorf("%s %s. %s", SkippedItemErrorPrefix, entityType.String(), errMsg)
+}
+
+func GetUnsupportedFileErrorMessage(entityType common.EntityType, err error) error {
+	errMsg := ""
+	if err != nil {
+		errMsg = fmt.Sprintf("error: %s.", err.Error())
+	}
+	return fmt.Errorf("%s %s. %s", UnsupportedItemErrorPrefix, entityType.String(), errMsg)
 }
