@@ -13,6 +13,9 @@ type NewSPNTokenOptions struct {
 	ApplicationID   string
 	CertificateData string
 	ClientSecret    string
+
+	// DisableInstanceDiscovery skips instance discovery for sovereign clouds.
+	DisableInstanceDiscovery bool
 }
 
 func (o NewSPNTokenOptions) LoginType() enum.AutoLoginType { return enum.EAutoLoginType.SPN() }
@@ -25,9 +28,10 @@ func (o NewSPNTokenOptions) NewToken() Token {
 			LoginType:               o.LoginType(),
 		},
 		tokenImpl: tokenInfoSPN{
-			ApplicationID: o.ApplicationID,
-			Cert:          o.CertificateData,
-			Secret:        o.ClientSecret,
+			ApplicationID:          o.ApplicationID,
+			Cert:                   o.CertificateData,
+			Secret:                 o.ClientSecret,
+			DisableInstanceDiscovery: o.DisableInstanceDiscovery,
 		},
 	}
 }

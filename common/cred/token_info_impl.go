@@ -144,7 +144,7 @@ func (t tokenInfoSPN) getTokenCert(header TokenHeader) (azcore.TokenCredential, 
 				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: header.ActiveDirectoryEndpoint},
 				Transport: newAzcopyHTTPClient(),
 			},
-			DisableInstanceDiscovery: false,
+			DisableInstanceDiscovery: t.DisableInstanceDiscovery,
 			SendCertificateChain:     true,
 		},
 	)
@@ -160,7 +160,7 @@ func (t tokenInfoSPN) getTokenSecret(header TokenHeader) (azcore.TokenCredential
 				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: header.ActiveDirectoryEndpoint},
 				Transport: newAzcopyHTTPClient(),
 			},
-			DisableInstanceDiscovery: false,
+			DisableInstanceDiscovery: t.DisableInstanceDiscovery,
 		},
 	)
 }

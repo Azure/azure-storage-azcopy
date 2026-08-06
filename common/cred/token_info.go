@@ -23,6 +23,8 @@ type tokenInfoSPN struct {
 	Secret string `json:"spn_secret"`
 	// Cert accepts either a raw certificate, or a path to a certificate.
 	Cert string `json:"spn_cert"`
+	// DisableInstanceDiscovery skips instance discovery for sovereign clouds when true.
+	DisableInstanceDiscovery bool `json:"disable_instance_discovery,omitempty"`
 }
 
 type tokenInfoManagedIdentity struct {

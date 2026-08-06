@@ -41,6 +41,27 @@ func TestSPNTokenOptions(t *testing.T) {
 	a.Equal(enum.EAutoLoginType.SPN(), h.LoginType)
 }
 
+func TestSPNTokenOptions_DisableInstanceDiscovery(t *testing.T) {
+	a := assert.New(t)
+
+	tok := NewSPNTokenOptions{
+		TenantID:                 "my-tenant",
+		AADEndpoint:              "https://login.microsoftonline.us",
+		ApplicationID:            "app-id",
+		ClientSecret:             "client-secret",
+		DisableInstanceDiscovery: true,
+	}.NewToken()
+
+	spn, ok := tokenImplFromToken(t, tok).(tokenInfoSPN)
+	a.True(ok, "expected tokenInfoSPN")
+	a.True(spn.DisableInstanceDiscovery, "DisableInstanceDiscovery should be propagated to tokenInfoSPN")
+
+	tokFalse := NewSPNTokenOptions{}.NewToken()
+	spnFalse, ok := tokenImplFromToken(t, tokFalse).(tokenInfoSPN)
+	a.True(ok, "expected tokenInfoSPN")
+	a.False(spnFalse.DisableInstanceDiscovery, "DisableInstanceDiscovery should default to false")
+}
+
 func TestSPNTokenOptions_Defaults(t *testing.T) {
 	a := assert.New(t)
 
