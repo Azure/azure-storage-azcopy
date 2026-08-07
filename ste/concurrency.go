@@ -27,6 +27,7 @@ import (
 	"strconv"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // ConfiguredInt is an integer which may be optionally configured by user through an environment variable
@@ -200,6 +201,11 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 		return c.Value, c // initial and max are same, fixed to the env var
 	}
 
+	if !requestAutoTune && buildmode.IsMover && buildmode.HighPerf() && buildmode.ConcurrencyValue() > 0 {
+		defaultValue := buildmode.ConcurrencyValue()
+		return defaultValue, &ConfiguredInt{defaultValue, false, envVar.Name, "mover high-perf profile"}
+	}
+
 	var initialValue int
 
 	if requestAutoTune {
@@ -222,7 +228,10 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 	maxValue := initialValue
 	if requestAutoTune {
 		reason = "auto-tuning limit"
-		maxValue = 20000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
+		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
+		if buildmode.IsMover && buildmode.HighPerf() {
+			maxValue = 20000
+		}
 	}
 
 	return initialValue, &ConfiguredInt{maxValue, false, envVar.Name, reason}
@@ -235,6 +244,10 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 		return c
 	}
 
+	if buildmode.IsMover && buildmode.HighPerf() {
+		return &ConfiguredInt{buildmode.ConcurrentFiles(), false, envVar.Name, "mover high-perf profile"}
+	}
+
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
 }
 
@@ -245,6 +258,10 @@ func getSchedulerParallelism() *ConfiguredInt {
 		return c
 	}
 
+	if buildmode.IsMover && buildmode.HighPerf() {
+		return &ConfiguredInt{buildmode.ConcurrentSchedulers(), false, envVar.Name, "mover high-perf profile"}
+	}
+
 	return &ConfiguredInt{defaultSchedulerParallelism, false, envVar.Name, "hard-coded default"}
 }
 
@@ -253,6 +270,10 @@ func GetEnumerationPoolSize() *ConfiguredInt {
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
 		return c
+	}
+
+	if buildmode.IsMover && buildmode.HighPerf() {
+		return &ConfiguredInt{buildmode.ConcurrentScan(), false, envVar.Name, "mover high-perf profile"}
 	}
 
 	return &ConfiguredInt{defaultEnumerationPoolSize, false, envVar.Name, "hard-coded default"}

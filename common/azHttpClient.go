@@ -35,6 +35,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // GlobalHTTPClient is the process-wide HTTP client used by AzCopy when initialized via InitGlobalHTTPClient.
@@ -44,9 +46,14 @@ var (
 )
 
 const (
-	maxIdleConnsPerHost_MaxValue = 30000
+	maxIdleConnsPerHost_MaxValue = 3000
 	httpTraceTickerInterval      = time.Minute * 1
+	shardStatsLogInterval        = time.Minute * 5
 )
+
+func useHighPerfNetworkPath() bool {
+	return buildmode.IsMover && buildmode.HighPerf()
+}
 
 // ShardedTransport implements http.RoundTripper by distributing requests across
 // N underlying http.Transport instances via atomic round-robin. Each transport has
@@ -60,11 +67,11 @@ type ShardedTransport struct {
 
 // shardMetrics tracks per-shard connection and concurrency statistics.
 type shardMetrics struct {
-	inFlight    atomic.Int64 // current in-flight requests
-	peakFlight  atomic.Int64 // peak in-flight since last log
-	totalReqs   atomic.Int64 // total requests routed to this shard
-	connNew     atomic.Int64 // new connections (not reused)
-	connReused  atomic.Int64 // reused connections
+	inFlight   atomic.Int64 // current in-flight requests
+	peakFlight atomic.Int64 // peak in-flight since last log
+	totalReqs  atomic.Int64 // total requests routed to this shard
+	connNew    atomic.Int64 // new connections (not reused)
+	connReused atomic.Int64 // reused connections
 }
 
 func (s *ShardedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -99,10 +106,10 @@ func (s *ShardedTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return resp, err
 }
 
-// startShardLogger logs per-shard stats periodically (every 60s).
+// startShardLogger logs per-shard stats periodically (every shardStatsLogInterval).
 func (s *ShardedTransport) startShardLogger() {
 	go func() {
-		ticker := time.NewTicker(60 * time.Second)
+		ticker := time.NewTicker(shardStatsLogInterval)
 		defer ticker.Stop()
 		for range ticker.C {
 			for i := range s.shardStats {
@@ -123,20 +130,10 @@ func (s *ShardedTransport) startShardLogger() {
 	}()
 }
 
-// defaultNumTransportShards is the default number of http.Transport instances created. Each shard
-// has its own connection pool + mutex, so N shards reduce pool-lock contention by ~N times. Overridable
-// via AZCOPY_TRANSPORT_SHARDS for perf tuning.
-const defaultNumTransportShards = 32
-
-// getNumTransportShards returns the configured transport shard count from AZCOPY_TRANSPORT_SHARDS,
-// falling back to defaultNumTransportShards when unset or invalid (< 1).
+// getNumTransportShards returns the shard count for the active high-perf profile. Only reached on the
+// high-perf network path; sharding does not exist in the mover-default path.
 func getNumTransportShards() int {
-	if raw := os.Getenv("AZCOPY_TRANSPORT_SHARDS"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n >= 1 {
-			return n
-		}
-	}
-	return defaultNumTransportShards
+	return buildmode.TransportShards()
 }
 
 // newShardedTransport creates N http.Transport instances with identical configuration, where N is
@@ -187,19 +184,48 @@ func newShardedTransport(maxConnsPerHost int) *ShardedTransport {
 // will be invoked with status messages.
 func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		const maxConnsPerHost = 1024
-		shardedTransport := newShardedTransport(maxConnsPerHost)
+		if useHighPerfNetworkPath() {
+			const maxConnsPerHost = 1024
+			shardedTransport := newShardedTransport(maxConnsPerHost)
+			client := &http.Client{
+				Transport: shardedTransport,
+			}
+			GlobalHTTPClient = client
+			msg := fmt.Sprintf(
+				"GetGlobalHTTPClient: SHARDED_TRANSPORT_V6 initialized %p shards=%d MaxConnsPerHost=%d HTTP1.1_ONLY",
+				client, len(shardedTransport.transports), maxConnsPerHost)
+			fmt.Fprintln(os.Stderr, msg)
+			if logger != nil {
+				logger.Log(LogError, msg)
+			}
+			return
+		}
+
+		const concurrentDialsPerCpu = 10
 		client := &http.Client{
-			Transport: shardedTransport,
+			Transport: &http.Transport{
+				Proxy:                  GlobalProxyLookup,
+				MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
+				MaxIdleConns:           0,
+				MaxIdleConnsPerHost:    GetMaxIdleConnsPerHost(),
+				IdleConnTimeout:        180 * time.Second,
+				TLSHandshakeTimeout:    10 * time.Second,
+				ExpectContinueTimeout:  1 * time.Second,
+				DisableKeepAlives:      false,
+				DisableCompression:     true,
+				MaxResponseHeaderBytes: 0,
+			},
 		}
 		GlobalHTTPClient = client
-		// Always log to stderr so it shows up in container logs
-		msg := fmt.Sprintf(
-			"GetGlobalHTTPClient: SHARDED_TRANSPORT_V6 initialized %p shards=%d MaxConnsPerHost=%d HTTP1.1_ONLY",
-			client, len(shardedTransport.transports), maxConnsPerHost)
-		fmt.Fprintln(os.Stderr, msg)
 		if logger != nil {
-			logger.Log(LogError, msg)
+			if tr, ok := client.Transport.(*http.Transport); ok {
+				logger.Log(LogError,
+					fmt.Sprintf(
+						"GetGlobalHTTPClient: initialized %p MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d",
+						client, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns))
+			} else {
+				logger.Log(LogError, fmt.Sprintf("GetGlobalHTTPClient: initialized %p", client))
+			}
 		}
 	})
 	return GlobalHTTPClient
@@ -218,6 +244,13 @@ func GetMaxIdleConnsPerHost() int {
 		concurrencyVal, err := strconv.ParseInt(envValue, 10, 0)
 		if err == nil {
 			concurrencyValue = min(int(concurrencyVal), concurrencyValue)
+			autoTune = false
+		}
+	}
+
+	if autoTune && useHighPerfNetworkPath() {
+		if defaultValue := buildmode.ConcurrencyValue(); defaultValue > 0 {
+			concurrencyValue = min(defaultValue, concurrencyValue)
 			autoTune = false
 		}
 	}

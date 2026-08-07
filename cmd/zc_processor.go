@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // Shuffle/backpressure tuning. The scanner buffers transfers, shuffles a window across the key range,
@@ -46,55 +47,40 @@ import (
 const inMemoryWindowMultiplier = 2
 
 // scannerBackpressureWindowParts: floor (in plan-parts) for the park watermark, which is
-// max(getShuffleThresholdParts()*inMemoryWindowMultiplier, scannerBackpressureWindowParts). The floor
-// keeps a wide hysteresis band for small windows (avoids per-part parking, the sawtooth cause).
-// Env-tunable via AZCOPY_SCANNER_WINDOW_PARTS. The old fixed 100 (=1M buffered transfers => ~12GB of
-// CopyTransfer structs for a 10MiB workload) dwarfed the shuffle window; the watermark now adapts to
-// the shuffle threshold and this floor only sets the small-window hysteresis band.
-var scannerBackpressureWindowParts = func() int {
-	if v := os.Getenv("AZCOPY_SCANNER_WINDOW_PARTS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 16
-}()
-
-// defaultShuffleThresholdParts: shuffle window (plan-parts) when AZCOPY_SHUFFLE_THRESHOLD_PARTS is unset.
-// 500 * 10k/part = ~5M transfers shuffled across the full key range to spread adjacent sorted keys
-// across storage partitions (reduces ServerBusy).
-const defaultShuffleThresholdParts = 500
+// max(getShuffleThresholdParts()*inMemoryWindowMultiplier, scannerBackpressureWindowParts). At 100
+// parts (* 10k transfers/part) the scanner may run ~1M transfers ahead of async dispatch before it
+// parks — a wide hysteresis band that avoids the per-part parking sawtooth. Baked constant (no env).
+const scannerBackpressureWindowParts = 100
 
 var shuffleThresholdLogOnce sync.Once
 
-// getShuffleThresholdParts is the shuffle window in plan-parts; override via AZCOPY_SHUFFLE_THRESHOLD_PARTS (>=1).
+// getShuffleThresholdParts is the shuffle window in plan-parts. Only reached on the high-perf mover
+// path, where the buildmode profile default is overridable by MOVER_SHUFFLE_PARTS (>=1).
 func getShuffleThresholdParts() int {
-	effective := defaultShuffleThresholdParts
-	rawValue := common.GetEnvironmentVariable(common.EEnvironmentVariable.ShuffleThresholdParts())
-	if rawValue != "" {
-		if n, err := strconv.Atoi(rawValue); err == nil && n >= 1 {
+	effective := buildmode.ShuffleThresholdParts()
+	rawMover := strings.TrimSpace(os.Getenv("MOVER_SHUFFLE_PARTS"))
+	if rawMover != "" {
+		if n, err := strconv.Atoi(rawMover); err == nil && n >= 1 {
 			effective = n
 		}
 	}
 	shuffleThresholdLogOnce.Do(func() {
-		fmt.Printf("[ShuffleConfig] AZCOPY_SHUFFLE_THRESHOLD_PARTS raw=%q effective=%d\n", rawValue, effective)
+		fmt.Printf("[ShuffleConfig] MOVER_SHUFFLE_PARTS raw=%q effective=%d\n", rawMover, effective)
 	})
 	return effective
 }
 
 var shuffleEnabledLogOnce sync.Once
 
+// isShuffleEnabled reports whether transfer shuffling is on. Only reached on the high-perf mover path,
+// where the buildmode profile default is overridable by AZCOPY_SHUFFLE_TRANSFERS.
 func isShuffleEnabled() bool {
-	enabled := false
-	rawValue := common.GetEnvironmentVariable(common.EEnvironmentVariable.ShuffleTransfers())
-	if rawValue != "" {
-		switch strings.ToLower(rawValue) {
-		case "true", "1":
-			enabled = true
-		}
+	enabled := buildmode.ShuffleEnabled()
+	if raw := common.GetEnvironmentVariable(common.EEnvironmentVariable.ShuffleTransfers()); raw != "" {
+		enabled = strings.EqualFold(raw, "true") || raw == "1"
 	}
 	shuffleEnabledLogOnce.Do(func() {
-		fmt.Printf("[ShuffleConfig] AZCOPY_SHUFFLE_TRANSFERS raw=%q enabled=%v\n", rawValue, enabled)
+		fmt.Printf("[ShuffleConfig] shuffle enabled=%v\n", enabled)
 	})
 	return enabled
 }
@@ -137,14 +123,13 @@ type copyTransferProcessor struct {
 	// flushWindowCounter is a monotonically increasing flush window ID used for diagnostics.
 	flushWindowCounter uint32
 
-	// Pipelined dispatch: assembled plan parts are pushed directly into dispatchCh and a pool
-	// of background goroutines calls sendPartToSte asynchronously, allowing the shuffle buffer
-	// to refill concurrently. The transfer-level shuffle in flushShuffleBuffer already gives each
-	// part diverse key-space prefixes, so parts are dispatched as soon as they are assembled —
-	// there is no intermediate part-buffering/reorder stage.
+	// High-perf mover path: assembled plan parts are pushed into dispatchCh and a pool
+	// of background goroutines calls sendPartToSte asynchronously, allowing the buffer
+	// to refill concurrently. Non-high-perf stays on synchronous dispatch for mover-default
+	// behavior parity.
 	dispatchCh   chan dispatchItem
 	dispatchOnce sync.Once
-	dispatchErr  error         // first error from dispatch goroutine
+	dispatchErr  error          // first error from dispatch goroutine
 	dispatchWg   sync.WaitGroup // tracks all dispatch workers
 	dispatchDone chan struct{}  // closed when all dispatch workers exit
 
@@ -153,8 +138,7 @@ type copyTransferProcessor struct {
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
-	m := &sync.Mutex{}
-	return &copyTransferProcessor{
+	p := &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
 		source:                    source,
@@ -165,10 +149,15 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
-		dispatchCh:                make(chan dispatchItem, dispatchChParts()), // async dispatch buffer (in plan-parts); env-tunable
-		dispatchDone:              make(chan struct{}),
-		bufferDrainCond:           sync.NewCond(m),
 	}
+	// High-perf mover only: allocate the async dispatch pipeline + backpressure resources.
+	// Mover-default keeps the original synchronous path with no extra allocation.
+	if useAsyncDispatchPipeline() {
+		p.dispatchCh = make(chan dispatchItem, dispatchChParts())
+		p.dispatchDone = make(chan struct{})
+		p.bufferDrainCond = sync.NewCond(&sync.Mutex{})
+	}
+	return p
 }
 
 // dispatchChParts returns the async-dispatch channel depth in plan-parts (AZCOPY_DISPATCH_CH_PARTS).
@@ -176,17 +165,24 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 // this directly caps how many transfers sit between flush and the STE when the engine is backpressured.
 // The old hardcoded 5000 (=50M transfers => tens of GB of live CopyTransfers) was the dominant heap holder.
 func dispatchChParts() int {
-	if v := os.Getenv("AZCOPY_DISPATCH_CH_PARTS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
 	return 128
+}
+
+func useAsyncDispatchPipeline() bool {
+	return buildmode.IsMover && buildmode.HighPerf()
+}
+
+func useHighPerfSyncPath() bool {
+	return buildmode.IsMover && buildmode.HighPerf()
 }
 
 // startDispatchPipeline ensures the background dispatch worker pool is running.
 // Called lazily on first use via sync.Once.
 func (s *copyTransferProcessor) startDispatchPipeline() {
+	if !useAsyncDispatchPipeline() {
+		return
+	}
+
 	s.dispatchOnce.Do(func() {
 		const numDispatchWorkers = 32 // parallelize fsync-heavy plan file creation
 		s.dispatchWg.Add(numDispatchWorkers)
@@ -209,29 +205,54 @@ func (s *copyTransferProcessor) dispatchWorker() {
 		if s.dispatchErr != nil {
 			continue // drain channel after first error
 		}
-		// Build a local copy of the template for this part
-		template := *s.copyJobTemplate
-		template.Transfers = item.transfers
-		template.PartNum = item.partNum
-
-		var resp common.CopyJobPartOrderResponse
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), &template, &resp)
-
-		// Report first part dispatched if this is part 0
-		if item.partNum == 0 && s.reportFirstPartDispatched != nil {
-			s.reportFirstPartDispatched(resp.JobStarted)
-		}
-
-		if resp.ErrorMsg != "" {
-			s.dispatchErr = errors.New(string(resp.ErrorMsg))
+		if err := s.dispatchPartNow(item); err != nil {
+			s.dispatchErr = err
 		}
 	}
+}
+
+func (s *copyTransferProcessor) dispatchPartNow(item dispatchItem) error {
+	// Build a local copy of the template for this part
+	template := *s.copyJobTemplate
+	template.Transfers = item.transfers
+	template.PartNum = item.partNum
+
+	var resp common.CopyJobPartOrderResponse
+	Rpc(common.ERpcCmd.CopyJobPartOrder(), &template, &resp)
+
+	// Report first part dispatched if this is part 0
+	if item.partNum == 0 && s.reportFirstPartDispatched != nil {
+		s.reportFirstPartDispatched(resp.JobStarted)
+	}
+
+	if resp.ErrorMsg != "" {
+		return errors.New(string(resp.ErrorMsg))
+	}
+
+	return nil
+}
+
+func (s *copyTransferProcessor) dispatchPart(item dispatchItem) error {
+	if useAsyncDispatchPipeline() {
+		s.startDispatchPipeline()
+		s.dispatchCh <- item
+		if s.dispatchErr != nil {
+			return s.dispatchErr
+		}
+		return nil
+	}
+
+	return s.dispatchPartNow(item)
 }
 
 // waitForDispatchPipeline closes the dispatch channel and waits for all workers, returning the first
 // dispatch error. startDispatchPipeline is called first (idempotent) so small jobs that never flushed
 // a full part don't deadlock on an unclosed dispatchDone.
 func (s *copyTransferProcessor) waitForDispatchPipeline() error {
+	if !useAsyncDispatchPipeline() {
+		return nil
+	}
+
 	s.startDispatchPipeline()
 	close(s.dispatchCh)
 	<-s.dispatchDone
@@ -454,7 +475,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil
 	}
 
-	if UseSyncOrchestrator {
+	if UseSyncOrchestrator && useHighPerfSyncPath() {
 		if isShuffleEnabled() {
 			shuffleThreshold := getShuffleThresholdParts()
 
@@ -512,6 +533,11 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 			}
 		}
 		return nil
+	}
+
+	if UseSyncOrchestrator {
+		s.syncTransferMutex.Lock()
+		defer s.syncTransferMutex.Unlock()
 	}
 
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
@@ -587,17 +613,13 @@ func (s *copyTransferProcessor) flushDirectBuffer() error {
 			}
 		}
 
-		// Pipeline: async dispatch
-		s.startDispatchPipeline()
-		s.dispatchCh <- dispatchItem{
+		if err := s.dispatchPart(dispatchItem{
 			transfers: transfers,
 			partNum:   s.copyJobTemplate.PartNum,
+		}); err != nil {
+			return err
 		}
 		s.copyJobTemplate.PartNum++
-
-		if s.dispatchErr != nil {
-			return s.dispatchErr
-		}
 	}
 
 	// Put remainder back
@@ -664,8 +686,7 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 			common.LogInfo)
 	}
 
-	// Dispatch part-sized batches straight to the async pipeline (already shuffled above).
-	s.startDispatchPipeline()
+	// Dispatch part-sized batches; high-perf uses async pipeline, non-high-perf stays synchronous.
 	for len(toFlush) >= s.numOfTransfersPerPart {
 		// Capped 3-index slice: hand out a view (no per-part malloc/copy); backing array frees when
 		// the last part drains from dispatchCh.
@@ -691,15 +712,13 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 			}
 		}
 
-		s.dispatchCh <- dispatchItem{
+		if err := s.dispatchPart(dispatchItem{
 			transfers: transfers,
 			partNum:   s.copyJobTemplate.PartNum,
+		}); err != nil {
+			return err
 		}
 		s.copyJobTemplate.PartNum++
-
-		if s.dispatchErr != nil {
-			return s.dispatchErr
-		}
 	}
 
 	// Wake scanners parked on backpressure; they re-check the watermark (wide hysteresis preserved).
@@ -737,17 +756,15 @@ var NothingScheduledError = errors.New("no transfers were scheduled because no f
 var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
-	fmt.Printf("[ShuffleConfig] dispatchFinalPart entered: UseSyncOrchestrator=%v, shuffleBufferLen=%d\n", UseSyncOrchestrator, len(s.shuffleBuffer))
 	// Flush any remaining transfers before dispatching the final part
-	if UseSyncOrchestrator && len(s.shuffleBuffer) > 0 {
+	if UseSyncOrchestrator && useHighPerfSyncPath() && len(s.shuffleBuffer) > 0 {
 		s.flushMutex.Lock()
 
-		// Dispatch any remaining full plan parts straight to the async pipeline.
+		// Dispatch any remaining full plan parts.
 		// The transfer-level shuffle already ran when these transfers were enqueued and the
 		// part-buffering/reorder stage has been removed, so the shuffle and non-shuffle paths
-		// are identical here — send each assembled part directly to dispatchCh. Any dispatch
+		// are identical here — send each assembled part directly. Any dispatch
 		// error is surfaced by waitForDispatchPipeline() below.
-		s.startDispatchPipeline()
 		for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
 			batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
 			copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
@@ -769,9 +786,12 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 					transfers.FilePropertyTransferCount++
 				}
 			}
-			s.dispatchCh <- dispatchItem{
+			if err := s.dispatchPart(dispatchItem{
 				transfers: transfers,
 				partNum:   s.copyJobTemplate.PartNum,
+			}); err != nil {
+				s.flushMutex.Unlock()
+				return false, err
 			}
 			s.copyJobTemplate.PartNum++
 		}

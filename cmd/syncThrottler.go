@@ -27,27 +27,24 @@ import (
 	"context"
 	"fmt"
 	_ "net/http/pprof"
-	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // maxActiveGoRoutines caps total process goroutines before the sync throttler pauses source
 // enumeration. In high-throughput transfers the goroutine count is dominated by the HTTP
 // connection pool (~2 goroutines per live connection), NOT scanner activity, so the static 50k
-// default can false-trip and stall enumeration. Env-tunable via AZCOPY_SYNC_MAX_GOROUTINES to
-// decouple the throttle from transfer connections.
+// default can false-trip and stall enumeration. Only the high-perf mover profile raises the cap
+// (buildmode.SyncMaxGoroutines(): 300000); every other build keeps 50k.
 var maxActiveGoRoutines int64 = func() int64 {
-	if v := os.Getenv("AZCOPY_SYNC_MAX_GOROUTINES"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
-			return n
-		}
+	if buildmode.IsMover && buildmode.HighPerf() {
+		return int64(buildmode.SyncMaxGoroutines())
 	}
 	return 50_000
 }()
