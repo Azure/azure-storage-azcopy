@@ -3,15 +3,17 @@ package e2etest
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/google/uuid"
 )
 
 type SyncTestSuite struct{}
@@ -147,10 +149,10 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 	}
 
 	srcRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc, GetResourceOptions{
-		PreferredAccount: common.Iff(srcLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
+		PreferredAccount: ternary.Iff(srcLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
 	}), ResourceDefinitionContainer{})
 	dstRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, dstLoc, GetResourceOptions{
-		PreferredAccount: common.Iff(dstLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
+		PreferredAccount: ternary.Iff(dstLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
 	}), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			"deleteme.txt":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
@@ -186,7 +188,7 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS()})
 	dstRes := CreateResource[ContainerResourceManager](svm,
 		GetRootResource(svm, dstLoc, GetResourceOptions{
-			PreferredAccount: common.Iff(dstLoc == common.ELocation.Blob(),
+			PreferredAccount: ternary.Iff(dstLoc == common.ELocation.Blob(),
 				pointerTo(PrimaryStandardAcct), //
 				pointerTo(PrimaryHNSAcct),
 			),
@@ -513,27 +515,23 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 		Verb: AzCopyVerbSync,
 		Targets: []ResourceManager{
 			srcTarget,
-			AzCopyTarget{
-				ResourceManager: dstTarget,
-				AuthType:        EExplicitCredentialType.SASToken(),
-				Opts: CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericAccountSignatureValues{
-						Permissions: (&blobsas.AccountPermissions{
-							Read:   true,
-							Write:  true,
-							Delete: true,
-							List:   true,
-							Add:    true,
-							Create: true,
-						}).String(),
-						ResourceTypes: (&blobsas.AccountResourceTypes{
-							Service:   true,
-							Container: true,
-							Object:    true,
-						}).String(),
-					},
+			CreateAzCopyTarget(dstTarget, EExplicitCredentialType.SASToken(), a, CreateAzCopyTargetOptions{
+				SASTokenOptions: GenericAccountSignatureValues{
+					Permissions: (&blobsas.AccountPermissions{
+						Read:   true,
+						Write:  true,
+						Delete: true,
+						List:   true,
+						Add:    true,
+						Create: true,
+					}).String(),
+					ResourceTypes: (&blobsas.AccountResourceTypes{
+						Service:   true,
+						Container: true,
+						Object:    true,
+					}).String(),
 				},
-			},
+			}),
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{

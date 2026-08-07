@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
@@ -45,7 +46,7 @@ type ListJobsResponse struct {
 }
 
 func (c Client) ListJobs(opts ListJobsOptions) (result ListJobsResponse, err error) {
-	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
+	status := ternary.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	resp := jobsAdmin.ListJobs(status)
 	if resp.ErrorMessage != "" {

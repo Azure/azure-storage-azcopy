@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2024 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,56 +18,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package cred
 
-// TODO : Remove this?
-// GetBlocksRoundedUp returns the number of blocks given size, rounded up
-func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
-	return uint16(size/blockSize) + uint16(Iff((size%blockSize) == 0, 0, 1))
+import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+)
+
+type CredentialInfo struct {
+	CredentialType    enum.CredentialType
+	TokenCredential   azcore.TokenCredential
+	S3CredentialInfo  S3CredentialInfo
+	GCPCredentialInfo GCPCredentialInfo
 }
 
-func FirstOrZero[T any](list []T) T {
-	if len(list) != 0 {
-		return list[0]
-	}
-
-	var zero T
-	return zero
-}
-
-func DerefOrZero[T any](in *T) (out T) {
-	if in != nil {
-		out = *in
-	}
-
-	return
-}
-
-func Iff[T any](test bool, trueVal, falseVal T) T {
-	if test {
-		return trueVal
-	}
-	return falseVal
-}
-
-func IffNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-	return *wanted
-}
-
-func IffNotNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-
-	return *wanted
-}
-
-func IffNotEmpty(wanted string) *string {
-	if wanted == "" {
-		return nil
-	}
-	return &wanted
+func (c CredentialInfo) WithType(credentialType enum.CredentialType) CredentialInfo {
+	// c is a clone, so this is OK
+	c.CredentialType = credentialType
+	return c
 }

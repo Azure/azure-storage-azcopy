@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"os"
 	"time"
 )
@@ -59,7 +60,7 @@ func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentit
 				},
 			},
 			Environment: &AzCopyEnvironment{
-				AutoLoginMode: pointerTo(common.EAutoLoginType.Workload().String()),
+				AutoLoginMode: pointerTo(enum.EAutoLoginType.Workload().String()),
 			},
 		})
 

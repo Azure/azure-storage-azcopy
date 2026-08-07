@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -36,18 +37,24 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	var srcCredInfo common.CredentialInfo
-
-	if srcCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source, true, cca.CpkOptions); err != nil {
+	targetCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: cca.DstCredName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
 		return nil, err
 	}
-	if cca.FromTo == common.EFromTo.FileNone() && (srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && cca.Source.SAS == "") {
+	if cca.FromTo == common.EFromTo.FileNone() && (targetCredInfo.CredentialType == enum.ECredentialType.Anonymous() && cca.Source.SAS == "") {
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the input for set-properties on File Storage")
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
-		Credential: &cca.credentialInfo,
+		Credential: &targetCredInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -88,13 +95,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, targetCredInfo.TokenCredential)
 	var fileClientOptions any
 	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
@@ -103,8 +104,8 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		targetCredInfo.CredentialType,
+		targetCredInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)

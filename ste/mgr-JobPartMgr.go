@@ -20,6 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -103,18 +104,19 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	}
 }
 
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred *common.ScopedToken, dstCred *common.ScopedAuthenticator) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
-	if dstCred != nil {
-		perCallPolicies = append(perRetryPolicies, NewDestReauthPolicy(dstCred))
-	}
-	if srcCred != nil {
-		perRetryPolicies = append(perRetryPolicies, NewSourceAuthPolicy(srcCred))
-	}
+	// discard the OK, we just want to nil these out if they are not scopedauthenticators
+	targetAuth, _ := targetCred.(cred.ScopedAuthenticator)
+	srcAuth, _ := srcCred.(cred.ScopedAuthenticator)
+
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(),
+		NewTokenReauthPolicy(targetAuth, NewTokenReauthPolicyOptions{srcAuth}), // these will resolve to nil
+		NewSourceAuthPolicy(srcCred)}
+
 	retry.ShouldRetry = GetShouldRetry(&log)
 
 	return azcore.ClientOptions{
@@ -162,7 +164,6 @@ type jobPartMgr struct {
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
 
-	credInfo   common.CredentialInfo
 	srcIsOAuth bool // true if source is authenticated via oauth
 	credOption *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
@@ -455,13 +456,6 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 }
 
 func (jpm *jobPartMgr) clientInfo() {
-	jobState := jpm.jobMgr.getInMemoryTransitJobState()
-
-	// Destination credential
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		jpm.credInfo = jobState.CredentialInfo
-	}
-
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
 		LogError: func(str string) { jpm.Log(common.LogError, str) },
