@@ -410,10 +410,10 @@ func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
 const mergeJoinDefaultParallelTraversers int32 = 32
 
 // mergeJoinParallelTraversers is the directory-crawl parallelism for streaming merge-join jobs.
-// Override with SYNC_MJ_PARALLEL_TRAVERSERS (positive integer). The indexMap sync path is
-// unaffected and keeps its own parallelism (orchestratorOptions.parallelTraversers).
+// Override with MOVER_SYNC_MJ_TRAV as a positive integer. The indexMap sync path is unaffected and
+// keeps its own parallelism (orchestratorOptions.parallelTraversers).
 var mergeJoinParallelTraversers = func() int32 {
-	if v := strings.TrimSpace(os.Getenv("SYNC_MJ_PARALLEL_TRAVERSERS")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("MOVER_SYNC_MJ_TRAV")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return int32(n)
 		}
@@ -425,7 +425,8 @@ var mergeJoinParallelTraversers = func() int32 {
 // this transfer. Enablement is decided entirely in the mover and passed to azcopy as the single
 // per-job flag cca.useStreamingMergeJoin, which the mover sets when EITHER:
 //   - the job's subscription is allowlisted for the feature via featureConfig, OR
-//   - the USE_STREAMING_MERGE_JOIN env var is set (blanket / testing).
+//   - the MOVER_SYNC_MJ env var is set (legacy aliases: MOVER_SYNC_STREAMING_MERGE_JOIN,
+//     USE_STREAMING_MERGE_JOIN) (blanket / testing).
 //
 // azcopy no longer reads any enablement env var itself. When the flag is set, the merge-join is
 // still restricted to the source/destination pairs whose listing order is proven lexicographically

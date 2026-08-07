@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -116,9 +117,32 @@ type rawSyncCmdArgs struct {
 	blockBlobTier string
 	// useStreamingMergeJoin opts this job into the channel-based streaming merge-join sync path
 	// (for eligible remote source/dest pairs). Set per-job by the mover when the job's subscription
-	// is allowlisted for the feature OR the USE_STREAMING_MERGE_JOIN env var is set (the mover
+	// is allowlisted for the feature OR the MOVER_SYNC_MJ env var is set (legacy aliases:
+	// MOVER_SYNC_STREAMING_MERGE_JOIN, USE_STREAMING_MERGE_JOIN) (the mover
 	// combines both into this single flag; azcopy does not read any enablement env var itself).
 	useStreamingMergeJoin bool
+}
+
+func parseTruthyBoolEnvValue(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "true", "1", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func getSyncMergeJoinOverride() (set bool, enabled bool) {
+	if v, ok := os.LookupEnv("MOVER_SYNC_MJ"); ok {
+		return true, parseTruthyBoolEnvValue(v)
+	}
+	if v, ok := os.LookupEnv("MOVER_SYNC_STREAMING_MERGE_JOIN"); ok {
+		return true, parseTruthyBoolEnvValue(v)
+	}
+	if v, ok := os.LookupEnv("USE_STREAMING_MERGE_JOIN"); ok {
+		return true, parseTruthyBoolEnvValue(v)
+	}
+	return false, false
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -759,7 +783,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			throughputString = ", " + jobsAdmin.FormatThroughput(throughput)
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
@@ -819,12 +843,12 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		// indicate whether constrained by disk or not
 		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
 			summary.PercentComplete,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
+			summary.TotalTransfers, perfString, jobsAdmin.FormatThroughput(throughput), diskString)
 	})
 
 	if jobDone {
@@ -1071,6 +1095,24 @@ func init() {
 
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
 				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
+
+			// Streaming merge-join enablement for the standalone CLI (perf branch): in mover builds the
+			// high-throughput streaming merge-join sync path is enabled BY DEFAULT so a customer running
+			// this azcopy directly gets it without extra flags. Actual use is still restricted by
+			// useStreamingMergeJoin() (only S3->Blob and Azure->Azure) and the orchestrator (which
+			// requires --recursive=false), so ineligible jobs transparently fall back to the classic sync
+			// path. MOVER_SYNC_MJ (legacy aliases: MOVER_SYNC_STREAMING_MERGE_JOIN,
+			// USE_STREAMING_MERGE_JOIN)
+			// is an explicit override / kill switch: set it to false/0/off to force the
+			// classic path, or true to force-enable in a non-mover build.
+			// (The mover's programmatic RawMoverSyncCmdArgs path sets this flag itself and does not reach
+			// this CLI code, so it is unaffected.)
+			if buildmode.IsMover {
+				raw.useStreamingMergeJoin = true
+			}
+			if set, enabled := getSyncMergeJoinOverride(); set {
+				raw.useStreamingMergeJoin = enabled
+			}
 
 			cooked, err := raw.cook()
 			if err != nil {
