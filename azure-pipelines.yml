@@ -199,19 +199,96 @@ jobs:
         displayName: 'Acquire the Distributed Mutex'
 
       - ${{ each directory in split(variables.nonFederatedUnitTestDirectories, ', ') }}:
-        - template: azurePipelineTemplates/run-ut.yml
-          parameters:
-            directory: ${{ directory }}
-            coverage_name: ${{ replace(directory, '/', '.') }} # Replace all forward slashes with periods, to avoid creating directories.
-            isMutexSet: variables['isMutexSet']
+        # We use the directory to generate report names that are inserted into filepaths in multiple tasks below,
+        # so we replace all forward slashes in `directory` with periods, to avoid creating directories when inserting it into the paths.
+        # It's a bit of a hack, but we use `each` to perform this replacement only once and store the result in a variable all tasks can reference;
+        # that requires putting the variable in an array, which is why we then use `split` with a delimiter we know won't split the string.
+        - ${{ each coverage_name in split(replace(directory, '/', '.'), '/') }}:
+          - task: ShellScript@2
+            inputs:
+              scriptPath: './azurePipelineTemplates/run_ut.sh'
+              disableAutoCwd: true
+              cwd: '$(System.DefaultWorkingDirectory)'
+            env:
+              directory: ${{ directory }}
+              testReportName: '${{ coverage_name }}_report'
+              coverageReportName: '${{ coverage_name }}_coverage'
+              ACCOUNT_NAME: $(ACCOUNT_NAME)
+              ACCOUNT_KEY: $(ACCOUNT_KEY)
+              AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+              AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+              GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+              # All env variables above this comment should be the same for federated and non-federated unit tests.
+              AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+              AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+              AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+            displayName: 'Run ${{ directory }} Tests'
+            # Don't let a test failure for a different directory prevent this directory from being tested,
+            # but don't run if job is canceled or mutex wasn't acquired
+            condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+            
+          - task: PublishTestResults@2
+            inputs:
+              testRunner: JUnit
+              testResultsFiles: '$(System.DefaultWorkingDirectory)/**/${{ coverage_name }}_report.xml'
+              testRunTitle: '${{ directory }} Tests'
+            # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+            condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+
+          - task: PublishCodeCoverageResults@2
+            inputs:
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/${{ coverage_name }}_coverage.xml'
+            # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test coverage data to report)
+            condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
       - ${{ each directory in split(variables.federatedUnitTestDirectories, ', ') }}:
-        - template: azurePipelineTemplates/run-ut.yml
-          parameters:
-            directory: ${{ directory }}
-            coverage_name: ${{ replace(directory, '/', '.') }} # Replace all forward slashes with periods, to avoid creating directories.
-            with_federated_credential: true
-            isMutexSet: variables['isMutexSet']
+        # We use the directory to generate report names that are inserted into filepaths in multiple tasks below,
+        # so we replace all forward slashes in `directory` with periods, to avoid creating directories when inserting it into the paths.
+        # It's a bit of a hack, but we use `each` to perform this replacement only once and store the result in a variable all tasks can reference;
+        # that requires putting the variable in an array, which is why we then use `split` with a delimiter we know won't split the string.
+        - ${{ each coverage_name in split(replace(directory, '/', '.'), '/') }}:
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: azcopytestworkloadidentity
+              addSpnToEnvironment: true
+              scriptType: bash
+              scriptLocation: 'scriptPath'
+              scriptPath: './azurePipelineTemplates/run_ut.sh'
+            env:
+              directory: ${{ directory }}
+              testReportName: '${{ coverage_name }}_report'
+              coverageReportName: '${{ coverage_name }}_coverage'
+              ACCOUNT_NAME: $(ACCOUNT_NAME)
+              ACCOUNT_KEY: $(ACCOUNT_KEY)
+              AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+              AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+              GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+              # All env variables above this comment should be the same for federated and non-federated unit tests.
+              NEW_E2E_ENVIRONMENT: "AzurePipeline"
+            displayName: 'Run ${{ directory }} Tests with Workload Identity'
+            # Don't let a test failure for a different directory prevent this directory from being tested,
+            # but don't run if job is canceled or mutex wasn't acquired
+            condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+            
+          - task: PublishTestResults@2
+            inputs:
+              testRunner: JUnit
+              testResultsFiles: '$(System.DefaultWorkingDirectory)/**/${{ coverage_name }}_report.xml'
+              testRunTitle: '${{ directory }} Tests'
+            # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+            condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+
+          - task: PublishCodeCoverageResults@2
+            inputs:
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/${{ coverage_name }}_coverage.xml'
+            # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test coverage data to report)
+            condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
@@ -337,4 +414,3 @@ jobs:
           GOARCH: $(GOARCH)
           CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
-          
