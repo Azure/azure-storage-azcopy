@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() *TransferInfo
+	SAS() (sourceSAS, destinationSAS string)
 	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
@@ -212,6 +214,18 @@ type jobPartTransferMgr struct {
 
 	// used defensively to protect against accidental double counting
 	atomicCompletionIndicator uint32
+
+	// prevents concurrent failing chunks from emitting duplicate structured failures
+	atomicDedupeFailureLogged uint32
+
+	// pairs small-file result events with an emitted start for this transfer
+	atomicSmallFileProgressStarted uint32
+
+	dedupeFailureMu        sync.Mutex
+	dedupeFailureOperation string
+	dedupeFailureReason    string
+	dedupeFailureStatus    int
+	dedupeFailureRequestID string
 
 	// used to show whether we have started doing things that may affect the destination
 	atomicDestModifiedIndicator uint32
@@ -448,6 +462,10 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		VersionID:         versionID,
 		SnapshotID:        snapshotID,
 	}
+}
+
+func (jptm *jobPartTransferMgr) SAS() (sourceSAS, destinationSAS string) {
+	return jptm.jobPartMgr.SAS()
 }
 
 func (jptm *jobPartTransferMgr) Context() context.Context {
@@ -870,6 +888,25 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 
 		requestID := ErrorEx{err}.MSRequestID()
 		fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, descriptionOfWhereErrorOccurred, requestID) // trailing \n to separate it better from any later, unrelated, log lines
+		partNumber := jptm.jobPartMgr.Plan().PartNum
+		jptm.recordDedupeFailureDetails(
+			descriptionOfWhereErrorOccurred,
+			status,
+			requestID,
+			msg,
+		)
+		if atomic.CompareAndSwapUint32(&jptm.atomicDedupeFailureLogged, 0, 1) {
+			emitDedupeTransferFailure(
+				jptm,
+				"transfer_failed",
+				descriptionOfWhereErrorOccurred,
+				status,
+				requestID,
+				msg,
+				partNumber,
+				jptm.transferIndex,
+			)
+		}
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
@@ -949,7 +986,48 @@ func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, so
 	info := jptm.Info() // TODO we are getting a lot of Info calls and its (presumably) not well-optimized.  Profile that?
 	msg := fmt.Sprintf("%v: %v", errorCode, info.entityTypeLogIndicator()) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSecretQueryParamForLogging()
+	jptm.recordDedupeFailureDetailsIfEmpty(string(errorCode), status, "", errorMsg)
 	jptm.Log(common.LogError, msg)
+}
+
+func (jptm *jobPartTransferMgr) recordDedupeFailureDetails(
+	operation string,
+	status int,
+	requestID string,
+	reason string,
+) {
+	jptm.dedupeFailureMu.Lock()
+	defer jptm.dedupeFailureMu.Unlock()
+	jptm.dedupeFailureOperation = operation
+	jptm.dedupeFailureStatus = status
+	jptm.dedupeFailureRequestID = requestID
+	jptm.dedupeFailureReason = reason
+}
+
+func (jptm *jobPartTransferMgr) dedupeFailureDetails() (string, int, string, string) {
+	jptm.dedupeFailureMu.Lock()
+	defer jptm.dedupeFailureMu.Unlock()
+	return jptm.dedupeFailureOperation,
+		jptm.dedupeFailureStatus,
+		jptm.dedupeFailureRequestID,
+		jptm.dedupeFailureReason
+}
+
+func (jptm *jobPartTransferMgr) recordDedupeFailureDetailsIfEmpty(
+	operation string,
+	status int,
+	requestID string,
+	reason string,
+) {
+	jptm.dedupeFailureMu.Lock()
+	defer jptm.dedupeFailureMu.Unlock()
+	if jptm.dedupeFailureReason != "" {
+		return
+	}
+	jptm.dedupeFailureOperation = operation
+	jptm.dedupeFailureStatus = status
+	jptm.dedupeFailureRequestID = requestID
+	jptm.dedupeFailureReason = reason
 }
 
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
@@ -1019,17 +1097,42 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
+	transferStatus := jptm.jobPartPlanTransfer.TransferStatus()
+	emitSmallFileTransferResult(jptm, transferStatus)
+	switch transferStatus {
+	case common.ETransferStatus.Failed(),
+		common.ETransferStatus.BlobTierFailure(),
+		common.ETransferStatus.TierAvailabilityCheckFailure():
+		operation, status, requestID, reason := jptm.dedupeFailureDetails()
+		if operation == "" {
+			operation = "transfer_completion"
+		}
+		if reason == "" {
+			reason = "transfer completed with status " + transferStatus.String()
+		}
+		emitDedupeTransferFailure(
+			jptm,
+			"file_failed",
+			operation,
+			status,
+			requestID,
+			reason,
+			jptm.jobPartMgr.Plan().PartNum,
+			jptm.transferIndex,
+		)
+	}
+
 	// Update Status Manager
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
-		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
+		TransferStatus:     transferStatus,
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
 		ErrorMessage:       jptm.ErrorMessage(),
 	})
 
-	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
+	return jptm.jobPartMgr.ReportTransferDone(transferStatus)
 }
 
 func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {

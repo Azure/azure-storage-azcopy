@@ -25,7 +25,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,7 +32,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 
@@ -64,6 +65,23 @@ type blockBlobSenderBase struct {
 	muBlockIDs             *sync.Mutex
 	blockNamePrefix        string
 	completedBlockList     map[int]string
+
+	// Block-level dedupe prototype (AZCOPY_DEDUPE_ACT). These are only populated for an eligible
+	// block-blob -> block-blob S2S copy; they stay at their zero values (dedupeMode == dedupeActOff)
+	// for every other transfer, so the default code path is unaffected.
+	dedupeMode dedupeActMode
+	dedupePlan *SourceGridPlan
+	dedupeETag azcore.ETag
+
+	dedupeResolveMu          sync.Mutex
+	dedupeResolveInProgress  bool
+	dedupeResolveDone        chan struct{}
+	dedupeResolveAttempted   bool
+	dedupeResolvedGeneration uint64
+	dedupeSourceHashState    dedupeSourceHashResolutionState
+	dedupeResolveErr         error
+	dedupeResolveStats       dedupeHashResolutionStats
+	dedupeHasher             dedupeRangeHasher
 }
 
 func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -215,6 +233,15 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
+// dedupeChunkSpecs implements sourceGridChunker. It returns the source-grid chunk boundaries when the
+// dedupe prototype is active for this transfer, and nil otherwise (so the uniform chunk grid is used).
+func (s *blockBlobSenderBase) dedupeChunkSpecs() []chunkSpec {
+	if s.dedupeMode == dedupeActOff {
+		return nil
+	}
+	return chunkSpecsFromPlan(s.dedupePlan)
+}
+
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	properties, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
 	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
@@ -249,6 +276,13 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// commit block list if necessary
 	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
+		if s.dedupeMode != dedupeActOff && s.dedupeETag != "" {
+			if err := validateDedupeSourceETag(jptm, s.dedupeETag); err != nil {
+				jptm.FailActiveSend("Validating dedupe source ETag before commit", err)
+				return
+			}
+		}
+
 		// commit the blocks.
 		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient.BlobClient(), s.jptm.Context(), false) {
 			s.destBlobTier = nil
@@ -266,7 +300,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = nil
 		}
 
-		_, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
+		resp, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
 			&blockblob.CommitBlockListOptions{
 				HTTPHeaders:  &s.headersToApply,
 				Metadata:     s.metadataToApply,
@@ -331,6 +365,43 @@ func (s *blockBlobSenderBase) Epilogue() {
 			}
 
 			return
+		}
+
+		// Block-level dedupe prototype (AZCOPY_DEDUPE_ACT): record this freshly-committed blob's hashed
+		// blocks into the job's committed table so that later identical blocks can be served from it.
+		// This only populates an in-memory lookup table and does not touch the bytes just written.
+		if s.dedupeMode != dedupeActOff && s.dedupePlan != nil {
+			recorded := 0
+			var etag azcore.ETag
+			if resp.ETag != nil {
+				etag = *resp.ETag
+			}
+			if etag == "" {
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning,
+					"dedupe-act: committed destination response had no ETag; this blob will not be used as a dedupe target")
+			} else {
+				_, destinationSAS := jptm.SAS()
+				recorded = recordCommittedBlocksWithObserver(jptm.Info().JobID, s.destBlockBlobClient.URL(), destinationSAS, etag, s.dedupePlan, func(event dedupeTableRecordEvent) {
+					jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
+						"dedupe-table(committed): record=%d inserted=%t entries=%d buckets=%d bucketEntries=%d refCount=%d "+
+							"crc64=%016x hasSha256=%t target=%s offset=%d size=%d etag=%q",
+						event.RecordIndex, event.Inserted, event.TableStats.Entries, event.TableStats.Buckets,
+						event.TableStats.BucketEntries, event.Stored.RefCount, event.Block.CRC64, event.Block.HasSHA256,
+						sanitizedDestForDedupe(event.Stored.TargetURI), event.Stored.TargetOffset, event.Stored.TargetLength, event.Stored.ETag))
+				})
+				jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+					"dedupe-act(%s): recorded %d committed block(s) for %q into the job dedupe table",
+					s.dedupeMode, recorded, jptm.Info().DstFilePath))
+			}
+			st := dedupeStateForJob(jptm.Info().JobID)
+			st.addFileCommitted()
+			emitDedupeProgress(jptm, dedupeProgressMessage(
+				"file_committed",
+				s.dedupeMode,
+				jptm.Info(),
+				fmt.Sprintf("fileBytes=%d committedIndexBlocks=%d", s.dedupePlan.TotalSize, recorded),
+				st.progressSnapshot()))
+			logDedupeActSummary(jptm, s.dedupeMode)
 		}
 
 		if setTags {

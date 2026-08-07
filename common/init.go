@@ -8,6 +8,7 @@ import (
 
 var AzcopyJobPlanFolder string
 var LogPathFolder string
+var AzcopyLogFolder string
 
 func InitializeFolders() {
 	LogPathFolder = GetEnvironmentVariable(EEnvironmentVariable.LogLocation())           // user specified location for log files
@@ -24,6 +25,7 @@ func InitializeFolders() {
 	if err := os.MkdirAll(LogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_LOG_LOCATION env variable. %v", err)
 	}
+	AzcopyLogFolder = LogPathFolder
 
 	// the user can optionally put the plan files somewhere else
 	if AzcopyJobPlanFolder == "" {

@@ -2,7 +2,7 @@ module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go/storage v1.45.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3-0.20260731063207-dbae4229a0d2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
@@ -119,3 +119,5 @@ require (
 replace github.com/Azure/azure-sdk-for-go/sdk/storage/azfile => github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647
 
 go 1.24.4
+
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob => github.com/ProgramPedro/azure-sdk-for-go/sdk/storage/azblob v1.6.3-0.20260731063207-dbae4229a0d2

@@ -49,6 +49,10 @@ func (t *testJobPartTransferManager) Info() *TransferInfo {
 	return t.info
 }
 
+func (t *testJobPartTransferManager) SAS() (sourceSAS, destinationSAS string) {
+	return t.jobPartMgr.SAS()
+}
+
 func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 	options := t.S2SSourceClientOptions()
 	var azureFileSpecificOptions any
