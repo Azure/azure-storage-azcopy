@@ -515,27 +515,23 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 		Verb: AzCopyVerbSync,
 		Targets: []ResourceManager{
 			srcTarget,
-			&azcopyTargetImpl{
-				ResourceManager: dstTarget,
-				authType:        EExplicitCredentialType.SASToken(),
-				opts: CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericAccountSignatureValues{
-						Permissions: (&blobsas.AccountPermissions{
-							Read:   true,
-							Write:  true,
-							Delete: true,
-							List:   true,
-							Add:    true,
-							Create: true,
-						}).String(),
-						ResourceTypes: (&blobsas.AccountResourceTypes{
-							Service:   true,
-							Container: true,
-							Object:    true,
-						}).String(),
-					},
+			CreateAzCopyTarget(dstTarget, EExplicitCredentialType.SASToken(), a, CreateAzCopyTargetOptions{
+				SASTokenOptions: GenericAccountSignatureValues{
+					Permissions: (&blobsas.AccountPermissions{
+						Read:   true,
+						Write:  true,
+						Delete: true,
+						List:   true,
+						Add:    true,
+						Create: true,
+					}).String(),
+					ResourceTypes: (&blobsas.AccountResourceTypes{
+						Service:   true,
+						Container: true,
+						Object:    true,
+					}).String(),
 				},
-			},
+			}),
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{

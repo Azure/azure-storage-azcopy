@@ -1,3 +1,4 @@
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -1645,7 +1646,8 @@ func init() {
 			"\n Separate regular expressions with ';'.")
 
 	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "",
-		"Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
+		"Exclude all the relative path of the files that align with regular expressions. "+
+			"Separate regular expressions with ';'.")
 
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "",
 		"Exclude these files when copying. This option supports wildcard characters (*). "+
@@ -1716,6 +1718,12 @@ func init() {
 
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "",
 		"Set the cache-control header. Returned on download.")
+    
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
+		"Specify this flag if you want to preserve properties during the transfer operation."+
+			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag"+
+			"for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB"+
+			"share and for Linux when copying to Azure Files NFS share. ")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false,
 		"False by default. "+
@@ -1911,6 +1919,8 @@ func init() {
 		cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 
 		if !displayDeveloperOptions {
+	        _ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+        
 			// Hide the old SMB-specific flags
 			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")

@@ -816,7 +816,7 @@ func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
-				&azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				CreateAzCopyTarget(srcObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
 			},
 			ShouldFail: true,
 		})

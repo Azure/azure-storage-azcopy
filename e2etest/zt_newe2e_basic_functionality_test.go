@@ -337,8 +337,8 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-				azcopyTargetImpl{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				CreateAzCopyTarget(srcObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
+				CreateAzCopyTarget(dstObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -369,8 +369,8 @@ func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *Scenario
 		AzCopyCommand{
 			Verb: AzCopyVerbSync,
 			Targets: []ResourceManager{
-				&azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-				&azcopyTargetImpl{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				CreateAzCopyTarget(srcObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
+				CreateAzCopyTarget(dstObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -400,8 +400,8 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				&azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-				&azcopyTargetImpl{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				CreateAzCopyTarget(srcObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
+				CreateAzCopyTarget(dstObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -504,7 +504,7 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
 				srcObj,
-				&azcopyTargetImpl{dstCt, EExplicitCredentialType.SASToken(), CreateAzCopyTargetOptions{
+				CreateAzCopyTarget(dstCt, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
 						ContainerName: dstCt.ContainerName(),
 						Permissions: PtrOf(blobsas.ContainerPermissions{
@@ -515,7 +515,7 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 							Tag:    false,
 						}).String(),
 					},
-				}},
+				}),
 			},
 			Flags: CopyFlags{
 				BlobTags: common.Metadata{
