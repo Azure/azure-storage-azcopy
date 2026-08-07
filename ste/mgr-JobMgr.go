@@ -24,9 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -101,26 +99,13 @@ type ChannelSizeConfig struct {
 	CloseTransferChannelSize int
 }
 
-// steEnvInt reads a positive integer from an env var, falling back to def. Used to make STE
-// channel depths tunable at runtime. Notably, shrinking PartsChannelSize bounds how far
-// enumeration can lead transfer (in-flight transfers ~= PartsChannelSize * numOfTransfersPerPart),
-// capping the live working set and heap growth without disabling backpressure entirely.
-func steEnvInt(name string, def int) int {
-	if v := os.Getenv(name); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return def
-}
-
 // GetChannelSizeConfig returns channel size configuration based on build mode
 func GetChannelSizeConfig() ChannelSizeConfig {
-	if buildmode.IsMover {
+	if buildmode.IsMover && buildmode.HighPerf() {
 		return ChannelSizeConfig{
-			PartsChannelSize:         steEnvInt("AZCOPY_STE_PARTS_CH", 5000),
-			TransferChannelSize:      steEnvInt("AZCOPY_STE_XFER_CH", 200000),
-			ChunkChannelSize:         steEnvInt("AZCOPY_STE_CHUNK_CH", 200000),
+			PartsChannelSize:         1000,
+			TransferChannelSize:      buildmode.TransferChannelSize(),
+			ChunkChannelSize:         buildmode.ChunkChannelSize(),
 			PartCreatedChannelSize:   100,
 			XferDoneChannelSize:      1000,
 			CloseTransferChannelSize: 100,

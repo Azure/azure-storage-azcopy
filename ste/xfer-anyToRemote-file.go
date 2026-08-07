@@ -630,7 +630,7 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 // pre-transfer and post-transfer GetFreshFileLastModifiedTime checks are skipped, so no extra
 // GetProperties calls are made against the source.
 func useSourceChangeAccessCondition(jptm IJobPartTransferMgr) bool {
-	return buildmode.IsMover &&
+	return buildmode.HighPerf() &&
 		jptm.Info().S2SSourceChangeValidation &&
 		jptm.FromTo() == common.EFromTo.BlobBlob()
 }
@@ -644,7 +644,7 @@ func useSourceChangeAccessCondition(jptm IJobPartTransferMgr) bool {
 // transactions (one per blob), so skipping it reduces service request load and removes a synchronous
 // round-trip from every transfer's critical path.
 func skipDestLengthValidation(jptm IJobPartTransferMgr) bool {
-	return buildmode.IsMover &&
+	return buildmode.HighPerf() &&
 		jptm.FromTo() == common.EFromTo.BlobBlob()
 }
 

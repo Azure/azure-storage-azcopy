@@ -613,7 +613,8 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	// Log (once per job) whether the streaming merge-join is used. Enablement is decided in the
-	// mover (subscription allowlist via featureConfig OR the USE_STREAMING_MERGE_JOIN env var) and
+	// mover (subscription allowlist via featureConfig OR the MOVER_SYNC_MJ env var,
+	// legacy aliases MOVER_SYNC_STREAMING_MERGE_JOIN / USE_STREAMING_MERGE_JOIN) and
 	// passed to azcopy as the single cca.useStreamingMergeJoin flag. This makes it easy to confirm
 	// the gating in production logs.
 	if useStreamingMergeJoin(cca) {
@@ -621,13 +622,14 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.fromTo.From(), cca.fromTo.To()), true)
 
 		// The streaming merge-join uses its own directory-crawl parallelism
-		// (SYNC_MJ_PARALLEL_TRAVERSERS, default 32) — separate from the indexMap path, which keeps
+		// (MOVER_SYNC_MJ_TRAV, default 32)
+		// — separate from the indexMap path, which keeps
 		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
 		// source and destination concurrently within each directory.
 		if orchestratorOptions != nil {
 			orchestratorOptions.parallelTraversers = mergeJoinParallelTraversers
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (SYNC_MJ_PARALLEL_TRAVERSERS)", mergeJoinParallelTraversers), true)
+				"Streaming merge-join directory-crawl parallelism set to %d (MOVER_SYNC_MJ_TRAV)", mergeJoinParallelTraversers), true)
 		}
 	} else if cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
