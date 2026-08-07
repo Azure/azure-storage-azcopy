@@ -916,7 +916,7 @@ func aceTypeToString(aceType BYTE) (string, error) {
 
 // aceToString returns a stringified version of a binary ACE object contained in aceSlice.
 // The layout of the binary ACE object is as per "struct ACCESS_ALLOWED_ACE".
-func aceToString(aceSlice []byte) (string, error) {
+func aceToString(aceSlice []byte, aclRevision byte) (string, error) {
 	// We access 8 bytes in this function, ensure we have at least 8 bytes.
 	if len(aceSlice) < 8 {
 		return "", fmt.Errorf("Short aceSlice: %d bytes", len(aceSlice))
@@ -927,10 +927,10 @@ func aceToString(aceSlice []byte) (string, error) {
 	// ACCESS_ALLOWED_ACE.Header.AceType.
 	aceType := aceSlice[:1][0]
 
-	// This is our gatekeeper for blocking unsupported ace types.
+	// This is our gatekeeper for blocking unsupported ace types. ACL revision should not matter as long as the ACE is in the compatible format.
 	// We open up ACEs as we add support for them.
 	if isUnsupportedAceType(aceType) {
-		return "", fmt.Errorf("Unsupported ACE type: 0x%x", aceType)
+		return "", fmt.Errorf("Unsupported ACE type: 0x%x. ACL revision: %d", aceType, aclRevision)
 	}
 
 	// ACCESS_ALLOWED_ACE.Header.AceFlags.
@@ -1119,17 +1119,8 @@ func getDaclString(sd []byte) (string, error) {
 	// ACL.AclRevision.
 	aclRevision := sd[dacloffset]
 
-	//
-	// Though we support only ACCESS_ALLOWED_ACE_TYPE and ACCESS_DENIED_ACE_TYPE which as per docs should be
-	// present with ACL revision 2, but I've seen some objects with these ACE types but acl revision 4.
-	// Instead of failing here, we let it proceed. Later isUnsupportedAceType() will catch unsupported ACE types.
-	//
-	// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/20233ed8-a6c6-4097-aafa-dd545ed24428
-	//
-	if aclRevision != ACL_REVISION && aclRevision != ACL_REVISION_DS {
-		// More importantly we don't support Object ACEs (ACL_REVISION_DS).
-		return "", fmt.Errorf("Invalid ACL Revision (%d), valid values are 2 and 4.", aclRevision)
-	}
+	// Skip ACL revision check as some SMB servers may return different revision values
+	// (2, 3, 4, 5, etc.). The unsupported ACE types will be caught later by isUnsupportedAceType().
 
 	// ACL.AceCount.
 	numAces := binary.LittleEndian.Uint32(sd[dacloffset+4 : dacloffset+8])
@@ -1153,7 +1144,7 @@ func getDaclString(sd []byte) (string, error) {
 			return "", fmt.Errorf("ACE (offset=%d, ace_size=%d) lies outside Security Descriptor of size %d bytes!", offset, ace_size, len(sd))
 		}
 
-		aceStr, err := aceToString(sd[offset : offset+ace_size])
+		aceStr, err := aceToString(sd[offset:offset+ace_size], aclRevision)
 		if err != nil {
 			return "", err
 		}
@@ -1630,7 +1621,7 @@ func SetSecurityObject(path string, flags SECURITY_INFORMATION, sd []byte) error
 	var xattrKey string
 
 	if len(sd) < int(unsafe.Sizeof(SECURITY_DESCRIPTOR_RELATIVE{})) {
-		panic(fmt.Errorf("SetSecurityObject: sd too small (%d bytes)", len(sd)))
+		return fmt.Errorf("SetSecurityObject: sd too small (%d bytes)", len(sd))
 	}
 
 	// Pick the right xattr key that allows us to pass the needed information to the cifs client.
@@ -1657,16 +1648,16 @@ func SetSecurityObject(path string, flags SECURITY_INFORMATION, sd []byte) error
 
 		// Put in the end to prevent "unreachable code" complaints from vet.
 		// TODO: Add support for "DACL + SACL + Owner + Group".
-		//       Remove this panic only after rest of the code correctly supports SACL.
-		panic(fmt.Errorf("SetSecurityObject: Unsupported flags value 0x%x", flags))
+		//       Return an error until the rest of the code correctly supports SACL.
+		return fmt.Errorf("SetSecurityObject: Unsupported flags value 0x%x", flags)
 
 	} else {
-		panic(fmt.Errorf("SetSecurityObject: Unsupported flags value 0x%x", flags))
+		return fmt.Errorf("SetSecurityObject: Unsupported flags value 0x%x", flags)
 	}
 
 	// Ensure Security Descriptor is valid before writing to the cifs client.
 	if err := sdRelativeIsValid(sd, flags); err != nil {
-		panic(fmt.Errorf("SetSecurityObject: %v", err))
+		return fmt.Errorf("SetSecurityObject: %v", err)
 	}
 
 	err := xattr.Set(path, xattrKey, sd)
@@ -1698,10 +1689,10 @@ func QuerySecurityObject(path string, flags SECURITY_INFORMATION) ([]byte, error
 
 		// Put in the end to prevent "unreachable code" complaints from vet.
 		// TODO: Add support for "DACL + SACL + Owner + Group".
-		//       Remove this panic only after rest of the code correctly supports SACL.
-		panic(fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags))
+		//       Return an error until the rest of the code correctly supports SACL.
+		return nil, fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags)
 	} else {
-		panic(fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags))
+		return nil, fmt.Errorf("QuerySecurityObject: Unsupported flags value 0x%x", flags)
 	}
 
 	sd, err := xattr.Get(path, xattrKey)
@@ -1711,8 +1702,8 @@ func QuerySecurityObject(path string, flags SECURITY_INFORMATION) ([]byte, error
 
 	// Ensure Security Descriptor returned by the cifs client is fine.
 	if err := sdRelativeIsValid(sd, flags); err != nil {
-		// panic because we expect cifs client to return a valid Security Descriptor.
-		panic(fmt.Errorf("QuerySecurityObject: %v", err))
+		// Return an error because we expect cifs client to return a valid Security Descriptor.
+		return nil, fmt.Errorf("QuerySecurityObject: %v", err)
 	}
 
 	return sd, nil

@@ -363,6 +363,8 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	}
 
 	// did fail as readonly, and forcing is enabled
+	LogToJobLogWithPrefix(fmt.Sprintf("Target %s has ReadOnly attribute set. Attempting to clear the ReadOnly attribute before retrying the operation.", targetFileOrDir.URL()), LogInfo)
+
 	if f, ok := targetFileOrDir.(*file.Client); ok {
 		h := file.HTTPHeaders{}
 		_, err = f.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
@@ -385,6 +387,7 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 		err = errors.New("cannot remove read-only attribute from unknown target type")
 	}
 	if err != nil {
+		LogToJobLogWithPrefix(fmt.Sprintf("Failed to clear ReadOnly attribute on %s: %s", targetFileOrDir.URL(), err.Error()), LogError)
 		return err
 	}
 
