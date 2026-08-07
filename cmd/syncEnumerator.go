@@ -323,6 +323,16 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
+	// Perf: for Blob->Blob (incl. BlobFS), the ListBlobs enumeration already returns full source
+	// properties/metadata, so the per-blob backend GetProperties (S2SGetPropertiesInBackend) and the
+	// pre-transfer source-LMT re-fetch (S2SSourceChangeValidation -> GetFreshFileLastModifiedTime) are
+	// redundant round trips. Skip both for Blob->Blob; keep them for S3/Azure Files whose listings do
+	// not return full properties. (DestLengthValidation still guards against size mismatches.)
+	isBlobToBlob := (cca.fromTo.From() == common.ELocation.Blob() || cca.fromTo.From() == common.ELocation.BlobFS()) &&
+		(cca.fromTo.To() == common.ELocation.Blob() || cca.fromTo.To() == common.ELocation.BlobFS())
+	s2sGetPropertiesInBackend := !isBlobToBlob
+	s2sSourceChangeValidation := !isBlobToBlob
+
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,
@@ -349,9 +359,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreservePermissions:            cca.preservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
-		S2SSourceChangeValidation:      true,
+		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		DestLengthValidation:           true,
-		S2SGetPropertiesInBackend:      true,
+		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,

@@ -52,6 +52,11 @@ func ToFixed(num float64, precision int) float64 {
 	return float64(round(num*output)) / output
 }
 
+// FormatThroughput formats throughput in both Mb/s and Gb/s.
+func FormatThroughput(mbps float64) string {
+	return fmt.Sprintf("2-sec Throughput (Mb/s): %v (Gb/s): %v", ToFixed(mbps, 4), ToFixed(mbps/1000, 4))
+}
+
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
@@ -411,9 +416,16 @@ func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryRespo
 	if pipeStats != nil {
 		js.AverageIOPS = pipeStats.OperationsPerSecond()
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
+		js.AverageWireMs = pipeStats.AverageWireMs()
+		js.AverageDNSMs = pipeStats.AverageDNSMs()
+		js.AverageTLSMs = pipeStats.AverageTLSMs()
+		js.ConnNewCount = pipeStats.ConnNewCount()
+		js.ConnReusedCount = pipeStats.ConnReusedCount()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
+	js.AverageChunkQueueMs = jm.AverageChunkQueueWaitMs()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
@@ -567,9 +579,16 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	if pipeStats != nil {
 		js.AverageIOPS = pipeStats.OperationsPerSecond()
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
+		js.AverageWireMs = pipeStats.AverageWireMs()
+		js.AverageDNSMs = pipeStats.AverageDNSMs()
+		js.AverageTLSMs = pipeStats.AverageTLSMs()
+		js.ConnNewCount = pipeStats.ConnNewCount()
+		js.ConnReusedCount = pipeStats.ConnReusedCount()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
+	js.AverageChunkQueueMs = jm.AverageChunkQueueWaitMs()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
