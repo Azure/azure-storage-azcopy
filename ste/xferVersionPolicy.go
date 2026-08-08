@@ -26,16 +26,20 @@ import (
 	"net/http"
 )
 
+var (
+	// ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
+	ServiceAPIVersionOverride = serviceAPIVersionOverride{}
+	// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
+	DefaultServiceApiVersion = common.GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
+)
+
+const (
+	XMsVersion = "x-ms-version"
+)
+
 type serviceAPIVersionOverride struct{}
 
-// ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
-var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
-
-// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-var DefaultServiceApiVersion = common.GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
-
-type versionPolicy struct {
-}
+type versionPolicy struct{}
 
 func NewVersionPolicy() policy.Policy {
 	return &versionPolicy{}
@@ -44,7 +48,7 @@ func NewVersionPolicy() policy.Policy {
 func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
-		req.Raw().Header["x-ms-version"] = []string{value.(string)}
+		req.Raw().Header[XMsVersion] = []string{value.(string)}
 	}
 	return req.Next()
 }

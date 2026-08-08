@@ -133,7 +133,7 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	p := processor
 	processor = func(storedObject StoredObject) error {
-		t.incrementEnumerationCounter(storedObject.entityType)
+		t.incrementEnumerationCounter(storedObject.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 
 		return p(storedObject)
 	}

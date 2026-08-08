@@ -1,8 +1,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -36,7 +37,9 @@ func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariationManager) {
@@ -68,7 +71,9 @@ func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariat
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager) {
@@ -99,7 +104,9 @@ func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobFSTestSuite) Scenario_DownloadFile(svm *ScenarioVariationManager) {
@@ -128,7 +135,9 @@ func (s *BlobFSTestSuite) Scenario_DownloadFile(svm *ScenarioVariationManager) {
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobFSTestSuite) Scenario_Download100Files(svm *ScenarioVariationManager) {
@@ -159,7 +168,9 @@ func (s *BlobFSTestSuite) Scenario_Download100Files(svm *ScenarioVariationManage
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobFSTestSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationManager) {
@@ -246,5 +257,7 @@ func (s *BlobFSTestSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariati
 
 	ValidateResource(svm, dstRes, ResourceDefinitionContainer{
 		Objects: resourceMapping,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }

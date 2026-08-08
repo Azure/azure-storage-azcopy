@@ -106,26 +106,31 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			switch entityType {
 			case common.EEntityType.File(), common.EEntityType.Hardlink():
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 			case common.EEntityType.Symlink():
-				if common.IsNFSCopy() {
+				if symlinkOption == common.ESymlinkHandlingType.Skip() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			case common.EEntityType.Hardlink():
+				if hardlinkHandling == common.SkipHardlinkHandlingType {
+					atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
+				}
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			case common.EEntityType.Other():
-				if common.IsNFSCopy() {
+				if cca.fromTo.IsNFS() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 				}
 			default:
 			}
 		},
-		IncrementEnumerationFailure: func(entityType common.EntityType) {
+		IncrementEnumerationFailure: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.Folder() {
 				cca.IncrementSourceFolderEnumerationFailed()
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
@@ -146,11 +151,20 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 		SymlinkHandling:         cca.symlinkHandling,
-		IncrementNotTransferred: func(entityType common.EntityType) {
+		FromTo:                  cca.fromTo,
+		IncrementNotTransferred: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 
 			switch entityType {
-			case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
+			case common.EEntityType.File():
 				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			case common.EEntityType.Hardlink():
+				if hardlinkHandling != common.SkipHardlinkHandlingType {
+					atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+				}
+			case common.EEntityType.Symlink():
+				if symlinkOption != common.ESymlinkHandlingType.Skip() {
+					atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+				}
 			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
 			case common.EEntityType.Other():
@@ -181,7 +195,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverserOptions := InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 			} else if entityType == common.EEntityType.Folder() {
@@ -202,6 +216,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
 		SymlinkHandling:         cca.symlinkHandling,
+		FromTo:                  cca.fromTo,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
@@ -347,7 +362,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
+	if cca.fromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
@@ -366,10 +381,10 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
+	if cca.fromTo.To().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To().IsFile()),
 		}
 	}
 
@@ -526,6 +541,8 @@ func GetSyncEnumeratorWithDestComparator(
 		cca.mirrorMode,
 		cca.deleteDestination,
 		srcTraverserTemplate.options.IncrementNotTransferred,
+		cca.symlinkHandling,
+		cca.hardlinks,
 		enumeratorOptions.SyncOrchOptions).processIfNecessary
 	finalize := func() error {
 		// schedule every local file that doesn't exist at the destination
@@ -545,7 +562,17 @@ func GetSyncEnumeratorWithDestComparator(
 		return nil
 	}
 
-	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
+	return newSyncEnumerator(
+		sourceTraverser,
+		destinationTraverser,
+		indexer,
+		filters,
+		comparator,
+		finalize,
+		srcTraverserTemplate,
+		dstTraverserTemplate,
+		transferScheduler,
+		enumeratorOptions.SyncOrchOptions), nil
 }
 
 func GetSyncEnumeratorWithSrcComparator(
@@ -563,7 +590,15 @@ func GetSyncEnumeratorWithSrcComparator(
 	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 	// in all other cases (download and S2S), the destination is scanned/indexed first
 	// then the source is scanned and filtered based on what the destination contains
-	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode, srcTraverserTemplate.options.IncrementNotTransferred).processIfNecessary
+	comparator := newSyncSourceComparator(
+		indexer,
+		transferScheduler.scheduleCopyTransfer,
+		cca.compareHash,
+		cca.preserveInfo,
+		cca.mirrorMode,
+		srcTraverserTemplate.options.IncrementNotTransferred,
+		cca.symlinkHandling,
+		cca.hardlinks).processIfNecessary
 
 	finalize := func() error {
 		// remove the extra files at the destination that were not present at the source
@@ -599,5 +634,15 @@ func GetSyncEnumeratorWithSrcComparator(
 		return nil
 	}
 
-	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
+	return newSyncEnumerator(
+		destinationTraverser,
+		sourceTraverser,
+		indexer,
+		filters,
+		comparator,
+		finalize,
+		srcTraverserTemplate,
+		dstTraverserTemplate,
+		transferScheduler,
+		enumeratorOptions.SyncOrchOptions), nil
 }
