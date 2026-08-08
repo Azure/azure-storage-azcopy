@@ -8,32 +8,34 @@ parameters:
     default: false
   - name: isMutexSet
     type: string
+  - name: test_script
+    type: string
+    default: |
+      set -e
+
+      # Run tests, write coverage data to a file, and pipe output to a file
+      echo "Running tests in ${directory}. Writing coverage data to ${coverageReportName}.txt and test results to ${testReportName}.txt."
+      go test -timeout=1h -v -coverprofile="${coverageReportName}.txt" "./${directory}" | tee "${testReportName}.txt"
+
+      exit_code=${PIPESTATUS[0]} # PIPESTATUS is defined by Bash, so this script must be run with Bash, not sh.
+
+      # Generate the jUnit report
+      echo "Generating jUnit report ${testReportName}.xml"
+      cat "${testReportName}.txt" | $(go env GOPATH)/bin/go-junit-report > "${testReportName}.xml"
+
+      # Convert coverage data to JSON format
+      echo "Generating JSON coverage report ${coverageReportName}.json"
+      $(go env GOPATH)/bin/gocov convert "${coverageReportName}.txt" > "${coverageReportName}.json"
+
+      # Convert coverage data to XML format
+      echo "Generating XML coverage report ${coverageReportName}.xml"
+      $(go env GOPATH)/bin/gocov-xml < "${coverageReportName}.json" > "${coverageReportName}.xml"
+
+      exit "$exit_code"
 
 steps:
   - ${{ if eq('false', parameters.with_federated_credential) }}:
-      - script: |
-            # This should be identical to the script below. Once you've updated one script, just copy and paste it in the other location.
-            set -e
-
-            # Run tests, write coverage data to a file, and pipe output to a file
-            echo "Running tests in ${directory}. Writing coverage data to ${coverageReportName}.txt and test results to ${testReportName}.txt."
-            go test -timeout=1h -v -coverprofile="${coverageReportName}.txt" "./${directory}" | tee "${testReportName}.txt"
-
-            exit_code=${PIPESTATUS[0]}
-
-            # Generate the jUnit report
-            echo "Generating jUnit report ${testReportName}.xml"
-            cat "${testReportName}.txt" | $(go env GOPATH)/bin/go-junit-report > "${testReportName}.xml"
-
-            # Convert coverage data to JSON format
-            echo "Generating JSON coverage report ${coverageReportName}.json"
-            $(go env GOPATH)/bin/gocov convert "${coverageReportName}.txt" > "${coverageReportName}.json"
-
-            # Convert coverage data to XML format
-            echo "Generating XML coverage report ${coverageReportName}.xml"
-            $(go env GOPATH)/bin/gocov-xml < "${coverageReportName}.json" > "${coverageReportName}.xml"
-
-            exit "$exit_code"
+      - bash: ${{ parameters.test_script }}
         env:
           directory: ${{ parameters.directory }}
           testReportName: '${{ parameters.coverage_name }}_report'
@@ -50,7 +52,7 @@ steps:
           AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
           AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-        displayName: 'Run ${{ parameters.directory }} tests'
+        displayName: 'Run ${{ parameters.directory }} Tests'
         # Don't let a test failure for a different directory prevent this directory from being tested,
         # but don't run if job is canceled or mutex wasn't acquired
         condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
@@ -61,29 +63,7 @@ steps:
           addSpnToEnvironment: true
           scriptType: bash
           scriptLocation: inlineScript
-          inlineScript: |
-            # This should be identical to the script above. Once you've updated one script, just copy and paste it in the other location.
-            set -e
-
-            # Run tests, write coverage data to a file, and pipe output to a file
-            echo "Running tests in ${directory}. Writing coverage data to ${coverageReportName}.txt and test results to ${testReportName}.txt."
-            go test -timeout=1h -v -coverprofile="${coverageReportName}.txt" "./${directory}" | tee "${testReportName}.txt"
-
-            exit_code=${PIPESTATUS[0]}
-
-            # Generate the jUnit report
-            echo "Generating jUnit report ${testReportName}.xml"
-            cat "${testReportName}.txt" | $(go env GOPATH)/bin/go-junit-report > "${testReportName}.xml"
-
-            # Convert coverage data to JSON format
-            echo "Generating JSON coverage report ${coverageReportName}.json"
-            $(go env GOPATH)/bin/gocov convert "${coverageReportName}.txt" > "${coverageReportName}.json"
-
-            # Convert coverage data to XML format
-            echo "Generating XML coverage report ${coverageReportName}.xml"
-            $(go env GOPATH)/bin/gocov-xml < "${coverageReportName}.json" > "${coverageReportName}.xml"
-
-            exit "$exit_code"
+          inlineScript: ${{ parameters.test_script }}
         env:
           directory: ${{ parameters.directory }}
           testReportName: '${{ parameters.coverage_name }}_report'
@@ -97,7 +77,7 @@ steps:
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
           # All env variables above this comment should be the same for both scripts.
-          NEW_E2E_ENVIRONMENT: "AzurePipeline"
+          NEW_E2E_ENVIRONMENT: 'AzurePipeline'
         displayName: 'Run ${{ parameters.directory }} Tests with Workload Identity'
         # Don't let a test failure for a different directory prevent this directory from being tested,
         # but don't run if job is canceled or mutex wasn't acquired
