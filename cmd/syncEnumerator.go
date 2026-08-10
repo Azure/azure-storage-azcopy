@@ -213,8 +213,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// verify that the traversers are targeting the same type of resources
-	sourceIsDir, _ := sourceTraverser.IsDirectory(true)
+	sourceIsDir, sourceErr := sourceTraverser.IsDirectory(true)
 	destIsDir, err := destinationTraverser.IsDirectory(true)
+
+	// If the source doesn't exist, return the error directly instead of falling through
+	// to the resource type mismatch check which produces a confusing error message.
+	if sourceErr != nil && !cca.fromTo.From().IsRemote() {
+		return nil, fmt.Errorf("failed to scan source %s due to %w", cca.source.Value, sourceErr)
+	}
 
 	var resourceMismatchError = errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
 		"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory." +
