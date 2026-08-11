@@ -253,7 +253,7 @@ func TestGetGitHubLatestVersionWithMocking(t *testing.T) {
 	defer testServer.Close()
 
 	version, err := getGitHubLatestRemoteVersionWithURL(testServer.URL)
-	versionSegments := []int64{10, 29, 1} // Cast to match Version struct type
+	versionSegments := []int{10, 29, 1} // Cast to match Version struct type
 	a.NoError(err)
 	expected := version.Segments
 	a.Equal(expected, versionSegments)
