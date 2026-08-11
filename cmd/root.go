@@ -49,6 +49,7 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
+var displayDeveloperOptions bool
 var outputFormat OutputFormat
 var OutputLevel OutputVerbosity
 var LogLevel common.LogLevel
@@ -58,6 +59,7 @@ var SkipVersionCheck bool
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
+var azcopyAwaitEnumerationStart bool
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
@@ -108,6 +110,7 @@ var rootCmd = &cobra.Command{
 		ste.RetryStatusCodes = rsc
 
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
+		glcm.E2EEnableAwaitEnumerationStart(azcopyAwaitEnumerationStart)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
 		}
@@ -323,30 +326,45 @@ func init() {
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
 	// Deprecated, marked as hidden to not break customers dependent on flag
 	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
-	// Note: this is due to Windows not supporting signals properly
-	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
-		"Used by partner teams to send in `cancel` through stdin to stop a job.")
 
-	// special E2E testing flags
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
-		"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
-			"\n Assists with debugging AzCopy via attach-to-process")
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
-		"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
-			"\n Assists with testing cases around file modifications between scanning and usage")
-	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
-		"Used when debugging, to tell AzCopy to cancel the job midway."+
-			"\n List of relative paths to skip in the STE.")
+	{ // Hidden flags placed into a closure to help identify them
+		// Note: this is due to Windows not supporting signals properly
+		rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
+			"Used by partner teams to send in `cancel` through stdin to stop a job.")
 
-	// reserved for partner teams
-	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+		// special E2E testing flags
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
+			"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
+				"\n Assists with debugging AzCopy via attach-to-process")
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
+			"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
+				"\n Assists with testing cases around file modifications between scanning and usage")
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitEnumerationStart, "await-enumeration", false,
+			"Used by E2E tests to pause immediately before enumeration until the command is cancelled.")
+		rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
+			"Used when debugging, to tell AzCopy to cancel the job midway."+
+				"\n List of relative paths to skip in the STE.")
 
-	// special flags to be used in case of unexpected service errors.
-	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
-		"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
-	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
-	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
-	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+		// special flags to be used in case of unexpected service errors.
+		rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
+			"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
+		rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
+
+		rootCmd.PersistentFlags().BoolVar(&displayDeveloperOptions, "display-dev", false, "display development flags")
+		if !displayDeveloperOptions {
+			_ = rootCmd.PersistentFlags().MarkHidden("display-dev")
+
+			_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
+			_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+
+			_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-open")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-enumeration")
+			_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+		}
+	}
+
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
 }
