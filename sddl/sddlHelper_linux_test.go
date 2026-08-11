@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-// Copyright Microsoft <wastore@microsoft.com>
+// Copyright © 2026 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
