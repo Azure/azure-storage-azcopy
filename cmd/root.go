@@ -35,6 +35,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,7 +44,9 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var outputFormatRaw string
@@ -54,6 +58,8 @@ var OutputLevel OutputVerbosity
 var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
+var disableTelemetry bool
+var telemetrySamplingRate float64
 
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
@@ -62,6 +68,306 @@ var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
 var checkAzCopyUpdates bool
+
+var commandsWithJobAttemptTelemetry = map[string]struct{}{
+	"bench":       {},
+	"copy":        {},
+	"jobs.resume": {},
+	"sync":        {},
+}
+
+var commandsExcludedFromTelemetry = map[string]struct{}{
+	"__complete":       {},
+	"__completeNoDesc": {},
+	"completion":       {},
+	"doc":              {},
+	"env":              {},
+	"help":             {},
+	"load.clfs":        {},
+}
+
+// telemetryFlagAllowlist contains reviewed flag names whose presence is safe
+// to report. Values are never read. Unknown flags are excluded until reviewed.
+var telemetryFlagAllowlist = map[string]struct{}{
+	"as-subdir": {}, "backup": {}, "blob-tags": {}, "blob-type": {}, "block-blob-tier": {},
+	"block-size-mb": {}, "cache-control": {}, "cancel-from-stdin": {}, "cap-mbps": {},
+	"check-length": {}, "check-md5": {}, "check-version": {}, "compare-hash": {},
+	"content-disposition": {}, "content-encoding": {}, "content-language": {}, "content-type": {},
+	"cpk-by-name": {}, "cpk-by-value": {}, "decompress": {}, "delete-destination": {},
+	"delete-destination-file": {}, "delete-snapshots": {}, "delete-test-data": {}, "disable-auto-decoding": {},
+	"disable-telemetry": {}, "dry-run": {}, "endpoint": {}, "exclude": {},
+	"exclude-attributes": {}, "exclude-blob-type": {}, "exclude-container": {}, "exclude-path": {},
+	"exclude-pattern": {}, "exclude-regex": {}, "file-count": {}, "flush-threshold": {},
+	"follow-symlinks": {}, "force-if-read-only": {}, "format": {}, "from-to": {}, "hardlinks": {},
+	"identity": {}, "ignore-error-if-completed": {}, "include": {}, "include-after": {},
+	"include-attributes": {}, "include-before": {},
+	"include-directory-stub": {}, "include-path": {}, "include-pattern": {}, "include-regex": {},
+	"include-root": {}, "local-hash-storage-mode": {}, "location": {}, "log-level": {},
+	"login-type": {}, "machine-readable": {}, "mega-units": {}, "metadata": {},
+	"method": {}, "mirror-mode": {}, "mode": {}, "no-guess-mime-type": {},
+	"number-of-folders": {}, "output-level": {}, "output-type": {}, "overwrite": {},
+	"page-blob-tier": {}, "permanent-delete": {}, "posix-properties-style": {},
+	"preserve-info": {}, "preserve-last-modified-time": {}, "preserve-owner": {}, "preserve-permissions": {},
+	"preserve-posix-properties": {}, "preserve-smb-info": {}, "preserve-smb-permissions": {},
+	"preserve-symlinks": {}, "properties": {},
+	"put-blob-size-mb": {}, "put-md5": {}, "quota-gb": {}, "recursive": {},
+	"rehydrate-priority": {}, "request-priority": {}, "retry-status-codes": {}, "running-tally": {},
+	"s2s-detect-source-changed": {}, "s2s-get-properties-in-backend": {},
+	"s2s-handle-invalid-metadata": {}, "s2s-preserve-access-tier": {},
+	"s2s-preserve-blob-tags": {}, "s2s-preserve-properties": {}, "service-principal": {},
+	"size-per-file": {}, "skip-version-check": {}, "telemetry-sampling-rate": {}, "tenant": {}, "trailing-dot": {},
+	"with-status": {},
+}
+
+var telemetryFlagDenylist = map[string]struct{}{
+	"aad-endpoint":               {},
+	"application-id":             {},
+	"await-continue":             {},
+	"await-open":                 {},
+	"certificate-path":           {},
+	"debug-skip-files":           {},
+	"destination-sas":            {},
+	"hash-meta-dir":              {},
+	"help":                       {},
+	"identity-client-id":         {},
+	"identity-object-id":         {},
+	"identity-resource-id":       {},
+	"list-of-files":              {},
+	"list-of-versions":           {},
+	"memory-profile":             {},
+	"output-location":            {},
+	"show-sensitive":             {},
+	"source-sas":                 {},
+	"tenant-id":                  {},
+	"trusted-microsoft-suffixes": {},
+}
+
+type telemetryValuePolicy struct {
+	property  string
+	normalize func(string) (string, bool)
+}
+
+var telemetryFlagValuePolicies = map[string]telemetryValuePolicy{
+	"as-subdir":                     {"OptAsSubdir", normalizeTelemetryBool},
+	"backup":                        {"OptBackup", normalizeTelemetryBool},
+	"blob-type":                     {"OptBlobType", normalizeTelemetryCategory},
+	"block-blob-tier":               {"OptBlockBlobTier", normalizeTelemetryCategory},
+	"block-size-mb":                 {"OptBlockSizeMB", normalizeTelemetryFloat},
+	"cap-mbps":                      {"OptCapMbps", normalizeTelemetryFloat},
+	"check-length":                  {"OptCheckLength", normalizeTelemetryBool},
+	"check-md5":                     {"OptCheckMD5", normalizeTelemetryCategory},
+	"compare-hash":                  {"OptCompareHash", normalizeTelemetryCategory},
+	"decompress":                    {"OptDecompress", normalizeTelemetryBool},
+	"delete-destination":            {"OptDeleteDestination", normalizeTelemetryCategory},
+	"delete-destination-file":       {"OptDeleteDestinationFile", normalizeTelemetryBool},
+	"delete-snapshots":              {"OptDeleteSnapshots", normalizeTelemetryCategory},
+	"delete-test-data":              {"OptBenchmarkDeleteTestData", normalizeTelemetryBool},
+	"disable-auto-decoding":         {"OptDisableAutoDecoding", normalizeTelemetryBool},
+	"dry-run":                       {"OptDryRun", normalizeTelemetryBool},
+	"exclude-blob-type":             {"OptExcludeBlobTypes", normalizeTelemetryCategoryList},
+	"file-count":                    {"OptBenchmarkFileCount", normalizeTelemetryInt},
+	"follow-symlinks":               {"OptFollowSymlinks", normalizeTelemetryBool},
+	"force-if-read-only":            {"OptForceIfReadOnly", normalizeTelemetryBool},
+	"from-to":                       {"OptFromTo", normalizeTelemetryCategory},
+	"hardlinks":                     {"OptHardlinks", normalizeTelemetryCategory},
+	"include-directory-stub":        {"OptIncludeDirectoryStub", normalizeTelemetryBool},
+	"include-root":                  {"OptIncludeRoot", normalizeTelemetryBool},
+	"local-hash-storage-mode":       {"OptLocalHashStorageMode", normalizeTelemetryCategory},
+	"login-type":                    {"OptLoginType", normalizeTelemetryCategory},
+	"mirror-mode":                   {"OptMirrorMode", normalizeTelemetryBool},
+	"mode":                          {"OptBenchmarkMode", normalizeTelemetryCategory},
+	"no-guess-mime-type":            {"OptNoGuessMimeType", normalizeTelemetryBool},
+	"number-of-folders":             {"OptBenchmarkFolderCount", normalizeTelemetryInt},
+	"overwrite":                     {"OptOverwrite", normalizeTelemetryCategory},
+	"page-blob-tier":                {"OptPageBlobTier", normalizeTelemetryCategory},
+	"permanent-delete":              {"OptPermanentDelete", normalizeTelemetryCategory},
+	"posix-properties-style":        {"OptPosixPropertiesStyle", normalizeTelemetryCategory},
+	"preserve-info":                 {"OptPreserveInfo", normalizeTelemetryBool},
+	"preserve-last-modified-time":   {"OptPreserveLastModifiedTime", normalizeTelemetryBool},
+	"preserve-owner":                {"OptPreserveOwner", normalizeTelemetryBool},
+	"preserve-permissions":          {"OptPreservePermissions", normalizeTelemetryBool},
+	"preserve-posix-properties":     {"OptPreservePosixProperties", normalizeTelemetryBool},
+	"preserve-smb-info":             {"OptPreserveSMBInfo", normalizeTelemetryBool},
+	"preserve-smb-permissions":      {"OptPreserveSMBPermissions", normalizeTelemetryBool},
+	"preserve-symlinks":             {"OptPreserveSymlinks", normalizeTelemetryBool},
+	"put-blob-size-mb":              {"OptPutBlobSizeMB", normalizeTelemetryFloat},
+	"put-md5":                       {"OptPutMD5", normalizeTelemetryBool},
+	"quota-gb":                      {"OptQuotaGB", normalizeTelemetryInt},
+	"recursive":                     {"OptRecursive", normalizeTelemetryBool},
+	"rehydrate-priority":            {"OptRehydratePriority", normalizeTelemetryCategory},
+	"request-priority":              {"OptRequestPriority", normalizeTelemetryInt},
+	"s2s-detect-source-changed":     {"OptS2SDetectSourceChanged", normalizeTelemetryBool},
+	"s2s-get-properties-in-backend": {"OptS2SGetPropertiesInBackend", normalizeTelemetryBool},
+	"s2s-handle-invalid-metadata":   {"OptS2SHandleInvalidMetadata", normalizeTelemetryCategory},
+	"s2s-preserve-access-tier":      {"OptS2SPreserveAccessTier", normalizeTelemetryBool},
+	"s2s-preserve-blob-tags":        {"OptS2SPreserveBlobTags", normalizeTelemetryBool},
+	"s2s-preserve-properties":       {"OptS2SPreserveProperties", normalizeTelemetryBool},
+	"service-principal":             {"OptServicePrincipal", normalizeTelemetryBool},
+	"size-per-file":                 {"OptBenchmarkFileSizeBytes", normalizeTelemetrySize},
+	"skip-version-check":            {"OptSkipVersionCheck", normalizeTelemetryBool},
+	"trailing-dot":                  {"OptTrailingDot", normalizeTelemetryCategory},
+}
+
+type telemetryEnvironmentPolicy struct {
+	environment common.EnvironmentVariable
+	value       telemetryValuePolicy
+}
+
+var telemetryEnvironmentPolicies = []telemetryEnvironmentPolicy{
+	{common.EEnvironmentVariable.ConcurrencyValue(), telemetryValuePolicy{"OptConcurrency", normalizeTelemetryConcurrency}},
+	{common.EEnvironmentVariable.TransferInitiationPoolSize(), telemetryValuePolicy{"OptConcurrentFiles", normalizeTelemetryInt}},
+	{common.EEnvironmentVariable.EnumerationPoolSize(), telemetryValuePolicy{"OptConcurrentScan", normalizeTelemetryInt}},
+	{common.EEnvironmentVariable.BufferGB(), telemetryValuePolicy{"OptBufferGB", normalizeTelemetryFloat}},
+	{common.EEnvironmentVariable.ParallelStatFiles(), telemetryValuePolicy{"OptParallelStatFiles", normalizeTelemetryBool}},
+	{common.EEnvironmentVariable.AutoTuneToCpu(), telemetryValuePolicy{"OptTuneToCPU", normalizeTelemetryBool}},
+	{common.EEnvironmentVariable.DisableHierarchicalScanning(), telemetryValuePolicy{"OptDisableHierarchicalScan", normalizeTelemetryBool}},
+	{common.EEnvironmentVariable.PacePageBlobs(), telemetryValuePolicy{"OptPacePageBlobs", normalizeTelemetryBool}},
+	{common.EEnvironmentVariable.RequestTryTimeout(), telemetryValuePolicy{"OptRequestTryTimeoutMinutes", normalizeTelemetryFloat}},
+	{common.EEnvironmentVariable.DownloadToTempPath(), telemetryValuePolicy{"OptDownloadToTempPath", normalizeTelemetryBool}},
+	{common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers(), telemetryValuePolicy{"OptOptimizeSparsePageBlob", normalizeTelemetryBool}},
+	{common.EEnvironmentVariable.CacheProxyLookup(), telemetryValuePolicy{}},
+	{common.EEnvironmentVariable.DisableSyslog(), telemetryValuePolicy{}},
+	{common.EEnvironmentVariable.ShowPerfStates(), telemetryValuePolicy{}},
+}
+
+func normalizeTelemetryBool(value string) (string, bool) {
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	if err != nil {
+		return "", false
+	}
+	return strconv.FormatBool(parsed), true
+}
+
+func normalizeTelemetryInt(value string) (string, bool) {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil || parsed < 0 {
+		return "", false
+	}
+	return strconv.FormatInt(parsed, 10), true
+}
+
+func normalizeTelemetryFloat(value string) (string, bool) {
+	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || parsed < 0 {
+		return "", false
+	}
+	return strconv.FormatFloat(parsed, 'f', -1, 64), true
+}
+
+func normalizeTelemetryCategory(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || len(trimmed) > 128 {
+		return "", false
+	}
+	return strings.ToLower(trimmed), true
+}
+
+func normalizeTelemetryCategoryList(value string) (string, bool) {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == ';' || r == ',' })
+	if len(parts) == 0 || len(parts) > 16 {
+		return "", false
+	}
+	for index := range parts {
+		parts[index] = strings.ToLower(strings.TrimSpace(parts[index]))
+		if parts[index] == "" || len(parts[index]) > 64 {
+			return "", false
+		}
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ","), true
+}
+
+func normalizeTelemetrySize(value string) (string, bool) {
+	bytes, err := ParseSizeString(strings.TrimSpace(value), common.SizePerFileParam)
+	if err != nil || bytes < 0 {
+		return "", false
+	}
+	return strconv.FormatInt(bytes, 10), true
+}
+
+func normalizeTelemetryConcurrency(value string) (string, bool) {
+	if strings.EqualFold(strings.TrimSpace(value), "AUTO") {
+		return "auto", true
+	}
+	return normalizeTelemetryInt(value)
+}
+
+func commandTelemetryName(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+
+	pathParts := strings.Fields(cmd.CommandPath())
+	if len(pathParts) <= 1 {
+		return ""
+	}
+	return strings.Join(pathParts[1:], ".")
+}
+
+func commandUsesJobAttemptTelemetry(command string) bool {
+	_, ok := commandsWithJobAttemptTelemetry[command]
+	return ok
+}
+
+func commandExcludedFromTelemetry(command string) bool {
+	_, ok := commandsExcludedFromTelemetry[command]
+	return ok
+}
+
+func telemetryOptions(cmd *cobra.Command) telemetry.OptionAttributes {
+	if cmd == nil {
+		return telemetry.OptionAttributes{}
+	}
+
+	seen := make(map[string]struct{})
+	values := make(map[string]string)
+	visit := func(flags *pflag.FlagSet) {
+		flags.Visit(func(flag *pflag.Flag) {
+			if _, allowed := telemetryFlagAllowlist[flag.Name]; allowed {
+				seen[flag.Name] = struct{}{}
+				if policy, capturesValue := telemetryFlagValuePolicies[flag.Name]; capturesValue {
+					if value, ok := policy.normalize(flag.Value.String()); ok {
+						values[policy.property] = value
+					}
+				}
+			}
+		})
+	}
+	visit(cmd.Flags())
+	for current := cmd; current != nil; current = current.Parent() {
+		visit(current.PersistentFlags())
+	}
+
+	flagsSet := make([]string, 0, len(seen))
+	for name := range seen {
+		flagsSet = append(flagsSet, name)
+	}
+	sort.Strings(flagsSet)
+
+	var envVarsSet []string
+	for _, policy := range telemetryEnvironmentPolicies {
+		raw, explicitlySet := os.LookupEnv(policy.environment.Name)
+		if !explicitlySet || strings.TrimSpace(raw) == "" {
+			continue
+		}
+		envVarsSet = append(envVarsSet, policy.environment.Name)
+		if policy.value.property != "" {
+			if value, ok := policy.value.normalize(raw); ok {
+				values[policy.value.property] = value
+			}
+		}
+	}
+	sort.Strings(envVarsSet)
+
+	if len(values) == 0 {
+		values = nil
+	}
+	return telemetry.OptionAttributes{
+		FlagsSet:   flagsSet,
+		EnvVarsSet: envVarsSet,
+		Values:     values,
+	}
+}
 
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
@@ -192,8 +498,18 @@ var rootCmd = &cobra.Command{
 				break
 			}
 		}
-		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]"
-		return Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID)
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]" || cmd.Use == "bench [destination]"
+		if err := Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID); err != nil {
+			return err
+		}
+		// Transfer job commands emit their own job-attempt start/finish events.
+		// Other product-operation leaves emit one command.invoked event using
+		// their canonical full command path; tooling-only commands are excluded.
+		command := commandTelemetryName(cmd)
+		if command != "" && !commandUsesJobAttemptTelemetry(command) && !commandExcludedFromTelemetry(command) {
+			azcopy.ReportCommandInvoked(command, Client.CurrentJobID.String(), telemetryOptions(cmd))
+		}
+		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
@@ -216,7 +532,13 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 	glcm.SetOutputFormat(outputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 	jobsAdmin.BenchmarkResults = isBench
-	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps, TrustedSuffixes: TrustedSuffixes, LogLevel: &LogLevel})
+	Client, err = azcopy.NewClient(azcopy.ClientOptions{
+		CapMbps:               CapMbps,
+		TrustedSuffixes:       TrustedSuffixes,
+		LogLevel:              &LogLevel,
+		DisableTelemetry:      disableTelemetry,
+		TelemetrySamplingRate: &telemetrySamplingRate,
+	})
 	// Run MessagHandler to process messages from Input Watcher
 	if jobsAdmin.JobsAdmin != nil {
 		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
@@ -349,6 +671,13 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
+
+	rootCmd.PersistentFlags().BoolVar(&disableTelemetry, "disable-telemetry", false,
+		"Opt out of sending anonymous usage telemetry. Telemetry is enabled by default and contains no PII. "+
+			"\n It can also be disabled by setting the AZCOPY_DISABLE_TELEMETRY environment variable to 'true'.")
+	rootCmd.PersistentFlags().Float64Var(&telemetrySamplingRate, "telemetry-sampling-rate", 0.01,
+		"Diagnostic override for the fraction of job IDs included in anonymous telemetry, from 0.0 through 1.0.")
+	_ = rootCmd.PersistentFlags().MarkHidden("telemetry-sampling-rate")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
