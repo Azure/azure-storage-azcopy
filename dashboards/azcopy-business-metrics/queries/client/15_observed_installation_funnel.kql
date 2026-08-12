@@ -1,5 +1,5 @@
 // Visual: Multi stat
-// These are observed sampled-installation proxies, not authoritative customer-funnel metrics.
+// These are selected-range installation proxies, not authoritative customer-funnel metrics.
 let Attempts = materialize(
     customEvents
     | where timestamp between (_startTime .. _endTime)

@@ -567,8 +567,8 @@
     },
     {
       "id": "588827a6-248f-93f2-e42c-42ec40858457",
-      "title": "Observed sampled-installation behavior (proxy)",
-      "description": "Unique InstallationIDs with sampled finished jobs in the selected range. Rates show whether the first observed attempt succeeded, whether 2+ attempts were observed, and whether any observed attempt succeeded. Time cards measure first observed attempt to first observed success. This is not a true acquisition funnel or first-ever/second-ever job analysis because unsampled and out-of-range jobs are invisible.",
+      "title": "Observed installation behavior (range proxy)",
+      "description": "Unique InstallationIDs with finished jobs in the selected range. Rates show whether the first observed attempt succeeded, whether 2+ attempts were observed, and whether any observed attempt succeeded. Time cards measure first observed attempt to first observed success. This is not a true acquisition funnel or first-ever/second-ever job analysis because jobs outside the selected range are invisible.",
       "visualType": "multistat",
       "pageId": "02162026-a791-5a8f-7c9b-a5d427226ca6",
       "layout": {
