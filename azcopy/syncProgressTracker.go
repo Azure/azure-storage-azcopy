@@ -36,6 +36,8 @@ type syncProgressTracker struct {
 	// so the 64 bit integers are placed first in the struct to avoid future breaks
 	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
 	// incremented by traversers
+	atomicTransferStartUnixNano   int64
+	atomicEnumerationEndUnixNano  int64
 	atomicSourceFilesScanned      uint64
 	atomicDestinationFilesScanned uint64
 	atomicScanningStatus          uint32
@@ -56,14 +58,16 @@ type syncProgressTracker struct {
 	// used to calculate job summary
 	jobStartTime time.Time
 
-	jobID   common.JobID
-	handler SyncHandler
+	jobID        common.JobID
+	handler      SyncHandler
+	shapeTracker *sourceShapeTracker
 }
 
-func newSyncProgressTracker(jobID common.JobID, handler SyncHandler) *syncProgressTracker {
+func newSyncProgressTracker(jobID common.JobID, handler SyncHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) *syncProgressTracker {
 	return &syncProgressTracker{
-		jobID:   jobID,
-		handler: handler,
+		jobID:        jobID,
+		handler:      handler,
+		shapeTracker: newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling),
 	}
 }
 
@@ -151,6 +155,34 @@ func (spt *syncProgressTracker) GetElapsedTime() time.Duration {
 	return time.Since(spt.jobStartTime)
 }
 
+func (spt *syncProgressTracker) GetSourceShapeSummary() sourceShapeSummary {
+	return spt.shapeTracker.snapshot()
+}
+
+func (spt *syncProgressTracker) GetTransferElapsedTime() time.Duration {
+	start := atomic.LoadInt64(&spt.atomicTransferStartUnixNano)
+	if start == 0 {
+		return 0
+	}
+	elapsed := time.Since(time.Unix(0, start))
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
+func (spt *syncProgressTracker) GetEnumerationElapsedTime() time.Duration {
+	end := atomic.LoadInt64(&spt.atomicEnumerationEndUnixNano)
+	if end == 0 || spt.jobStartTime.IsZero() {
+		return 0
+	}
+	elapsed := time.Unix(0, end).Sub(spt.jobStartTime)
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
 func (spt *syncProgressTracker) incSourceEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 	if entityType == common.EEntityType.File() {
 		atomic.AddUint64(&spt.atomicSourceFilesScanned, 1)
@@ -205,6 +237,7 @@ func (spt *syncProgressTracker) getDeletionCount() uint32 {
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
 func (spt *syncProgressTracker) setFirstPartOrdered() {
+	atomic.CompareAndSwapInt64(&spt.atomicTransferStartUnixNano, 0, time.Now().UnixNano())
 	atomic.StoreUint32(&spt.atomicFirstPartOrdered, 1)
 }
 
@@ -215,6 +248,7 @@ func (spt *syncProgressTracker) firstPartOrdered() bool {
 
 // setScanningComplete sets the value of atomicScanningStatus to 1.
 func (spt *syncProgressTracker) setScanningComplete() {
+	atomic.CompareAndSwapInt64(&spt.atomicEnumerationEndUnixNano, 0, time.Now().UnixNano())
 	atomic.StoreUint32(&spt.atomicScanningStatus, 1)
 }
 

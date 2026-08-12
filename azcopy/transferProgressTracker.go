@@ -32,11 +32,16 @@ import (
 var _ jobProgressTracker = &transferProgressTracker{}
 
 type transferProgressTracker struct {
+	// Keep 64-bit atomics first for correct alignment on 32-bit platforms.
+	atomicTransferStartUnixNano  int64
+	atomicEnumerationEndUnixNano int64
+
 	jobID   common.JobID
 	fromTo  common.FromTo
 	handler CopyHandler
 	//jobType      common.JobType
 	isCleanupJob bool
+	shapeTracker *sourceShapeTracker
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -127,18 +132,48 @@ func (tpt *transferProgressTracker) GetElapsedTime() time.Duration {
 	return time.Since(tpt.jobStartTime)
 }
 
-func newTransferProgressTracker(jobID common.JobID, handler CopyHandler, fromTo common.FromTo) *transferProgressTracker {
+func (tpt *transferProgressTracker) GetTransferElapsedTime() time.Duration {
+	start := atomic.LoadInt64(&tpt.atomicTransferStartUnixNano)
+	if start == 0 {
+		return 0
+	}
+	elapsed := time.Since(time.Unix(0, start))
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
+func (tpt *transferProgressTracker) GetEnumerationElapsedTime() time.Duration {
+	end := atomic.LoadInt64(&tpt.atomicEnumerationEndUnixNano)
+	if end == 0 || tpt.jobStartTime.IsZero() {
+		return 0
+	}
+	elapsed := time.Unix(0, end).Sub(tpt.jobStartTime)
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
+func newTransferProgressTracker(jobID common.JobID, handler CopyHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) *transferProgressTracker {
 	return &transferProgressTracker{
 		jobID:        jobID,
 		handler:      handler,
 		isCleanupJob: false, // TODO: when implementing benchmark, set this properly
 		fromTo:       fromTo,
+		shapeTracker: newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling),
 		//jobType:      common.EJobType.Copy(), // TODO: when implementing benchmark, set this properly
 	}
 }
 
+func (tpt *transferProgressTracker) GetSourceShapeSummary() sourceShapeSummary {
+	return tpt.shapeTracker.snapshot()
+}
+
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
 func (tpt *transferProgressTracker) setFirstPartOrdered() {
+	atomic.CompareAndSwapInt64(&tpt.atomicTransferStartUnixNano, 0, time.Now().UnixNano())
 	atomic.StoreUint32(&tpt.atomicFirstPartOrdered, 1)
 }
 
@@ -149,6 +184,7 @@ func (tpt *transferProgressTracker) firstPartOrdered() bool {
 
 // setScanningComplete sets the value of atomicScanningStatus to 1.
 func (tpt *transferProgressTracker) setScanningComplete() {
+	atomic.CompareAndSwapInt64(&tpt.atomicEnumerationEndUnixNano, 0, time.Now().UnixNano())
 	atomic.StoreUint32(&tpt.atomicScanningStatus, 1)
 }
 
