@@ -22,7 +22,14 @@ function Read-Query([string]$RelativePath) {
 
     if ($RelativePath -like "queries/client/*") {
         $appInsightsTable = "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents"
-        $text = [regex]::Replace($text, '(?m)^customEvents', $appInsightsTable, 1)
+        $text = [regex]::Replace(
+            $text,
+            '(?m)^(\s*)customEvents\b',
+            { param($match) $match.Groups[1].Value + $appInsightsTable })
+
+        if ($text -match '(?m)^\s*customEvents\b') {
+            throw "Client query '$RelativePath' contains an unqualified customEvents reference."
+        }
     }
 
     if ($RelativePath -eq "queries/server/02_storage_operation_mix.kql") {
