@@ -10,7 +10,7 @@ This directory contains an importable ADX dashboard and its source KQL for the b
 4. Select `azcopy-business-metrics.dashboard.json` from this directory.
 5. Name the dashboard `AzCopy Business Metrics` and select **Create**.
 
-The imported dashboard contains 17 tiles across six pages and uses one XStore data source. Client telemetry and XDataAnalytics queries use explicit cross-cluster references, so no additional dashboard data sources are required.
+The imported dashboard contains 24 tiles across seven pages and uses one XStore data source. Client telemetry and XDataAnalytics queries use explicit cross-cluster references, so no additional dashboard data sources are required.
 
 If the imported XStore source needs reconnecting, set it to:
 
@@ -87,7 +87,7 @@ Add one free-text parameter:
 
 | Label | Variable | Type | Default | Pages |
 | --- | --- | --- | --- | --- |
-| Storage account | `_account` | String | Empty | All pages; used by Customer Drilldown, Data Quality, and Server Correlation queries |
+| Storage account | `_account` | String | Empty | All pages; used by Customer Drilldown, Reliability, Data Quality, and Server Correlation queries |
 
 ## Page And Tile Manifest
 
@@ -106,6 +106,7 @@ Add one free-text parameter:
 | --- | --- | --- | --- |
 | Throughput and completion-time percentiles | `queries/client/04_performance_percentiles.kql` | AzCopyClientTelemetry | Table |
 | Platform and version mix | `queries/client/07_platform_mix.kql` | AzCopyClientTelemetry | Table or bar chart |
+| Source and destination platform mix | `queries/client/18_endpoint_platform_mix.kql` | AzCopyClientTelemetry | Bar chart |
 
 ### Reliability
 
@@ -113,6 +114,16 @@ Add one free-text parameter:
 | --- | --- | --- | --- |
 | Reliability rates | `queries/client/05_reliability_cards.kql` | AzCopyClientTelemetry | Multi stat |
 | Top job error categories | `queries/client/06_error_distribution.kql` | AzCopyClientTelemetry | Bar chart |
+| Failed-object error codes | `queries/client/17_failed_object_error_codes.kql` | AzCopyClientTelemetry | Bar chart or table |
+| Newly observed error codes | `queries/client/19_new_error_codes_30d.kql` | AzCopyClientTelemetry | Table |
+| Unmatched starts and cancellation progress | `queries/client/16_abandonment_and_cancellation.kql` | AzCopyClientTelemetry | Multi stat |
+
+### Adoption
+
+| Tile | Query | Data source | Visual |
+| --- | --- | --- | --- |
+| Weekly job frequency and change | `queries/client/14_weekly_job_frequency.kql` | AzCopyClientTelemetry | Time chart or table |
+| Observed sampled-installation funnel | `queries/client/15_observed_installation_funnel.kql` | AzCopyClientTelemetry | Multi stat |
 
 ### Data Quality
 
@@ -126,6 +137,7 @@ Add one free-text parameter:
 
 | Tile | Query | Data source | Visual |
 | --- | --- | --- | --- |
+| Selected account business summary | `queries/client/13_account_business_summary.kql` | AzCopyClientTelemetry | Multi stat |
 | Observed job attempts | `queries/client/09_account_drilldown.kql` | AzCopyClientTelemetry | Table |
 | Top source/destination movers | `queries/client/11_top_account_movers.kql` | AzCopyClientTelemetry | Table or bar chart |
 | Account ownership | `queries/server/03_account_ownership.kql` | XDataAnalytics | Table |
@@ -160,11 +172,15 @@ Shows estimated weekly command usage by AzCopy version. It combines finished job
 
 ### Performance percentiles
 
-Reports sampled-job performance by transfer topology: average and P50/P90/P95 job throughput, P90/P95 completion hours per TB, and average enumeration and transfer-phase durations. Percentiles are calculated directly over observed sampled jobs and are not inverse-sampling weighted; `SampleSize` indicates the population behind each row. Jobs with no transferred bytes or nonpositive duration are excluded.
+Reports sampled-job performance by transfer topology: average and P50/P90/P95 job throughput, average/P90/P95 completion hours per TB, and average/P90/P95 enumeration and transfer-phase durations. Percentiles are calculated directly over observed sampled jobs and are not inverse-sampling weighted; `SampleSize` indicates the population behind each row. Jobs with no transferred bytes or nonpositive duration are excluded.
 
 ### Platform and version mix
 
 Ranks the top 30 combinations of source type, destination type, transfer topology, host operating system, and AzCopy version. `ObservedAttempts` is the sampled count and `EstimatedAttempts` applies inverse sampling. This is a multidimensional usage mix, so totals across overlapping filtered views should not be treated as distinct customers.
+
+### Source and destination platform mix
+
+Shows sampling-adjusted endpoint platform and protocol distribution with source and destination roles kept separate. It answers the source/target platform-mix question directly without treating the two endpoints of a service-to-service job as independent jobs.
 
 ### Reliability rates
 
@@ -173,6 +189,26 @@ Shows sampling-adjusted completion, partial-success, failure, cancellation, fail
 ### Top job errors
 
 Ranks the top 20 terminal job error category/code combinations by estimated attempts and includes observed attempt counts plus example bounded failed-transfer code histograms. It describes why jobs ended unsuccessfully or with errors; it is not a count of individual HTTP failures or failed files.
+
+### Failed-object error codes
+
+Expands the bounded `FailureErrorCodes` histogram and ranks failed-object error codes by observed and sampling-adjusted object occurrences. It complements terminal job errors: one attempt can contain multiple failed objects and codes.
+
+### Newly observed error codes
+
+Lists terminal-job and failed-object error codes whose first event in the retained 730-day lookback falls within the last 30 days. "New" means newly observed in retained telemetry, not proof that the code has never occurred anywhere before.
+
+### Unmatched starts and cancellation progress
+
+Shows observed starts older than 30 minutes with no finish event, plus cancellation count and average/P50/P90 percent complete at cancellation. An unmatched start is an abandonment proxy only; ingestion delay, process interruption, and telemetry delivery failure can produce the same shape.
+
+### Weekly job frequency and change
+
+Shows observed and inverse-sampling estimated finished attempts by week, the prior week's estimate, and week-over-week percentage change. Missing weeks are not backfilled, so compare only adjacent rows that represent adjacent calendar weeks.
+
+### Observed sampled-installation funnel
+
+Shows success on the first observed sampled attempt, whether a second sampled attempt was observed, and time from the first observed attempt to the first observed success. These are selected-range, sampled-installation proxies. They are not first-ever customer job, true second-job conversion, or an authoritative customer cohort.
 
 ### Telemetry acceptance
 
@@ -189,6 +225,10 @@ For accepted client attempts, expands each Azure Storage source and destination 
 ### Observed job attempts
 
 Lists up to the 200 most recent sampled finished attempts, including IDs, command, status, topology, source and destination Azure storage accounts, version, bytes, duration, throughput, failed objects, and inverse-sampling weight. The optional storage-account parameter matches either Azure endpoint. Rows are observed records; `EstimatedWeight` is context, not a duplicated estimated row count.
+
+### Selected account business summary
+
+Summarizes the selected interval and optional Azure Storage account filter with observed and estimated attempts, transferred TB, average throughput, P90/P95 hours per TB, failures, cancellations, resume attempts, observed activity age, and observed version set. A storage account is an endpoint/resource proxy rather than a unique customer, and deterministic JobID sampling can omit the actual latest job.
 
 ### Top source and destination movers
 
@@ -215,6 +255,7 @@ Correlates destination-account/hour client telemetry with server-observed AzCopy
 - `ObservedAttempts` is the sampled row count.
 - `EstimatedAttempts` and estimated byte totals use inverse-probability weighting from each event's `SamplingRate`.
 - Percentiles are calculated over sampled jobs. Always show `SampleSize`; do not weight percentile values.
+- Installation-funnel and latest-activity fields are observed sampled proxies; inverse weighting cannot reconstruct a customer cohort or the actual latest job.
 - Aggregate retry/throttle rates from raw numerators and denominators, never by averaging per-job percentages.
 - Keep source and destination account roles separate. Do not duplicate S2S jobs in global totals.
 - Treat unmatched starts as probable abandonment only after an agreed ingestion timeout.
@@ -222,17 +263,41 @@ Correlates destination-account/hour client telemetry with server-observed AzCopy
 - Do not require client HTTP-attempt counts to equal server request counts. Chunking, retries, service-to-service transfers, sampling, concurrent jobs, and aggregation boundaries can all change the ratio.
 - XStore `Tenant`/`LogicalTenant` values are Storage deployment tenants, not customer Entra tenant IDs.
 
-## Unsupported Or Partial Business Metrics
+## Business-Metric Coverage
 
-Do not create authoritative tiles for these until their dependencies exist:
+The source document describes desired business outcomes rather than a finalized telemetry contract. Coverage below distinguishes authoritative telemetry-backed calculations from useful but explicitly limited proxies.
 
-- First-ever job success, time to first success, and second-job conversion: requires an account/subscription cohort sampler.
-- Exact last-active date per customer: JobID sampling can omit the actual latest job.
-- Finalization duration: not emitted separately.
-- Comprehensive retries and retry overhead: current counters do not cover all SDK/body-read retries.
-- Public/private network bytes: configured endpoint kind is not actual route attribution.
-- Support cases, diagnosis, mitigation, resolution, repeat contact, and escalation: require support-system joins.
-- Exact job-to-Storage-request attribution: requires a job/run correlation value on Storage requests.
+| Document metric | Coverage | Dashboard implementation or gap |
+| --- | --- | --- |
+| Jobs and transferred data over N days | Covered | Overview and selected-account summary use observed counts plus inverse-sampling estimates. |
+| Average/P90/P95 migration time per TB | Covered | Performance percentiles globally/by topology and selected-account P90/P95. |
+| Average network speed | Partial | Job throughput is covered; it is end-to-end transfer throughput, not physical network-link speed. |
+| Failures and error codes | Covered | Reliability rates, terminal job errors, failed-object error codes, and newly observed retained-history codes. |
+| Command distribution and version | Covered | Outcomes by command plus weekly command/version trend. |
+| Days since last active job | Partial | Days since the latest observed sampled account job/success; the actual latest job may be sampled out. |
+| Week-over-week job frequency | Covered | Weekly frequency and week-over-week change. |
+| Retry and resume/restart count | Partial | Resume attempts are covered. Storage HTTP attempts, 503 attempts, and network-error attempts are available, but they are not comprehensive retries; a newly started job cannot be reliably classified as a restart. |
+| Abandonment and percent complete at kill | Partial | Mature unmatched starts are an abandonment proxy; explicit cancellations include percent-complete statistics. |
+| Volume and time per TB by transfer category | Covered | Volume by topology and performance percentiles by topology. |
+| P50/P90/P95 throughput | Covered | Performance percentiles. |
+| Enumeration and transfer time | Covered | Average/P90/P95 durations by topology. |
+| Finalization time and retry overhead | Missing | Neither phase is emitted separately. |
+| Top movers | Partial | Azure Storage source/destination account endpoints are covered. S3/GCS bucket names are intentionally not emitted. |
+| First-job success, time to first success, second-job conversion | Partial | The Adoption page provides selected-range sampled-installation proxies only. Authoritative metrics require a stable customer/account cohort sampler and retained cohort state. |
+| Completion, outcome, failed-object, throttling, cancellation, and resume-success rates | Covered | Reliability rates. |
+| Repeated and newly observed error codes | Covered | Failed-object occurrences and first-observed-in-retained-730-day-history query. |
+| Source and target platform distribution | Covered | Source/destination role, endpoint type, and protocol distribution. |
+| Public/private network byte attribution | Missing | `DestEndpointKind` is configured endpoint intent, not proof of the actual network route. |
+| Cases per active customer/job | Missing | Requires support-system case data and a governed customer/job join. |
+| Diagnostic bundle and self-service rates | Missing | Diagnostic/support workflow events are not emitted. |
+| Diagnosis, mitigation, and resolution time | Missing | Requires support-system workflow timestamps. |
+| Repeat-contact and escalation rates | Missing | Requires support-system case history. |
+
+Additional scope limits:
+
+- "Per customer" is not globally authoritative. Client telemetry emits Azure Storage account names for recognized Azure endpoints, not a universal customer, subscription, or tenant identifier. A storage account may be shared by multiple customers/installations, and one customer may use many accounts.
+- Local-only, S3, GCS, and sampled-out activity cannot be assigned to an Azure account proxy. S3/GCS bucket names are intentionally excluded for privacy minimization.
+- Exact job-to-Storage-request attribution remains unavailable because server requests do not carry AzCopy Job IDs. Existing server panels provide account/time-window evidence only.
 
 ## Validate Client Tiles
 

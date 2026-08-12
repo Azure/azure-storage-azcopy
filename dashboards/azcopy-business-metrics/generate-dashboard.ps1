@@ -130,6 +130,7 @@ $pages = @(
     [ordered]@{ name = "Overview"; id = New-StableGuid "azcopy-business-metrics:page:overview" },
     [ordered]@{ name = "Performance"; id = New-StableGuid "azcopy-business-metrics:page:performance" },
     [ordered]@{ name = "Reliability"; id = New-StableGuid "azcopy-business-metrics:page:reliability" },
+    [ordered]@{ name = "Adoption"; id = New-StableGuid "azcopy-business-metrics:page:adoption" },
     [ordered]@{ name = "Data Quality"; id = New-StableGuid "azcopy-business-metrics:page:data-quality" },
     [ordered]@{ name = "Customer Drilldown"; id = New-StableGuid "azcopy-business-metrics:page:customer" },
     [ordered]@{ name = "Server Correlation"; id = New-StableGuid "azcopy-business-metrics:page:server" }
@@ -145,17 +146,25 @@ $manifest = @(
 
     @{ Page = "Performance"; Title = "Performance percentiles"; File = "queries/client/04_performance_percentiles.kql"; Visual = "table"; X = 0; Y = 0; W = 22; H = 8 },
     @{ Page = "Performance"; Title = "Platform and version mix"; File = "queries/client/07_platform_mix.kql"; Visual = "bar"; X = 0; Y = 8; W = 22; H = 9 },
+    @{ Page = "Performance"; Title = "Source and destination platform mix"; File = "queries/client/18_endpoint_platform_mix.kql"; Visual = "bar"; X = 0; Y = 17; W = 22; H = 9 },
 
     @{ Page = "Reliability"; Title = "Reliability rates"; File = "queries/client/05_reliability_cards.kql"; Visual = "multistat"; X = 0; Y = 0; W = 22; H = 6 },
-    @{ Page = "Reliability"; Title = "Top job errors"; File = "queries/client/06_error_distribution.kql"; Visual = "bar"; X = 0; Y = 6; W = 12; H = 9 },
+    @{ Page = "Reliability"; Title = "Top job errors"; File = "queries/client/06_error_distribution.kql"; Visual = "bar"; X = 0; Y = 6; W = 11; H = 9 },
+    @{ Page = "Reliability"; Title = "Failed-object error codes"; File = "queries/client/17_failed_object_error_codes.kql"; Visual = "bar"; X = 11; Y = 6; W = 11; H = 9 },
+    @{ Page = "Reliability"; Title = "Newly observed error codes (30 days)"; File = "queries/client/19_new_error_codes_30d.kql"; Visual = "table"; X = 0; Y = 15; W = 11; H = 9 },
+    @{ Page = "Reliability"; Title = "Unmatched starts and cancellation progress"; File = "queries/client/16_abandonment_and_cancellation.kql"; Visual = "multistat"; X = 11; Y = 15; W = 11; H = 9 },
+
+    @{ Page = "Adoption"; Title = "Weekly job frequency and change"; File = "queries/client/14_weekly_job_frequency.kql"; Visual = "timechart"; X = 0; Y = 0; W = 22; H = 8 },
+    @{ Page = "Adoption"; Title = "Observed sampled-installation funnel (proxy)"; File = "queries/client/15_observed_installation_funnel.kql"; Visual = "multistat"; X = 0; Y = 8; W = 22; H = 7 },
 
     @{ Page = "Data Quality"; Title = "Telemetry acceptance"; File = "queries/client/08_telemetry_quality.kql"; Visual = "multistat"; X = 0; Y = 0; W = 22; H = 6 },
     @{ Page = "Data Quality"; Title = "Rejected and suspect attempts"; File = "queries/client/12_telemetry_rejections.kql"; Visual = "table"; X = 0; Y = 6; W = 22; H = 10 },
     @{ Page = "Data Quality"; Title = "Per-attempt Storage request evidence"; File = "queries/server/05_job_storage_evidence.kql"; Visual = "table"; X = 0; Y = 16; W = 22; H = 10 },
 
-    @{ Page = "Customer Drilldown"; Title = "Observed job attempts"; File = "queries/client/09_account_drilldown.kql"; Visual = "table"; X = 0; Y = 0; W = 22; H = 10 },
-    @{ Page = "Customer Drilldown"; Title = "Top source and destination movers"; File = "queries/client/11_top_account_movers.kql"; Visual = "bar"; X = 0; Y = 10; W = 12; H = 9 },
-    @{ Page = "Customer Drilldown"; Title = "Account ownership"; File = "queries/server/03_account_ownership.kql"; Visual = "table"; X = 12; Y = 10; W = 10; H = 9 },
+    @{ Page = "Customer Drilldown"; Title = "Selected account business summary (proxy)"; File = "queries/client/13_account_business_summary.kql"; Visual = "multistat"; X = 0; Y = 0; W = 22; H = 6 },
+    @{ Page = "Customer Drilldown"; Title = "Observed job attempts"; File = "queries/client/09_account_drilldown.kql"; Visual = "table"; X = 0; Y = 6; W = 22; H = 10 },
+    @{ Page = "Customer Drilldown"; Title = "Top source and destination movers"; File = "queries/client/11_top_account_movers.kql"; Visual = "bar"; X = 0; Y = 16; W = 12; H = 9 },
+    @{ Page = "Customer Drilldown"; Title = "Account ownership"; File = "queries/server/03_account_ownership.kql"; Visual = "table"; X = 12; Y = 16; W = 10; H = 9 },
 
     @{ Page = "Server Correlation"; Title = "Server-observed AzCopy requests"; File = "queries/server/01_xagg_azcopy_requests.kql"; Visual = "timechart"; X = 0; Y = 0; W = 22; H = 8 },
     @{ Page = "Server Correlation"; Title = "Storage API operation mix"; File = "queries/server/02_storage_operation_mix.kql"; Visual = "bar"; X = 0; Y = 8; W = 10; H = 10 },

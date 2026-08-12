@@ -40,10 +40,15 @@ customEvents
     ThroughputP50Mbps = percentile(ThroughputMbps, 50),
     ThroughputP90Mbps = percentile(ThroughputMbps, 90),
     ThroughputP95Mbps = percentile(ThroughputMbps, 95),
+    CompletionAvgSecondsPerTB = avg(CompletionSecondsPerTB),
     CompletionP90SecondsPerTB = percentile(CompletionSecondsPerTB, 90),
     CompletionP95SecondsPerTB = percentile(CompletionSecondsPerTB, 95),
     AvgEnumerationSeconds = avg(EnumerationSeconds),
-    AvgTransferSeconds = avg(TransferSeconds)
+    EnumerationP90Seconds = percentile(EnumerationSeconds, 90),
+    EnumerationP95Seconds = percentile(EnumerationSeconds, 95),
+    AvgTransferSeconds = avg(TransferSeconds),
+    TransferP90Seconds = percentile(TransferSeconds, 90),
+    TransferP95Seconds = percentile(TransferSeconds, 95)
   by Topology
 | project
     Topology = iif(isempty(Topology), 'unknown', Topology),
@@ -52,8 +57,13 @@ customEvents
     ThroughputP50Mbps = round(ThroughputP50Mbps, 2),
     ThroughputP90Mbps = round(ThroughputP90Mbps, 2),
     ThroughputP95Mbps = round(ThroughputP95Mbps, 2),
+    CompletionAvgHoursPerTB = round(CompletionAvgSecondsPerTB / 3600.0, 2),
     CompletionP90HoursPerTB = round(CompletionP90SecondsPerTB / 3600.0, 2),
     CompletionP95HoursPerTB = round(CompletionP95SecondsPerTB / 3600.0, 2),
     AvgEnumerationSeconds = round(AvgEnumerationSeconds, 2),
-    AvgTransferSeconds = round(AvgTransferSeconds, 2)
+    EnumerationP90Seconds = round(EnumerationP90Seconds, 2),
+    EnumerationP95Seconds = round(EnumerationP95Seconds, 2),
+    AvgTransferSeconds = round(AvgTransferSeconds, 2),
+    TransferP90Seconds = round(TransferP90Seconds, 2),
+    TransferP95Seconds = round(TransferP95Seconds, 2)
 | order by SampleSize desc

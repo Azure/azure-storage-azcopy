@@ -1,0 +1,25 @@
+// Visual: Time chart or table
+// X column: timestamp; Y columns: EstimatedAttempts, WoWChangePct
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend SamplingRate = todouble(customDimensions.SamplingRate)
+| extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| summarize
+    ObservedAttempts = count(),
+    EstimatedAttempts = sum(Weight)
+  by Week = startofweek(timestamp)
+| order by Week asc
+| serialize
+| extend PreviousWeekEstimatedAttempts = prev(EstimatedAttempts)
+| extend WoWChangePct = iif(
+    isnotnull(PreviousWeekEstimatedAttempts) and PreviousWeekEstimatedAttempts > 0,
+    100.0 * (EstimatedAttempts - PreviousWeekEstimatedAttempts) / PreviousWeekEstimatedAttempts,
+    real(null))
+| project
+    timestamp = Week,
+    ObservedAttempts,
+    EstimatedAttempts = round(EstimatedAttempts, 0),
+    PreviousWeekEstimatedAttempts = round(PreviousWeekEstimatedAttempts, 0),
+    WoWChangePct = round(WoWChangePct, 2)

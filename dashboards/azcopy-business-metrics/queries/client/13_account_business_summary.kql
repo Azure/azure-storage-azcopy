@@ -1,0 +1,64 @@
+// Visual: Multi stat
+// The optional _account parameter is an Azure Storage account proxy, not a customer identity.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    CommandValue = tostring(customDimensions.Command),
+    StatusValue = tostring(customDimensions.JobStatus),
+    VersionValue = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),
+    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
+    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), ''),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    EndTime = max(timestamp),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    Command = take_any(CommandValue),
+    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),
+    Version = take_any(VersionValue),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    SamplingRate = max(SamplingRateValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),
+    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),
+    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps')
+  by InvocationID, JobID
+| where FinishedRows > 0
+| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account
+| extend
+    Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0),
+    CompletionHoursPerTB = iif(BytesTransferred > 0 and JobDurationSeconds > 0, JobDurationSeconds * 1000000000000.0 / BytesTransferred / 3600.0, real(null))
+| summarize
+    ObservedAttempts = count(),
+    EstimatedAttempts = sum(Weight),
+    EstimatedBytes = sum(Weight * BytesTransferred),
+    AvgThroughputMbps = avg(ThroughputMbps),
+    MigrationP90HoursPerTB = percentile(CompletionHoursPerTB, 90),
+    MigrationP95HoursPerTB = percentile(CompletionHoursPerTB, 95),
+    EstimatedFailures = sumif(Weight, JobStatus in ('Failed', 'CompletedWithErrors')),
+    EstimatedCancellations = sumif(Weight, JobStatus == 'Cancelled'),
+    EstimatedResumeAttempts = sumif(Weight, Command == 'jobs.resume'),
+    LastObservedJob = max(EndTime),
+    LastObservedSuccessfulJob = maxif(EndTime, JobStatus in ('Completed', 'CompletedWithSkipped')),
+    Versions = make_set(Version, 10)
+| project
+    ObservedAttempts,
+    EstimatedAttempts = round(EstimatedAttempts, 0),
+    EstimatedDataTB = round(EstimatedBytes / 1000000000000.0, 3),
+    AvgThroughputMbps = round(AvgThroughputMbps, 2),
+    MigrationP90HoursPerTB = round(MigrationP90HoursPerTB, 2),
+    MigrationP95HoursPerTB = round(MigrationP95HoursPerTB, 2),
+    EstimatedFailures = round(EstimatedFailures, 0),
+    EstimatedCancellations = round(EstimatedCancellations, 0),
+    EstimatedResumeAttempts = round(EstimatedResumeAttempts, 0),
+    DaysSinceLastObservedJob = datetime_diff('day', _endTime, LastObservedJob),
+    DaysSinceLastObservedSuccessfulJob = datetime_diff('day', _endTime, LastObservedSuccessfulJob),
+    Versions
