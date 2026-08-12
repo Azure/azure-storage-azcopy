@@ -23,6 +23,8 @@ package ste
 import (
 	"context"
 	"io"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // pacedReadSeeker implements read/seek/close with pacing. (Formerly in file pacer-lite)
@@ -35,17 +37,17 @@ type pacedReadSeeker struct {
 	ctx context.Context
 
 	body io.Reader // Seeking is required to support retries
-	p    pacer
+	p    common.Pacer
 }
 
-func newPacedRequestBody(ctx context.Context, requestBody io.ReadSeeker, p pacer) io.ReadSeekCloser {
+func newPacedRequestBody(ctx context.Context, requestBody io.ReadSeeker, p common.Pacer) io.ReadSeekCloser {
 	if p == nil {
 		panic("p must not be nil")
 	}
 	return &pacedReadSeeker{ctx: ctx, body: requestBody, p: p}
 }
 
-func newPacedResponseBody(ctx context.Context, responseBody io.ReadCloser, p pacer) io.ReadCloser {
+func newPacedResponseBody(ctx context.Context, responseBody io.ReadCloser, p common.Pacer) io.ReadCloser {
 	if p == nil {
 		panic("p must not be nil")
 	}

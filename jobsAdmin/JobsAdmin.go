@@ -130,7 +130,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
 	unusedExpectedCoarseRequestByteCount := int64(0)
-	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+	pacer := common.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 
@@ -254,7 +254,7 @@ type jobsAdmin struct {
 	logDir                  string // Where log files are stored
 	planDir                 string // Initialize to directory where Job Part Plans are stored
 	appCtx                  context.Context
-	pacer                   ste.PacerAdmin
+	pacer                   common.PacerAdmin
 	slicePool               common.ByteSlicePooler
 	cacheLimiter            common.CacheLimiter
 	fileCountLimiter        common.CacheLimiter

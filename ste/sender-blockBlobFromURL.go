@@ -35,7 +35,7 @@ type urlToBlockBlobCopier struct {
 	srcURL string
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer common.Pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	var destBlobTier *blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.

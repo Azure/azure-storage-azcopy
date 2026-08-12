@@ -201,7 +201,7 @@ type jobPartMgr struct {
 
 	priority common.JobPriority
 
-	pacer pacer // Pacer is used to cap throughput
+	pacer common.Pacer // Pacer is used to cap throughput
 
 	slicePool common.ByteSlicePooler
 

@@ -31,14 +31,14 @@ import (
 )
 
 type autopacer interface {
-	pacer
+	common.Pacer
 	retryNotificationReceiver
 }
 
 // autoTokenBucketPacer is a pacer which automatically seeks the right rate, based on retry (503)
 // statuses received from the target service.
 type autoTokenBucketPacer struct {
-	*tokenBucketPacer
+	*common.TokenBucketPacer
 	lastPeakBytesPerSecond  float32
 	lastPeakTime            time.Time
 	done                    chan struct{}
@@ -49,8 +49,6 @@ type autoTokenBucketPacer struct {
 
 const (
 	tuningIntervalDuration = time.Second
-
-	deadBandDuration = 20 * time.Second // TODO: review this rather generous value.  Might not be needed if we can pace the internal retry efforts inside the retryPolices, because we (presumably) won't get such big flurries of 503s if we do that
 
 	decreaseFactor = 0.65
 
@@ -101,7 +99,7 @@ func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bo
 	}
 
 	a := &autoTokenBucketPacer{
-		tokenBucketPacer:       NewTokenBucketPacer(bytesPerSecond, expectedBytesPerRequest),
+		TokenBucketPacer:       common.NewTokenBucketPacer(bytesPerSecond, expectedBytesPerRequest),
 		lastPeakBytesPerSecond: float32(bytesPerSecond),
 		done:                   make(chan struct{}),
 		logger:                 logger,
@@ -115,7 +113,7 @@ func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bo
 
 func (a *autoTokenBucketPacer) Close() error {
 	close(a.done)
-	return a.tokenBucketPacer.Close()
+	return a.TokenBucketPacer.Close()
 }
 
 // RetryCallback records the fact that a retry has happened
@@ -145,18 +143,18 @@ func (a *autoTokenBucketPacer) rateTunerBody() {
 }
 
 func (a *autoTokenBucketPacer) decreaseRate() {
-	if time.Since(a.lastPeakTime) < deadBandDuration {
+	if time.Since(a.lastPeakTime) < common.DeadBandDuration {
 		return // don't do another decrease so soon, since doing so would cause us to overreact
 	}
-	existingRate := float32(a.targetBytesPerSecond())
+	existingRate := float32(a.TargetBytesPerSecond())
 	a.lastPeakBytesPerSecond = existingRate
 	a.lastPeakTime = time.Now()
 	newRate := existingRate * decreaseFactor
-	a.tokenBucketPacer.setTargetBytesPerSecond(int64(newRate))
+	a.TokenBucketPacer.SetTargetBytesPerSecondImmediate(int64(newRate))
 }
 
 func (a *autoTokenBucketPacer) increaseRate() {
-	existingRate := float32(a.targetBytesPerSecond())
+	existingRate := float32(a.TargetBytesPerSecond())
 	var newRate float32
 	switch {
 	case existingRate < stableZoneStart*a.lastPeakBytesPerSecond:
@@ -176,10 +174,10 @@ func (a *autoTokenBucketPacer) increaseRate() {
 	// then suddenly well be at a crazy high rate that takes too long to step back down to reality (and or get
 	// integer overflow issues).
 	if newRate < maxPacerBytesPerSecond {
-		a.tokenBucketPacer.setTargetBytesPerSecond(int64(newRate))
+		a.TokenBucketPacer.SetTargetBytesPerSecondImmediate(int64(newRate))
 	}
 }
 
 func (a *autoTokenBucketPacer) logRate() {
-	a.logger.Log(common.LogInfo, fmt.Sprintf("%s: Target Mbps %d", a.logPrefix, (a.targetBytesPerSecond()*8)/(1000*1000)))
+	a.logger.Log(common.LogInfo, fmt.Sprintf("%s: Target Mbps %d", a.logPrefix, (a.TargetBytesPerSecond()*8)/(1000*1000)))
 }

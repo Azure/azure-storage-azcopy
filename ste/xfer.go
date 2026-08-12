@@ -57,22 +57,22 @@ var cpkAccessFailureLogGLCM sync.Once
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // These types are define the STE Coordinator
-type newJobXfer func(jptm IJobPartTransferMgr, pacer pacer)
+type newJobXfer func(jptm IJobPartTransferMgr, pacer common.Pacer)
 
 // same as newJobXfer, but with an extra parameter
-type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory)
-type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
+type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pacer common.Pacer, df downloaderFactory)
+type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pacer common.Pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
-	return func(jptm IJobPartTransferMgr, pacer pacer) {
+	return func(jptm IJobPartTransferMgr, pacer common.Pacer) {
 		targetFunction(jptm, pacer, df)
 	}
 }
 
 // Takes a multi-purpose send function, and makes it ready to use with a specific type of sender
 func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
-	return func(jptm IJobPartTransferMgr, pacer pacer) {
+	return func(jptm IJobPartTransferMgr, pacer common.Pacer) {
 		targetFunction(jptm, pacer, sf, sipf)
 	}
 }

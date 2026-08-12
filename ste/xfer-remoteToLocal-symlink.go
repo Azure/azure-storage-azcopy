@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer common.Pacer, df downloaderFactory) {
 	info := jptm.Info()
 
 	// Perform initial checks

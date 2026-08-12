@@ -58,7 +58,7 @@ type azureFileSenderBase struct {
 	shareClient          *share.Client
 	chunkSize            int64
 	numChunks            uint32
-	pacer                pacer
+	pacer                common.Pacer
 	ctx                  context.Context
 	sip                  ISourceInfoProvider
 	// Headers and other info that we will apply to the destination
@@ -80,7 +80,7 @@ type NFSProperties struct {
 	FileMode      *string
 }
 
-func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
+func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer common.Pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size (irrelevant but harmless for folders)

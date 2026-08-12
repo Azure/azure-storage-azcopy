@@ -18,19 +18,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package common
 
 import (
 	"context"
 	"errors"
 	"sync/atomic"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// pacer is used by callers whose activity must be controlled to a certain pace
-type pacer interface {
+// Pacer is used by callers whose activity must be controlled to a certain pace
+type Pacer interface {
 
 	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
 	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
@@ -47,7 +45,7 @@ type pacer interface {
 }
 
 type PacerAdmin interface {
-	pacer
+	Pacer
 
 	// GetTotalTraffic returns the cumulative count of all traffic that has been processed
 	GetTotalTraffic() int64
@@ -62,11 +60,18 @@ const (
 
 	// Controls the max amount by which the contents of the token bucket can build up, unused.
 	maxSecondsToOverpopulateBucket = 2.5 // had 5, when doing coarse-grained pacing. TODO: find best all-round value, or parameterize
+
+	// DeadBandDuration is the minimum time between target-rate updates that pacers built on
+	// TokenBucketPacer will honour. Shared here because it's used both by TokenBucketPacer's own
+	// pacerBody (for live --cap-mbps updates) and by ste's autoTokenBucketPacer (for AIMD peak-decrease
+	// throttling), which embeds TokenBucketPacer directly.
+	// TODO: review this rather generous value.  Might not be needed if we can pace the internal retry efforts inside the retryPolices, because we (presumably) won't get such big flurries of 503s if we do that
+	DeadBandDuration = 20 * time.Second
 )
 
-// tokenBucketPacer allows us to control the pace of an activity, using a basic token bucket algorithm.
-// The target rate is fixed, but can be modified at any time through SetTargetBytesPerSecond
-type tokenBucketPacer struct {
+// TokenBucketPacer allows us to control the pace of an activity, using a basic token bucket algorithm.
+// The target rate is fixed, but can be modified at any time through UpdateTargetBytesPerSecond
+type TokenBucketPacer struct {
 	atomicTokenBucket          int64
 	atomicTargetBytesPerSecond int64
 	atomicGrandTotal           int64
@@ -76,8 +81,8 @@ type tokenBucketPacer struct {
 	done                       chan struct{}
 }
 
-func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
-	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
+func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *TokenBucketPacer {
+	p := &TokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
 		done:                       make(chan struct{}),
@@ -91,18 +96,18 @@ func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 
 // RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
-func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
-	targetBytes := p.targetBytesPerSecond()
+func (p *TokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	targetBytes := p.TargetBytesPerSecond()
 	//if targetBytesIsZero, we have a null pacer, we just track GrandTotal
 	if targetBytes == 0 {
 		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 		return nil
 	}
 
-	// Wait until p.targetBytesPerSecond() is positive or zero
+	// Wait until p.TargetBytesPerSecond() is positive or zero
 	// A negative value indicates the pacer is temporarily disabled/throttled
 	// Prevents token allocation errors and CPU waste from busy-waiting on invalid targets
-	for p.targetBytesPerSecond() < 0 {
+	for p.TargetBytesPerSecond() < 0 {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -134,7 +139,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		}
 
 		// If we've updated target to a NULL pacer, we'll return immediately
-		if p.targetBytesPerSecond() == 0 {
+		if p.TargetBytesPerSecond() == 0 {
 			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 			return nil
 		}
@@ -148,23 +153,23 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 }
 
 // UndoRequest allows a caller to return unused tokens
-func (p *tokenBucketPacer) UndoRequest(byteCount int64) {
+func (p *TokenBucketPacer) UndoRequest(byteCount int64) {
 	if byteCount > 0 {
 		atomic.AddInt64(&p.atomicTokenBucket, byteCount) // put them back in the bucket
 		atomic.AddInt64(&p.atomicGrandTotal, -byteCount) // deduct them from all-time issued count
 	}
 }
 
-func (p *tokenBucketPacer) Close() error {
+func (p *TokenBucketPacer) Close() error {
 	close(p.done)
 	return nil
 }
 
-func (p *tokenBucketPacer) pacerBody() {
+func (p *TokenBucketPacer) pacerBody() {
 	lastTime := time.Now()
 
 	lastTargetUpdateTime := time.Now()
-	newTarget := p.targetBytesPerSecond()
+	newTarget := p.TargetBytesPerSecond()
 	for {
 
 		select {
@@ -175,8 +180,8 @@ func (p *tokenBucketPacer) pacerBody() {
 		}
 
 		/*check if we have to update target rate */
-		if newTarget != p.targetBytesPerSecond() && time.Since(lastTargetUpdateTime) >= deadBandDuration {
-			p.setTargetBytesPerSecond(newTarget)
+		if newTarget != p.TargetBytesPerSecond() && time.Since(lastTargetUpdateTime) >= DeadBandDuration {
+			p.SetTargetBytesPerSecondImmediate(newTarget)
 			lastTargetUpdateTime = time.Now()
 		}
 
@@ -193,7 +198,7 @@ func (p *tokenBucketPacer) pacerBody() {
 			maxAllowedUnsentBytes = p.expectedBytesPerRequest // just in case we are very coarse grained at a very slow speed
 		}
 		if newTokenCount > maxAllowedUnsentBytes {
-			common.AtomicMorphInt64(&p.atomicTokenBucket, func(currentVal int64) (newVal int64, _ interface{}) {
+			AtomicMorphInt64(&p.atomicTokenBucket, func(currentVal int64) (newVal int64, _ interface{}) {
 				newVal = currentVal
 				if currentVal > maxAllowedUnsentBytes {
 					newVal = maxAllowedUnsentBytes
@@ -206,18 +211,26 @@ func (p *tokenBucketPacer) pacerBody() {
 	}
 }
 
-func (p *tokenBucketPacer) targetBytesPerSecond() int64 {
+// TargetBytesPerSecond returns the current target rate. Exported (rather than staying a private
+// getter) because ste's autoTokenBucketPacer embeds *TokenBucketPacer directly and reads this
+// across the package boundary.
+func (p *TokenBucketPacer) TargetBytesPerSecond() int64 {
 	return atomic.LoadInt64(&p.atomicTargetBytesPerSecond)
 }
 
-func (p *tokenBucketPacer) setTargetBytesPerSecond(value int64) {
+// SetTargetBytesPerSecondImmediate sets the target rate right away, bypassing the dead-band
+// debounce that UpdateTargetBytesPerSecond applies. Named distinctly from UpdateTargetBytesPerSecond
+// (the debounced, channel-based public API) to avoid confusion between the two. Exported because
+// ste's autoTokenBucketPacer, which embeds *TokenBucketPacer directly, calls this for its own
+// AIMD-driven rate changes, which must take effect immediately rather than being debounced.
+func (p *TokenBucketPacer) SetTargetBytesPerSecondImmediate(value int64) {
 	atomic.StoreInt64(&p.atomicTargetBytesPerSecond, value)
 }
 
-func (p *tokenBucketPacer) UpdateTargetBytesPerSecond(value int64) {
+func (p *TokenBucketPacer) UpdateTargetBytesPerSecond(value int64) {
 	p.newTargetBytesPerSecond <- value
 }
 
-func (p *tokenBucketPacer) GetTotalTraffic() int64 {
+func (p *TokenBucketPacer) GetTotalTraffic() int64 {
 	return atomic.LoadInt64(&p.atomicGrandTotal)
 }
