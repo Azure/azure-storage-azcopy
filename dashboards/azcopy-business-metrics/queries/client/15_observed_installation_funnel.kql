@@ -45,11 +45,11 @@ Attempts
     P90HoursToFirstObservedSuccess = round(P90HoursToFirstObservedSuccess, 2)
 | mv-expand MetricValue = pack_array(
     bag_pack('Metric', 'Observed installations', 'Value', ObservedInstallations),
-    bag_pack('Metric', 'First observed success (%)', 'Value', FirstObservedAttemptSuccessRatePct),
-    bag_pack('Metric', 'Second observed attempt (%)', 'Value', SecondObservedAttemptRatePct),
-    bag_pack('Metric', 'Observed success (%)', 'Value', ObservedSuccessRatePct),
-    bag_pack('Metric', 'Median hours to success', 'Value', MedianHoursToFirstObservedSuccess),
-    bag_pack('Metric', 'P90 hours to success', 'Value', P90HoursToFirstObservedSuccess))
+    bag_pack('Metric', 'First observed attempt succeeded (%)', 'Value', FirstObservedAttemptSuccessRatePct),
+    bag_pack('Metric', 'Had 2+ observed attempts (%)', 'Value', SecondObservedAttemptRatePct),
+    bag_pack('Metric', 'Had any observed success (%)', 'Value', ObservedSuccessRatePct),
+    bag_pack('Metric', 'Median hours to observed success', 'Value', MedianHoursToFirstObservedSuccess),
+    bag_pack('Metric', 'P90 hours to observed success', 'Value', P90HoursToFirstObservedSuccess))
 | project
     Metric = tostring(MetricValue.Metric),
     Value = todouble(MetricValue.Value)

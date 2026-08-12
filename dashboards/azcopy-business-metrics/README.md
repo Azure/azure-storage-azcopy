@@ -123,7 +123,7 @@ Add one free-text parameter:
 | Tile | Query | Data source | Visual |
 | --- | --- | --- | --- |
 | Weekly job frequency and change | `queries/client/14_weekly_job_frequency.kql` | AzCopyClientTelemetry | Time chart or table |
-| Observed sampled-installation funnel | `queries/client/15_observed_installation_funnel.kql` | AzCopyClientTelemetry | Multi stat |
+| Observed sampled-installation behavior (proxy) | `queries/client/15_observed_installation_funnel.kql` | AzCopyClientTelemetry | Multi stat |
 
 ### Data Quality
 
@@ -206,9 +206,11 @@ Shows starts at least 30 minutes old, how many still lack a finish event after t
 
 Shows observed and inverse-sampling estimated finished attempts by week, the prior week's estimate, and week-over-week percentage change. Missing weeks are not backfilled, so compare only adjacent rows that represent adjacent calendar weeks.
 
-### Observed sampled-installation funnel
+### Observed sampled-installation behavior (proxy)
 
-Shows success on the first observed sampled attempt, whether a second sampled attempt was observed, and time from the first observed attempt to the first observed success. These are selected-range, sampled-installation proxies. They are not first-ever customer job, true second-job conversion, or an authoritative customer cohort.
+Groups sampled finished jobs in the selected range by `InstallationID`. It shows the number of unique installations observed, the percentage whose first observed attempt succeeded, the percentage with at least two observed attempts, the percentage with any observed success, and the median/P90 time from first observed attempt to first observed success.
+
+This is a behavior summary, not a true sequential funnel. The rates share observed installations as their denominator but describe overlapping outcomes. Deterministic job sampling and the selected time range can hide earlier, later, or intervening jobs, so "first observed" and "2+ observed" do not mean first-ever customer job or true second-job conversion.
 
 ### Telemetry acceptance
 
