@@ -38,23 +38,30 @@ steps:
     displayName: 'Create output paths'
 
   - script: |
-      go build -tags "netgo" -o "$(binaries)/azcopy_linux${{ parameters.build_suffix }}_${{ parameters.host_architecture }}"
+      case "$AZCOPY_TELEMETRY_CONNECTION_STRING" in
+        InstrumentationKey=*) ;;
+        *) echo "AZCOPY_TELEMETRY_CONNECTION_STRING_PROD must be configured as a secret pipeline variable"; exit 1 ;;
+      esac
+      telemetry_ldflags="-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=$AZCOPY_TELEMETRY_CONNECTION_STRING"
+      go build -ldflags "$telemetry_ldflags" -tags "netgo" -o "$(binaries)/azcopy_linux${{ parameters.build_suffix }}_${{ parameters.host_architecture }}"
     displayName: 'Build'
     env:
       GOARCH: '${{ parameters.host_architecture }}'
       GOOS: linux
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
       ${{ if eq(parameters.build_suffix, '_fips') }}:
         CGO_ENABLED: 1
 
   - script: |
-      go build -tags "netgo,se_integration" -o "$(binaries)/azcopy_linux_se${{ parameters.build_suffix }}_${{ parameters.host_architecture }}"
+      telemetry_ldflags="-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=$AZCOPY_TELEMETRY_CONNECTION_STRING"
+      go build -ldflags "$telemetry_ldflags" -tags "netgo,se_integration" -o "$(binaries)/azcopy_linux_se${{ parameters.build_suffix }}_${{ parameters.host_architecture }}"
     displayName: 'Build SE Integration'
     env:
       GOARCH: '${{ parameters.host_architecture }}'
       GOOS: linux
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
       ${{ if eq(parameters.build_suffix, '_fips') }}:
         CGO_ENABLED: 1
-
   - script: |
       linux_dir="$(System.DefaultWorkingDirectory)/azcopy_linux${{ parameters.build_suffix }}_${{ parameters.host_architecture }}_$(azcopy_version)"
       echo "##vso[task.setvariable variable=linux_dir]$linux_dir"
