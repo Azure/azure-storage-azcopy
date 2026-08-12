@@ -15,25 +15,29 @@ steps:
     displayName: 'Create resource.syso files'
 
   - script: |
-      go build -o "$(binaries)\azcopy_windows_amd64.exe"
+      echo %AZCOPY_TELEMETRY_CONNECTION_STRING% | findstr /B /C:"InstrumentationKey=" >nul || (echo AZCOPY_TELEMETRY_CONNECTION_STRING_PROD must be configured as a secret pipeline variable && exit /b 1)
+      go build -ldflags "-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=%AZCOPY_TELEMETRY_CONNECTION_STRING%" -o "$(binaries)\azcopy_windows_amd64.exe"
     displayName: 'Generate Windows AMD64'
     env:
       GOARCH: amd64
       GOOS: windows
       CGO_ENABLED: 0
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
 
   - script: |
-      go build -o "$(binaries)\azcopy_windows_386.exe"
+      go build -ldflags "-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=%AZCOPY_TELEMETRY_CONNECTION_STRING%" -o "$(binaries)\azcopy_windows_386.exe"
     displayName: 'Generate Windows i386'
     env:
       GOARCH: 386
       GOOS: windows
       CGO_ENABLED: 0
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
 
   - script: |
-      go build -o "$(binaries)\azcopy_windows_arm64.exe"
+      go build -ldflags "-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=%AZCOPY_TELEMETRY_CONNECTION_STRING%" -o "$(binaries)\azcopy_windows_arm64.exe"
     displayName: 'Generate Windows ARM'
     env:
       GOARCH: arm64
       GOOS: windows
       CGO_ENABLED: 0
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
