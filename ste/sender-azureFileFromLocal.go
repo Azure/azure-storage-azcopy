@@ -32,7 +32,7 @@ type azureFileUploader struct {
 	md5Channel chan []byte
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, pacer common.Pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err

@@ -194,7 +194,7 @@ type IJobMgr interface {
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
-	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
+	pacer common.PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 
 	config := GetChannelSizeConfig()
@@ -440,7 +440,7 @@ type jobMgr struct {
 	poolSizingChannels  poolSizingChannels
 	concurrencyTuner    ConcurrencyTuner
 	cpuMon              common.CPUMonitor
-	pacer               PacerAdmin
+	pacer               common.PacerAdmin
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter

@@ -42,7 +42,7 @@ type pageBlobSenderBase struct {
 	srcSize            int64
 	chunkSize          int64
 	numChunks          uint32
-	pacer              pacer
+	pacer              common.Pacer
 
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
@@ -79,7 +79,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer common.Pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count

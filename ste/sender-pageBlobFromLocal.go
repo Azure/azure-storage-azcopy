@@ -36,7 +36,7 @@ type pageBlobUploader struct {
 	sip        ISourceInfoProvider
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer common.Pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, nil)
 	if err != nil {
 		return nil, err
