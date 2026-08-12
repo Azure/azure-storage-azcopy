@@ -1,0 +1,43 @@
+// Visual: Table or time chart
+// Run from: azcore.centralus.kusto.windows.net / Xstore
+// This is account/time correlation, not exact job-to-request attribution.
+// Additional dashboard parameter: _account (free text, default empty)
+let ClientMetrics = cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    AccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), ''),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    EndTime = max(timestamp),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    Account = take_any(AccountValue),
+    SamplingRate = max(SamplingRateValue)
+  by InvocationID
+| where FinishedRows > 0 and isnotempty(Account)
+| extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| summarize ObservedJobs = count(), EstimatedJobs = sum(Weight)
+  by Hour = bin(EndTime, 1h), Account = tolower(Account);
+let ServerRequests = XAggUserAgentTelemetryMetric()
+| where TimeWindow between (_startTime .. _endTime)
+| where Tool =~ 'azcopy'
+| summarize Requests = sum(RequestCount)
+  by Hour = bin(TimeWindow, 1h), Account = tolower(Account);
+ClientMetrics
+| join kind=fullouter hint.strategy=broadcast ServerRequests on Hour, Account
+| where isempty(_account) or Account =~ _account
+| extend RequestsPerEstimatedJob = Requests / iif(EstimatedJobs > 0.0, EstimatedJobs, 1.0)
+| project
+    timestamp = Hour,
+    Account,
+    ObservedJobs,
+    EstimatedJobs = round(EstimatedJobs, 0),
+    Requests,
+    RequestsPerEstimatedJob = round(RequestsPerEstimatedJob, 2)
+| order by timestamp asc, Requests desc

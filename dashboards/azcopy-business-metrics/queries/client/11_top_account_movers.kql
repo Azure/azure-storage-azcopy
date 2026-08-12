@@ -1,0 +1,43 @@
+// Visual: Table or bar chart
+// S2S jobs intentionally appear once per endpoint role; do not sum roles for global totals.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
+    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), ''),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    SamplingRate = max(SamplingRateValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')
+  by InvocationID
+| where FinishedRows > 0
+| extend
+    Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0),
+    Endpoints = pack_array(
+        bag_pack('Role', 'source', 'Account', SourceAccount),
+        bag_pack('Role', 'destination', 'Account', DestAccount))
+| mv-expand Endpoint = Endpoints
+| extend Role = tostring(Endpoint.Role), Account = tostring(Endpoint.Account)
+| where isnotempty(Account)
+| summarize
+    ObservedAttempts = count(),
+    EstimatedAttempts = sum(Weight),
+    EstimatedBytes = sum(Weight * BytesTransferred)
+  by Role, Account
+| top 50 by EstimatedBytes desc
+| project
+    Role,
+    Account,
+    ObservedAttempts,
+    EstimatedAttempts = round(EstimatedAttempts, 0),
+    EstimatedDataTB = round(EstimatedBytes / 1000000000000.0, 3)

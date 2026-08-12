@@ -1,0 +1,28 @@
+// Visual: Multi stat
+// Schema v2 and v3 finish attempts are expected to contain 50 distinct finish metrics.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    SamplingRateValue = todouble(customDimensions.SamplingRate),
+    SchemaVersionValue = tostring(customDimensions.SchemaVersion)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    StartedRows = countif(name == 'azcopy.job.started'),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    FinishMetricNames = dcountif(name, name != 'azcopy.job.started'),
+    SamplingRate = max(SamplingRateValue),
+    SchemaVersion = take_any(SchemaVersionValue)
+  by InvocationID
+| summarize
+    ObservedAttempts = count(),
+    UnmatchedStarts = countif(StartedRows > 0 and FinishedRows == 0),
+    FinishWithoutStart = countif(FinishedRows > 0 and StartedRows == 0),
+    IncompleteKnownSchemaFinishes = countif(FinishedRows > 0 and SchemaVersion in ('2', '3') and FinishMetricNames < 50),
+    MissingSamplingRate = countif(isnull(SamplingRate) or SamplingRate <= 0.0),
+    SchemaVersions = make_set(SchemaVersion, 10)

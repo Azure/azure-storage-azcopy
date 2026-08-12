@@ -1,0 +1,17 @@
+// Visual: Bar chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend
+    Category = tostring(customDimensions.JobErrorCategory),
+    Code = tostring(customDimensions.JobErrorCode),
+    JobStatus = tostring(customDimensions.JobStatus),
+    TerminalStage = tostring(customDimensions.TerminalStage)
+| extend Error = strcat(iif(isempty(Category), 'none', Category), ' / ', iif(isempty(Code), 'none', Code))
+| summarize Attempts = count() by Error, JobStatus, TerminalStage
+| top 30 by Attempts desc

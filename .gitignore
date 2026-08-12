@@ -23,6 +23,10 @@ vendor/
 ## Ignore the executables
 azcopy*
 
+## Do not ignore AzCopy dashboard source and import artifacts
+!dashboards/azcopy-*/
+!dashboards/azcopy-*/**
+
 ## Do not ignore azcopy as a library code
 !azcopy/
 

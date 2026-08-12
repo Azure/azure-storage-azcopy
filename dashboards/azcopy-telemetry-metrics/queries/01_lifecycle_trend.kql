@@ -1,0 +1,12 @@
+// Visual: Time chart
+// Raw observed telemetry values; no inverse-sampling estimation.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.command.invoked', 'azcopy.job.started', 'azcopy.job.finished')
+| summarize Value = sum(value) by bin(timestamp, 1h), Metric = name
+| order by timestamp asc

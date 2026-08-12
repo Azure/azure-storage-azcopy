@@ -1,0 +1,58 @@
+// Visual: Table
+// Percentiles are calculated over sampled jobs; show SampleSize with every row.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+  SourceTypeValue = tostring(customDimensions.SourceType),
+  DestTypeValue = tostring(customDimensions.DestType),
+  LegacyTopologyValue = tostring(customDimensions.TransferTopology)
+| extend TopologyValue = iif(isnotempty(LegacyTopologyValue), LegacyTopologyValue, case(
+  SourceTypeValue == 'S3' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',
+  SourceTypeValue == 'GCP' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',
+  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',
+  DestTypeValue == 'Trash', 'azure-delete',
+  SourceTypeValue in ('Local', 'Benchmark', 'Pipe') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',
+  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Local', 'Pipe'), 'azure-to-local',
+  SourceTypeValue !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestTypeValue !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',
+  'unknown'))
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    Topology = take_any(TopologyValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),
+    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),
+    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps'),
+    EnumerationSeconds = maxif(value, name == 'azcopy.enumeration_phase_duration_seconds'),
+    TransferSeconds = maxif(value, name == 'azcopy.transfer_phase_duration_seconds')
+  by InvocationID
+| where FinishedRows > 0 and BytesTransferred > 0 and JobDurationSeconds > 0
+| extend CompletionSecondsPerTB = JobDurationSeconds * 1000000000000.0 / BytesTransferred
+| summarize
+    SampleSize = count(),
+    AvgJobThroughputMbps = avg(ThroughputMbps),
+    ThroughputP50Mbps = percentile(ThroughputMbps, 50),
+    ThroughputP90Mbps = percentile(ThroughputMbps, 90),
+    ThroughputP95Mbps = percentile(ThroughputMbps, 95),
+    CompletionP90SecondsPerTB = percentile(CompletionSecondsPerTB, 90),
+    CompletionP95SecondsPerTB = percentile(CompletionSecondsPerTB, 95),
+    AvgEnumerationSeconds = avg(EnumerationSeconds),
+    AvgTransferSeconds = avg(TransferSeconds)
+  by Topology
+| project
+    Topology = iif(isempty(Topology), 'unknown', Topology),
+    SampleSize,
+    AvgJobThroughputMbps = round(AvgJobThroughputMbps, 2),
+    ThroughputP50Mbps = round(ThroughputP50Mbps, 2),
+    ThroughputP90Mbps = round(ThroughputP90Mbps, 2),
+    ThroughputP95Mbps = round(ThroughputP95Mbps, 2),
+    CompletionP90HoursPerTB = round(CompletionP90SecondsPerTB / 3600.0, 2),
+    CompletionP95HoursPerTB = round(CompletionP95SecondsPerTB / 3600.0, 2),
+    AvgEnumerationSeconds = round(AvgEnumerationSeconds, 2),
+    AvgTransferSeconds = round(AvgTransferSeconds, 2)
+| order by SampleSize desc
