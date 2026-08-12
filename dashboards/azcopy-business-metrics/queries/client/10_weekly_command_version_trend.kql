@@ -7,6 +7,7 @@ customEvents
 | extend value = todouble(customMeasurements[name])
 | project-away MetricName
 | where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
 | where name in ('azcopy.job.finished', 'azcopy.command.invoked')
 | extend
     Command = tostring(customDimensions.Command),

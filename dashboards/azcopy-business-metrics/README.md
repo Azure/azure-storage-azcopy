@@ -10,7 +10,7 @@ This directory contains an importable ADX dashboard and its source KQL for the b
 4. Select `azcopy-business-metrics.dashboard.json` from this directory.
 5. Name the dashboard `AzCopy Business Metrics` and select **Create**.
 
-The imported dashboard contains 15 tiles across five pages and uses one XStore data source. Client telemetry and XDataAnalytics queries use explicit cross-cluster references, so no additional dashboard data sources are required.
+The imported dashboard contains 17 tiles across six pages and uses one XStore data source. Client telemetry and XDataAnalytics queries use explicit cross-cluster references, so no additional dashboard data sources are required.
 
 If the imported XStore source needs reconnecting, set it to:
 
@@ -87,7 +87,7 @@ Add one free-text parameter:
 
 | Label | Variable | Type | Default | Pages |
 | --- | --- | --- | --- | --- |
-| Storage account | `_account` | String | Empty | Customer Drilldown, Server Correlation |
+| Storage account | `_account` | String | Empty | All pages; used by Customer Drilldown, Data Quality, and Server Correlation queries |
 
 ## Page And Tile Manifest
 
@@ -113,7 +113,14 @@ Add one free-text parameter:
 | --- | --- | --- | --- |
 | Reliability rates | `queries/client/05_reliability_cards.kql` | AzCopyClientTelemetry | Multi stat |
 | Top job error categories | `queries/client/06_error_distribution.kql` | AzCopyClientTelemetry | Bar chart |
-| Telemetry quality | `queries/client/08_telemetry_quality.kql` | AzCopyClientTelemetry | Multi stat |
+
+### Data Quality
+
+| Tile | Query | Data source | Visual |
+| --- | --- | --- | --- |
+| Telemetry acceptance | `queries/client/08_telemetry_quality.kql` | AzCopyClientTelemetry | Multi stat |
+| Rejected and suspect attempts | `queries/client/12_telemetry_rejections.kql` | AzCopyClientTelemetry | Table |
+| Per-attempt Storage request evidence | `queries/server/05_job_storage_evidence.kql` | AzCopyClientTelemetry and XStoreUserAgent | Table |
 
 ### Customer Drilldown
 
@@ -131,7 +138,7 @@ Add one free-text parameter:
 | Storage API and error mix | `queries/server/02_storage_operation_mix.kql` | XDataAnalytics | Bar chart or table |
 | Requests per estimated job by account/hour | `queries/server/04_client_server_account_hour.kql` | XStoreUserAgent | Table or time chart |
 
-The account/hour correlation is not a job-to-request join. It correlates client jobs and server requests by normalized destination account and hour.
+Neither Storage correlation panel is a job-to-request join. The aggregate panel correlates client jobs and server requests by normalized destination account and hour. The per-attempt evidence panel narrows correlation to each recognized source or destination account and padded job time window.
 
 ## Panel Descriptions
 
@@ -167,9 +174,17 @@ Shows sampling-adjusted completion, partial-success, failure, cancellation, fail
 
 Ranks the top 20 terminal job error category/code combinations by estimated attempts and includes observed attempt counts plus example bounded failed-transfer code histograms. It describes why jobs ended unsuccessfully or with errors; it is not a count of individual HTTP failures or failed files.
 
-### Telemetry quality
+### Telemetry acceptance
 
-Counts structural telemetry issues without extrapolating them: starts without finishes, finishes without starts, incomplete schema-v2 finish metric sets, and missing sampling rates. It also reports observed schema versions. Use this panel to assess whether the business panels have a trustworthy input population.
+Classifies observed attempts using independently visible schema, lifecycle, field-completeness, and timing checks. Schema versions 2 and 3 are accepted; other or mixed versions are `InvalidSchema` and are excluded from the business-metric queries. An accepted attempt has exactly one start and finish, valid required dimensions and sampling rate, at least 50 finish measurements, a finish at or after its start, and an emitted duration within 60 seconds or 20 percent of the observed elapsed time.
+
+### Rejected and suspect attempts
+
+Lists the latest attempts that failed acceptance, with explicit reasons such as unsupported or mixed schema, missing or duplicate lifecycle events, missing required fields, incomplete finish measurements, finish-before-start ordering, and implausible duration differences. `InvalidSchema` is a hard rejection; the other reasons classify the attempt as `Suspect` so it can be investigated rather than silently discarded.
+
+### Per-attempt Storage request evidence
+
+For accepted client attempts, expands each Azure Storage source and destination account into five-minute buckets covering the observed job interval with five minutes of padding, then compares it with server-observed AzCopy requests. `SupportingEvidence` means at least one matching request was observed, `Suspect` means no request was found, and `InsufficientEvidence` means the job had no recognized Azure Storage account. The panel shows both server requests and the client-emitted Storage HTTP-attempt count plus their ratio; it does not require equality.
 
 ### Observed job attempts
 
@@ -203,6 +218,8 @@ Correlates destination-account/hour client telemetry with server-observed AzCopy
 - Aggregate retry/throttle rates from raw numerators and denominators, never by averaging per-job percentages.
 - Keep source and destination account roles separate. Do not duplicate S2S jobs in global totals.
 - Treat unmatched starts as probable abandonment only after an agreed ingestion timeout.
+- Treat `InvalidSchema` as a hard exclusion. Treat lifecycle, timing, and missing Storage evidence as investigation signals, not proof that a client fabricated telemetry.
+- Do not require client HTTP-attempt counts to equal server request counts. Chunking, retries, service-to-service transfers, sampling, concurrent jobs, and aggregation boundaries can all change the ratio.
 - XStore `Tenant`/`LogicalTenant` values are Storage deployment tenants, not customer Entra tenant IDs.
 
 ## Unsupported Or Partial Business Metrics

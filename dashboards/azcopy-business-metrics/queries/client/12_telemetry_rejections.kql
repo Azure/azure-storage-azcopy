@@ -1,6 +1,5 @@
-// Visual: Multi stat
-// Schema v2 and v3 are accepted. Other schemas are visible here but excluded
-// from the business-metric queries.
+// Visual: Table
+// Shows why an attempt is rejected or marked suspect. Schema v2 and v3 are accepted.
 customEvents
 | where timestamp between (_startTime .. _endTime)
 | where name in ('azcopy.job.started', 'azcopy.job.finished')
@@ -32,7 +31,9 @@ customEvents
     MissingRequiredDimensionRows = countif(
         isempty(InvocationID) or isempty(JobID) or isempty(CommandValue) or
         isempty(FromToValue) or isempty(SourceTypeValue) or isempty(DestTypeValue) or
-        isnull(SamplingRateValue) or SamplingRateValue <= 0.0 or SamplingRateValue > 1.0)
+        isnull(SamplingRateValue) or SamplingRateValue <= 0.0 or SamplingRateValue > 1.0),
+    InvocationID = take_any(InvocationID),
+    JobID = take_any(JobID)
   by AttemptKey
 | extend
     ObservedDurationSeconds = iif(
@@ -49,15 +50,36 @@ customEvents
         isnotnull(ReportedDurationSeconds) and ReportedDurationSeconds >= 0.0 and
         abs(ObservedDurationSeconds - ReportedDurationSeconds) >
             max_of(60.0, ReportedDurationSeconds * 0.2)
-| extend Accepted =
-    not(InvalidSchema) and not(LifecycleAnomaly) and not(MissingRequiredFields) and
-    not(IncompleteFinishMetricSet) and not(TimingAnomaly) and not(DurationMismatch)
-| summarize
-    ObservedAttempts = count(),
-    AcceptedAttempts = countif(Accepted),
-    InvalidSchemaAttempts = countif(InvalidSchema),
-    LifecycleSuspectAttempts = countif(LifecycleAnomaly),
-    TimingSuspectAttempts = countif(TimingAnomaly or DurationMismatch),
-    MissingRequiredFieldAttempts = countif(MissingRequiredFields),
-    IncompleteFinishMetricAttempts = countif(IncompleteFinishMetricSet)
-| extend AcceptedRatePercent = round(100.0 * AcceptedAttempts / iif(ObservedAttempts > 0, ObservedAttempts, 1), 2)
+| extend
+    QualityClass = case(
+        InvalidSchema, 'InvalidSchema',
+        LifecycleAnomaly or MissingRequiredFields or IncompleteFinishMetricSet or TimingAnomaly or DurationMismatch, 'Suspect',
+        'Valid'),
+    Reasons = strcat(
+        iif(InvalidSchema, 'UnsupportedOrMixedSchema; ', ''),
+        iif(StartEvents == 0, 'MissingStart; ', ''),
+        iif(StartEvents > 1, 'DuplicateStart; ', ''),
+        iif(FinishEvents == 0, 'MissingFinish; ', ''),
+        iif(FinishEvents > 1, 'DuplicateFinish; ', ''),
+        iif(MissingRequiredFields, 'MissingRequiredFields; ', ''),
+        iif(IncompleteFinishMetricSet, 'IncompleteFinishMetrics; ', ''),
+        iif(TimingAnomaly, 'FinishBeforeStart; ', ''),
+        iif(DurationMismatch, 'DurationMismatch; ', ''))
+| where QualityClass != 'Valid'
+| project
+    LastObserved = coalesce(FinishTime, StartTime),
+    QualityClass,
+    Reasons,
+    SchemaVersion,
+    InvocationID,
+    JobID,
+    StartEvents,
+    FinishEvents,
+    StartTime,
+    FinishTime,
+    ObservedDurationSeconds = round(ObservedDurationSeconds, 2),
+    ReportedDurationSeconds = round(ReportedDurationSeconds, 2),
+    DurationDifferenceSeconds = round(abs(ObservedDurationSeconds - ReportedDurationSeconds), 2),
+    SamplingRate,
+    FinishMetricCount
+| top 200 by LastObserved desc

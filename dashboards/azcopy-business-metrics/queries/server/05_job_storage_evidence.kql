@@ -1,0 +1,95 @@
+// Visual: Table
+// Run from: azcore.centralus.kusto.windows.net / Xstore
+// Storage requests do not carry AzCopy JobID, so this is supporting account/time
+// evidence rather than exact job-to-request attribution.
+// Additional dashboard parameter: _account (free text, default empty)
+let ValidAttempts = materialize(cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.job.started', 'azcopy.job.finished')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    SchemaVersionValue = tostring(customDimensions.SchemaVersion),
+    SamplingRateValue = todouble(customDimensions.SamplingRate),
+    CommandValue = tostring(customDimensions.Command),
+    FromToValue = tostring(customDimensions.FromTo),
+    SourceTypeValue = tostring(customDimensions.SourceType),
+    DestTypeValue = tostring(customDimensions.DestType),
+    SourceAccountValue = tostring(customDimensions.SourceStorageAccount),
+    DestAccountValue = tostring(customDimensions.DestStorageAccount),
+    ClientStorageHttpAttemptsValue = todouble(customMeasurements['azcopy.storage_http_attempt_count'])
+| where isnotempty(InvocationID) and isnotempty(JobID)
+| summarize
+    StartEvents = countif(name == 'azcopy.job.started'),
+    FinishEvents = countif(name == 'azcopy.job.finished'),
+    StartTime = minif(timestamp, name == 'azcopy.job.started'),
+    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),
+    SchemaVersionCount = dcount(SchemaVersionValue),
+    SchemaVersion = take_any(SchemaVersionValue),
+    SamplingRate = max(SamplingRateValue),
+    Command = take_any(CommandValue),
+    FromTo = take_any(FromToValue),
+    SourceType = take_any(SourceTypeValue),
+    DestType = take_any(DestTypeValue),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    ClientStorageHttpAttempts = max(ClientStorageHttpAttemptsValue)
+  by InvocationID, JobID
+| where StartEvents == 1 and FinishEvents == 1 and StartTime <= FinishTime
+| where SchemaVersionCount == 1 and SchemaVersion in ('2', '3')
+| where isnotnull(SamplingRate) and SamplingRate > 0.0 and SamplingRate <= 1.0);
+let EndpointAttempts = union
+    (ValidAttempts
+    | where SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(SourceAccount)
+    | project InvocationID, JobID, Command, FromTo, StartTime, FinishTime,
+        EndpointRole = 'Source', Account = tolower(SourceAccount), ClientStorageHttpAttempts),
+    (ValidAttempts
+    | where DestType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(DestAccount)
+    | project InvocationID, JobID, Command, FromTo, StartTime, FinishTime,
+        EndpointRole = 'Destination', Account = tolower(DestAccount), ClientStorageHttpAttempts),
+    (ValidAttempts
+    | where not(
+        (SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(SourceAccount)) or
+        (DestType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(DestAccount)))
+    | project InvocationID, JobID, Command, FromTo, StartTime, FinishTime,
+        EndpointRole = 'None', Account = '', ClientStorageHttpAttempts)
+| distinct InvocationID, JobID, Command, FromTo, StartTime, FinishTime, EndpointRole, Account, ClientStorageHttpAttempts
+| where isempty(_account) or Account =~ _account
+| extend RequestWindow = range(bin(StartTime - 5m, 5m), bin(FinishTime + 5m, 5m), 5m)
+| mv-expand RequestWindow to typeof(datetime);
+let ServerRequests = XAggUserAgentTelemetryMetric()
+| where TimeWindow between ((_startTime - 5m) .. (_endTime + 5m))
+| where Tool =~ 'azcopy'
+| summarize StorageRequests = sum(RequestCount)
+  by RequestWindow = bin(TimeWindow, 5m), Account = tolower(Account);
+EndpointAttempts
+| join kind=leftouter hint.strategy=broadcast ServerRequests on Account, RequestWindow
+| summarize
+    StorageRequests = sum(coalesce(StorageRequests, 0)),
+    CorrelationStart = min(RequestWindow),
+    CorrelationEnd = max(RequestWindow)
+  by InvocationID, JobID, Command, FromTo, StartTime, FinishTime, EndpointRole, Account, ClientStorageHttpAttempts
+| extend
+    EvidenceClass = case(
+        isempty(Account), 'InsufficientEvidence',
+        StorageRequests > 0, 'SupportingEvidence',
+        'Suspect'),
+    RequestsPerClientHttpAttempt = iif(
+        ClientStorageHttpAttempts > 0.0,
+        todouble(StorageRequests) / ClientStorageHttpAttempts,
+        real(null))
+| project
+    FinishTime,
+    EvidenceClass,
+    InvocationID,
+    JobID,
+    Command,
+    FromTo,
+    EndpointRole,
+    Account,
+    StorageRequests,
+    ClientStorageHttpAttempts,
+    RequestsPerClientHttpAttempt = round(RequestsPerClientHttpAttempt, 2),
+    CorrelationStart,
+    CorrelationEnd
+| top 200 by FinishTime desc

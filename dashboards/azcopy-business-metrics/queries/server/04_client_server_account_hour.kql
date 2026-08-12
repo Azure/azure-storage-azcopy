@@ -9,6 +9,7 @@ let ClientMetrics = cluster('https://adx.monitor.azure.com/subscriptions/31347be
 | extend value = todouble(customMeasurements[name])
 | project-away MetricName
 | where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     AccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), ''),

@@ -130,6 +130,7 @@ $pages = @(
     [ordered]@{ name = "Overview"; id = New-StableGuid "azcopy-business-metrics:page:overview" },
     [ordered]@{ name = "Performance"; id = New-StableGuid "azcopy-business-metrics:page:performance" },
     [ordered]@{ name = "Reliability"; id = New-StableGuid "azcopy-business-metrics:page:reliability" },
+    [ordered]@{ name = "Data Quality"; id = New-StableGuid "azcopy-business-metrics:page:data-quality" },
     [ordered]@{ name = "Customer Drilldown"; id = New-StableGuid "azcopy-business-metrics:page:customer" },
     [ordered]@{ name = "Server Correlation"; id = New-StableGuid "azcopy-business-metrics:page:server" }
 )
@@ -147,7 +148,10 @@ $manifest = @(
 
     @{ Page = "Reliability"; Title = "Reliability rates"; File = "queries/client/05_reliability_cards.kql"; Visual = "multistat"; X = 0; Y = 0; W = 22; H = 6 },
     @{ Page = "Reliability"; Title = "Top job errors"; File = "queries/client/06_error_distribution.kql"; Visual = "bar"; X = 0; Y = 6; W = 12; H = 9 },
-    @{ Page = "Reliability"; Title = "Telemetry quality"; File = "queries/client/08_telemetry_quality.kql"; Visual = "multistat"; X = 12; Y = 6; W = 10; H = 9 },
+
+    @{ Page = "Data Quality"; Title = "Telemetry acceptance"; File = "queries/client/08_telemetry_quality.kql"; Visual = "multistat"; X = 0; Y = 0; W = 22; H = 6 },
+    @{ Page = "Data Quality"; Title = "Rejected and suspect attempts"; File = "queries/client/12_telemetry_rejections.kql"; Visual = "table"; X = 0; Y = 6; W = 22; H = 10 },
+    @{ Page = "Data Quality"; Title = "Per-attempt Storage request evidence"; File = "queries/server/05_job_storage_evidence.kql"; Visual = "table"; X = 0; Y = 16; W = 22; H = 10 },
 
     @{ Page = "Customer Drilldown"; Title = "Observed job attempts"; File = "queries/client/09_account_drilldown.kql"; Visual = "table"; X = 0; Y = 0; W = 22; H = 10 },
     @{ Page = "Customer Drilldown"; Title = "Top source and destination movers"; File = "queries/client/11_top_account_movers.kql"; Visual = "bar"; X = 0; Y = 10; W = 12; H = 9 },

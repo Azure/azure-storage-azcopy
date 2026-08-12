@@ -7,6 +7,7 @@ customEvents
 | extend value = todouble(customMeasurements[name])
 | project-away MetricName
 | where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
