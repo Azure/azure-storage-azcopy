@@ -72,12 +72,12 @@ jobs:
             if (-Not (Test-Path -Path "./$(coverageDir)")) {
               New-Item -Path "./$(coverageDir)" -ItemType Directory
             }
-            
+
             # Create log directory
             if (-Not (Test-Path -Path "${env:AZCOPY_E2E_LOG_OUTPUT}")) {
               New-Item -Path "${env:AZCOPY_E2E_LOG_OUTPUT}" -ItemType Directory
             }
-            
+
             # Set platform-specific variables
             $tags = ""
             $suffix = ""
@@ -92,7 +92,56 @@ jobs:
               Write-Error "Unsupported operating system"
               exit 1
             }
-            
+
+            $telemetryResourceSettings = @{
+              SubscriptionId = $env:AZCOPY_TELEMETRY_SUBSCRIPTION_ID
+              ResourceGroup = $env:AZCOPY_TELEMETRY_RESOURCE_GROUP
+              AppName = $env:AZCOPY_TELEMETRY_APP_NAME
+            }
+            foreach ($setting in $telemetryResourceSettings.GetEnumerator()) {
+              if ([string]::IsNullOrWhiteSpace($setting.Value) -or $setting.Value.StartsWith('$(')) {
+                throw "The E2E telemetry $($setting.Key) pipeline setting is not configured"
+              }
+            }
+
+            az account set --subscription $telemetryResourceSettings.SubscriptionId
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to select the E2E telemetry subscription"
+            }
+
+            $appInsights = az resource show `
+              --resource-group $telemetryResourceSettings.ResourceGroup `
+              --name $telemetryResourceSettings.AppName `
+              --resource-type 'Microsoft.Insights/components' `
+              --api-version '2020-02-02' | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or $null -eq $appInsights) {
+              throw "Failed to retrieve the E2E Application Insights component"
+            }
+            if ($appInsights.tags.environment -ne 'test') {
+              throw "The configured Application Insights component is not tagged as the test environment"
+            }
+
+            $workspace = az resource show `
+              --ids $appInsights.properties.WorkspaceResourceId `
+              --api-version '2023-09-01' | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($workspace.properties.customerId)) {
+              throw "Failed to retrieve the E2E Log Analytics workspace customer ID"
+            }
+
+            $env:AZCOPY_TELEMETRY_CONNECTION_STRING = $appInsights.properties.ConnectionString
+            $env:NEW_E2E_APP_INSIGHTS_WORKSPACE_ID = $workspace.properties.customerId
+            $env:AZCOPY_E2E_TELEMETRY_RUN_ID = "$env:BUILD_BUILDID-$env:SYSTEM_JOBID"
+
+            if ([string]::IsNullOrWhiteSpace($env:AZCOPY_TELEMETRY_CONNECTION_STRING) -or
+                -not $env:AZCOPY_TELEMETRY_CONNECTION_STRING.StartsWith("InstrumentationKey=")) {
+              throw "The E2E Application Insights component returned an invalid connection string"
+            }
+
+            az account set --subscription $env:NEW_E2E_SUBSCRIPTION_ID
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to restore the E2E test subscription"
+            }
+
             # Build the Go program
             Write-Output "Building executable"
             # Normally, `go build` has no effect when `go test` is used to run unit tests,
@@ -102,37 +151,37 @@ jobs:
             } else {
               go build -cover -o "$(build_name)"
             }
-            
+
             # Az PS login
             Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
             $null = Get-AzAccessToken -AsSecureString
-            
+
             # Run tests, write coverage data to a directory, and pipe output to a file
             Write-Output "Running tests. Writing coverage data to `"$(coverageDir)`" directory and test results to $(testReportName).txt."
             go test -timeout=2h -v ${{ parameters.test_cli_param }} ./e2etest | Tee-Object -FilePath "$(testReportName).txt"
-            
+
             # Save the exit code from the previous command
             $exitCode = $LASTEXITCODE
-            
+
             # Print the test results from the file
             # Get-Content "$(testReportName).txt"
 
             # Generate the jUnit report
             Write-Output "Generating jUnit report $(testReportName).xml"
             Get-Content "$(testReportName).txt" | & "$(go env GOPATH)/bin/go-junit-report" > "$(testReportName).xml"
-            
+
             # Convert coverage data to text format
             Write-Output "Generating plain-text coverage report $(coverageReportName).txt"
             go tool covdata textfmt -i="$(coverageDir)" -o "$(coverageReportName).txt"
-            
+
             # Convert coverage data to JSON format
             Write-Output "Generating JSON coverage report $(coverageReportName).json"
             & "$(go env GOPATH)/bin/gocov$suffix" convert "$(coverageReportName).txt" > "$(coverageReportName).json"
-            
+
             # Convert coverage data to XML format
             Write-Output "Generating XML coverage report $(coverageReportName).xml"
             Get-Content "$(coverageReportName).json" | & "$(go env GOPATH)/bin/gocov-xml$suffix" > "$(coverageReportName).xml"
-            
+
             # Return the exit code from above
             exit $exitCode
         env:
@@ -156,6 +205,9 @@ jobs:
           NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
+          AZCOPY_TELEMETRY_SUBSCRIPTION_ID: $(AZCOPY_TELEMETRY_SUBSCRIPTION_ID_TEST)
+          AZCOPY_TELEMETRY_RESOURCE_GROUP: $(AZCOPY_TELEMETRY_RESOURCE_GROUP_TEST)
+          AZCOPY_TELEMETRY_APP_NAME: $(AZCOPY_TELEMETRY_APP_NAME_TEST)
         displayName: 'Run Tests with Workload Identity'
 
       - task: PublishBuildArtifacts@1

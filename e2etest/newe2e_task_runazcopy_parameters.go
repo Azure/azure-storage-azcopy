@@ -216,6 +216,8 @@ type GlobalFlags struct {
 	// TODO: Ongoing performance profiling work
 	MemoryProfile *string `flag:"memory-profile,defaultfunc:DefaultMemoryProfile"`
 	//CpuProfile *string `flag:"cpu-profile"`
+
+	TelemetrySamplingRate *float64 `flag:"telemetry-sampling-rate"`
 }
 
 func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter, ctx context.Context) string {
