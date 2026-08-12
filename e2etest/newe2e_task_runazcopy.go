@@ -179,12 +179,14 @@ func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 }
 
 var RunAzCopyDefaultInheritEnvironment = map[string]bool{
-	"path":             true,
-	"home":             true,
-	"userprofile":      true,
-	"homepath":         true,
-	"homedrive":        true,
-	"azure_config_dir": true,
+	"path":                               true,
+	"home":                               true,
+	"userprofile":                        true,
+	"homepath":                           true,
+	"homedrive":                          true,
+	"azure_config_dir":                   true,
+	"azcopy_telemetry_connection_string": true,
+	"azcopy_e2e_telemetry_run_id":        true,
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
@@ -395,6 +397,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a, ctx)
+		if AppInsightsTelemetryValidationEnabled() {
+			flagMap["telemetry-sampling-rate"] = "1"
+		}
 		for k, v := range flagMap {
 			out = append(out, fmt.Sprintf("--%s=%s", k, v))
 		}
@@ -539,6 +544,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		Stdout: out.String(),
 		Stderr: stderr.String(),
 	})
+
+	if parsed, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok && parsed.InitMsg.JobID != "" {
+		RegisterExpectedAppInsightsJob(parsed.InitMsg.JobID)
+	}
 
 	return out, &AzCopyJobPlan{}
 }
