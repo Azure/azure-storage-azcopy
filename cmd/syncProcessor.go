@@ -882,11 +882,16 @@ func (b *remoteResourceDeleter) createFileDeletionFunc(fileClient *file.Client, 
 	return func() {
 		ctx := context.Background()
 
-		if _, err := fileClient.Delete(ctx, nil); err != nil {
+		err := common.DoWithOverrideReadOnlyOnAzureFiles(ctx, func() (interface{}, error) {
+			return fileClient.Delete(ctx, nil)
+		}, fileClient, b.forceIfReadOnly)
+
+		if err != nil {
 			msg := fmt.Sprintf("Failed to delete file %s: %v", filePath, err)
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogError, msg)
 			}
+			return // Don't increment count on failure
 		}
 
 		// Increment deletion count
