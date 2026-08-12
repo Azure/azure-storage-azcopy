@@ -113,10 +113,10 @@ Add one free-text parameter:
 | Tile | Query | Data source | Visual |
 | --- | --- | --- | --- |
 | Reliability rates | `queries/client/05_reliability_cards.kql` | AzCopyClientTelemetry | Multi stat |
-| Top job error categories | `queries/client/06_error_distribution.kql` | AzCopyClientTelemetry | Bar chart |
-| Failed-object error codes | `queries/client/17_failed_object_error_codes.kql` | AzCopyClientTelemetry | Bar chart or table |
+| Terminal errors (one reason per job) | `queries/client/06_error_distribution.kql` | AzCopyClientTelemetry | Bar chart |
+| Failed transfer-item error codes (per item) | `queries/client/17_failed_object_error_codes.kql` | AzCopyClientTelemetry | Bar chart or table |
 | Newly observed error codes | `queries/client/19_new_error_codes_30d.kql` | AzCopyClientTelemetry | Table |
-| Unmatched starts and cancellation progress | `queries/client/16_abandonment_and_cancellation.kql` | AzCopyClientTelemetry | Multi stat |
+| Job lifecycle gaps and cancellation progress | `queries/client/16_abandonment_and_cancellation.kql` | AzCopyClientTelemetry | Table |
 
 ### Adoption
 
@@ -186,21 +186,21 @@ Shows sampling-adjusted endpoint platform and protocol distribution with source 
 
 Shows sampling-adjusted completion, partial-success, failure, cancellation, failed-object, server-busy, network-error, and resume-success rates. Job outcome rates use estimated job attempts; failed-object rate uses scheduled objects; server-busy and network-error rates use Storage HTTP attempts. These percentages have different denominators and are not intended to add to 100%.
 
-### Top job errors
+### Terminal errors (one reason per job)
 
-Ranks the top 20 terminal job error category/code combinations by estimated attempts and includes observed attempt counts plus example bounded failed-transfer code histograms. It describes why jobs ended unsuccessfully or with errors; it is not a count of individual HTTP failures or failed files.
+Ranks the top 20 terminal job error category/code combinations by estimated attempts and includes observed attempt counts plus example bounded failed-transfer code histograms. Each unsuccessful job contributes one terminal or primary failure reason. It is not a count of individual HTTP failures or failed transfer items.
 
-### Failed-object error codes
+### Failed transfer-item error codes (per item)
 
-Expands the bounded `FailureErrorCodes` histogram and ranks failed-object error codes by observed and sampling-adjusted object occurrences. It complements terminal job errors: one attempt can contain multiple failed objects and codes.
+Expands the bounded `FailureErrorCodes` histogram and ranks error codes by observed and sampling-adjusted failed transfer-item occurrences. It complements terminal job errors: one job can contain multiple failed items and codes. Transfer items are normally files/objects and can include failed folder-property transfers.
 
 ### Newly observed error codes
 
 Lists terminal-job and failed-object error codes whose first event in the retained 730-day lookback falls within the last 30 days. "New" means newly observed in retained telemetry, not proof that the code has never occurred anywhere before.
 
-### Unmatched starts and cancellation progress
+### Job lifecycle gaps and cancellation progress
 
-Shows observed starts older than 30 minutes with no finish event, plus cancellation count and average/P50/P90 percent complete at cancellation. An unmatched start is an abandonment proxy only; ingestion delay, process interruption, and telemetry delivery failure can produce the same shape.
+Shows starts at least 30 minutes old, how many still lack a finish event after that grace period, plus explicit cancellation count and average/P50/P90 percent complete at cancellation. A missing finish is an abandonment proxy only; ingestion delay, process interruption, and telemetry delivery failure can produce the same shape.
 
 ### Weekly job frequency and change
 

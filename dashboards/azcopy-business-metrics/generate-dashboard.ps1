@@ -149,10 +149,10 @@ $manifest = @(
     @{ Page = "Performance"; Title = "Source and destination platform mix"; File = "queries/client/18_endpoint_platform_mix.kql"; Visual = "bar"; X = 0; Y = 17; W = 22; H = 9 },
 
     @{ Page = "Reliability"; Title = "Reliability rates"; File = "queries/client/05_reliability_cards.kql"; Visual = "multistat"; X = 0; Y = 0; W = 22; H = 6 },
-    @{ Page = "Reliability"; Title = "Top job errors"; File = "queries/client/06_error_distribution.kql"; Visual = "bar"; X = 0; Y = 6; W = 11; H = 9 },
-    @{ Page = "Reliability"; Title = "Failed-object error codes"; File = "queries/client/17_failed_object_error_codes.kql"; Visual = "bar"; X = 11; Y = 6; W = 11; H = 9 },
+    @{ Page = "Reliability"; Title = "Terminal errors (one reason per job)"; Description = "Job-level view. Each unsuccessful job contributes one terminal category/code representing its final or primary failure reason. For multiple failures within a job, use the failed transfer-item panel."; File = "queries/client/06_error_distribution.kql"; Visual = "bar"; X = 0; Y = 6; W = 11; H = 9 },
+    @{ Page = "Reliability"; Title = "Failed transfer-item error codes (per item)"; Description = "Transfer-item view. Expands the bounded error histogram across failed items within each job. One job may contribute multiple error codes and counts; items are normally files/objects and can include failed folder-property transfers."; File = "queries/client/17_failed_object_error_codes.kql"; Visual = "bar"; X = 11; Y = 6; W = 11; H = 9 },
     @{ Page = "Reliability"; Title = "Newly observed error codes (30 days)"; File = "queries/client/19_new_error_codes_30d.kql"; Visual = "table"; X = 0; Y = 15; W = 11; H = 9 },
-    @{ Page = "Reliability"; Title = "Unmatched starts and cancellation progress"; File = "queries/client/16_abandonment_and_cancellation.kql"; Visual = "multistat"; X = 11; Y = 15; W = 11; H = 9 },
+    @{ Page = "Reliability"; Title = "Job lifecycle gaps and cancellation progress"; Description = "Job-level lifecycle view. Eligible starts are at least 30 minutes old. A start without a finish after that grace period is a telemetry/abandonment proxy, not proof the job was abandoned. Cancellation rows show completion percentage for jobs explicitly reported as Cancelled."; File = "queries/client/16_abandonment_and_cancellation.kql"; Visual = "table"; X = 11; Y = 15; W = 11; H = 9 },
 
     @{ Page = "Adoption"; Title = "Weekly job frequency and change"; File = "queries/client/14_weekly_job_frequency.kql"; Visual = "timechart"; X = 0; Y = 0; W = 22; H = 8 },
     @{ Page = "Adoption"; Title = "Observed sampled-installation funnel (proxy)"; File = "queries/client/15_observed_installation_funnel.kql"; Visual = "multistat"; X = 0; Y = 8; W = 22; H = 7 },
@@ -214,6 +214,7 @@ foreach ($item in $manifest) {
     $tiles += [ordered]@{
         id = $tileId
         title = $item.Title
+        description = if ($item.ContainsKey("Description")) { $item.Description } else { "" }
         visualType = $item.Visual
         pageId = $pageIds[$item.Page]
         layout = [ordered]@{ x = $item.X; y = $item.Y; width = $item.W; height = $item.H }

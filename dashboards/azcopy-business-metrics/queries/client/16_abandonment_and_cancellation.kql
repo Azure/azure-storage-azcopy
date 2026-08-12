@@ -45,10 +45,10 @@ customEvents
     CancelPercentCompleteP50 = round(CancelPercentCompleteP50, 2),
     CancelPercentCompleteP90 = round(CancelPercentCompleteP90, 2)
 | mv-expand MetricValue = pack_array(
-    bag_pack('Metric', 'Mature starts', 'Value', ObservedMatureStarts),
-    bag_pack('Metric', 'Unmatched starts', 'Value', ObservedUnmatchedStarts),
-    bag_pack('Metric', 'Unmatched start rate (%)', 'Value', UnmatchedStartRatePct),
-    bag_pack('Metric', 'Cancellations', 'Value', ObservedCancellations),
+    bag_pack('Metric', 'Starts eligible after 30 min', 'Value', ObservedMatureStarts),
+    bag_pack('Metric', 'Eligible starts without finish', 'Value', ObservedUnmatchedStarts),
+    bag_pack('Metric', 'Missing finish rate (%)', 'Value', UnmatchedStartRatePct),
+    bag_pack('Metric', 'Explicitly cancelled jobs', 'Value', ObservedCancellations),
     bag_pack('Metric', 'Average completion at cancel (%)', 'Value', AvgCancelPercentComplete),
     bag_pack('Metric', 'P50 completion at cancel (%)', 'Value', CancelPercentCompleteP50),
     bag_pack('Metric', 'P90 completion at cancel (%)', 'Value', CancelPercentCompleteP90))

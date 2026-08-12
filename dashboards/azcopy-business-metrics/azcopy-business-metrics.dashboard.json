@@ -8,6 +8,7 @@
     {
       "id": "93772c2e-bf12-795e-e3f0-12911f953c63",
       "title": "Overview KPIs",
+      "description": "",
       "visualType": "multistat",
       "pageId": "167ba969-f5fd-19e9-0a21-76522d7e61b1",
       "layout": {
@@ -37,6 +38,7 @@
     {
       "id": "3a49e27d-667f-e52b-6da7-e80d5fd37f99",
       "title": "Volume by topology",
+      "description": "",
       "visualType": "stackedcolumn",
       "pageId": "167ba969-f5fd-19e9-0a21-76522d7e61b1",
       "layout": {
@@ -88,6 +90,7 @@
     {
       "id": "03e83aab-374c-1067-dba1-4ee257179487",
       "title": "Outcomes by command",
+      "description": "",
       "visualType": "bar",
       "pageId": "167ba969-f5fd-19e9-0a21-76522d7e61b1",
       "layout": {
@@ -139,6 +142,7 @@
     {
       "id": "752b5384-8f88-5efd-bfdc-dc029eb5c181",
       "title": "Weekly command and version trend",
+      "description": "",
       "visualType": "stackedcolumn",
       "pageId": "167ba969-f5fd-19e9-0a21-76522d7e61b1",
       "layout": {
@@ -190,6 +194,7 @@
     {
       "id": "65cb5a85-ec52-e916-3fee-ecbfd712112c",
       "title": "Performance percentiles",
+      "description": "",
       "visualType": "table",
       "pageId": "d52b81ad-bc2f-299b-14f2-52629472581c",
       "layout": {
@@ -217,6 +222,7 @@
     {
       "id": "dadab34f-4fbe-e9e7-8f2d-49111ec05938",
       "title": "Platform and version mix",
+      "description": "",
       "visualType": "bar",
       "pageId": "d52b81ad-bc2f-299b-14f2-52629472581c",
       "layout": {
@@ -268,6 +274,7 @@
     {
       "id": "4026e409-d68d-2156-5cd7-a69c3db9ccf4",
       "title": "Source and destination platform mix",
+      "description": "",
       "visualType": "bar",
       "pageId": "d52b81ad-bc2f-299b-14f2-52629472581c",
       "layout": {
@@ -319,6 +326,7 @@
     {
       "id": "5e43f529-df13-3dbc-0aa7-1ba2653973cf",
       "title": "Reliability rates",
+      "description": "",
       "visualType": "multistat",
       "pageId": "17553b37-344e-f761-603a-bb85a78048a1",
       "layout": {
@@ -347,7 +355,8 @@
     },
     {
       "id": "b904d038-09cb-9e6e-7e8f-1b18ccad72e6",
-      "title": "Top job errors",
+      "title": "Terminal errors (one reason per job)",
+      "description": "Job-level view. Each unsuccessful job contributes one terminal category/code representing its final or primary failure reason. For multiple failures within a job, use the failed transfer-item panel.",
       "visualType": "bar",
       "pageId": "17553b37-344e-f761-603a-bb85a78048a1",
       "layout": {
@@ -398,7 +407,8 @@
     },
     {
       "id": "7cf4f35a-7173-6980-ad19-7944c3125843",
-      "title": "Failed-object error codes",
+      "title": "Failed transfer-item error codes (per item)",
+      "description": "Transfer-item view. Expands the bounded error histogram across failed items within each job. One job may contribute multiple error codes and counts; items are normally files/objects and can include failed folder-property transfers.",
       "visualType": "bar",
       "pageId": "17553b37-344e-f761-603a-bb85a78048a1",
       "layout": {
@@ -450,6 +460,7 @@
     {
       "id": "dc38d38b-f774-79ae-8eca-40e60ce75cab",
       "title": "Newly observed error codes (30 days)",
+      "description": "",
       "visualType": "table",
       "pageId": "17553b37-344e-f761-603a-bb85a78048a1",
       "layout": {
@@ -476,8 +487,9 @@
     },
     {
       "id": "231cb69d-7e38-1d95-c6b1-4e0902d6d291",
-      "title": "Unmatched starts and cancellation progress",
-      "visualType": "multistat",
+      "title": "Job lifecycle gaps and cancellation progress",
+      "description": "Job-level lifecycle view. Eligible starts are at least 30 minutes old. A start without a finish after that grace period is a telemetry/abandonment proxy, not proof the job was abandoned. Cancellation rows show completion percentage for jobs explicitly reported as Cancelled.",
+      "visualType": "table",
       "pageId": "17553b37-344e-f761-603a-bb85a78048a1",
       "layout": {
         "x": 11,
@@ -490,22 +502,21 @@
         "queryId": "5d63777b-81ee-b70c-a58f-a4a5f8ad937d"
       },
       "visualOptions": {
-        "multiStat__textSize": "large",
-        "multiStat__valueColumn": "Value",
+        "table__enableRenderLinks": true,
         "colorRulesDisabled": true,
         "colorStyle": "light",
-        "multiStat__displayOrientation": "horizontal",
-        "multiStat__labelColumn": "Metric",
-        "multiStat__slot": {
-          "width": 1,
-          "height": 2
-        },
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
         "colorRules": []
       }
     },
     {
       "id": "b37338b9-541d-1049-946a-2a34e92f6bc5",
       "title": "Weekly job frequency and change",
+      "description": "",
       "visualType": "timechart",
       "pageId": "02162026-a791-5a8f-7c9b-a5d427226ca6",
       "layout": {
@@ -557,6 +568,7 @@
     {
       "id": "588827a6-248f-93f2-e42c-42ec40858457",
       "title": "Observed sampled-installation funnel (proxy)",
+      "description": "",
       "visualType": "multistat",
       "pageId": "02162026-a791-5a8f-7c9b-a5d427226ca6",
       "layout": {
@@ -586,6 +598,7 @@
     {
       "id": "a304d8b6-25f6-7187-656a-cdcbce1eacb3",
       "title": "Telemetry acceptance",
+      "description": "",
       "visualType": "multistat",
       "pageId": "ea317753-6f36-74c4-de49-5b2aa1a94293",
       "layout": {
@@ -615,6 +628,7 @@
     {
       "id": "a67cc77d-7da6-79f0-16e2-72f38912aa35",
       "title": "Rejected and suspect attempts",
+      "description": "",
       "visualType": "table",
       "pageId": "ea317753-6f36-74c4-de49-5b2aa1a94293",
       "layout": {
@@ -642,6 +656,7 @@
     {
       "id": "b5697bea-efc1-ac8d-4116-bfb3787f29a2",
       "title": "Per-attempt Storage request evidence",
+      "description": "",
       "visualType": "table",
       "pageId": "ea317753-6f36-74c4-de49-5b2aa1a94293",
       "layout": {
@@ -669,6 +684,7 @@
     {
       "id": "b7467df6-8dc0-bdea-aa35-c9222a6b62bb",
       "title": "Selected account business summary (proxy)",
+      "description": "",
       "visualType": "multistat",
       "pageId": "f53736b5-b949-e8e7-a429-1702dd510beb",
       "layout": {
@@ -698,6 +714,7 @@
     {
       "id": "75685098-7416-ad90-11e5-f596d043ecba",
       "title": "Observed job attempts",
+      "description": "",
       "visualType": "table",
       "pageId": "f53736b5-b949-e8e7-a429-1702dd510beb",
       "layout": {
@@ -725,6 +742,7 @@
     {
       "id": "ff1ee29b-384c-0a25-5fec-aa293805b64f",
       "title": "Top source and destination movers",
+      "description": "",
       "visualType": "bar",
       "pageId": "f53736b5-b949-e8e7-a429-1702dd510beb",
       "layout": {
@@ -776,6 +794,7 @@
     {
       "id": "900bc7d8-a860-67b8-6bb5-f5b07dddc37f",
       "title": "Account ownership",
+      "description": "",
       "visualType": "table",
       "pageId": "f53736b5-b949-e8e7-a429-1702dd510beb",
       "layout": {
@@ -803,6 +822,7 @@
     {
       "id": "2bb2c1a7-7568-5cda-eb69-549ce91cc29a",
       "title": "Server-observed AzCopy requests",
+      "description": "",
       "visualType": "timechart",
       "pageId": "fa3b6884-8306-7e4c-9061-1a698484f2a2",
       "layout": {
@@ -854,6 +874,7 @@
     {
       "id": "8cb8b447-fa02-46a8-bef4-852f754c77e2",
       "title": "Storage API operation mix",
+      "description": "",
       "visualType": "bar",
       "pageId": "fa3b6884-8306-7e4c-9061-1a698484f2a2",
       "layout": {
@@ -905,6 +926,7 @@
     {
       "id": "d6244a7e-8397-c365-ffa3-dd1ee2ad2fc3",
       "title": "Requests per estimated job",
+      "description": "",
       "visualType": "table",
       "pageId": "fa3b6884-8306-7e4c-9061-1a698484f2a2",
       "layout": {
@@ -1142,7 +1164,7 @@
         "kind": "inline",
         "dataSourceId": "e7cc902d-7684-af93-f7a3-0c1a76448066"
       },
-      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. (_endTime + 30m))\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    StatusValue = tostring(customDimensions.JobStatus),\n    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),\n    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    StartedAt = minif(timestamp, name == 'azcopy.job.started' and timestamp <= _endTime),\n    FinishedAt = maxif(timestamp, name == 'azcopy.job.finished'),\n    StartedRows = countif(name == 'azcopy.job.started' and timestamp <= _endTime),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    PercentComplete = maxif(value, name == 'azcopy.percent_complete')\n  by InvocationID\n| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account\n| extend\n    IsMatureStart = StartedRows > 0 and StartedAt <= _endTime - 30m,\n    IsUnmatchedStart = StartedRows > 0 and FinishedRows == 0 and StartedAt <= _endTime - 30m,\n    IsCancellation = FinishedRows > 0 and JobStatus == 'Cancelled'\n| summarize\n    ObservedMatureStarts = countif(IsMatureStart),\n    ObservedUnmatchedStarts = countif(IsUnmatchedStart),\n    ObservedCancellations = countif(IsCancellation),\n    AvgCancelPercentComplete = avg(iff(IsCancellation, PercentComplete, real(null))),\n    CancelPercentCompleteP50 = percentile(iff(IsCancellation, PercentComplete, real(null)), 50),\n    CancelPercentCompleteP90 = percentile(iff(IsCancellation, PercentComplete, real(null)), 90)\n| project\n    ObservedMatureStarts,\n    ObservedUnmatchedStarts,\n    UnmatchedStartRatePct = round(100.0 * ObservedUnmatchedStarts / iif(ObservedMatureStarts > 0, ObservedMatureStarts, 1), 2),\n    ObservedCancellations,\n    AvgCancelPercentComplete = round(AvgCancelPercentComplete, 2),\n    CancelPercentCompleteP50 = round(CancelPercentCompleteP50, 2),\n    CancelPercentCompleteP90 = round(CancelPercentCompleteP90, 2)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Mature starts', 'Value', ObservedMatureStarts),\n    bag_pack('Metric', 'Unmatched starts', 'Value', ObservedUnmatchedStarts),\n    bag_pack('Metric', 'Unmatched start rate (%)', 'Value', UnmatchedStartRatePct),\n    bag_pack('Metric', 'Cancellations', 'Value', ObservedCancellations),\n    bag_pack('Metric', 'Average completion at cancel (%)', 'Value', AvgCancelPercentComplete),\n    bag_pack('Metric', 'P50 completion at cancel (%)', 'Value', CancelPercentCompleteP50),\n    bag_pack('Metric', 'P90 completion at cancel (%)', 'Value', CancelPercentCompleteP90))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. (_endTime + 30m))\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    StatusValue = tostring(customDimensions.JobStatus),\n    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),\n    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    StartedAt = minif(timestamp, name == 'azcopy.job.started' and timestamp <= _endTime),\n    FinishedAt = maxif(timestamp, name == 'azcopy.job.finished'),\n    StartedRows = countif(name == 'azcopy.job.started' and timestamp <= _endTime),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    PercentComplete = maxif(value, name == 'azcopy.percent_complete')\n  by InvocationID\n| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account\n| extend\n    IsMatureStart = StartedRows > 0 and StartedAt <= _endTime - 30m,\n    IsUnmatchedStart = StartedRows > 0 and FinishedRows == 0 and StartedAt <= _endTime - 30m,\n    IsCancellation = FinishedRows > 0 and JobStatus == 'Cancelled'\n| summarize\n    ObservedMatureStarts = countif(IsMatureStart),\n    ObservedUnmatchedStarts = countif(IsUnmatchedStart),\n    ObservedCancellations = countif(IsCancellation),\n    AvgCancelPercentComplete = avg(iff(IsCancellation, PercentComplete, real(null))),\n    CancelPercentCompleteP50 = percentile(iff(IsCancellation, PercentComplete, real(null)), 50),\n    CancelPercentCompleteP90 = percentile(iff(IsCancellation, PercentComplete, real(null)), 90)\n| project\n    ObservedMatureStarts,\n    ObservedUnmatchedStarts,\n    UnmatchedStartRatePct = round(100.0 * ObservedUnmatchedStarts / iif(ObservedMatureStarts > 0, ObservedMatureStarts, 1), 2),\n    ObservedCancellations,\n    AvgCancelPercentComplete = round(AvgCancelPercentComplete, 2),\n    CancelPercentCompleteP50 = round(CancelPercentCompleteP50, 2),\n    CancelPercentCompleteP90 = round(CancelPercentCompleteP90, 2)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Starts eligible after 30 min', 'Value', ObservedMatureStarts),\n    bag_pack('Metric', 'Eligible starts without finish', 'Value', ObservedUnmatchedStarts),\n    bag_pack('Metric', 'Missing finish rate (%)', 'Value', UnmatchedStartRatePct),\n    bag_pack('Metric', 'Explicitly cancelled jobs', 'Value', ObservedCancellations),\n    bag_pack('Metric', 'Average completion at cancel (%)', 'Value', AvgCancelPercentComplete),\n    bag_pack('Metric', 'P50 completion at cancel (%)', 'Value', CancelPercentCompleteP50),\n    bag_pack('Metric', 'P90 completion at cancel (%)', 'Value', CancelPercentCompleteP90))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
       "id": "5d63777b-81ee-b70c-a58f-a4a5f8ad937d",
       "usedVariables": [
         "_startTime",
