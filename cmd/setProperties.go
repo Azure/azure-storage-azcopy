@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
@@ -37,7 +38,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 
 func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 	// tier or tags can't be set on files
-	if cca.FromTo.From() == common.ELocation.File() {
+	if cca.FromTo.From().IsFile() {
 		if cca.propertiesToTransfer.ShouldTransferTier() {
 			return fmt.Errorf("changing tier is not available for File Storage")
 		}
@@ -113,7 +114,7 @@ func init() {
 					raw.fromTo = common.EFromTo.BlobNone().String()
 				case common.ELocation.BlobFS():
 					raw.fromTo = common.EFromTo.BlobFSNone().String()
-				case common.ELocation.File():
+				case common.ELocation.File(), common.ELocation.FileNFS():
 					raw.fromTo = common.EFromTo.FileNone().String()
 				default:
 					return fmt.Errorf("invalid source type %s. azcopy supports set-properties of blobs/files/adls gen2", srcLocationType.String())

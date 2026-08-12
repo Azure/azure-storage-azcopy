@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -21,9 +22,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
-
-var AzcopyJobPlanFolder string
-var AzcopyCurrentJobLogger ILoggerResetable
 
 // isIPEndpointStyle checks if URL's host is IP, in this case the storage account endpoint will be composed as:
 // http(s)://IP(:port)/storageaccount/container/...
@@ -192,7 +190,7 @@ func GetServiceClientForLocation(loc Location,
 		ret.bsc = bsc
 		return ret, nil
 
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		fileURLParts, err := file.ParseURL(resourceURL)
 		if err != nil {
 			return nil, err
@@ -411,4 +409,16 @@ func IsSystemContainer(containerName string) bool {
 		}
 	}
 	return false
+}
+
+// this is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+func SetNFSFlag(isNFS bool) {
+	// SetNFSFlag sets the global isNFSCopy variable to the given value
+	isNFSCopy = isNFS
+}
+
+func IsNFSCopy() bool {
+	return isNFSCopy
 }

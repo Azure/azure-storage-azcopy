@@ -20,7 +20,7 @@ steps:
       darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64_$(azcopy_version)"
       echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
       mkdir -p $darwin_arm64_m1_dir
-      cp $(System.DefaultWorkingDirectory)/azcopy  $darwin_arm64_m1_dir
+      cp $(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64  $darwin_arm64_m1_dir/azcopy
       cp NOTICE.txt $darwin_arm64_m1_dir
     displayName: 'Copy required files for packaging'
 

@@ -967,6 +967,7 @@ func getDefaultSyncRawInput(sra, dst string) rawSyncCmdArgs {
 		src:                  sra,
 		dst:                  dst,
 		recursive:            true,
+		blobType:             common.EBlobType.Detect().String(),
 		deleteDestination:    deleteDestination.String(),
 		md5ValidationOption:  common.DefaultHashValidationOption.String(),
 		compareHash:          common.ESyncHashType.None().String(),

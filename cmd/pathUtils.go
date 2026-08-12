@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
+
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
-	"net/url"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/pkg/errors"
@@ -58,6 +59,7 @@ func DetermineLocationLevel(location string, locationType common.Location, sourc
 
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
+		common.ELocation.FileNFS(),
 		common.ELocation.BlobFS(),
 		common.ELocation.S3(),
 		common.ELocation.GCP():
@@ -123,7 +125,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		return bURLParts.String(), nil
 
 	//noinspection GoNilness
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		fURLParts, err := filesas.ParseURL(resource)
 		if err != nil {
 			return resource, err
@@ -249,7 +251,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		bURLParts.SAS = blobsas.QueryParameters{} // clear the SAS token and drop the raw, base URL
 		resourceBase = bURLParts.String()
 		return
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		var fURLParts filesas.URLParts
 		fURLParts, err = filesas.ParseURL(resource)
 		if err != nil {
@@ -324,6 +326,7 @@ func GetAccountRoot(resource common.ResourceString, location common.Location) (s
 		panic("attempted to get account root on local location")
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
+		common.ELocation.FileNFS(),
 		common.ELocation.BlobFS():
 		baseURL, err := resource.String()
 		if err != nil {
@@ -353,6 +356,7 @@ func GetContainerName(path string, location common.Location) (string, error) {
 		panic("attempted to get container name on local location")
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
+		common.ELocation.FileNFS(),
 		common.ELocation.BlobFS():
 		bURLParts, err := blobsas.ParseURL(path)
 		if err != nil {
