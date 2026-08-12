@@ -228,7 +228,7 @@ Lists up to the 200 most recent sampled finished attempts, including IDs, comman
 
 ### Selected account business summary
 
-Summarizes the selected interval and optional Azure Storage account filter with observed and estimated attempts, transferred TB, average throughput, P90/P95 hours per TB, failures, cancellations, resume attempts, observed activity age, and observed version set. A storage account is an endpoint/resource proxy rather than a unique customer, and deterministic JobID sampling can omit the actual latest job.
+Summarizes the selected interval and optional Azure Storage account filter with observed and estimated attempts, transferred TB, average throughput, P90/P95 hours per TB, failures, cancellations, resume attempts, and observed activity age. Versions remain available in the observed-attempt detail panel. A storage account is an endpoint/resource proxy rather than a unique customer, and deterministic JobID sampling can omit the actual latest job.
 
 ### Top source and destination movers
 

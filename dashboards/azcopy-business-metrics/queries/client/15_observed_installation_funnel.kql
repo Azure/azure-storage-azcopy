@@ -43,3 +43,13 @@ Attempts
     ObservedSuccessRatePct = round(100.0 * InstallationsWithObservedSuccess / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),
     MedianHoursToFirstObservedSuccess = round(MedianHoursToFirstObservedSuccess, 2),
     P90HoursToFirstObservedSuccess = round(P90HoursToFirstObservedSuccess, 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed installations', 'Value', ObservedInstallations),
+    bag_pack('Metric', 'First observed success (%)', 'Value', FirstObservedAttemptSuccessRatePct),
+    bag_pack('Metric', 'Second observed attempt (%)', 'Value', SecondObservedAttemptRatePct),
+    bag_pack('Metric', 'Observed success (%)', 'Value', ObservedSuccessRatePct),
+    bag_pack('Metric', 'Median hours to success', 'Value', MedianHoursToFirstObservedSuccess),
+    bag_pack('Metric', 'P90 hours to success', 'Value', P90HoursToFirstObservedSuccess))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

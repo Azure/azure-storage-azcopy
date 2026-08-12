@@ -60,5 +60,19 @@ customEvents
     EstimatedCancellations = round(EstimatedCancellations, 0),
     EstimatedResumeAttempts = round(EstimatedResumeAttempts, 0),
     DaysSinceLastObservedJob = datetime_diff('day', _endTime, LastObservedJob),
-    DaysSinceLastObservedSuccessfulJob = datetime_diff('day', _endTime, LastObservedSuccessfulJob),
-    Versions
+    DaysSinceLastObservedSuccessfulJob = datetime_diff('day', _endTime, LastObservedSuccessfulJob)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed attempts', 'Value', ObservedAttempts),
+    bag_pack('Metric', 'Estimated attempts', 'Value', EstimatedAttempts),
+    bag_pack('Metric', 'Estimated data (TB)', 'Value', EstimatedDataTB),
+    bag_pack('Metric', 'Average throughput (Mbps)', 'Value', AvgThroughputMbps),
+    bag_pack('Metric', 'P90 hours per TB', 'Value', MigrationP90HoursPerTB),
+    bag_pack('Metric', 'P95 hours per TB', 'Value', MigrationP95HoursPerTB),
+    bag_pack('Metric', 'Estimated failures', 'Value', EstimatedFailures),
+    bag_pack('Metric', 'Estimated cancellations', 'Value', EstimatedCancellations),
+    bag_pack('Metric', 'Estimated resume attempts', 'Value', EstimatedResumeAttempts),
+    bag_pack('Metric', 'Days since observed job', 'Value', DaysSinceLastObservedJob),
+    bag_pack('Metric', 'Days since observed success', 'Value', DaysSinceLastObservedSuccessfulJob))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

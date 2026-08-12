@@ -48,3 +48,15 @@ customEvents
     ServerBusyRatePct = round(100.0 * WeightedServerBusy503 / iif(WeightedHttpAttempts > 0.0, WeightedHttpAttempts, 1.0), 4),
     NetworkErrorRatePct = round(100.0 * WeightedNetworkErrors / iif(WeightedHttpAttempts > 0.0, WeightedHttpAttempts, 1.0), 4),
     ResumeSuccessRatePct = round(100.0 * EstimatedSuccessfulResumes / iif(EstimatedResumeAttempts > 0.0, EstimatedResumeAttempts, 1.0), 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),
+    bag_pack('Metric', 'Partial success rate (%)', 'Value', PartialSuccessRatePct),
+    bag_pack('Metric', 'Failure rate (%)', 'Value', FailureRatePct),
+    bag_pack('Metric', 'Cancellation rate (%)', 'Value', CancellationRatePct),
+    bag_pack('Metric', 'Failed object rate (%)', 'Value', FailedObjectRatePct),
+    bag_pack('Metric', 'Server busy rate (%)', 'Value', ServerBusyRatePct),
+    bag_pack('Metric', 'Network error rate (%)', 'Value', NetworkErrorRatePct),
+    bag_pack('Metric', 'Resume success rate (%)', 'Value', ResumeSuccessRatePct))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

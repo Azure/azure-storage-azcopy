@@ -61,3 +61,15 @@ customEvents
     MissingRequiredFieldAttempts = countif(MissingRequiredFields),
     IncompleteFinishMetricAttempts = countif(IncompleteFinishMetricSet)
 | extend AcceptedRatePercent = round(100.0 * AcceptedAttempts / iif(ObservedAttempts > 0, ObservedAttempts, 1), 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed attempts', 'Value', ObservedAttempts),
+    bag_pack('Metric', 'Accepted attempts', 'Value', AcceptedAttempts),
+    bag_pack('Metric', 'Accepted rate (%)', 'Value', AcceptedRatePercent),
+    bag_pack('Metric', 'Invalid schema', 'Value', InvalidSchemaAttempts),
+    bag_pack('Metric', 'Lifecycle suspects', 'Value', LifecycleSuspectAttempts),
+    bag_pack('Metric', 'Timing suspects', 'Value', TimingSuspectAttempts),
+    bag_pack('Metric', 'Missing required fields', 'Value', MissingRequiredFieldAttempts),
+    bag_pack('Metric', 'Incomplete finish metrics', 'Value', IncompleteFinishMetricAttempts))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

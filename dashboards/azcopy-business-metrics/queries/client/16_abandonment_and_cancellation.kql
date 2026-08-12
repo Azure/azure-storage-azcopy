@@ -44,3 +44,14 @@ customEvents
     AvgCancelPercentComplete = round(AvgCancelPercentComplete, 2),
     CancelPercentCompleteP50 = round(CancelPercentCompleteP50, 2),
     CancelPercentCompleteP90 = round(CancelPercentCompleteP90, 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Mature starts', 'Value', ObservedMatureStarts),
+    bag_pack('Metric', 'Unmatched starts', 'Value', ObservedUnmatchedStarts),
+    bag_pack('Metric', 'Unmatched start rate (%)', 'Value', UnmatchedStartRatePct),
+    bag_pack('Metric', 'Cancellations', 'Value', ObservedCancellations),
+    bag_pack('Metric', 'Average completion at cancel (%)', 'Value', AvgCancelPercentComplete),
+    bag_pack('Metric', 'P50 completion at cancel (%)', 'Value', CancelPercentCompleteP50),
+    bag_pack('Metric', 'P90 completion at cancel (%)', 'Value', CancelPercentCompleteP90))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

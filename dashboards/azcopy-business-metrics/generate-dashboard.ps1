@@ -49,11 +49,11 @@ function New-VisualOptions([string]$VisualType) {
         "multistat" {
             return [ordered]@{
                 multiStat__textSize = "large"
-                multiStat__valueColumn = $null
+                multiStat__valueColumn = "Value"
                 colorRulesDisabled = $true
                 colorStyle = "light"
                 multiStat__displayOrientation = "horizontal"
-                multiStat__labelColumn = $null
+                multiStat__labelColumn = "Metric"
                 multiStat__slot = [ordered]@{ width = 1; height = 2 }
                 colorRules = @()
             }

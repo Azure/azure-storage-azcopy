@@ -35,3 +35,12 @@ customEvents
     EstimatedDataTB = round(EstimatedBytes / 1e12, 2),
     CompletionRatePct = round(100.0 * EstimatedCompleted / iif(EstimatedAttempts > 0.0, EstimatedAttempts, 1.0), 2),
     UnmatchedStarts
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed attempts', 'Value', ObservedAttempts),
+    bag_pack('Metric', 'Estimated attempts', 'Value', EstimatedAttempts),
+    bag_pack('Metric', 'Estimated data (TB)', 'Value', EstimatedDataTB),
+    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),
+    bag_pack('Metric', 'Unmatched starts', 'Value', UnmatchedStarts))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)
