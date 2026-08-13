@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
+	"strings"
 )
 
 type serviceAPIVersionOverride struct{}
@@ -44,7 +45,25 @@ func NewVersionPolicy() policy.Policy {
 func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
-		req.Raw().Header["x-ms-version"] = []string{value.(string)}
+		if !shouldPreserveRequestServiceVersion(req.Raw()) {
+			setServiceVersionHeader(req.Raw(), value.(string))
+		}
 	}
 	return req.Next()
+}
+
+func setServiceVersionHeader(req *http.Request, version string) {
+	for name := range req.Header {
+		if strings.EqualFold(name, "x-ms-version") {
+			delete(req.Header, name)
+		}
+	}
+	req.Header["x-ms-version"] = []string{version}
+}
+
+func shouldPreserveRequestServiceVersion(req *http.Request) bool {
+	return req != nil &&
+		strings.EqualFold(req.Method, http.MethodGet) &&
+		strings.EqualFold(req.URL.Query().Get("comp"), "hash") &&
+		req.Header.Get("x-ms-version") != ""
 }
