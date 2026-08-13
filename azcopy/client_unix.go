@@ -21,14 +21,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"math"
-	"path"
 	"syscall"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // processOSSpecificInitialization changes the soft limit for file descriptor for process
@@ -66,12 +63,4 @@ func processOSSpecificInitialization() (int, error) {
 	} else {
 		return int(set.Cur), nil
 	}
-}
-
-// getAzCopyAppPath returns the path of Azcopy folder in local appdata.
-// Azcopy folder in local appdata contains all the files created by azcopy locally.
-func getAzCopyAppPath() string {
-	localAppData := common.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
-	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
-	return azcopyAppDataFolder
 }

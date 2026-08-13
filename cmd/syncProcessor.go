@@ -360,7 +360,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			defer b.folderManager.RecordChildDeleted(objURL)
 
 			_, err = blobClient.Delete(b.ctx, nil)
-		case common.ELocation.File():
+		case common.ELocation.File(), common.ELocation.FileNFS():
 			fsc, _ := sc.FileServiceClient()
 			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(objectPath)
 
@@ -436,7 +436,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				return (err == nil)
 			}
 
-		case common.ELocation.File():
+		case common.ELocation.File(), common.ELocation.FileNFS():
 			fsc, _ := sc.FileServiceClient()
 			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(objectPath)
 			objURL, err = b.getObjectURL(dirClient.URL())
@@ -882,11 +882,16 @@ func (b *remoteResourceDeleter) createFileDeletionFunc(fileClient *file.Client, 
 	return func() {
 		ctx := context.Background()
 
-		if _, err := fileClient.Delete(ctx, nil); err != nil {
+		err := common.DoWithOverrideReadOnlyOnAzureFiles(ctx, func() (interface{}, error) {
+			return fileClient.Delete(ctx, nil)
+		}, fileClient, b.forceIfReadOnly)
+
+		if err != nil {
 			msg := fmt.Sprintf("Failed to delete file %s: %v", filePath, err)
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogError, msg)
 			}
+			return // Don't increment count on failure
 		}
 
 		// Increment deletion count

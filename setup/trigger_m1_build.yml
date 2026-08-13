@@ -116,7 +116,7 @@ steps:
               mkdir -p $ARTIFACTS_DIR/unzipped_artifacts
               ls -ltR $ARTIFACTS_DIR/
               unzip -o $ARTIFACTS_DIR/$artifact_name* -d "$ARTIFACTS_DIR/unzipped_artifacts"
-              mv $ARTIFACTS_DIR/unzipped_artifacts/azcopy_darwin_m1_arm64 ${{ parameters.download_path }}/azcopy
+              mv $ARTIFACTS_DIR/unzipped_artifacts/azcopy_darwin_m1_arm64 ${{ parameters.download_path }}/azcopy_darwin_m1_arm64
             else
               echo "Failed to download $artifact_name"
               exit 1
