@@ -68,6 +68,10 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 }
 
 func (p *gcpSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return signGCPObjectURLV4(jsonKey, p.gcpURLParts.BucketName, p.gcpURLParts.ObjectKey, defaultPresignExpires)
+}
+
+func signGCPObjectURLV4(jsonKey []byte, bucketName string, objectKey string, expires time.Duration) (string, error) {
 	conf, err := google.JWTConfigFromJSON(jsonKey)
 	if err != nil {
 		return "", fmt.Errorf("Could not get config from json key. Error: %v", err)
@@ -77,9 +81,9 @@ func (p *gcpSourceInfoProvider) PreSignedSourceURL() (string, error) {
 		Method:         "GET",
 		GoogleAccessID: conf.Email,
 		PrivateKey:     conf.PrivateKey,
-		Expires:        time.Now().Add(defaultPresignExpires),
+		Expires:        time.Now().Add(expires),
 	}
-	u, err := gcpUtils.SignedURL(p.gcpURLParts.BucketName, p.gcpURLParts.ObjectKey, opts)
+	u, err := gcpUtils.SignedURL(bucketName, objectKey, opts)
 
 	if err != nil {
 		return "", fmt.Errorf("Unable to Generate Signed URL for given GCP Object: %v", err)
