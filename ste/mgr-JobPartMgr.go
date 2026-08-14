@@ -108,7 +108,9 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
+	// newAzureFilesThrottlePolicy feeds Azure Files 429/503 responses into the
+	// per-share dual-resource controller's fast reactive path (no-op otherwise).
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(), newAzureFilesThrottlePolicy()}
 	if dstCred != nil {
 		perCallPolicies = append(perRetryPolicies, NewDestReauthPolicy(dstCred))
 	}
