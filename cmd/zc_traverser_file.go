@@ -67,11 +67,6 @@ type fileTraverser struct {
 	// To retrieve current property values, use x-ms-file-extended-info: true for a directory
 	// located on a File Share with SMB protocol enabled, or call Get File Properties against the specific file.
 	includeExtendedInfo bool // whether to include extended info in the listing, such as SMB properties
-
-	// scanPacer, when non-nil, meters the IOPS consumed by enumeration metadata
-	// operations (List, GetProperties) so scanning respects the same storage IOPS
-	// budget as the transfer phase. nil means uncapped scanning.
-	scanPacer common.IOPSPacer
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -340,12 +335,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// When includeExtendedInfo is true, we already have the properties from the listing API
 		// so we don't need to fetch full properties (which would make individual API calls)
 		needsFullPropertiesFetch := !t.includeExtendedInfo && t.getProperties
-		if needsFullPropertiesFetch {
-			// Charge one IOP for the per-file GetProperties call against the shared budget.
-			if err := common.ScanPacerAcquire(t.ctx, t.scanPacer, 1); err != nil {
-				return nil, err
-			}
-		}
 		fullProperties, err := f.propertyGetter(t.ctx, needsFullPropertiesFetch)
 		if err != nil {
 			return StoredObject{
@@ -423,9 +412,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
 		// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 		// XDM: We are breaking this rule in the case of SyncOrchestrator, because of directory level processing.
-		if err = common.ScanPacerAcquire(t.ctx, t.scanPacer, 1); err != nil {
-			return err
-		}
 		_, err = common.WithNetworkRetry(
 			t.ctx,
 			azcopyScanningLogger,
@@ -466,10 +452,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		var marker *string
 		for pager.More() {
-			// Charge one IOP for each List page against the shared budget.
-			if err := common.ScanPacerAcquire(t.ctx, t.scanPacer, 1); err != nil {
-				return err
-			}
 			lResp, err := common.WithNetworkRetry(
 				t.ctx,
 				azcopyScanningLogger,
@@ -612,13 +594,6 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		trailingDot:                 opts.TrailingDotOption,
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
-		scanPacer:                   opts.ScanPacer,
-	}
-
-	// Meter enumeration (metadata) IOPS against the source share's per-share
-	// dual-resource budget, unless a caller supplied an explicit ScanPacer.
-	if t.scanPacer == nil {
-		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 
 	t.skipRootProperties = UseSyncOrchestrator && !t.recursive

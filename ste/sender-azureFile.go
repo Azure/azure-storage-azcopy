@@ -141,15 +141,6 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		client = shareClient.NewRootDirectoryClient().NewFileClient(directoryOrFilePath)
 	}
 
-	// Scope pacing to the destination Azure Files share so the per-share
-	// dual-resource controller meters IOPS and dynamic bandwidth alongside the
-	// global --cap-mbps pacer. Non-Files/unresolvable shares fall back to the
-	// global pacer unchanged.
-	scopedPacer := pacer
-	if sp := common.GetOrCreateSharePacer(shareClient.URL(), 1); sp != nil {
-		scopedPacer = newShareScopedPacer(pacer, sp)
-	}
-
 	return &azureFileSenderBase{
 		jptm:                 jptm,
 		addFileRequestIntent: addFileRequestIntent,
@@ -157,7 +148,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		fileOrDirClient:      client,
 		chunkSize:            chunkSize,
 		numChunks:            numChunks,
-		pacer:                scopedPacer,
+		pacer:                pacer,
 		ctx:                  jptm.Context(),
 		headersToApply:       props.SrcHTTPHeaders.ToFileHTTPHeaders(),
 		smbPropertiesToApply: file.SMBProperties{},
@@ -184,9 +175,6 @@ func (u *azureFileSenderBase) NumChunks() uint32 {
 }
 
 func (u *azureFileSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	if err := pacerAcquire(u.ctx, u.pacer, 0, 1); err != nil {
-		return false, time.Time{}, err
-	}
 	props, err := u.getFileClient().GetProperties(u.ctx, nil)
 	return remoteObjectExists(filePropertiesResponseAdapter{props}, err)
 }
@@ -519,9 +507,6 @@ func (u *azureFileSenderBase) Cleanup() {
 }
 
 func (u *azureFileSenderBase) GetDestinationLength() (int64, error) {
-	if err := pacerAcquire(u.ctx, u.pacer, 0, 1); err != nil {
-		return -1, err
-	}
 	prop, err := u.getFileClient().GetProperties(u.ctx, nil)
 
 	if err != nil {
