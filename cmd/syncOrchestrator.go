@@ -166,13 +166,6 @@ func IsDestinationNotFoundDuringSync(err error) bool {
 
 func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncOrchErrorInfo) {
 	if errorChannel != nil {
-		defer func() {
-			if r := recover(); r != nil {
-				syncOrchestratorLog(
-					common.LogWarning,
-					fmt.Sprintf("Error channel closed, dropping error: %v", err.ErrorMessage()))
-			}
-		}()
 		select {
 		case errorChannel <- err:
 		default:
