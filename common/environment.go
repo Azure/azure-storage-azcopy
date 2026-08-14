@@ -493,3 +493,12 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
 	}
 }
+
+func (EnvironmentVariable) EnableAzFilesProactiveStats() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_ENABLE_AZFILES_PROACTIVE_STATS",
+		DefaultValue: "false",
+		Description:  "When set to true, enables proactive polling of Azure Files share throttling statistics via GetShareStats for File-to-File transfers.",
+		Hidden:       true,
+	}
+}
