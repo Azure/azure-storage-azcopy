@@ -317,34 +317,16 @@ func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceIn
 	return nil
 }
 
-// PutNFSDefaultPermissions sets default ownership and permissions for NFS shares
-// when no explicit NFS permissions are provided by the source.
-// Default: 0755 for directories, 0644 for files. Owner/group set to root (UID 0, GID 0).
-func (a *azureFilesDownloader) PutNFSDefaultPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
-	const (
-		defaultFileMode = 0644
-		defaultDirMode  = 0755
-		defaultUID      = 0 // root
-		defaultGID      = 0 // root
-	)
-
-	// Determine file mode based on entity type
-	var mode os.FileMode
-	if txInfo.EntityType == common.EEntityType.Folder() {
-		mode = defaultDirMode
-	} else {
-		mode = defaultFileMode
+func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newFileSourceInfoProvider(jptm)
+	if err != nil {
+		return err
 	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
+	symlinkInfo, _ := symsip.ReadLink()
 
-	// Set ownership
-	if err := os.Chown(txInfo.Destination, defaultUID, defaultGID); err != nil {
-		return fmt.Errorf("failed to set owner/group for %s: %w", txInfo.Destination, err)
-	}
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
 
-	// Set permissions
-	if err := os.Chmod(txInfo.Destination, mode); err != nil {
-		return fmt.Errorf("failed to set permissions for %s: %w", txInfo.Destination, err)
-	}
-
-	return nil
+	return err
 }

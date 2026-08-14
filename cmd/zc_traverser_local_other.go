@@ -45,5 +45,5 @@ func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.Ha
 
 	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
 	inodeStr := strconv.FormatUint(stat.Ino, 10)
-	logNFSLinkWarning(fileInfo.Name(), inodeStr, false)
+	logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandling)
 }

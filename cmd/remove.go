@@ -110,6 +110,9 @@ func init() {
 		"\n Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
 	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. "+
 		"\n For example: *.jpg;*.pdf;exactName")
+	deleteCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
+		"This option does not support wildcard characters (*). "+
+		"\n Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
 	deleteCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+
 		"\n When deleting an Azure Files file or folder, force the deletion to work even if the existing object is has its read-only attribute set")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a text file which contains the list of files and directories to be deleted. "+

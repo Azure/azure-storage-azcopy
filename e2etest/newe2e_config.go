@@ -75,22 +75,27 @@ type NewE2EConfig struct {
 				} `env:",required,mutually_exclusive"`
 			}
 
+			AccountKeyLookup struct {
+				SubscriptionID string `env:"NEW_E2E_STATIC_SUBSCRIPTION_ID"`
+				ResourceGroup  string `env:"NEW_E2E_STATIC_RESOURCE_GROUP"`
+			}
+
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
 			Standard struct {
 				AccountName string `env:"NEW_E2E_STANDARD_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY"`
 			} `env:",required"`
 			HNS struct {
 				AccountName string `env:"NEW_E2E_HNS_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_HNS_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_HNS_ACCOUNT_KEY"`
 			} `env:",required"`
 			PremiumPage struct {
 				AccountName string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY"`
 			} `env:",required"`
 			PremiumFileShare struct {
 				AccountName string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY"`
 			} `env:",required"`
 		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`
@@ -111,6 +116,12 @@ type NewE2EConfig struct {
 
 		LogDropPath string `env:"AZCOPY_E2E_LOG_OUTPUT"`
 	} `env:",required"`
+
+	// Extra config for the e2e framework that isn't always applicable.
+	E2EFrameworkSpecialConfig struct {
+		SkipTelemetry              bool `env:"NEW_E2E_SKIP_TELEMETRY,default=false"`
+		OverrideWindowsSymlinkSkip bool `env:"NEW_E2E_OVERRIDE_WINDOWS_SYMLINK,default=false"`
+	}
 }
 
 func (e NewE2EConfig) DefaultTelemetryDataKey() (string, error) {
@@ -119,6 +130,11 @@ func (e NewE2EConfig) DefaultTelemetryDataKey() (string, error) {
 
 func (e NewE2EConfig) StaticResources() bool {
 	return e.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID == "" // all subscriptionlogininfo options would have to be filled due to required
+}
+
+func (e NewE2EConfig) CanLookupStaticAcctKeys() bool {
+	lookup := e.E2EAuthConfig.StaticStgAcctInfo.AccountKeyLookup
+	return lookup.SubscriptionID != "" && lookup.ResourceGroup != "" && PrimaryOAuthCache.tc != nil
 }
 
 func (e NewE2EConfig) GetSPNOptions() (present bool, tenant, applicationId, secret string) {

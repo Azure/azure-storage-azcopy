@@ -3,18 +3,16 @@ package e2etest
 import (
 	"net/http"
 	"net/url"
+	"path"
 )
 
 type ARMManagedDisk struct {
-	*ARMResourceGroup
+	ParentSubject[*ARMResourceGroup]
 	DiskName string
 }
 
-func (md *ARMManagedDisk) ManagementURI() url.URL {
-	baseURI := md.ARMResourceGroup.ManagementURI()
-	newURI := baseURI.JoinPath("providers/Microsoft.Compute/disks", md.DiskName)
-
-	return *newURI
+func (md *ARMManagedDisk) CanonicalPath() string {
+	return path.Join(md.ParentSubject.CanonicalPath(), "providers/Microsoft.Compute/disks", md.DiskName)
 }
 
 func (md *ARMManagedDisk) PrepareRequest(reqSettings *ARMRequestSettings) {

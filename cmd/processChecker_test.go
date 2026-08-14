@@ -32,7 +32,7 @@ func Test_WarnMultipleProcesses(t *testing.T) {
 
 	dirEntry, _ := os.ReadDir(pidsDir)
 	// Check only one file
-	a.Equal(2, len(dirEntry), "Should contain 2 .pid files")
+	a.Equal(1, len(dirEntry), "Should contain 1 .pid files")
 }
 
 // Test_MultipleProcessWithMockedLCM validates warn messages are logged when there's multiple AzCopy instances
@@ -62,7 +62,7 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	mockLCM := mockedLifecycleManager{warnLog: make(chan string, 50)}
+	mockLCM := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockLCM.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	mockedRPC.init()
 	glcm = &mockLCM
@@ -71,8 +71,40 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	WarnMultipleProcesses(tempDir, 456)
 
 	// Assert
-	errorMessages := mockLCM.GatherAllLogs(mockLCM.warnLog) // check mocked LCM warnLogs
+	errorMessages := mockLCM.GatherAllLogs(mockLCM.infoLog) // check mocked LCM infoLogs
 	if errorMessages != nil {
-		a.Equal(common.ERR_MULTIPLE_PROCESSES, errorMessages[0])
+		a.Equal(common.WARN_MULTIPLE_PROCESSES, errorMessages[0])
 	}
+}
+
+func Test_CleanUpStalePids(t *testing.T) {
+	a := assert.New(t)
+
+	// Arrange
+	tempDir, err := os.MkdirTemp("", "temp")
+	a.NoError(err)
+	defer func(path string) { // Cleanup temp dir
+		err := os.RemoveAll(path)
+		if err != nil {
+			return
+		}
+	}(tempDir)
+
+	pidsDir := path.Join(tempDir, "pids")
+	err = os.MkdirAll(pidsDir, 0777)
+	a.NoError(err)
+
+	stalePidFile, _ := os.Create(path.Join(pidsDir, "11111.pid"))
+	err = stalePidFile.Close()
+	a.NoError(err)
+
+	dirEntry, _ := os.ReadDir(pidsDir)
+	a.Equal(len(dirEntry), 1, "Should contain only one pid")
+
+	// Act
+	cleanupStalePidFiles(pidsDir, os.Getpid())
+
+	dirEntry, _ = os.ReadDir(pidsDir) // Re-read dir entry because it does not get updates
+	a.Equal(len(dirEntry), 0, "Should have cleaned up pid file")
+
 }

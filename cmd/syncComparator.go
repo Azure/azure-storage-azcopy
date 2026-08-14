@@ -101,7 +101,9 @@ type syncDestinationComparator struct {
 	deleteDestination common.DeleteDestination
 
 	// Function to increment files/folders not transferred as a result of no change since last sync.
-	incrementNotTransferred func(common.EntityType)
+	incrementNotTransferred enumerationCounterFunc
+	symlinkHandling         common.SymlinkHandlingType
+	hardlinkHandling        common.HardlinkHandlingType
 
 	orchestratorOptions *SyncOrchestratorOptions
 
@@ -118,7 +120,9 @@ func newSyncDestinationComparator(
 	preferSMBTime,
 	disableComparison bool,
 	deleteDestination common.DeleteDestination,
-	incrementNotTransferred func(common.EntityType),
+	incrementNotTransferred enumerationCounterFunc,
+	symlinkHandling common.SymlinkHandlingType,
+	hardlinkHandling common.HardlinkHandlingType,
 	orchestratorOptions *SyncOrchestratorOptions) *syncDestinationComparator {
 	comp := &syncDestinationComparator{
 		sourceIndex:             i,
@@ -129,6 +133,8 @@ func newSyncDestinationComparator(
 		comparisonHashType:      comparisonHashType,
 		deleteDestination:       deleteDestination,
 		incrementNotTransferred: incrementNotTransferred,
+		symlinkHandling:         symlinkHandling,
+		hardlinkHandling:        hardlinkHandling,
 		orchestratorOptions:     orchestratorOptions,
 	}
 
@@ -217,7 +223,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 
 		// if source is not more recent, we skip the transfer
 		if f.incrementNotTransferred != nil {
-			f.incrementNotTransferred(sourceObjectInMap.entityType)
+			f.incrementNotTransferred(sourceObjectInMap.entityType, f.symlinkHandling, f.hardlinkHandling)
 		}
 
 		// skip if dest is more recent
@@ -269,7 +275,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
 					if f.incrementNotTransferred != nil {
 						// XDM:maybe we should have a different counter for skipped transfers
-						f.incrementNotTransferred(sourceObjectInMap.entityType)
+						f.incrementNotTransferred(sourceObjectInMap.entityType, f.symlinkHandling, f.hardlinkHandling)
 					}
 					return true, nil
 				}
@@ -322,7 +328,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 
 	// Data, metadata or entity type are unchanged, so we skip the transfer.
 	if f.incrementNotTransferred != nil {
-		f.incrementNotTransferred(sourceObjectInMap.entityType)
+		f.incrementNotTransferred(sourceObjectInMap.entityType, f.symlinkHandling, f.hardlinkHandling)
 	}
 
 	syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
@@ -350,7 +356,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare last write times with precision tolerance
-	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, common.IsNFSCopy()) {
+	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, f.orchestratorOptions.fromTo.IsNFS()) {
 		return true, true
 	}
 
@@ -360,7 +366,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return false, false
 	}
 
-	if common.IsNFSCopy() {
+	if f.orchestratorOptions.fromTo.IsNFS() {
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.
@@ -388,7 +394,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare change times with precision tolerance
-	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, common.IsNFSCopy()) {
+	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, f.orchestratorOptions.fromTo.IsNFS()) {
 		return false, true
 	}
 
@@ -412,7 +418,9 @@ type syncSourceComparator struct {
 	disableComparison bool
 
 	// Function to increment files/folders not transferred as a result of no change since last sync.
-	incrementNotTransferred func(common.EntityType)
+	incrementNotTransferred enumerationCounterFunc
+	symlinkHandling         common.SymlinkHandlingType
+	hardlinkHandling        common.HardlinkHandlingType
 }
 
 func newSyncSourceComparator(
@@ -421,7 +429,9 @@ func newSyncSourceComparator(
 	comparisonHashType common.SyncHashType,
 	preferSMBTime,
 	disableComparison bool,
-	incrementNotTransferred func(common.EntityType)) *syncSourceComparator {
+	incrementNotTransferred enumerationCounterFunc,
+	symlinkHandling common.SymlinkHandlingType,
+	hardlinkHandling common.HardlinkHandlingType) *syncSourceComparator {
 	return &syncSourceComparator{
 		destinationIndex:        i,
 		copyTransferScheduler:   copyScheduler,
@@ -429,6 +439,8 @@ func newSyncSourceComparator(
 		disableComparison:       disableComparison,
 		comparisonHashType:      comparisonHashType,
 		incrementNotTransferred: incrementNotTransferred,
+		symlinkHandling:         symlinkHandling,
+		hardlinkHandling:        hardlinkHandling,
 	}
 }
 
@@ -488,7 +500,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 
 		// Neither data nor metadata for the file has changed, hence file is not transferred.
 		if f.incrementNotTransferred != nil {
-			f.incrementNotTransferred(sourceObject.entityType)
+			f.incrementNotTransferred(sourceObject.entityType, f.symlinkHandling, f.hardlinkHandling)
 		}
 
 		// skip if dest is more recent

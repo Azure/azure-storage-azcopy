@@ -1,8 +1,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 /*
@@ -79,7 +80,9 @@ func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariation
 				ObjectShouldExist: pointerTo(true),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Scenario_IncludeRootDirectoryStub tests that the root directory (and sub directories) appropriately get their files picked up.
@@ -138,7 +141,9 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
 			"foobar/folder/foobar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 /*
@@ -200,7 +205,9 @@ func (*FNSSuite) Scenario_SyncTrailingSlashDeletion(a *ScenarioVariationManager)
 				ObjectShouldExist: pointerTo(false),
 			},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (*FNSSuite) Scenario_SyncOverlap(a *ScenarioVariationManager) {
@@ -269,5 +276,7 @@ func (*FNSSuite) Scenario_SyncOverlap(a *ScenarioVariationManager) {
 
 	ValidateResource(a, dst, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat(JoinMap(dstMap, srcMap)),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
