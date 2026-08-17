@@ -43,7 +43,7 @@ type urlToBlockBlobCopier struct {
 	// srcChangeAC, when non-nil, carries a source access-condition (SourceIfUnmodifiedSince set to the
 	// enumerated source LMT) that is attached to every StageBlockFromURL/UploadBlobFromURL request, so
 	// Azure Storage atomically fails the copy with 412 if the source changed since enumeration. Set
-	// only in mover builds for Blob->Blob, replacing the pre/post-transfer GetProperties change checks.
+	// only in the mover high-perf profile for Blob->Blob, replacing the pre/post-transfer GetProperties change checks.
 	srcChangeAC *blob.SourceModifiedAccessConditions
 }
 
@@ -74,9 +74,10 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvi
 		intentBool = sUrl.SAS.Signature() == "" // No SAS means using OAuth
 	}
 
-	// In mover Blob->Blob builds, enforce source-change detection via a source access-condition on the
-	// copy request itself (the enumerated LMT), instead of separate GetProperties calls. The service
-	// returns 412 if the source changed since enumeration, which fails the transfer before commit.
+	// In the mover high-perf profile for Blob->Blob transfers, enforce source-change detection via a
+	// source access-condition on the copy request itself (the enumerated LMT), instead of separate
+	// GetProperties calls. The service returns 412 if the source changed since enumeration, which
+	// fails the transfer before commit.
 	var srcChangeAC *blob.SourceModifiedAccessConditions
 	if useSourceChangeAccessCondition(jptm) {
 		lmt := jptm.LastModifiedTime()

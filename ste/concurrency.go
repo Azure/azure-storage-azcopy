@@ -197,7 +197,7 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 		return c.Value, c // initial and max are same, fixed to the env var
 	}
 
-	if !autoTune && buildmode.IsMover && buildmode.HighPerf() && buildmode.ConcurrencyValue() > 0 {
+	if !autoTune && buildmode.HighPerf() && buildmode.ConcurrencyValue() > 0 {
 		defaultValue := buildmode.ConcurrencyValue()
 		return defaultValue, &ConfiguredInt{defaultValue, false, envVar.Name, "mover high-perf profile"}
 	}
@@ -225,7 +225,7 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 	if autoTune {
 		reason = "auto-tuning limit"
 		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
-		if buildmode.IsMover && buildmode.HighPerf() {
+		if buildmode.HighPerf() {
 			maxValue = 20000
 		}
 	}
@@ -240,7 +240,7 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 		return c
 	}
 
-	if buildmode.IsMover && buildmode.HighPerf() {
+	if buildmode.HighPerf() {
 		return &ConfiguredInt{buildmode.ConcurrentFiles(), false, envVar.Name, "mover high-perf profile"}
 	}
 
@@ -254,7 +254,7 @@ func getSchedulerParallelism() *ConfiguredInt {
 		return c
 	}
 
-	if buildmode.IsMover && buildmode.HighPerf() {
+	if buildmode.HighPerf() {
 		return &ConfiguredInt{buildmode.ConcurrentSchedulers(), false, envVar.Name, "mover high-perf profile"}
 	}
 
@@ -268,7 +268,7 @@ func GetEnumerationPoolSize() *ConfiguredInt {
 		return c
 	}
 
-	if buildmode.IsMover && buildmode.HighPerf() {
+	if buildmode.HighPerf() {
 		return &ConfiguredInt{buildmode.ConcurrentScan(), false, envVar.Name, "mover high-perf profile"}
 	}
 

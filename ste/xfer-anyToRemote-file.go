@@ -623,8 +623,9 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 // enforced via a source access-condition (SourceIfUnmodifiedSince) attached to the copy request
 // itself, instead of separate GetProperties round-trips before and after the transfer.
 //
-// It is enabled only in mover builds, only when S2SSourceChangeValidation is requested, and only
-// for Blob->Blob copies: the block-blob "from URL" sender attaches the access-condition to every
+// It is enabled only in the mover high-perf profile (buildmode.HighPerf(), i.e. MOVER_HIGH_PERF set
+// in a mover build), only when S2SSourceChangeValidation is requested, and only for Blob->Blob
+// copies: the block-blob "from URL" sender attaches the access-condition to every
 // StageBlockFromURL/UploadBlobFromURL call, and Azure Storage enforces it natively against the
 // source blob (returning 412 Precondition Failed if the source changed since enumeration, which
 // gates CommitBlockList so no torn blob is ever committed). When this is active, BOTH the
@@ -639,11 +640,11 @@ func useSourceChangeAccessCondition(jptm IJobPartTransferMgr) bool {
 // skipDestLengthValidation reports whether the post-commit destination length check should be
 // skipped for this transfer. That check calls GetDestinationLength() (a GetProperties round-trip on
 // the just-written destination blob) in the epilogue to compare the destination content-length
-// against the source size. In mover builds for Blob->Blob server-side copy it is skipped: a
-// successful CommitBlockList already fixes the destination blob length deterministically from the
-// committed block list, so the readback is redundant. It otherwise accounts for ~25% of destination
-// transactions (one per blob), so skipping it reduces service request load and removes a synchronous
-// round-trip from every transfer's critical path.
+// against the source size. In the mover high-perf profile (buildmode.HighPerf()) for Blob->Blob
+// server-side copy it is skipped: a successful CommitBlockList already fixes the destination blob
+// length deterministically from the committed block list, so the readback is redundant. It
+// otherwise accounts for ~25% of destination transactions (one per blob), so skipping it reduces
+// service request load and removes a synchronous round-trip from every transfer's critical path.
 func skipDestLengthValidation(jptm IJobPartTransferMgr) bool {
 	return buildmode.HighPerf() &&
 		jptm.FromTo() == common.EFromTo.BlobBlob()
@@ -663,9 +664,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}
 	if jptm.IsLive() {
-		// When the source-change access-condition is in effect (mover Blob->Blob), a source change is
-		// detected atomically by the service on each StageBlockFromURL/UploadBlobFromURL (412), so skip
-		// the redundant post-transfer GetProperties source-change check entirely.
+		// When the source-change access-condition is in effect (mover high-perf Blob->Blob), a source
+		// change is detected atomically by the service on each StageBlockFromURL/UploadBlobFromURL
+		// (412), so skip the redundant post-transfer GetProperties source-change check entirely.
 		if _, isS2SCopier := s.(s2sCopier); !useSourceChangeAccessCondition(jptm) &&
 			(sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation)) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.

@@ -171,11 +171,11 @@ func dispatchChParts() int {
 }
 
 func useAsyncDispatchPipeline() bool {
-	return buildmode.IsMover && buildmode.HighPerf()
+	return buildmode.HighPerf()
 }
 
 func useHighPerfSyncPath() bool {
-	return buildmode.IsMover && buildmode.HighPerf()
+	return buildmode.HighPerf()
 }
 
 // startDispatchPipeline ensures the background dispatch worker pool is running.

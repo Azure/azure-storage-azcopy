@@ -621,8 +621,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	// Log (once per job) whether the streaming merge-join is used. Enablement is decided in the
-	// mover (subscription allowlist via featureConfig OR the MOVER_SYNC_MJ env var,
-	// legacy aliases MOVER_SYNC_STREAMING_MERGE_JOIN / USE_STREAMING_MERGE_JOIN) and
+	// mover (subscription allowlist via featureConfig OR the MOVER_SYNC_MJ env var) and
 	// passed to azcopy as the single cca.useStreamingMergeJoin flag. This makes it easy to confirm
 	// the gating in production logs.
 	if useStreamingMergeJoin(cca) {

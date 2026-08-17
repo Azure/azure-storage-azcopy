@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -85,38 +86,60 @@ type IJobPartMgr interface {
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
-	const maxConnsPerHost = 30000
-	// Go 1.24: Use explicit Protocols field to force HTTP/1.1 only.
-	http1Only := &http.Protocols{}
-	http1Only.SetHTTP1(true)
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 15 * time.Second,
+	if buildmode.HighPerf() {
+		const maxConnsPerHost = 30000
+		// Go 1.24: Use explicit Protocols field to force HTTP/1.1 only.
+		http1Only := &http.Protocols{}
+		http1Only.SetHTTP1(true)
+		dialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 15 * time.Second,
+		}
+		return &http.Client{
+			Transport: &http.Transport{
+				Proxy:     common.GlobalProxyLookup,
+				Protocols: http1Only,
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return dialer.DialContext(ctx, network, addr)
+				},
+				MaxConnsPerHost:        maxConnsPerHost,
+				MaxIdleConns:           0,
+				MaxIdleConnsPerHost:    maxConnsPerHost,
+				IdleConnTimeout:        90 * time.Second,
+				TLSHandshakeTimeout:    10 * time.Second,
+				ResponseHeaderTimeout:  60 * time.Second,
+				ExpectContinueTimeout:  1 * time.Second,
+				DisableKeepAlives:      false,
+				DisableCompression:     true,
+				MaxResponseHeaderBytes: 0,
+				WriteBufferSize:        32 * 1024,
+				ReadBufferSize:         32 * 1024,
+				ForceAttemptHTTP2:      false,
+				TLSNextProto:           make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+				TLSClientConfig: &tls.Config{
+					NextProtos: []string{"http/1.1"},
+				},
+			},
+		}
 	}
+
+	// Default (non-mover-high-perf) path: unchanged from the original implementation.
+	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                  common.GlobalProxyLookup,
-			Protocols:              http1Only,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, network, addr)
-			},
-			MaxConnsPerHost:        maxConnsPerHost,
-			MaxIdleConns:           0,
-			MaxIdleConnsPerHost:    maxConnsPerHost,
-			IdleConnTimeout:        90 * time.Second,
+			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
+			MaxIdleConns:           0, // No limit
+			MaxIdleConnsPerHost:    maxIdleConns,
+			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
-			ResponseHeaderTimeout:  60 * time.Second,
+			ResponseHeaderTimeout:  60 * time.Second, // Timeout for reading response headers
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     true,
+			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
-			WriteBufferSize:        32 * 1024,
-			ReadBufferSize:         32 * 1024,
-			ForceAttemptHTTP2:      false,
-			TLSNextProto:           make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
-			TLSClientConfig: &tls.Config{
-				NextProtos: []string{"http/1.1"},
-			},
+			// ResponseHeaderTimeout:  time.Duration{},
+			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
 }

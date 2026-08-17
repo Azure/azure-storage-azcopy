@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -323,12 +324,15 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
-	// Perf: for Blob->Blob (incl. BlobFS), the ListBlobs enumeration already returns full source
-	// properties/metadata, so the per-blob backend GetProperties (S2SGetPropertiesInBackend) and the
-	// pre-transfer source-LMT re-fetch (S2SSourceChangeValidation -> GetFreshFileLastModifiedTime) are
-	// redundant round trips. Skip both for Blob->Blob; keep them for S3/Azure Files whose listings do
-	// not return full properties. (DestLengthValidation still guards against size mismatches.)
-	isBlobToBlob := (cca.fromTo.From() == common.ELocation.Blob() || cca.fromTo.From() == common.ELocation.BlobFS()) &&
+	// Perf (mover high-perf code path only): for Blob->Blob (incl. BlobFS), the ListBlobs enumeration
+	// already returns full source properties/metadata, so the per-blob backend GetProperties
+	// (S2SGetPropertiesInBackend) and the pre-transfer source-LMT re-fetch (S2SSourceChangeValidation ->
+	// GetFreshFileLastModifiedTime) are redundant round trips. Skip both for Blob->Blob in mover builds;
+	// keep the original/default behavior (both enabled) for the standalone azcopy CLI and for
+	// S3/Azure Files whose listings do not return full properties. (DestLengthValidation still guards
+	// against size mismatches.)
+	isBlobToBlob := buildmode.IsMover &&
+		(cca.fromTo.From() == common.ELocation.Blob() || cca.fromTo.From() == common.ELocation.BlobFS()) &&
 		(cca.fromTo.To() == common.ELocation.Blob() || cca.fromTo.To() == common.ELocation.BlobFS())
 	s2sGetPropertiesInBackend := !isBlobToBlob
 	s2sSourceChangeValidation := !isBlobToBlob

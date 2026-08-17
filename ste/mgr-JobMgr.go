@@ -101,13 +101,27 @@ type ChannelSizeConfig struct {
 	CloseTransferChannelSize int
 }
 
-// GetChannelSizeConfig returns channel size configuration based on build mode
+// GetChannelSizeConfig returns channel size configuration based on build mode/profile:
+// mover high-perf (buildmode.HighPerf()) uses the high-perf channel sizes;
+// mover-default (buildmode.IsMover only) keeps the original mover channel sizes; every other
+// (non-mover) build uses the generic default sizes.
 func GetChannelSizeConfig() ChannelSizeConfig {
-	if buildmode.IsMover && buildmode.HighPerf() {
+	if buildmode.HighPerf() {
 		return ChannelSizeConfig{
 			PartsChannelSize:         1000,
 			TransferChannelSize:      buildmode.TransferChannelSize(),
 			ChunkChannelSize:         buildmode.ChunkChannelSize(),
+			PartCreatedChannelSize:   100,
+			XferDoneChannelSize:      1000,
+			CloseTransferChannelSize: 100,
+		}
+	}
+
+	if buildmode.IsMover {
+		return ChannelSizeConfig{
+			PartsChannelSize:         1000,
+			TransferChannelSize:      20000,
+			ChunkChannelSize:         20000,
 			PartCreatedChannelSize:   100,
 			XferDoneChannelSize:      1000,
 			CloseTransferChannelSize: 100,

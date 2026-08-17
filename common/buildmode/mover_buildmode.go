@@ -11,8 +11,9 @@ import (
 var IsMover = true
 
 // High-performance mover profile. These values are consulted ONLY when MOVER_HIGH_PERF is set; every
-// call site is guarded by `buildmode.IsMover && buildmode.HighPerf()`. When MOVER_HIGH_PERF is unset,
-// the mover binary runs the original mover-default code path (env vars + generic defaults) unchanged.
+// call site is guarded by `buildmode.HighPerf()` (the IsMover check is redundant here, since this file
+// only compiles into mover builds). When MOVER_HIGH_PERF is unset, the mover binary runs the original
+// mover-default code path (env vars + generic defaults) unchanged.
 const (
 	highPerfTransportShards       = 64
 	highPerfConcurrencyValue      = 10000

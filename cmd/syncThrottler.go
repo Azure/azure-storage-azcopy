@@ -43,7 +43,7 @@ import (
 // default can false-trip and stall enumeration. Only the high-perf mover profile raises the cap
 // (buildmode.SyncMaxGoroutines(): 300000); every other build keeps 50k.
 var maxActiveGoRoutines int64 = func() int64 {
-	if buildmode.IsMover && buildmode.HighPerf() {
+	if buildmode.HighPerf() {
 		return int64(buildmode.SyncMaxGoroutines())
 	}
 	return 50_000

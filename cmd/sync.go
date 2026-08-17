@@ -117,8 +117,7 @@ type rawSyncCmdArgs struct {
 	blockBlobTier string
 	// useStreamingMergeJoin opts this job into the channel-based streaming merge-join sync path
 	// (for eligible remote source/dest pairs). Set per-job by the mover when the job's subscription
-	// is allowlisted for the feature OR the MOVER_SYNC_MJ env var is set (legacy aliases:
-	// MOVER_SYNC_STREAMING_MERGE_JOIN, USE_STREAMING_MERGE_JOIN) (the mover
+	// is allowlisted for the feature OR the MOVER_SYNC_MJ env var is set (the mover
 	// combines both into this single flag; azcopy does not read any enablement env var itself).
 	useStreamingMergeJoin bool
 }
@@ -134,12 +133,6 @@ func parseTruthyBoolEnvValue(v string) bool {
 
 func getSyncMergeJoinOverride() (set bool, enabled bool) {
 	if v, ok := os.LookupEnv("MOVER_SYNC_MJ"); ok {
-		return true, parseTruthyBoolEnvValue(v)
-	}
-	if v, ok := os.LookupEnv("MOVER_SYNC_STREAMING_MERGE_JOIN"); ok {
-		return true, parseTruthyBoolEnvValue(v)
-	}
-	if v, ok := os.LookupEnv("USE_STREAMING_MERGE_JOIN"); ok {
 		return true, parseTruthyBoolEnvValue(v)
 	}
 	return false, false
@@ -1096,20 +1089,14 @@ func init() {
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
 				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
 
-			// Streaming merge-join enablement for the standalone CLI (perf branch): in mover builds the
-			// high-throughput streaming merge-join sync path is enabled BY DEFAULT so a customer running
-			// this azcopy directly gets it without extra flags. Actual use is still restricted by
-			// useStreamingMergeJoin() (only S3->Blob and Azure->Azure) and the orchestrator (which
-			// requires --recursive=false), so ineligible jobs transparently fall back to the classic sync
-			// path. MOVER_SYNC_MJ (legacy aliases: MOVER_SYNC_STREAMING_MERGE_JOIN,
-			// USE_STREAMING_MERGE_JOIN)
-			// is an explicit override / kill switch: set it to false/0/off to force the
-			// classic path, or true to force-enable in a non-mover build.
+			// Streaming merge-join enablement for the standalone CLI (perf branch): the high-throughput
+			// streaming merge-join sync path is opt-in only, via the MOVER_SYNC_MJ env var. It is never
+			// enabled just because this is a mover build. Even when MOVER_SYNC_MJ=true, actual use is
+			// still restricted by useStreamingMergeJoin() (only S3->Blob and Azure->Azure) and the
+			// orchestrator (which requires --recursive=false), so ineligible jobs transparently fall
+			// back to the classic sync path.
 			// (The mover's programmatic RawMoverSyncCmdArgs path sets this flag itself and does not reach
 			// this CLI code, so it is unaffected.)
-			if buildmode.IsMover {
-				raw.useStreamingMergeJoin = true
-			}
 			if set, enabled := getSyncMergeJoinOverride(); set {
 				raw.useStreamingMergeJoin = enabled
 			}

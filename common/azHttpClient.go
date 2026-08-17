@@ -52,7 +52,7 @@ const (
 )
 
 func useHighPerfNetworkPath() bool {
-	return buildmode.IsMover && buildmode.HighPerf()
+	return buildmode.HighPerf()
 }
 
 // ShardedTransport implements http.RoundTripper by distributing requests across
