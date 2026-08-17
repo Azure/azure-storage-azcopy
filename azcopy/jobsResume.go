@@ -96,17 +96,23 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 		return ResumeJobResult{}, errors.New("resuming benchmark jobs is not supported")
 	}
 
-	// Prepare source and destination resource strings with updated SAS tokens
+	// Prepare source and destination resource strings with updated SAS tokens.
+	// If the user provided new SAS tokens via --source-sas / --destination-sas,
+	// use those; otherwise keep the SAS that was embedded in the plan file URL.
 	srcResourceString, err := traverser.SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
 	if err != nil {
 		return ResumeJobResult{}, fmt.Errorf("error parsing source resource string: %w", err)
 	}
-	srcResourceString.SAS = normalizeSAS(opts.SourceSAS)
+	if opts.SourceSAS != "" {
+		srcResourceString.SAS = normalizeSAS(opts.SourceSAS)
+	}
 	dstResourceString, err := traverser.SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
 	if err != nil {
 		return ResumeJobResult{}, fmt.Errorf("error parsing destination resource string: %w", err)
 	}
-	dstResourceString.SAS = normalizeSAS(opts.DestinationSAS)
+	if opts.DestinationSAS != "" {
+		dstResourceString.SAS = normalizeSAS(opts.DestinationSAS)
+	}
 
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 

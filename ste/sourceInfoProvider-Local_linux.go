@@ -4,6 +4,7 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"os/user"
 	"strconv"
@@ -206,8 +207,8 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// This is the Windows equivalent of ConvertSecurityDescriptorToStringSecurityDescriptorW().
 	sdStr, err := sddl.SecurityDescriptorToString(sd)
 	if err != nil {
-		// Panic, as it's unexpected and we would want to know.
-		panic(fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err))
+		// No longer panic here. A malformed SD would prevent the entire job from running.
+		return "", fmt.Errorf("cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %w", f.jptm.Info().Source, securityInfoFlags, err)
 	}
 
 	fSDDL, err := sddl.ParseSDDL(sdStr)
@@ -216,7 +217,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	}
 
 	if strings.TrimSpace(fSDDL.String()) != strings.TrimSpace(sdStr) {
-		panic("SDDL sanity check failed (parsed string output != original string)")
+		return "", errors.New("SDDL sanity check failed (parsed string output != original string)")
 	}
 
 	return fSDDL.PortableString(), nil

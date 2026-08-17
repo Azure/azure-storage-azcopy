@@ -83,7 +83,7 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 				BlobType: pointerTo(blobType),
 			},
 		})
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, ValidateResourceOptions{validateObjectContent:true})
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, ValidateResourceOptions{validateObjectContent: true})
 }
 
 func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManager) {

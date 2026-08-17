@@ -450,3 +450,7 @@ func (t *testJobPartTransferManager) GetJobErrorHandler() common.JobErrorHandler
 	// TODO: actually implement me if ever wanting to test error handling
 	return &noopJobErrorHandler{}
 }
+
+func (t *testJobPartTransferManager) GetSourceRoot() string {
+	panic("implement me")
+}

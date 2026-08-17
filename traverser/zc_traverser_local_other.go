@@ -7,8 +7,6 @@ import (
 	"os"
 	"strconv"
 	"syscall"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func WrapFolder(fullpath string, stat os.FileInfo) (os.FileInfo, error) {
@@ -36,14 +34,8 @@ func IsSymbolicLink(fileInfo os.FileInfo) bool {
 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
 }
 
-// LogHardLinkIfDefaultPolicy logs a warning if the given file is a hard link and the specified
-// hardlink handling policy is set to default hard links behaviour(follow).
-func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.HardlinkHandlingType) {
-	if !IsHardlink(fileInfo) || hardlinkHandling != common.DefaultHardlinkHandlingType {
-		return
-	}
-
+func getInodeString(fileInfo os.FileInfo) string {
 	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
 	inodeStr := strconv.FormatUint(stat.Ino, 10)
-	logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandling)
+	return inodeStr
 }
