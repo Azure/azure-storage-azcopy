@@ -19,6 +19,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -47,7 +49,7 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) err
 	return nil
 }
 
-func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
+func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo cred.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 	var err error
 	jobPartOrder.FileAttributes = common.FileTransferAttributes{
@@ -381,13 +383,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
 	var err error
-	dstCredInfo := common.CredentialInfo{}
+	dstCredInfo := cred.CredentialInfo{}
 
 	if ctx == nil {
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: cca.DstCredName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       GetCredentialManager(),
+	}); err != nil {
 		return false
 	}
 
@@ -497,27 +506,29 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
 	defer cancel()
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	dstCredInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: cca.DstCredName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
 		return err
-	}
-
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
 	options := createClientOptions(
 		common.LogLevelOverrideLogger{ // override our log level here
 			ILoggerResetable:  common.AzcopyCurrentJobLogger,
-			MinimumLevelToLog: common.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
-		}, nil, reauthTok)
+			MinimumLevelToLog: ternary.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
+		}, nil, dstCredInfo.TokenCredential)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstWithSAS,
 		dstCredInfo.CredentialType,
-		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		dstCredInfo.TokenCredential,
 		&options,
 		nil, // trailingDot is not required when creating a share
 	)
@@ -699,8 +710,8 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	}
 
-	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
-		relativePath = `/` + common.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
+	if ternary.Iff(source, object.ContainerName, object.DstContainerName) != "" {
+		relativePath = `/` + ternary.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
 	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
@@ -737,7 +748,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
-		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
+		willProcessString := ternary.Iff(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {

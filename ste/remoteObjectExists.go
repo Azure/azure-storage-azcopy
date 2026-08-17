@@ -22,11 +22,13 @@ package ste
 
 import (
 	"errors"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"net/http"
 	"time"
 )
@@ -45,7 +47,7 @@ type blobPropertiesResponseAdapter struct {
 }
 
 func (a blobPropertiesResponseAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 type filePropertiesResponseAdapter struct {
@@ -53,7 +55,7 @@ type filePropertiesResponseAdapter struct {
 }
 
 func (a filePropertiesResponseAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 type datalakePropertiesResponseAdapter struct {
@@ -61,7 +63,7 @@ type datalakePropertiesResponseAdapter struct {
 }
 
 func (a datalakePropertiesResponseAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 // remoteObjectExists takes the error returned when trying to access a remote object, sees whether is

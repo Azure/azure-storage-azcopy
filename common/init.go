@@ -4,14 +4,16 @@ import (
 	"log"
 	"os"
 	"path"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 var AzcopyJobPlanFolder string
 var LogPathFolder string
 
 func InitializeFolders() {
-	LogPathFolder = GetEnvironmentVariable(EEnvironmentVariable.LogLocation())           // user specified location for log files
-	AzcopyJobPlanFolder = GetEnvironmentVariable(EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
+	LogPathFolder = enum.EEnvironmentVariable.LogLocation().Get()           // user specified location for log files
+	AzcopyJobPlanFolder = enum.EEnvironmentVariable.JobPlanLocation().Get() // user specified location for plan files
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but all the above can be put elsewhere as they can become very large

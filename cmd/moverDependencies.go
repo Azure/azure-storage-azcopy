@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +9,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ============================================================================
@@ -65,7 +66,7 @@ func (cooked *CookedCopyCmdArgs) AsSubdir() bool {
 }
 
 // Authentication and credential options
-func (cooked *CookedCopyCmdArgs) CredentialInfo() common.CredentialInfo {
+func (cooked *CookedCopyCmdArgs) CredentialInfo() cred.CredentialInfo {
 	return cooked.credentialInfo
 }
 
@@ -316,16 +317,20 @@ func (cooked *cookedSyncCmdArgs) SetDestinationValue(destination string) {
 
 func CreateClientOptionsExt(
 	logger common.ILoggerResetable,
-	srcCred *common.ScopedToken,
-	reauthCred *common.ScopedAuthenticator) azcore.ClientOptions {
-	return createClientOptions(logger, srcCred, reauthCred)
+	srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
+	return createClientOptions(logger, srcCred, targetCred)
 }
 
 // RawMoverSyncCmdArgs - Represents the raw command line arguments for the mover sync command.
 // This struct is a subset of rawSyncCmdArgs, specifically tailored for the mover sync command.
 type RawMoverSyncCmdArgs struct {
-	Src                     string
-	Dst                     string
+	Src string
+	Dst string
+
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
+
 	FromTo                  string
 	Recursive               bool
 	ExcludeRegex            string
@@ -351,8 +356,13 @@ type RawMoverSyncCmdArgs struct {
 }
 
 type SyncCmdArgsInput struct {
-	Src                     string
-	Dst                     string
+	Src string
+	Dst string
+
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
+
 	FromTo                  string
 	Recursive               bool
 	ExcludeRegex            string
@@ -375,6 +385,8 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 	raw := rawSyncCmdArgs{
 		src:                     args.Src,
 		dst:                     args.Dst,
+		SrcCredName:             args.SrcCredName,
+		DstCredName:             args.DstCredName,
 		fromTo:                  args.FromTo,
 		recursive:               args.Recursive,
 		excludeRegex:            args.ExcludeRegex,
@@ -399,10 +411,6 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		useStreamingMergeJoin:   args.UseStreamingMergeJoin,
 	}
 	return raw.cook()
-}
-
-func (cca *cookedSyncCmdArgs) SetCredentialInfo(ctx context.Context) error {
-	return cca.setCredentialInfo(ctx)
 }
 
 // ToStringMap returns a map representation of cookedSyncCmdArgs
@@ -559,11 +567,6 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	deletions := atomic.LoadUint32(&cooked.atomicDeletionCount)
 	if deletions > 0 {
 		result["deletionCount"] = fmt.Sprintf("%d", deletions)
-	}
-
-	// Always mask credential info
-	if cooked.credentialInfo.CredentialType != common.ECredentialType.Unknown() {
-		result["credentialType"] = cooked.credentialInfo.CredentialType.String()
 	}
 
 	// Add CPK info if present (without exposing keys)
@@ -858,7 +861,7 @@ func (cooked *CookedCopyCmdArgs) ToStringMap() map[string]string {
 	}
 
 	// Always mask credential info
-	if cooked.credentialInfo.CredentialType != common.ECredentialType.Unknown() {
+	if cooked.credentialInfo.CredentialType != enum.ECredentialType.Unknown() {
 		result["credentialType"] = cooked.credentialInfo.CredentialType.String()
 	}
 

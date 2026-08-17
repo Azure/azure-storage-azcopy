@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -48,9 +49,21 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
+	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: cca.DstCredName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
-		Credential: &cca.credentialInfo,
+		Credential: &srcCredInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -107,13 +120,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
 	var fileClientOptions any
 	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
@@ -121,8 +128,8 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		srcCredInfo.CredentialType,
+		srcCredInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)
@@ -165,15 +172,22 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	sourceURL, _ := cca.Source.String()
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+
+	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: cca.DstCredName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
+		return err
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
 
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, srcCredInfo.CredentialType, srcCredInfo.TokenCredential, &options, nil)
 	if err != nil {
 		return err
 	}
@@ -288,7 +302,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 
 	// if the source URL is actually a file
 	// then we should short-circuit and simply remove that file
-	resourceType := common.IffNotNil(props.ResourceType, "")
+	resourceType := ternary.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
 		glcm.Dryrun(func(of common.OutputFormat) string {
 			switch of {
@@ -333,7 +347,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 					return fmt.Sprintf("DRYRUN: remove %s", uri)
 				case of.Json():
 					tx := DryrunTransfer{
-						EntityType: common.Iff(entityType == "directory", common.EEntityType.Folder(), common.EEntityType.File()),
+						EntityType: ternary.Iff(entityType == "directory", common.EEntityType.Folder(), common.EEntityType.File()),
 						FromTo:     common.EFromTo.BlobFSTrash(),
 						Source:     uri,
 					}
