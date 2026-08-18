@@ -1,0 +1,85 @@
+// Visual: Table
+// Shows why an attempt is rejected or marked suspect. Schema v2 and v3 are accepted.
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.job.started', 'azcopy.job.finished')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    SchemaVersionValue = tostring(customDimensions.SchemaVersion),
+    SamplingRateValue = todouble(customDimensions.SamplingRate),
+    CommandValue = tostring(customDimensions.Command),
+    FromToValue = tostring(customDimensions.FromTo),
+    SourceTypeValue = tostring(customDimensions.SourceType),
+    DestTypeValue = tostring(customDimensions.DestType),
+    ReportedDurationValue = todouble(customMeasurements['azcopy.job_duration_seconds']),
+    FinishMetricCountValue = array_length(bag_keys(customMeasurements))
+| extend AttemptKey = iif(
+    isnotempty(InvocationID) and isnotempty(JobID),
+    strcat(InvocationID, '/', JobID),
+    strcat('missing-id:', tostring(itemId)))
+| summarize
+    StartEvents = countif(name == 'azcopy.job.started'),
+    FinishEvents = countif(name == 'azcopy.job.finished'),
+    StartTime = minif(timestamp, name == 'azcopy.job.started'),
+    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),
+    SchemaVersionCount = dcount(SchemaVersionValue),
+    SchemaVersion = take_any(SchemaVersionValue),
+    SamplingRate = max(SamplingRateValue),
+    ReportedDurationSeconds = max(ReportedDurationValue),
+    FinishMetricCount = maxif(FinishMetricCountValue, name == 'azcopy.job.finished'),
+    MissingRequiredDimensionRows = countif(
+        isempty(InvocationID) or isempty(JobID) or isempty(CommandValue) or
+        isempty(FromToValue) or isempty(SourceTypeValue) or isempty(DestTypeValue) or
+        isnull(SamplingRateValue) or SamplingRateValue <= 0.0 or SamplingRateValue > 1.0),
+    InvocationID = take_any(InvocationID),
+    JobID = take_any(JobID)
+  by AttemptKey
+| extend
+    ObservedDurationSeconds = iif(
+        StartEvents > 0 and FinishEvents > 0,
+        todouble(datetime_diff('millisecond', FinishTime, StartTime)) / 1000.0,
+        real(null)),
+    InvalidSchema = SchemaVersionCount != 1 or SchemaVersion !in ('2', '3'),
+    LifecycleAnomaly = StartEvents != 1 or FinishEvents != 1,
+    MissingRequiredFields = MissingRequiredDimensionRows > 0,
+    IncompleteFinishMetricSet = FinishEvents > 0 and FinishMetricCount < 50
+| extend
+    TimingAnomaly = StartEvents == 1 and FinishEvents == 1 and ObservedDurationSeconds < 0.0,
+    DurationMismatch = StartEvents == 1 and FinishEvents == 1 and
+        isnotnull(ReportedDurationSeconds) and ReportedDurationSeconds >= 0.0 and
+        abs(ObservedDurationSeconds - ReportedDurationSeconds) >
+            max_of(60.0, ReportedDurationSeconds * 0.2)
+| extend
+    QualityClass = case(
+        InvalidSchema, 'InvalidSchema',
+        LifecycleAnomaly or MissingRequiredFields or IncompleteFinishMetricSet or TimingAnomaly or DurationMismatch, 'Suspect',
+        'Valid'),
+    Reasons = strcat(
+        iif(InvalidSchema, 'UnsupportedOrMixedSchema; ', ''),
+        iif(StartEvents == 0, 'MissingStart; ', ''),
+        iif(StartEvents > 1, 'DuplicateStart; ', ''),
+        iif(FinishEvents == 0, 'MissingFinish; ', ''),
+        iif(FinishEvents > 1, 'DuplicateFinish; ', ''),
+        iif(MissingRequiredFields, 'MissingRequiredFields; ', ''),
+        iif(IncompleteFinishMetricSet, 'IncompleteFinishMetrics; ', ''),
+        iif(TimingAnomaly, 'FinishBeforeStart; ', ''),
+        iif(DurationMismatch, 'DurationMismatch; ', ''))
+| where QualityClass != 'Valid'
+| project
+    LastObserved = coalesce(FinishTime, StartTime),
+    QualityClass,
+    Reasons,
+    SchemaVersion,
+    InvocationID,
+    JobID,
+    StartEvents,
+    FinishEvents,
+    StartTime,
+    FinishTime,
+    ObservedDurationSeconds = round(ObservedDurationSeconds, 2),
+    ReportedDurationSeconds = round(ReportedDurationSeconds, 2),
+    DurationDifferenceSeconds = round(abs(ObservedDurationSeconds - ReportedDurationSeconds), 2),
+    SamplingRate,
+    FinishMetricCount
+| top 200 by LastObserved desc

@@ -1,0 +1,62 @@
+// Visual: Multi stat
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobStatusValue = tostring(customDimensions.JobStatus),
+    IsResumeValue = tostring(customDimensions.Command) == 'jobs.resume',
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),
+    IsResume = take_any(IsResumeValue),
+    SamplingRate = max(SamplingRateValue),
+    ObjectsScheduled = maxif(value, name == 'azcopy.objects_scheduled'),
+    ObjectsFailed = maxif(value, name == 'azcopy.objects_failed'),
+    HttpAttempts = maxif(value, name == 'azcopy.storage_http_attempt_count'),
+    ServerBusy503 = maxif(value, name == 'azcopy.server_busy_503_count'),
+    NetworkErrors = maxif(value, name == 'azcopy.network_error_attempt_count')
+  by InvocationID
+| where FinishedRows > 0
+| extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| summarize
+    EstimatedAttempts = sum(Weight),
+    EstimatedSuccesses = sumif(Weight, JobStatus in ('Completed', 'CompletedWithSkipped')),
+    EstimatedPartialSuccesses = sumif(Weight, JobStatus == 'CompletedWithErrors'),
+    EstimatedFailures = sumif(Weight, JobStatus == 'Failed'),
+    EstimatedCancellations = sumif(Weight, JobStatus == 'Cancelled'),
+    EstimatedResumeAttempts = sumif(Weight, IsResume),
+    EstimatedSuccessfulResumes = sumif(Weight, IsResume and JobStatus in ('Completed', 'CompletedWithSkipped')),
+    WeightedObjectsScheduled = sum(Weight * ObjectsScheduled),
+    WeightedObjectsFailed = sum(Weight * ObjectsFailed),
+    WeightedHttpAttempts = sum(Weight * HttpAttempts),
+    WeightedServerBusy503 = sum(Weight * ServerBusy503),
+    WeightedNetworkErrors = sum(Weight * NetworkErrors)
+| project
+    CompletionRatePct = round(100.0 * EstimatedSuccesses / iif(EstimatedAttempts > 0.0, EstimatedAttempts, 1.0), 2),
+    PartialSuccessRatePct = round(100.0 * EstimatedPartialSuccesses / iif(EstimatedAttempts > 0.0, EstimatedAttempts, 1.0), 2),
+    FailureRatePct = round(100.0 * EstimatedFailures / iif(EstimatedAttempts > 0.0, EstimatedAttempts, 1.0), 2),
+    CancellationRatePct = round(100.0 * EstimatedCancellations / iif(EstimatedAttempts > 0.0, EstimatedAttempts, 1.0), 2),
+    FailedObjectRatePct = round(100.0 * WeightedObjectsFailed / iif(WeightedObjectsScheduled > 0.0, WeightedObjectsScheduled, 1.0), 4),
+    ServerBusyRatePct = round(100.0 * WeightedServerBusy503 / iif(WeightedHttpAttempts > 0.0, WeightedHttpAttempts, 1.0), 4),
+    NetworkErrorRatePct = round(100.0 * WeightedNetworkErrors / iif(WeightedHttpAttempts > 0.0, WeightedHttpAttempts, 1.0), 4),
+    ResumeSuccessRatePct = round(100.0 * EstimatedSuccessfulResumes / iif(EstimatedResumeAttempts > 0.0, EstimatedResumeAttempts, 1.0), 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),
+    bag_pack('Metric', 'Partial success rate (%)', 'Value', PartialSuccessRatePct),
+    bag_pack('Metric', 'Failure rate (%)', 'Value', FailureRatePct),
+    bag_pack('Metric', 'Cancellation rate (%)', 'Value', CancellationRatePct),
+    bag_pack('Metric', 'Failed object rate (%)', 'Value', FailedObjectRatePct),
+    bag_pack('Metric', 'Server busy rate (%)', 'Value', ServerBusyRatePct),
+    bag_pack('Metric', 'Network error rate (%)', 'Value', NetworkErrorRatePct),
+    bag_pack('Metric', 'Resume success rate (%)', 'Value', ResumeSuccessRatePct))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

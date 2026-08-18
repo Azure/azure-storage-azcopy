@@ -1,0 +1,66 @@
+// Visual: Table
+// Additional dashboard parameter: _account (free text, default empty)
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    CommandValue = tostring(customDimensions.Command),
+    StatusValue = tostring(customDimensions.JobStatus),
+    SourceTypeValue = tostring(customDimensions.SourceType),
+    DestTypeValue = tostring(customDimensions.DestType),
+    LegacyTopologyValue = tostring(customDimensions.TransferTopology),
+    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
+    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), ''),
+    VersionValue = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| extend TopologyValue = iif(isnotempty(LegacyTopologyValue), LegacyTopologyValue, case(
+    SourceTypeValue == 'S3' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',
+    SourceTypeValue == 'GCP' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',
+    SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',
+    DestTypeValue == 'Trash', 'azure-delete',
+    SourceTypeValue in ('Local', 'Benchmark', 'Pipe') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',
+    SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Local', 'Pipe'), 'azure-to-local',
+    SourceTypeValue !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestTypeValue !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',
+    'unknown'))
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    EndTime = max(timestamp),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    Command = take_any(CommandValue),
+    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),
+    Topology = take_any(TopologyValue),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    Version = take_any(VersionValue),
+    SamplingRate = max(SamplingRateValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),
+    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),
+    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps'),
+    ObjectsFailed = maxif(value, name == 'azcopy.objects_failed')
+  by InvocationID, JobID
+| where FinishedRows > 0
+| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account
+| extend EstimatedWeight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| project
+    EndTime,
+    JobID,
+    InvocationID,
+    Command,
+    JobStatus,
+    Topology,
+    SourceAccount,
+    DestAccount,
+    Version,
+    BytesTransferred,
+    JobDurationSeconds,
+    ThroughputMbps,
+    ObjectsFailed,
+    EstimatedWeight
+| top 200 by EndTime desc

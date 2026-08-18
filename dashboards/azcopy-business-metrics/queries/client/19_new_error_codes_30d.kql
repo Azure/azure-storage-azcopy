@@ -1,0 +1,52 @@
+// Visual: Table
+// "New" means first observed in the retained 730-day lookback, not necessarily globally new.
+let Base = materialize(
+    customEvents
+    | where timestamp between ((_endTime - 730d) .. _endTime)
+    | where name == 'azcopy.job.finished'
+    | where tostring(customDimensions.SchemaVersion) in ('2', '3')
+    | extend
+        JobErrorCode = tostring(customDimensions.JobErrorCode),
+        FailureErrorCodes = tostring(customDimensions.FailureErrorCodes),
+        SamplingRate = todouble(customDimensions.SamplingRate)
+    | extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0));
+let TerminalCodes =
+    Base
+    | where isnotempty(JobErrorCode)
+    | project
+        timestamp,
+        SignalSource = 'terminal-job',
+        ErrorCode = JobErrorCode,
+        ObservedOccurrences = 1.0,
+        EstimatedOccurrences = Weight;
+let FailedObjectCodes =
+    Base
+    | where isnotempty(FailureErrorCodes)
+    | mv-expand Bucket = split(FailureErrorCodes, ',')
+    | extend Pair = split(tostring(Bucket), ':')
+    | extend
+        ErrorCode = tostring(Pair[0]),
+        Occurrences = todouble(Pair[1])
+    | where isnotempty(ErrorCode) and isnotnull(Occurrences)
+    | project
+        timestamp,
+        SignalSource = 'failed-object',
+        ErrorCode,
+        ObservedOccurrences = Occurrences,
+        EstimatedOccurrences = Weight * Occurrences;
+union TerminalCodes, FailedObjectCodes
+| summarize
+    FirstSeen = min(timestamp),
+    LastSeen = max(timestamp),
+    ObservedOccurrencesLast30Days = sumif(ObservedOccurrences, timestamp >= _endTime - 30d),
+    EstimatedOccurrencesLast30Days = sumif(EstimatedOccurrences, timestamp >= _endTime - 30d)
+  by SignalSource, ErrorCode
+| where FirstSeen >= _endTime - 30d
+| project
+    SignalSource,
+    ErrorCode,
+    FirstSeen,
+    LastSeen,
+    ObservedOccurrencesLast30Days,
+    EstimatedOccurrencesLast30Days = round(EstimatedOccurrencesLast30Days, 0)
+| order by FirstSeen desc

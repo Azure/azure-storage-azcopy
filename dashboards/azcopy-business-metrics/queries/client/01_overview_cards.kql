@@ -1,0 +1,46 @@
+// Visual: Multi stat
+// Data source: sharankur_insights1 (Application Insights)
+// Dashboard parameters: _startTime, _endTime
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    JobStatusValue = tostring(customDimensions.JobStatus),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    StartedRows = countif(name == 'azcopy.job.started'),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),
+    SamplingRate = max(SamplingRateValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')
+    by InvocationID, JobID
+| extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| summarize
+    ObservedAttempts = countif(FinishedRows > 0),
+    EstimatedAttempts = sumif(Weight, FinishedRows > 0),
+    EstimatedBytes = sumif(Weight * BytesTransferred, FinishedRows > 0),
+    EstimatedCompleted = sumif(Weight, FinishedRows > 0 and JobStatus in ('Completed', 'CompletedWithSkipped')),
+    UnmatchedStarts = countif(StartedRows > 0 and FinishedRows == 0)
+| project
+    ObservedAttempts,
+    EstimatedAttempts = round(EstimatedAttempts, 0),
+    EstimatedDataTB = round(EstimatedBytes / 1e12, 2),
+    CompletionRatePct = round(100.0 * EstimatedCompleted / iif(EstimatedAttempts > 0.0, EstimatedAttempts, 1.0), 2),
+    UnmatchedStarts
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed attempts', 'Value', ObservedAttempts),
+    bag_pack('Metric', 'Estimated attempts', 'Value', EstimatedAttempts),
+    bag_pack('Metric', 'Estimated data (TB)', 'Value', EstimatedDataTB),
+    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),
+    bag_pack('Metric', 'Unmatched starts', 'Value', UnmatchedStarts))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

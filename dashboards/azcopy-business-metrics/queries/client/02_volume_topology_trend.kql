@@ -1,0 +1,46 @@
+// Visual: Stacked column chart
+// X column: timestamp; Y columns: EstimatedAttempts, EstimatedDataTB; Series: Topology
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+  JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+  SourceTypeValue = tostring(customDimensions.SourceType),
+  DestTypeValue = tostring(customDimensions.DestType),
+  LegacyTopologyValue = tostring(customDimensions.TransferTopology),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| extend TopologyValue = iif(isnotempty(LegacyTopologyValue), LegacyTopologyValue, case(
+  SourceTypeValue == 'S3' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',
+  SourceTypeValue == 'GCP' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',
+  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',
+  DestTypeValue == 'Trash', 'azure-delete',
+  SourceTypeValue in ('Local', 'Benchmark', 'Pipe') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',
+  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Local', 'Pipe'), 'azure-to-local',
+  SourceTypeValue !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestTypeValue !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',
+  'unknown'))
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    EndTime = max(timestamp),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    Topology = take_any(TopologyValue),
+    SamplingRate = max(SamplingRateValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')
+  by InvocationID, JobID
+| where FinishedRows > 0
+| extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| summarize
+    EstimatedAttempts = sum(Weight),
+    EstimatedBytes = sum(Weight * BytesTransferred)
+  by Day = bin(EndTime, 1d), Topology
+| project
+    timestamp = Day,
+    Topology = iif(isempty(Topology), 'unknown', Topology),
+    EstimatedAttempts = round(EstimatedAttempts, 0),
+    EstimatedDataTB = round(EstimatedBytes / 1000000000000.0, 3)
+| order by timestamp asc, Topology asc

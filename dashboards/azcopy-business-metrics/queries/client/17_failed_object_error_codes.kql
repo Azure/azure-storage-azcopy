@@ -1,0 +1,32 @@
+// Visual: Bar chart or table
+// Error-code occurrences come from the bounded per-attempt failed-object histogram.
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    FailureErrorCodes = tostring(customDimensions.FailureErrorCodes),
+    SamplingRate = todouble(customDimensions.SamplingRate)
+| where isnotempty(FailureErrorCodes)
+| extend Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0)
+| mv-expand Bucket = split(FailureErrorCodes, ',')
+| extend Pair = split(tostring(Bucket), ':')
+| extend
+    ErrorCode = tostring(Pair[0]),
+    ObservedOccurrences = tolong(Pair[1])
+| where isnotempty(ErrorCode) and isnotnull(ObservedOccurrences)
+| summarize
+    AttemptsWithCode = count(),
+    ObservedFailedObjects = sum(ObservedOccurrences),
+    EstimatedFailedObjects = sum(Weight * ObservedOccurrences),
+    FirstSeen = min(timestamp),
+    LastSeen = max(timestamp)
+  by ErrorCode
+| top 20 by EstimatedFailedObjects desc
+| project
+    ErrorCode,
+    AttemptsWithCode,
+    ObservedFailedObjects,
+    EstimatedFailedObjects = round(EstimatedFailedObjects, 0),
+    FirstSeen,
+    LastSeen

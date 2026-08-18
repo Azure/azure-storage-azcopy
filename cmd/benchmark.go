@@ -21,11 +21,14 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
@@ -99,7 +102,7 @@ func ParseSizeString(s string, name string) (int64, error) {
 // raw benchmark args cook into copyArgs, because the actual work
 // of a benchmark job is doing a copy. Benchmark just doesn't offer so many
 // choices in its raw args
-func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
+func (raw rawBenchmarkCmdArgs) cook(cmd *cobra.Command) (CookedCopyCmdArgs, error) {
 
 	glcm.Info(common.BenchmarkPreviewNotice)
 
@@ -161,6 +164,18 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	copyOptions, err := c.toCopyOptions(cmd)
+	if err != nil {
+		return cooked, err
+	}
+	copyOptions.SetBenchmarkTelemetry(
+		strings.ToLower(benchMode.String()),
+		int64(raw.fileCount),
+		bytesPerFile,
+		int64(raw.numOfFolders),
+		raw.deleteTestData && !downloadMode,
+		false)
+	cooked.benchmarkCopyOptions = &copyOptions
 
 	if downloadMode {
 		glcm.Info(fmt.Sprintf("Benchmarking downloads from %s.", cooked.Source.Value))
@@ -272,17 +287,49 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			var cooked CookedCopyCmdArgs // benchmark args cook into copy args
-			cooked, err := raw.cook()
+			cooked, err := raw.cook(cmd)
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
 			glcm.Info("Scanning...")
 
-			cooked.commandString = ConstructCommandStringFromArgs()
-			err = cooked.process()
+			source, sourceErr := cooked.Source.String()
+			if sourceErr != nil {
+				glcm.Error("failed to parse benchmark source due to error: " + sourceErr.Error())
+			}
+			destination, destinationErr := cooked.Destination.String()
+			if destinationErr != nil {
+				glcm.Error("failed to parse benchmark destination due to error: " + destinationErr.Error())
+			}
+			options := *cooked.benchmarkCopyOptions
+			options.Handler = cliCopyHandler{isBenchmark: true, hasFollowup: cooked.hasFollowup()}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go func() {
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				select {
+				case <-sigChan:
+				case <-glcm.CancelFromStdinChannel():
+				}
+				glcm.Info("Cancellation requested")
+				cancel()
+			}()
+
+			result, copyErr := Client.Copy(ctx, source, destination, options)
+			exitCode := EExitCode.Success()
+			if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+				exitCode = EExitCode.Error()
+			}
+			err = copyErr
 			if err != nil {
+				exitCode = EExitCode.Error()
 				glcm.Error("failed to perform benchmark command due to error: " + err.Error())
+			}
+			if cooked.hasFollowup() {
+				cooked.launchFollowup(exitCode)
 			}
 
 			glcm.SurrenderControl()

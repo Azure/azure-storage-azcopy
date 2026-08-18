@@ -7,12 +7,22 @@ steps:
     displayName: 'Install Go'
 
   - script: |
-      CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
+      case "$AZCOPY_TELEMETRY_CONNECTION_STRING" in
+        InstrumentationKey=*) ;;
+        *) echo "AZCOPY_TELEMETRY_CONNECTION_STRING_PROD must be configured as a secret pipeline variable"; exit 1 ;;
+      esac
+      telemetry_ldflags="-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=$AZCOPY_TELEMETRY_CONNECTION_STRING"
+      CGO_ENABLED=1 go build -ldflags "$telemetry_ldflags" -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
     displayName: 'Generate MacOS Build with AMD64'
+    env:
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
 
   - script: |
-      GOARCH=arm64 CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64"
+      telemetry_ldflags="-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=$AZCOPY_TELEMETRY_CONNECTION_STRING"
+      GOARCH=arm64 CGO_ENABLED=1 go build -ldflags "$telemetry_ldflags" -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64"
     displayName: 'Test Cross-compiled MacOS Build with ARM64'
+    env:
+      AZCOPY_TELEMETRY_CONNECTION_STRING: $(AZCOPY_TELEMETRY_CONNECTION_STRING_PROD)
 
   - script: |
       darwin_amd_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64_$(azcopy_version)"
