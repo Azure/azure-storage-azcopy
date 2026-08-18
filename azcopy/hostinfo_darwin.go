@@ -77,7 +77,7 @@ func localMountType(path string) string {
 	if err := unix.Statfs(path, &st); err != nil {
 		return ""
 	}
-	fsType := int8SliceToString(st.Fstypename[:])
+	fsType := unix.ByteSliceToString(st.Fstypename[:])
 	switch {
 	case strings.HasPrefix(fsType, "nfs"):
 		return "nas-nfs"
@@ -88,17 +88,4 @@ func localMountType(path string) string {
 	default:
 		return "local-disk"
 	}
-}
-
-// int8SliceToString converts a NUL-terminated [16]int8-style C string (as used
-// by statfs f_fstypename) to a Go string.
-func int8SliceToString(b []int8) string {
-	buf := make([]byte, 0, len(b))
-	for _, c := range b {
-		if c == 0 {
-			break
-		}
-		buf = append(buf, byte(c))
-	}
-	return string(buf)
 }
