@@ -17,7 +17,7 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"	
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
