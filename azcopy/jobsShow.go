@@ -26,6 +26,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
@@ -62,7 +63,7 @@ func (c Client) ListJobTransfers(opts ListJobTransfersOptions) (result ListJobTr
 	if opts.JobID.IsEmpty() {
 		return result, errors.New("list job transfers requires the JobID")
 	}
-	status := common.IffNil(opts.WithStatus, common.ETransferStatus.All())
+	status := ternary.IffNil(opts.WithStatus, common.ETransferStatus.All())
 
 	resp := jobsAdmin.ListJobTransfers(common.ListJobTransfersRequest{JobID: opts.JobID, OfStatus: status})
 

@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 type blobSymlinkSender struct {
@@ -84,7 +85,7 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 			CPKScopeInfo: s.jptm.CpkScopeInfo(),
 		})
 	if err != nil {
-		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Upload symlink (with tags)", "Upload symlink"), err)
+		s.jptm.FailActiveSend(ternary.Iff(len(blobTags) > 0, "Upload symlink (with tags)", "Upload symlink"), err)
 		return nil
 	}
 

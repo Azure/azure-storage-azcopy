@@ -30,6 +30,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -438,7 +440,7 @@ type S3ClientManager struct {
 	err    error
 }
 
-func (m *S3ClientManager) GetS3Client(ctx context.Context, s3URLParts common.S3URLParts, credInfo common.CredentialInfo) (*minio.Client, error) {
+func (m *S3ClientManager) GetS3Client(ctx context.Context, s3URLParts common.S3URLParts, credInfo cred.CredentialInfo) (*minio.Client, error) {
 	m.once.Do(func() {
 		// XDM: Do we need retry here?
 		m.client, m.err = CreateSharedS3Client(ctx, s3URLParts, credInfo.CredentialType)
@@ -457,7 +459,7 @@ func GetS3TraverserGlobalClientManager() *S3ClientManager {
 
 // CreateSharedS3Client creates a shared S3 client that can be reused across multiple traversers
 // This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
-func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, credentialType common.CredentialType) (*minio.Client, error) {
+func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, credentialType enum.CredentialType) (*minio.Client, error) {
 	//Optional check for custom credential provider
 	var credProvider credentials.Provider = nil
 	creds := ctx.Value(customCreds)
@@ -467,7 +469,7 @@ func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, cre
 
 	return common.CreateS3Client(ctx, common.CredentialInfo{
 		CredentialType: credentialType,
-		S3CredentialInfo: common.S3CredentialInfo{
+		S3CredentialInfo: cred.S3CredentialInfo{
 			Endpoint:   s3URLParts.Endpoint,
 			Region:     s3URLParts.Region,
 			BucketName: s3URLParts.BucketName,

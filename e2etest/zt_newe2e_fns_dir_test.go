@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"time"
 )
 
@@ -22,7 +24,7 @@ func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariation
 	destRm := ObjectResourceMappingFlat{
 		"foobar/": ResourceDefinitionObject{
 			ObjectProperties: ObjectProperties{
-				Metadata: common.Iff(DirMeta != "", common.Metadata{
+				Metadata: ternary.Iff(DirMeta != "", common.Metadata{
 					common.POSIXFolderMeta: pointerTo("true"),
 				}, nil),
 			},
@@ -60,7 +62,7 @@ func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariation
 				dest.GetObject(a, "foobar", common.EEntityType.File()),
 			},
 			Flags: CopyFlags{
-				AsSubdir: common.Iff(tgtVerb == AzCopyVerbCopy, pointerTo(false), nil),
+				AsSubdir: ternary.Iff(tgtVerb == AzCopyVerbCopy, pointerTo(false), nil),
 			},
 		},
 	)
@@ -72,7 +74,7 @@ func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariation
 			},
 			"foobar/": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
-					Metadata: common.Iff(DirMeta != "", common.Metadata{
+					Metadata: ternary.Iff(DirMeta != "", common.Metadata{
 						common.POSIXFolderMeta: pointerTo("true"),
 					}, nil),
 				},
@@ -92,14 +94,14 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512), ObjectProperties: ObjectProperties{Metadata: common.Metadata{"dontcopyme": pointerTo("")}}}, // Object w/ same name as root dir
 			"foobar/": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
-					EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File()),
+					EntityType: ternary.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File()),
 					Metadata:   common.Metadata{"asdf": pointerTo("qwerty")},
 				},
 			}, // Folder w/ same name as object, add special prop to ensure
 			"foobar/foo":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/bar":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/baz":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
-			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
+			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: ternary.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
 			"foobar/folder/foobar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 		},
 	})
@@ -117,7 +119,7 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 					Recursive:             pointerTo(true),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				AsSubdir: common.Iff(azcopyVerb == AzCopyVerbCopy, pointerTo(false), nil),
+				AsSubdir: ternary.Iff(azcopyVerb == AzCopyVerbCopy, pointerTo(false), nil),
 			},
 		},
 	)
@@ -126,7 +128,7 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 		Objects: ObjectResourceMappingFlat{
 			"foobar": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)}, // We shouldn't have captured foobar, but foobar/ should exist as a directory.
 			"foobar/": ResourceDefinitionObject{ObjectProperties: ObjectProperties{
-				EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File()),
+				EntityType: ternary.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File()),
 				Metadata: common.Metadata{
 					"asdf": pointerTo("qwerty"),
 				},
@@ -135,7 +137,7 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 			"foobar/foo":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/bar":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/baz":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
-			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
+			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: ternary.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
 			"foobar/folder/foobar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 		},
 	}, false)

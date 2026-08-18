@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -1050,41 +1051,6 @@ func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var ECredentialType = CredentialType(0)
-
-// CredentialType defines the different types of credentials
-type CredentialType uint8
-
-func (CredentialType) Unknown() CredentialType              { return CredentialType(0) }
-func (CredentialType) OAuthToken() CredentialType           { return CredentialType(1) } // For Azure, OAuth
-func (CredentialType) MDOAuthToken() CredentialType         { return CredentialType(7) } // For Azure MD impexp
-func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
-func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
-func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
-func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) } // For GCP, App Credentials
-func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
-
-func (ct CredentialType) IsAzureOAuth() bool {
-	return ct == ct.OAuthToken() || ct == ct.MDOAuthToken()
-}
-
-func (ct CredentialType) IsSharedKey() bool {
-	return ct == ct.SharedKey()
-}
-
-func (ct CredentialType) String() string {
-	return enum.StringInt(ct, reflect.TypeOf(ct))
-}
-func (ct *CredentialType) Parse(s string) error {
-	val, err := enum.ParseInt(reflect.TypeOf(ct), s, true, true)
-	if err == nil {
-		*ct = val.(CredentialType)
-	}
-	return err
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 var EOutputVerbosity = OutputVerbosity(0)
 
 type OutputVerbosity uint8
@@ -1497,36 +1463,36 @@ type ResourceHTTPHeaders struct {
 // ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
-		BlobContentType:        IffNotEmpty(h.ContentType),
+		BlobContentType:        ternary.IffNotEmpty(h.ContentType),
 		BlobContentMD5:         h.ContentMD5,
-		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
-		BlobCacheControl:       IffNotEmpty(h.CacheControl),
+		BlobContentEncoding:    ternary.IffNotEmpty(h.ContentEncoding),
+		BlobContentLanguage:    ternary.IffNotEmpty(h.ContentLanguage),
+		BlobContentDisposition: ternary.IffNotEmpty(h.ContentDisposition),
+		BlobCacheControl:       ternary.IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 	return sharefile.HTTPHeaders{
-		ContentType:        IffNotEmpty(h.ContentType),
+		ContentType:        ternary.IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		ContentDisposition: IffNotEmpty(h.ContentDisposition),
-		CacheControl:       IffNotEmpty(h.CacheControl),
+		ContentEncoding:    ternary.IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    ternary.IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: ternary.IffNotEmpty(h.ContentDisposition),
+		CacheControl:       ternary.IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
 func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
 	return datalakefile.HTTPHeaders{
-		ContentType:        IffNotEmpty(h.ContentType),
+		ContentType:        ternary.IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		ContentDisposition: IffNotEmpty(h.ContentDisposition),
-		CacheControl:       IffNotEmpty(h.CacheControl),
+		ContentEncoding:    ternary.IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    ternary.IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: ternary.IffNotEmpty(h.ContentDisposition),
+		CacheControl:       ternary.IffNotEmpty(h.CacheControl),
 	}
 }
 

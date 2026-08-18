@@ -33,6 +33,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 // encapsulates the interaction with the AzCopy instance that is being tested
@@ -300,10 +302,10 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 	if needsOAuth {
 		switch strings.ToLower(oauthMode) {
-		case common.EAutoLoginType.SPN().String():
+		case enum.EAutoLoginType.SPN().String():
 			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 			env = append(env,
-				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.SPN().String(), oauthMode),
+				"AZCOPY_AUTO_LOGIN_TYPE="+ternary.Iff(oauthMode == "", enum.EAutoLoginType.SPN().String(), oauthMode),
 				"AZCOPY_SPA_APPLICATION_ID="+appId,
 				"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
 			)
@@ -311,7 +313,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			if tenId != "" {
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
-		case "", common.EAutoLoginType.AzCLI().String():
+		case "", enum.EAutoLoginType.AzCLI().String():
 			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
 				// We are already logged in with AzCLI in Azure Pipeline
 			} else {

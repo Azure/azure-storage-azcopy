@@ -23,8 +23,11 @@ package ste
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -178,7 +181,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 
 		// if the put blob is a failure, update the transfer status to failed
 		if err != nil {
-			jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
+			jptm.FailActiveSend(ternary.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
 			return
 		}
 
