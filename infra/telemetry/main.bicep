@@ -28,6 +28,7 @@ param baseName string = 'azcopy-telemetry'
 param retentionInDays int = 730
 
 @description('Daily ingestion cap in GB. Bounds cost and protects against runaway/bogus ingestion.')
+@minValue(1)
 param dailyQuotaGb int = 10
 
 @description('Optional object ID of the E2E workload identity. When provided, grants only the read/query roles required by telemetry validation.')
@@ -109,5 +110,7 @@ output connectionString string = appInsights.properties.ConnectionString
 output instrumentationKey string = appInsights.properties.InstrumentationKey
 
 output appInsightsResourceId string = appInsights.id
+output appInsightsName string = appInsights.name
 output workspaceResourceId string = workspace.id
+output workspaceName string = workspace.name
 output workspaceCustomerId string = workspace.properties.customerId
