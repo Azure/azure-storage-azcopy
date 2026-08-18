@@ -10,7 +10,7 @@ This directory contains an importable ADX dashboard and its source KQL for the b
 4. Select `azcopy-business-metrics.dashboard.json` from this directory.
 5. Name the dashboard `AzCopy Business Metrics` and select **Create**.
 
-The imported dashboard contains 24 tiles across seven pages and uses one XStore data source. Client telemetry and XDataAnalytics queries use explicit cross-cluster references, so no additional dashboard data sources are required.
+The imported dashboard contains 37 tiles across seven pages and uses one XStore data source. Client telemetry, XDataAnalytics, and ARG 1P queries use explicit cross-cluster references, so no additional dashboard data sources are required.
 
 If the imported XStore source needs reconnecting, set it to:
 
@@ -74,7 +74,56 @@ Tables:
 
 ### Subscription Tenant Enrichment
 
-ARG 1P is required to map `SubscriptionId` to the owning Microsoft Entra tenant. This query is intentionally not placed directly on the dashboard until ARG access and privacy controls are approved. Use `InternalSubscriptionResources` with a 60-hour lookback and latest-record `arg_max` as documented by ARG 1P.
+Name: `AzureResourceGraph`
+
+```text
+https://argeusarm1pone.eastus.kusto.windows.net
+```
+
+Database: `AzureResourceGraph`
+
+Table: `InternalSubscriptionResources`
+
+The Top customer tenants panel maps `SubscriptionId` to the owning Microsoft Entra tenant and shows example ARG subscription display names. It uses the required 60-hour lookback and latest non-deleted record. Dashboard viewers need access to the ARG 1P inventory in addition to the other cross-cluster sources. A subscription display name labels a subscription, not its tenant/customer, and can change. Friendly tenant names require a separately approved tenant-name source and are intentionally not inferred from subscription names or XStore deployment-tenant fields.
+
+#### Optional Friendly Tenant-Name Cache
+
+Do not call Microsoft Graph from dashboard KQL and do not add tenant display names to AzCopy client telemetry. Run a scheduled Azure worker under a user-assigned managed identity, resolve only missing or stale tenant IDs, and write the results to an ADX dimension that the dashboard can left-join.
+
+Grant the managed identity the least-privileged Microsoft Graph application permission, `CrossTenantInformation.ReadBasic.All`. This is a Microsoft Graph app-role assignment, not an Azure ARM RBAC role assignment. A Microsoft Entra administrator who can grant application permissions must run the following once:
+
+```powershell
+Connect-MgGraph -Scopes "Application.Read.All","AppRoleAssignment.ReadWrite.All"
+
+$managedIdentityObjectId = "<managed-identity-service-principal-object-id>"
+$graphServicePrincipal = Get-MgServicePrincipal `
+    -Filter "appId eq '00000003-0000-0000-c000-000000000000'" `
+    -Property "Id,AppRoles"
+$appRole = $graphServicePrincipal.AppRoles | Where-Object {
+    $_.Value -eq "CrossTenantInformation.ReadBasic.All" -and
+    $_.AllowedMemberTypes -contains "Application"
+}
+
+if (-not $appRole) {
+    throw "Microsoft Graph application role CrossTenantInformation.ReadBasic.All was not found."
+}
+
+New-MgServicePrincipalAppRoleAssignment `
+    -ServicePrincipalId $graphServicePrincipal.Id `
+    -PrincipalId $managedIdentityObjectId `
+    -ResourceId $graphServicePrincipal.Id `
+    -AppRoleId $appRole.Id
+```
+
+At runtime, request a managed-identity token for `https://graph.microsoft.com/.default` and call:
+
+```http
+GET https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenant-id}')
+```
+
+The response can supply `displayName`, `defaultDomainName`, and `federationBrandName`. Store only fields approved for this dashboard's audience. Batch with `POST https://graph.microsoft.com/v1.0/$batch`, with no more than 20 lookups per batch. Inspect every item in `responses`: the batch can return HTTP 200 while an individual lookup returns 404, 403, 429, or 5xx. Treat 404 as `NotFound`; honor each 429 `Retry-After` value and retry those items explicitly; use exponential backoff when `Retry-After` is absent. Preserve the last successful name as stale on transient refresh failures rather than replacing it with an error.
+
+The dimension should retain `TenantId`, `TenantDisplayName`, `Source`, `FirstResolvedTime`, `LastResolvedTime`, `LastAttemptTime`, `ResolutionStatus`, `HttpStatus`, and `IsCurrent`. Recommended statuses are `Resolved`, `NotFound`, `Forbidden`, `Throttled`, `TransientFailure`, and `StaleCached`. Managed-identity role changes can take time to appear because managed-identity tokens are cached.
 
 ## Parameters
 
@@ -141,6 +190,7 @@ Add one free-text parameter:
 | Observed job attempts | `queries/client/09_account_drilldown.kql` | AzCopyClientTelemetry | Table |
 | Top source/destination movers | `queries/client/11_top_account_movers.kql` | AzCopyClientTelemetry | Table or bar chart |
 | Account ownership | `queries/server/03_account_ownership.kql` | XDataAnalytics | Table |
+| Top customer tenants (resource-owning IDs) | `queries/server/06_top_customer_tenants.kql` | AzCopyClientTelemetry, XDataAnalytics, and ARG 1P | Table |
 
 ### Server Correlation
 
@@ -240,6 +290,12 @@ Ranks up to 50 Azure storage accounts by sampling-adjusted transferred TB, keepi
 
 Shows the latest available server-side metadata for storage accounts: subscription, billed subscription, resource group, Storage logical tenant, live status, and snapshot time. The data comes from `XStoreAccountPropertiesDaily`, is not client-sampled, and uses a three-day lookback to locate the latest snapshot. Storage logical tenant is not the customer's Microsoft Entra tenant ID.
 
+### Top customer tenants
+
+Ranks Microsoft Entra tenant IDs by sampling-adjusted transferred TB after mapping each Azure Storage endpoint to its resource-owning subscription and then to that subscription's owning tenant. The table also shows up to five example owning subscription IDs and ARG subscription display names for each tenant row. Source and destination roles remain separate. Account ownership is selected from `XStoreAccountPropertiesDaily` as of each activity day, allowing up to three days for a missing daily snapshot. Subscription-to-tenant mapping and subscription names use the latest non-deleted `InternalSubscriptionResources` record in ARG 1P's required 60-hour inventory window.
+
+`Mapped` rows completed both joins. `MissingAccountOwnership` means no suitable account snapshot was found. `MissingTenantInventory` means account ownership was found but ARG did not return a current tenant mapping. `ExampleOwningSubscriptionNames` contains mutable subscription labels, not tenant/customer names. Friendly tenant names are not shown because no approved tenant-name source is configured; subscription display names and XStore logical tenants are not valid substitutes. This is a resource-ownership grouping, not an authoritative commercial or contractual customer master.
+
 ### Server-observed AzCopy requests
 
 Shows five-minute Azure Storage request counts where the server-observed user agent identifies AzCopy, broken down by AzCopy tool version and Storage SDK/version. These are server-side observed requests rather than estimated client jobs. The optional account parameter filters the server account name.
@@ -260,6 +316,7 @@ Correlates destination-account/hour client telemetry with server-observed AzCopy
 - Installation-funnel and latest-activity fields are observed sampled proxies; inverse weighting cannot reconstruct a customer cohort or the actual latest job.
 - Aggregate retry/throttle rates from raw numerators and denominators, never by averaging per-job percentages.
 - Keep source and destination account roles separate. Do not duplicate S2S jobs in global totals.
+- Keep source and destination customer-tenant roles separate. The same S2S job can contribute its full bytes to both endpoint owners, so do not sum roles for a global total.
 - Treat unmatched starts as probable abandonment only after an agreed ingestion timeout.
 - Treat `InvalidSchema` as a hard exclusion. Treat lifecycle, timing, and missing Storage evidence as investigation signals, not proof that a client fabricated telemetry.
 - Do not require client HTTP-attempt counts to equal server request counts. Chunking, retries, service-to-service transfers, sampling, concurrent jobs, and aggregation boundaries can all change the ratio.
@@ -284,7 +341,7 @@ The source document describes desired business outcomes rather than a finalized 
 | P50/P90/P95 throughput | Covered | Performance percentiles. |
 | Enumeration and transfer time | Covered | Average/P90/P95 durations by topology. |
 | Finalization time and retry overhead | Missing | Neither phase is emitted separately. |
-| Top movers | Partial | Azure Storage source/destination account endpoints are covered. S3/GCS bucket names are intentionally not emitted. |
+| Top movers | Partial | Azure Storage source/destination account endpoints and their resource-owning Entra tenant IDs are covered. Friendly/canonical customer names, S3/GCS ownership, and commercial-account identity remain unavailable. |
 | First-job success, time to first success, second-job conversion | Partial | The Adoption page provides selected-range installation proxies only. Authoritative metrics require retained cohort state spanning the installation's full history. |
 | Completion, outcome, failed-object, throttling, cancellation, and resume-success rates | Covered | Reliability rates. |
 | Repeated and newly observed error codes | Covered | Failed-object occurrences and first-observed-in-retained-730-day-history query. |
@@ -297,7 +354,7 @@ The source document describes desired business outcomes rather than a finalized 
 
 Additional scope limits:
 
-- "Per customer" is not globally authoritative. Client telemetry emits Azure Storage account names for recognized Azure endpoints, not a universal customer, subscription, or tenant identifier. A storage account may be shared by multiple customers/installations, and one customer may use many accounts.
+- "Per customer" is not globally authoritative. The customer-tenant panel enriches recognized Azure Storage accounts to the Entra tenant owning the resource subscription, but this is not a universal commercial customer identifier. A tenant may own many accounts, an account may be shared, and billed ownership may differ from resource ownership.
 - Local-only, S3, GCS, and sampled-out activity cannot be assigned to an Azure account proxy. S3/GCS bucket names are intentionally excluded for privacy minimization.
 - Exact job-to-Storage-request attribution remains unavailable because server requests do not carry AzCopy Job IDs. Existing server panels provide account/time-window evidence only.
 

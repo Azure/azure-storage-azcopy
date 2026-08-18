@@ -1,0 +1,122 @@
+// Visual: Table
+// Run from: azcore.centralus.kusto.windows.net / Xstore
+// "Customer" means the Microsoft Entra tenant that owns the account's ARM subscription.
+// Account ownership is selected as of each activity day; subscription-to-tenant inventory is current.
+// Subscription names come from ARG inventory and are display labels, not tenant/customer names.
+// Friendly tenant names require a separate approved enrichment source and are intentionally not inferred.
+// Additional dashboard parameter: _account (free text, default empty)
+let AccountActivity = materialize(cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    SourceAccountValue = iif(
+        tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'),
+        tostring(customDimensions.SourceStorageAccount),
+        ''),
+    DestAccountValue = iif(
+        tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'),
+        tostring(customDimensions.DestStorageAccount),
+        ''),
+    SamplingRateValue = todouble(customDimensions.SamplingRate)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    SamplingRate = max(SamplingRateValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')
+  by InvocationID
+| where FinishedRows > 0
+| extend
+    Weight = iif(SamplingRate > 0.0 and SamplingRate <= 1.0, 1.0 / SamplingRate, 1.0),
+    Endpoints = pack_array(
+        bag_pack('Role', 'source', 'Account', SourceAccount),
+        bag_pack('Role', 'destination', 'Account', DestAccount))
+| mv-expand Endpoint = Endpoints
+| extend
+    Role = tostring(Endpoint.Role),
+    Account = tolower(tostring(Endpoint.Account)),
+    ActivityDay = startofday(FinishTime)
+| where isnotempty(Account)
+| where isempty(_account) or Account =~ _account
+| summarize
+    ObservedAttempts = count(),
+    EstimatedAttempts = sum(Weight),
+    EstimatedBytes = sum(Weight * BytesTransferred)
+  by ActivityDay, Role, Account);
+let AccountOwnershipByActivityDay = cluster('https://xdataanalytics.westcentralus.kusto.windows.net').database('XDataAnalytics').XStoreAccountPropertiesDaily
+| where TimePeriod between ((startofday(_startTime) - 3d) .. startofday(_endTime))
+| project
+    Account = tolower(AccountNameWithoutVersion),
+    OwnershipSnapshot = TimePeriod,
+    SubscriptionId = tolower(Subscription),
+    BilledSubscriptionId = tolower(BilledSubscription),
+    ResourceGroup,
+    IsLive
+| extend ActivityDayCandidates = range(
+    startofday(OwnershipSnapshot),
+    startofday(OwnershipSnapshot) + 3d,
+    1d)
+| mv-expand ActivityDay = ActivityDayCandidates to typeof(datetime)
+| where ActivityDay between (startofday(_startTime) .. startofday(_endTime))
+| summarize arg_max(
+    OwnershipSnapshot,
+    SubscriptionId,
+    BilledSubscriptionId,
+    ResourceGroup,
+    IsLive)
+  by ActivityDay, Account;
+let SubscriptionInventory = cluster('https://argeusarm1pone.eastus.kusto.windows.net').database('AzureResourceGraph').InternalSubscriptionResources
+| where timestamp > ago(60h)
+| extend SubscriptionDisplayName = tostring(properties.displayName)
+| summarize hint.strategy=shuffle arg_max(timestamp, tenantId, SubscriptionDisplayName, deleted) by SubscriptionId = tolower(subscriptionId)
+| where deleted == false
+| project
+    SubscriptionId,
+    SubscriptionDisplayName,
+    CustomerTenantId = tolower(tenantId),
+    SubscriptionInventorySnapshot = timestamp;
+let ActivityWithOwnership = AccountActivity
+| join kind=leftouter hint.remote=right hint.strategy=broadcast AccountOwnershipByActivityDay on ActivityDay, Account
+| project-away ActivityDay1, Account1;
+ActivityWithOwnership
+| join kind=leftouter hint.remote=right hint.strategy=broadcast SubscriptionInventory on SubscriptionId
+| project-away SubscriptionId1
+| extend MappingStatus = case(
+    isempty(SubscriptionId), 'MissingAccountOwnership',
+    isempty(CustomerTenantId), 'MissingTenantInventory',
+    'Mapped')
+| summarize
+    ObservedAttempts = sum(ObservedAttempts),
+    EstimatedAttempts = sum(EstimatedAttempts),
+    EstimatedBytes = sum(EstimatedBytes),
+    StorageAccounts = dcount(Account),
+    OwningSubscriptions = dcountif(SubscriptionId, isnotempty(SubscriptionId)),
+    ExampleAccounts = make_set(Account, 5),
+    ExampleOwningSubscriptions = make_set_if(SubscriptionId, isnotempty(SubscriptionId), 5),
+    ExampleOwningSubscriptionNames = make_set_if(SubscriptionDisplayName, isnotempty(SubscriptionDisplayName), 5),
+    AccountOwnershipSnapshot = max(OwnershipSnapshot),
+    SubscriptionInventorySnapshot = max(SubscriptionInventorySnapshot)
+  by Role, CustomerTenantId, MappingStatus
+| top 50 by EstimatedBytes desc
+| project
+    Role,
+    CustomerTenantId,
+    MappingStatus,
+    StorageAccounts,
+    OwningSubscriptions,
+    ObservedAttempts,
+    EstimatedAttempts = round(EstimatedAttempts, 0),
+    EstimatedDataTB = round(EstimatedBytes / 1000000000000.0, 3),
+    ExampleAccounts,
+    ExampleOwningSubscriptions,
+    ExampleOwningSubscriptionNames,
+    AccountOwnershipSnapshot,
+    SubscriptionInventorySnapshot
