@@ -32,7 +32,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -324,18 +323,20 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
-	// Perf (mover high-perf code path only): for Blob->Blob (incl. BlobFS), the ListBlobs enumeration
-	// already returns full source properties/metadata, so the per-blob backend GetProperties
-	// (S2SGetPropertiesInBackend) and the pre-transfer source-LMT re-fetch (S2SSourceChangeValidation ->
-	// GetFreshFileLastModifiedTime) are redundant round trips. Skip both for Blob->Blob in mover builds;
-	// keep the original/default behavior (both enabled) for the standalone azcopy CLI and for
-	// S3/Azure Files whose listings do not return full properties. (DestLengthValidation still guards
-	// against size mismatches.)
-	isBlobToBlob := buildmode.IsMover &&
-		(cca.fromTo.From() == common.ELocation.Blob() || cca.fromTo.From() == common.ELocation.BlobFS()) &&
-		(cca.fromTo.To() == common.ELocation.Blob() || cca.fromTo.To() == common.ELocation.BlobFS())
-	s2sGetPropertiesInBackend := !isBlobToBlob
-	s2sSourceChangeValidation := !isBlobToBlob
+	// NOTE: S2SGetPropertiesInBackend has no effect for Blob->Blob transfers: sourceInfoProvider-Blob.go
+	// has no code path that consults it (only S3/GCP/Azure Files source providers check this flag to
+	// decide whether to do a per-object backend property fetch). So it is left at its original,
+	// unconditional value (true) here regardless of build mode/profile -- there is no redundant round
+	// trip to skip for Blob->Blob in the first place.
+	//
+	// S2SSourceChangeValidation is likewise left at its normal (true) value: it signals "source-change
+	// validation is wanted", and useSourceChangeAccessCondition() (in xfer-anyToRemote-file.go) decides
+	// HOW that validation is enforced for mover-high-perf Blob->Blob transfers -- via the cheaper
+	// source access-condition (412 on StageBlockFromURL/UploadBlobFromURL) instead of a separate
+	// pre/post-transfer GetProperties call. If S2SSourceChangeValidation were forced to false here,
+	// useSourceChangeAccessCondition() would never activate (it requires S2SSourceChangeValidation ==
+	// true) and the GetProperties fallback would also be skipped, silently disabling source-change
+	// detection entirely for that path.
 
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
@@ -363,9 +364,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreservePermissions:            cca.preservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
-		S2SSourceChangeValidation:      s2sSourceChangeValidation,
+		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
-		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
+		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,

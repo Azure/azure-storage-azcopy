@@ -181,7 +181,6 @@ type IJobMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
-	AverageChunkQueueWaitMs() int
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 
@@ -424,8 +423,6 @@ type jobMgr struct {
 	// (workers spinning on idle channels rather than running chunks/transfers).
 	atomicChunkStarveCount    int64
 	atomicTransferStarveCount int64
-	atomicChunkQueueWaitMs    int64 // total ms chunks spent waiting in the channel
-	atomicChunkQueueCount     int64 // number of chunks dequeued (for averaging)
 	atomicCurrentMainPoolSize int32
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
 	atomicAllTransfersScheduled     int32
@@ -1051,14 +1048,6 @@ func (jm *jobMgr) CurrentMainPoolSize() int {
 	return int(atomic.LoadInt32(&jm.atomicCurrentMainPoolSize))
 }
 
-func (jm *jobMgr) AverageChunkQueueWaitMs() int {
-	count := atomic.LoadInt64(&jm.atomicChunkQueueCount)
-	if count > 0 {
-		return int(atomic.LoadInt64(&jm.atomicChunkQueueWaitMs) / count)
-	}
-	return 0
-}
-
 func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
@@ -1082,18 +1071,11 @@ func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTra
 }
 
 func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc) {
-	enqueued := time.Now()
-	wrapped := func(workerID int) {
-		waitMs := time.Since(enqueued).Milliseconds()
-		atomic.AddInt64(&jm.atomicChunkQueueWaitMs, waitMs)
-		atomic.AddInt64(&jm.atomicChunkQueueCount, 1)
-		chunkFunc(workerID)
-	}
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
-		jm.xferChannels.normalChunckCh <- wrapped
+		jm.xferChannels.normalChunckCh <- chunkFunc
 	case common.EJobPriority.Low():
-		jm.xferChannels.lowChunkCh <- wrapped
+		jm.xferChannels.lowChunkCh <- chunkFunc
 	default:
 		jm.Panic(fmt.Errorf("invalid priority: %q", priority))
 	}

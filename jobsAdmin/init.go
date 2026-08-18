@@ -425,7 +425,6 @@ func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryRespo
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
-	js.AverageChunkQueueMs = jm.AverageChunkQueueWaitMs()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
@@ -588,7 +587,6 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
-	js.AverageChunkQueueMs = jm.AverageChunkQueueWaitMs()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that

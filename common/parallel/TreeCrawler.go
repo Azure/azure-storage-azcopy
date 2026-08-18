@@ -36,11 +36,12 @@ type CrawlStats struct {
 }
 
 type crawler struct {
-	output      chan CrawlResult
-	workerBody  EnumerateOneDirFunc
-	parallelism int
-	stats       *CrawlStats
-	cond        *sync.Cond
+	output        chan CrawlResult
+	workerBody    EnumerateOneDirFunc
+	parallelism   int
+	stats         *CrawlStats
+	randomDequeue bool // if true, use random dequeue instead of the default BFS/DFS-hybrid dequeue
+	cond          *sync.Cond
 	// the following are protected by cond (and must only be accessed when cond.L is held)
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
@@ -72,6 +73,19 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 // CrawlWithStats is like Crawl but also returns live CrawlStats that the
 // caller can poll to observe active worker count and queue depth.
 func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) (<-chan CrawlResult, *CrawlStats) {
+	return CrawlWithOptions(ctx, root, worker, parallelism, false)
+}
+
+// CrawlWithOptions is like Crawl but also returns live CrawlStats, and allows opting into random
+// dequeue of the unstarted-directories queue instead of the default BFS/DFS-hybrid dequeue.
+//
+// randomDequeue should only be set true for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers
+// (see buildmode.HighPerf() callers in cmd/zc_traverser_blob.go and cmd/syncOrchestrator.go): it
+// spreads workers across diverse prefixes, which helps avoid partition hotspotting when writing to
+// Azure Blob Storage (where lexicographically adjacent keys often land on the same partition). For
+// all other cases (default azcopy CLI, mover-default builds, and non-Blob/BlobFS pairs even in
+// mover-high-perf) this should be left false to preserve the original dequeue behavior below.
+func CrawlWithOptions(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int, randomDequeue bool) (<-chan CrawlResult, *CrawlStats) {
 	stats := &CrawlStats{}
 	c := &crawler{
 		unstartedDirs: make([]Directory, 0, 1024),
@@ -79,6 +93,7 @@ func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirF
 		workerBody:    worker,
 		parallelism:   parallelism,
 		stats:         stats,
+		randomDequeue: randomDequeue,
 		cond:          sync.NewCond(&sync.Mutex{}),
 	}
 	go c.start(ctx, root)
@@ -130,6 +145,7 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerInde
 
 func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (bool, error) {
 	const maxQueueDirectories = 1000 * 1000
+	const maxQueueDirsForBreadthFirst = 100 * 1000 // figure is somewhat arbitrary.  Want it big, but not huge
 
 	var toExamine Directory
 	stop := false
@@ -148,16 +164,34 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		stop = ctx.Err() != nil
 		if !stop {
 			if len(c.unstartedDirs) > 0 {
-				// Random dequeue: pick a random directory from the queue and swap-remove it (O(1)).
-				// This spreads workers across diverse prefixes, avoiding partition hotspotting
-				// when writing to Azure Blob Storage (where lexicographically adjacent keys
-				// often land on the same partition). Unlike BFS (FIFO) or DFS (LIFO), random
-				// selection ensures no sustained prefix locality regardless of queue size.
-				idx := rand.Intn(len(c.unstartedDirs))
-				toExamine = c.unstartedDirs[idx]
-				last := len(c.unstartedDirs) - 1
-				c.unstartedDirs[idx] = c.unstartedDirs[last]
-				c.unstartedDirs = c.unstartedDirs[:last]
+				if c.randomDequeue {
+					// Random dequeue (mover-high-perf Blob/BlobFS<->Blob/BlobFS only, see CrawlWithOptions):
+					// pick a random directory from the queue and swap-remove it (O(1)). This spreads
+					// workers across diverse prefixes, avoiding partition hotspotting when writing to
+					// Azure Blob Storage (where lexicographically adjacent keys often land on the same
+					// partition). Unlike BFS (FIFO) or DFS (LIFO), random selection ensures no sustained
+					// prefix locality regardless of queue size.
+					idx := rand.Intn(len(c.unstartedDirs))
+					toExamine = c.unstartedDirs[idx]
+					last := len(c.unstartedDirs) - 1
+					c.unstartedDirs[idx] = c.unstartedDirs[last]
+					c.unstartedDirs = c.unstartedDirs[:last]
+				} else if len(c.unstartedDirs) < maxQueueDirsForBreadthFirst {
+					// pop from start of list. This gives a breadth-first flavour to the search.
+					// (Breadth-first is useful for distributing small-file workloads over the full keyspace, which
+					// is can help performance when uploading small files to Azure Blob Storage)
+					toExamine = c.unstartedDirs[0]
+					c.unstartedDirs = c.unstartedDirs[1:]
+				} else {
+					// Fall back to popping from end of list if list is already pretty big.
+					// This gives more of a depth-first flavour to our processing,
+					// which (we think) will prevent c.unstartedDirs getting really large and using too much RAM.
+					// (Since we think that depth first tends to hit leaf nodes relatively quickly, so total number of
+					// unstarted dirs should tend to grow less in a depth first mode)
+					lastIndex := len(c.unstartedDirs) - 1
+					toExamine = c.unstartedDirs[lastIndex]
+					c.unstartedDirs = c.unstartedDirs[:lastIndex]
+				}
 
 				c.dirInProgressCount++ // record that we are working on something
 				c.cond.Broadcast()     // and let other threads know of that fact

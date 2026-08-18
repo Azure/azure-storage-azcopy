@@ -512,32 +512,14 @@ func (ds *ThrottleSemaphore) shouldThrottleBasedOnFiles() bool {
 
 // shouldThrottleBasedOnMemory applies hysteresis to memory pressure throttling
 func (ds *ThrottleSemaphore) shouldThrottleBasedOnMemory() bool {
-	var usagePercent float64
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
 
-	// Prefer the cached OS-level (container/cgroup-aware) memory percentage from the
-	// stats monitor. It is refreshed on the monitor's interval and avoids the
-	// runtime.ReadMemStats stop-the-world pause that would otherwise serialize every
-	// directory acquisition. It also reflects true process RSS rather than just the
-	// Go heap arena, which is what actually drives the container OOM killer.
-	gotFromMonitor := false
-	if common.GlobalSystemStatsMonitor != nil {
-		if p := common.GlobalSystemStatsMonitor.GetMemoryPercent(); p >= 0 {
-			usagePercent = p
-			gotFromMonitor = true
-		}
+	totalMemoryBytes, err := common.GetTotalPhysicalMemory()
+	if err != nil {
+		totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
 	}
-
-	if !gotFromMonitor {
-		// Fallback (e.g. non-linux dev, or monitor not yet started): use runtime stats.
-		var memStats runtime.MemStats
-		runtime.ReadMemStats(&memStats)
-
-		totalMemoryBytes, err := common.GetTotalPhysicalMemory()
-		if err != nil {
-			totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
-		}
-		usagePercent = float64(memStats.Sys) / float64(totalMemoryBytes) * 100
-	}
+	usagePercent := float64(memStats.Sys) / float64(totalMemoryBytes) * 100
 
 	if !ds.memoryThrottleActive {
 		// Not currently throttling - check if we should start

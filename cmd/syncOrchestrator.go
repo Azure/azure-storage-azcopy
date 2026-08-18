@@ -35,10 +35,12 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
@@ -1105,9 +1107,45 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
+	// Random dequeue is only used for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers: it helps
+	// avoid partition hotspotting when writing to Azure Blob Storage. Fall back to the original
+	// BFS/DFS-hybrid dequeue for everything else (default azcopy CLI, mover-default builds, and
+	// non-Blob/BlobFS pairs even in mover-high-perf, e.g. S3 -> Blob).
+	isAzureToAzure := func(loc common.Location) bool {
+		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
+	}
+	randomDequeue := buildmode.HighPerf() && isAzureToAzure(cca.fromTo.From()) && isAzureToAzure(cca.fromTo.To())
+
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
 	// merge-join producers) has returned — the drain signal we use on cancellation below.
-	crawlOutput := parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
+	crawlOutput, crawlStats := parallel.CrawlWithOptions(mainCtx, root, syncOneDir, int(crawlParallelism), randomDequeue)
+
+	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
+	// workers, queued directories, in-flight merge-join directory syncs, and goroutine count. This
+	// is diagnostic-only output to help investigate concurrency/throughput issues in high-perf runs;
+	// it is not needed for the default azcopy CLI or mover-default builds.
+	if buildmode.HighPerf() {
+		statsCtx, stopStats := context.WithCancel(mainCtx)
+		defer stopStats()
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-statsCtx.Done():
+					return
+				case <-ticker.C:
+					active := atomic.LoadInt64(&crawlStats.ActiveWorkers)
+					queued := atomic.LoadInt64(&crawlStats.QueuedDirs)
+					activeMJ := activeMergeJoinDirs.Load()
+					goroutines := runtime.NumGoroutine()
+					syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+						"[CrawlStats] activeWorkers=%d/%d, queuedDirs=%d, activeMergeJoin=%d, goroutines=%d",
+						active, int(crawlParallelism), queued, activeMJ, goroutines), true)
+				}
+			}
+		}()
+	}
 
 	// Cancellation-aware wait
 	done := make(chan struct{})

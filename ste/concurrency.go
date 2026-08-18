@@ -141,7 +141,7 @@ func (c ConcurrencySettings) AutoTuneMainPool() bool {
 const defaultTransferInitiationPoolSize = 64
 const defaultEnumerationPoolSize = 16
 const concurrentFilesFloor = 32
-const defaultSchedulerParallelism = 16
+const defaultSchedulerParallelism = 1
 
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the

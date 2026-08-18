@@ -219,7 +219,7 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 		GlobalHTTPClient = client
 		if logger != nil {
 			if tr, ok := client.Transport.(*http.Transport); ok {
-				logger.Log(LogError,
+				logger.Log(LogError, // XDM: This is error level on purpose as we want to make sure it is seen in the logs
 					fmt.Sprintf(
 						"GetGlobalHTTPClient: initialized %p MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d",
 						client, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns))

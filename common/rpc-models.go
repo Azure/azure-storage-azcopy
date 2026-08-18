@@ -268,7 +268,6 @@ type ListJobSummaryResponse struct {
 	AverageTLSMs           int     `json:",string"`
 	ConnNewCount           int64   `json:",string"`
 	ConnReusedCount        int64   `json:",string"`
-	AverageChunkQueueMs    int     `json:",string"`
 	ServerBusyPercentage   float32 `json:",string"`
 	NetworkErrorPercentage float32 `json:",string"`
 

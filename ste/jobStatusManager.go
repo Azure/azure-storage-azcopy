@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type JobPartCreatedMsg struct {
@@ -155,6 +156,16 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				continue
 			}
 
+			// Redacting here (before the switch) matches original/default behavior: every message's
+			// Src/Dst is redacted regardless of outcome. Under mover-high-perf, skip this for the
+			// (overwhelmingly common) Success() case, since msg.Src/Dst are only ever read later for
+			// FailedTransfers/SkippedTransfers -- redacting on every successful transfer in a large
+			// job is wasted url.Parse()/rebuild work that's never used.
+			if !buildmode.HighPerf() {
+				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
+			}
+
 			switch msg.TransferStatus {
 			case common.ETransferStatus.Success():
 				if msg.IsFolderProperties {
@@ -169,8 +180,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.FoldersFailed++
 				}
 				js.TransfersFailed++
-				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
-				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
+				if buildmode.HighPerf() {
+					msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+					msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
+				}
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
@@ -178,8 +191,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.FoldersSkipped++
 				}
 				js.TransfersSkipped++
-				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
-				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
+				if buildmode.HighPerf() {
+					msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+					msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
+				}
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
 			case common.ETransferStatus.SkippedArchiveNotRestored():
 				js.SkippedArchiveFileCount++
