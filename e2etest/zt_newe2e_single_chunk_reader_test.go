@@ -14,13 +14,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
-// TestSingleChunkReader_RetriesAfterProxyClosesReplayedBody reproduces a retry failure seen
+func init() {
+	suiteManager.RegisterSuite(&SingleChunkReaderSuite{})
+}
+
+type SingleChunkReaderSuite struct{}
+
+// Scenario_RetriesAfterProxyClosesReplayedBody reproduces a retry failure seen
 // when a proxy resets a block upload while net/http is replaying its request body:
 //
 //  1. AzCopy uploads a 400 MiB sparse file in 8 MiB blocks with one active connection.
@@ -37,19 +40,22 @@ import (
 //     commit, proving that AzCopy recovered from the mid-body reset and completed the upload.
 //
 // The origin and proxy are entirely local; no production fault hook or Storage account is used.
-func TestSingleChunkReader_RetriesAfterProxyClosesReplayedBody(t *testing.T) {
-	a := assert.New(t)
+func (*SingleChunkReaderSuite) Scenario_RetriesAfterProxyClosesReplayedBody(svm *ScenarioVariationManager) {
+	if svm.Dryrun() {
+		return
+	}
+
 	const (
 		uploadSize = int64(400 * 1024 * 1024)
 		blockSize  = int64(8 * 1024 * 1024)
 	)
 
-	tempDir := t.TempDir()
+	tempDir := svm.t.TempDir()
 	sourcePath := filepath.Join(tempDir, "source.bin")
 	source, err := os.Create(sourcePath)
-	a.NoError(err)
-	a.NoError(source.Truncate(uploadSize))
-	a.NoError(source.Close())
+	svm.NoError("create source file", err, true)
+	svm.NoError("set source file size", source.Truncate(uploadSize), true)
+	svm.NoError("close source file", source.Close(), true)
 
 	var mu sync.Mutex
 	var serverErr error
@@ -129,7 +135,7 @@ func TestSingleChunkReader_RetriesAfterProxyClosesReplayedBody(t *testing.T) {
 	defer origin.Close()
 
 	originURL, err := url.Parse(origin.URL)
-	a.NoError(err)
+	svm.NoError("parse origin URL", err, true)
 	reverseProxy := httputil.NewSingleHostReverseProxy(originURL)
 	reverseProxy.ErrorHandler = func(w http.ResponseWriter, req *http.Request, proxyErr error) {
 		mu.Lock()
@@ -214,7 +220,7 @@ func TestSingleChunkReader_RetriesAfterProxyClosesReplayedBody(t *testing.T) {
 	defer proxy.Close()
 
 	destination := proxy.URL + "/container/destination.bin?sv=2021-12-02&sr=b&sp=rw&se=2099-01-01&sig=fake"
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(svm.Context(), 45*time.Second)
 	defer cancel()
 	command := exec.CommandContext(
 		ctx,
@@ -233,18 +239,18 @@ func TestSingleChunkReader_RetriesAfterProxyClosesReplayedBody(t *testing.T) {
 		"AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(tempDir, "plans"),
 	)
 	output, err := command.CombinedOutput()
-	a.NoError(err, "AzCopy failed: %s", output)
+	svm.NoError(fmt.Sprintf("AzCopy failed: %s", output), err, true)
 
 	mu.Lock()
 	defer mu.Unlock()
-	a.NoError(serverErr)
-	a.NotEmpty(targetBlockID)
-	a.Equal(2, targetOriginalAttempts, "azcore should retry the target block after the redirected body is reset")
-	a.Equal(1, targetReplayAttempts, "the proxy should reset one net/http GetBody replay")
-	a.Equal(blockSize, targetRetryBodyBytes, "the retried target block body should be complete")
-	a.Equal(1, targetOriginAttempts, "only the successful target-block retry should reach Storage")
-	a.Len(stagedBlocks, int(uploadSize/blockSize), "every 8 MiB block should be staged")
-	a.True(committed, "block list should be committed")
+	svm.NoError("proxy and origin must complete without errors", serverErr)
+	svm.Assert("a target block must be selected", Empty{Invert: true}, targetBlockID)
+	svm.Assert("azcore should retry the target block after the redirected body is reset", Equal{}, targetOriginalAttempts, 2)
+	svm.Assert("the proxy should reset one net/http GetBody replay", Equal{}, targetReplayAttempts, 1)
+	svm.Assert("the retried target block body should be complete", Equal{}, targetRetryBodyBytes, blockSize)
+	svm.Assert("only the successful target-block retry should reach Storage", Equal{}, targetOriginAttempts, 1)
+	svm.Assert("every 8 MiB block should be staged", Equal{}, len(stagedBlocks), int(uploadSize/blockSize))
+	svm.Assert("the block list should be committed", Equal{}, committed, true)
 }
 
 // resetProxyConnection performs an abortive close. Hijack removes the socket from net/http's
