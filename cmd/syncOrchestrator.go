@@ -35,10 +35,12 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
@@ -621,7 +623,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	// Log (once per job) whether the streaming merge-join is used. Enablement is decided in the
-	// mover (subscription allowlist via featureConfig OR the USE_STREAMING_MERGE_JOIN env var) and
+	// mover (subscription allowlist via featureConfig OR the MOVER_SYNC_MJ env var) and
 	// passed to azcopy as the single cca.useStreamingMergeJoin flag. This makes it easy to confirm
 	// the gating in production logs.
 	if useStreamingMergeJoin(cca) {
@@ -629,13 +631,14 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.fromTo.From(), cca.fromTo.To()), true)
 
 		// The streaming merge-join uses its own directory-crawl parallelism
-		// (SYNC_MJ_PARALLEL_TRAVERSERS, default 32) — separate from the indexMap path, which keeps
+		// (MOVER_SYNC_MJ_TRAV, default 32)
+		// — separate from the indexMap path, which keeps
 		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
 		// source and destination concurrently within each directory.
 		if orchestratorOptions != nil {
 			orchestratorOptions.parallelTraversers = mergeJoinParallelTraversers
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (SYNC_MJ_PARALLEL_TRAVERSERS)", mergeJoinParallelTraversers), true)
+				"Streaming merge-join directory-crawl parallelism set to %d (MOVER_SYNC_MJ_TRAV)", mergeJoinParallelTraversers), true)
 		}
 	} else if cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -1104,8 +1107,45 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
-	// Start parallel crawling with specified concurrency
-	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
+	// Random dequeue is only used for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers: it helps
+	// avoid partition hotspotting when writing to Azure Blob Storage. Fall back to the original
+	// BFS/DFS-hybrid dequeue for everything else (default azcopy CLI, mover-default builds, and
+	// non-Blob/BlobFS pairs even in mover-high-perf, e.g. S3 -> Blob).
+	isAzureToAzure := func(loc common.Location) bool {
+		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
+	}
+	randomDequeue := buildmode.HighPerf() && isAzureToAzure(cca.fromTo.From()) && isAzureToAzure(cca.fromTo.To())
+
+	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
+	// merge-join producers) has returned — the drain signal we use on cancellation below.
+	crawlOutput, crawlStats := parallel.CrawlWithOptions(mainCtx, root, syncOneDir, int(crawlParallelism), randomDequeue)
+
+	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
+	// workers, queued directories, in-flight merge-join directory syncs, and goroutine count. This
+	// is diagnostic-only output to help investigate concurrency/throughput issues in high-perf runs;
+	// it is not needed for the default azcopy CLI or mover-default builds.
+	if buildmode.HighPerf() {
+		statsCtx, stopStats := context.WithCancel(mainCtx)
+		defer stopStats()
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-statsCtx.Done():
+					return
+				case <-ticker.C:
+					active := atomic.LoadInt64(&crawlStats.ActiveWorkers)
+					queued := atomic.LoadInt64(&crawlStats.QueuedDirs)
+					activeMJ := activeMergeJoinDirs.Load()
+					goroutines := runtime.NumGoroutine()
+					syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+						"[CrawlStats] activeWorkers=%d/%d, queuedDirs=%d, activeMergeJoin=%d, goroutines=%d",
+						active, int(crawlParallelism), queued, activeMJ, goroutines), true)
+				}
+			}
+		}()
+	}
 
 	// Cancellation-aware wait
 	done := make(chan struct{})
@@ -1120,8 +1160,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
 
 	case <-mainCtx.Done():
-		// Cancellation occurred
-		syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected.")
+		// On cancel, drain crawlOutput until it closes so no producer is still alive to write to the
+		// caller-owned sync ErrorChannel after it is closed. (crawlWg can't be used here: the crawler
+		// abandons queued dirs on cancel, so it would never reach zero.)
+		syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected; waiting for in-flight traversers to drain.")
+		for range crawlOutput {
+		}
+		syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
 	}
 

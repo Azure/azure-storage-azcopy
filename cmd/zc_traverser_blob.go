@@ -34,12 +34,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -133,6 +133,13 @@ func (t *blobTraverser) destIsBlobFS() bool {
 
 func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
 	if t.errorChannel != nil {
+		// Defense-in-depth: the orchestrator drains all traversers before the caller closes this
+		// channel, but recover in case a send still races a close during cancellation.
+		defer func() {
+			if r := recover(); r != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
+			}
+		}()
 		select {
 		case t.errorChannel <- err:
 		default:
@@ -602,7 +609,13 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	// initiate parallel scanning, starting at the root path
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
 	defer cancelWorkers()
-	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism)
+	// Random dequeue is only used for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers: it helps
+	// avoid partition hotspotting when writing to Azure Blob Storage. The source side here is always
+	// Blob or BlobFS (this is the blob traverser); check the destination side too so we don't affect
+	// Blob/BlobFS -> Local, File, S3, etc.
+	randomDequeue := buildmode.HighPerf() && t.destResourceType != nil &&
+		(*t.destResourceType == common.ELocation.Blob() || *t.destResourceType == common.ELocation.BlobFS())
+	cCrawled, _ := parallel.CrawlWithOptions(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, randomDequeue)
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {

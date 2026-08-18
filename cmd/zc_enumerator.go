@@ -305,7 +305,10 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		name:               name,
 		relativePath:       relativePath,
 		entityType:         entityType,
-		lastModifiedTime:   lmt,
+		// Normalize to UTC so the time references the shared time.UTC location instead of a
+		// per-blob fixedZone("GMT") allocated by the SDK's RFC1123 date parse. With millions of
+		// enumerated blobs buffered in the shuffle window, those per-blob zones added GBs of live heap.
+		lastModifiedTime:   lmt.UTC(),
 		size:               size,
 		cacheControl:       props.CacheControl(),
 		contentDisposition: props.ContentDisposition(),

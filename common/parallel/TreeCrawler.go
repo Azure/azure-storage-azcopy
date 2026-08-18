@@ -22,15 +22,26 @@ package parallel
 
 import (
 	"context"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
+// CrawlStats exposes live counters for a running crawl. All fields are
+// atomically updated and safe to read from any goroutine.
+type CrawlStats struct {
+	ActiveWorkers int64 // number of workers currently processing a directory
+	QueuedDirs    int64 // approximate number of directories waiting to be processed
+}
+
 type crawler struct {
-	output      chan CrawlResult
-	workerBody  EnumerateOneDirFunc
-	parallelism int
-	cond        *sync.Cond
+	output        chan CrawlResult
+	workerBody    EnumerateOneDirFunc
+	parallelism   int
+	stats         *CrawlStats
+	randomDequeue bool // if true, use random dequeue instead of the default BFS/DFS-hybrid dequeue
+	cond          *sync.Cond
 	// the following are protected by cond (and must only be accessed when cond.L is held)
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
@@ -55,15 +66,38 @@ type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueue
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
 func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
+	ch, _ := CrawlWithStats(ctx, root, worker, parallelism)
+	return ch
+}
+
+// CrawlWithStats is like Crawl but also returns live CrawlStats that the
+// caller can poll to observe active worker count and queue depth.
+func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) (<-chan CrawlResult, *CrawlStats) {
+	return CrawlWithOptions(ctx, root, worker, parallelism, false)
+}
+
+// CrawlWithOptions is like Crawl but also returns live CrawlStats, and allows opting into random
+// dequeue of the unstarted-directories queue instead of the default BFS/DFS-hybrid dequeue.
+//
+// randomDequeue should only be set true for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers
+// (see buildmode.HighPerf() callers in cmd/zc_traverser_blob.go and cmd/syncOrchestrator.go): it
+// spreads workers across diverse prefixes, which helps avoid partition hotspotting when writing to
+// Azure Blob Storage (where lexicographically adjacent keys often land on the same partition). For
+// all other cases (default azcopy CLI, mover-default builds, and non-Blob/BlobFS pairs even in
+// mover-high-perf) this should be left false to preserve the original dequeue behavior below.
+func CrawlWithOptions(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int, randomDequeue bool) (<-chan CrawlResult, *CrawlStats) {
+	stats := &CrawlStats{}
 	c := &crawler{
 		unstartedDirs: make([]Directory, 0, 1024),
 		output:        make(chan CrawlResult, 1000),
 		workerBody:    worker,
 		parallelism:   parallelism,
+		stats:         stats,
+		randomDequeue: randomDequeue,
 		cond:          sync.NewCond(&sync.Mutex{}),
 	}
 	go c.start(ctx, root)
-	return c.output
+	return c.output, stats
 }
 
 func (c *crawler) start(ctx context.Context, root Directory) {
@@ -130,7 +164,19 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		stop = ctx.Err() != nil
 		if !stop {
 			if len(c.unstartedDirs) > 0 {
-				if len(c.unstartedDirs) < maxQueueDirsForBreadthFirst {
+				if c.randomDequeue {
+					// Random dequeue (mover-high-perf Blob/BlobFS<->Blob/BlobFS only, see CrawlWithOptions):
+					// pick a random directory from the queue and swap-remove it (O(1)). This spreads
+					// workers across diverse prefixes, avoiding partition hotspotting when writing to
+					// Azure Blob Storage (where lexicographically adjacent keys often land on the same
+					// partition). Unlike BFS (FIFO) or DFS (LIFO), random selection ensures no sustained
+					// prefix locality regardless of queue size.
+					idx := rand.Intn(len(c.unstartedDirs))
+					toExamine = c.unstartedDirs[idx]
+					last := len(c.unstartedDirs) - 1
+					c.unstartedDirs[idx] = c.unstartedDirs[last]
+					c.unstartedDirs = c.unstartedDirs[:last]
+				} else if len(c.unstartedDirs) < maxQueueDirsForBreadthFirst {
 					// pop from start of list. This gives a breadth-first flavour to the search.
 					// (Breadth-first is useful for distributing small-file workloads over the full keyspace, which
 					// is can help performance when uploading small files to Azure Blob Storage)
@@ -149,6 +195,9 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 
 				c.dirInProgressCount++ // record that we are working on something
 				c.cond.Broadcast()     // and let other threads know of that fact
+				// Update live stats
+				atomic.AddInt64(&c.stats.ActiveWorkers, 1)
+				atomic.StoreInt64(&c.stats.QueuedDirs, int64(len(c.unstartedDirs)))
 			} else {
 				if c.dirInProgressCount > 0 {
 					// something has gone wrong in the design of this algorithm, because we should only get here if all done now
@@ -182,7 +231,10 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 
 	c.unstartedDirs = append(c.unstartedDirs, foundDirectories...) // do NOT try to wait here if unstartedDirs is getting big. May cause deadlocks, due to all workers waiting and none processing the queue
 	c.dirInProgressCount--                                         // we were doing something, and now we have finished it
-	c.cond.Broadcast()                                             // let other workers know that the state has changed
+	// Update live stats
+	atomic.AddInt64(&c.stats.ActiveWorkers, -1)
+	atomic.StoreInt64(&c.stats.QueuedDirs, int64(len(c.unstartedDirs)))
+	c.cond.Broadcast() // let other workers know that the state has changed
 
 	// If our queue of unstarted stuff is getting really huge,
 	// reduce our parallelism in the hope of preventing further excessive RAM growth.

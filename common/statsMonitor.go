@@ -579,6 +579,21 @@ func (m *SystemStatsMonitor) GetSnapshot() SystemStatsSnapshot {
 	return snapshot
 }
 
+// GetMemoryPercent returns the most recent OS-level memory usage percentage
+// (container/cgroup-aware, via gopsutil) from the latest collected snapshot.
+// It is a lightweight read that avoids the runtime.ReadMemStats stop-the-world
+// pause, so it is safe to call on hot paths such as per-directory throttle checks.
+// Returns -1 if no snapshot has been collected yet (e.g. monitor not started).
+func (m *SystemStatsMonitor) GetMemoryPercent() float64 {
+	m.snapshotMutex.RLock()
+	defer m.snapshotMutex.RUnlock()
+
+	if m.currentSnapshot == nil {
+		return -1
+	}
+	return m.currentSnapshot.MemoryPercent
+}
+
 // logStaticSystemInfo logs static system information once at startup
 func (m *SystemStatsMonitor) logStaticSystemInfo() {
 	if m.config.Logger == nil {
@@ -1479,8 +1494,10 @@ func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons [
 		orderedCustomMetrics = m.config.CustomCallbackManager.CollectAllOrderedMetrics()
 	}
 
-	// Log only the compact stats line (single line as before)
-	m.config.Logger.Log(LogInfo, m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, reasons))
+	// Log only the compact stats line (single line as before).
+	// Emitted at LogError so the periodic STE channel/starvation/GC stats survive --log-level ERROR
+	// (one line per interval; per-transfer INFO spam stays filtered). Used for throughput-dip debugging.
+	m.config.Logger.Log(LogError, m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, reasons))
 }
 
 // buildCompactStatsLine builds the original compact stats line for quick reference
