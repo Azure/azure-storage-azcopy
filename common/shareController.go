@@ -109,7 +109,7 @@ type ControllerFactory func(sink DualRateSink, source ResourceStatsSource, worke
 // today). Register a different factory to change how per-resource controllers
 // are built.
 var controllerFactory ControllerFactory = func(sink DualRateSink, source ResourceStatsSource, workers int64) ResourceController {
-	return NewAzureFilesController(sink, source, workers, DefaultDualResourceConfig())
+	return NewAzureFilesController(sink, source, int(workers), DefaultDualResourceConfig())
 }
 
 // RegisterControllerFactory injects the per-resource controller constructor

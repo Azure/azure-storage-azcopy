@@ -206,7 +206,7 @@ type DualResourceController struct {
 	pollStatsSignal bool
 
 	mode              string
-	activeWorkerCount int64
+	activeWorkerCount int
 
 	// curBw/curIops are the most recently pushed sink targets (bytes/sec and
 	// ops/sec). 0 means unlimited on that dimension.
@@ -237,7 +237,7 @@ type DualResourceController struct {
 // mode, driving sink. Call Refresh every poll interval (~30s), and HandleResponse
 // on every relevant HTTP outcome. activeWorkers is the equal-share denominator
 // (1 for single-process).
-func NewDualResourceController(sink DualRateSink, source ResourceStatsSource, activeWorkers int64, cfg DualResourceConfig) *DualResourceController {
+func NewDualResourceController(sink DualRateSink, source ResourceStatsSource, activeWorkers int, cfg DualResourceConfig) *DualResourceController {
 	return newDualResourceControllerWithClock(sink, source, realPacerClock{}, activeWorkers, cfg, true)
 }
 
@@ -249,7 +249,7 @@ var _ ResourceController = (*DualResourceController)(nil)
 // ResourceStatsSource (dual dimension: IOPS + bandwidth) and Azure Files 429/503
 // classification (done in ste). The core engine is unchanged; only the injected
 // source/classification/config differ per service.
-func NewAzureFilesController(sink DualRateSink, source ResourceStatsSource, activeWorkers int64, cfg DualResourceConfig) ResourceController {
+func NewAzureFilesController(sink DualRateSink, source ResourceStatsSource, activeWorkers int, cfg DualResourceConfig) ResourceController {
 	return NewDualResourceController(sink, source, activeWorkers, cfg)
 }
 
@@ -261,11 +261,11 @@ func NewAzureFilesController(sink DualRateSink, source ResourceStatsSource, acti
 // generic real-time HTTP 429/503 signal governs mode - GetShareStats-style deltas
 // are irrelevant to Blob. It reuses the same shared AIMD engine, so the Blob path
 // can be wired in later without changing any core throttling logic.
-func NewBlobController(sink DualRateSink, source ResourceStatsSource, activeWorkers int64, cfg DualResourceConfig) ResourceController {
+func NewBlobController(sink DualRateSink, source ResourceStatsSource, activeWorkers int, cfg DualResourceConfig) ResourceController {
 	return newDualResourceControllerWithClock(sink, source, realPacerClock{}, activeWorkers, cfg, false)
 }
 
-func newDualResourceControllerWithClock(sink DualRateSink, source ResourceStatsSource, clock pacerClock, activeWorkers int64, cfg DualResourceConfig, pollStatsSignal bool) *DualResourceController {
+func newDualResourceControllerWithClock(sink DualRateSink, source ResourceStatsSource, clock pacerClock, activeWorkers int, cfg DualResourceConfig, pollStatsSignal bool) *DualResourceController {
 	cfg = normalizeDualConfig(cfg)
 	if activeWorkers < 1 {
 		activeWorkers = 1
@@ -287,13 +287,14 @@ func newDualResourceControllerWithClock(sink DualRateSink, source ResourceStatsS
 
 // SetActiveWorkerCount updates the equal-share denominator. Rates are recomputed
 // on the next proactive refresh.
-func (d *DualResourceController) SetActiveWorkerCount(n int64) {
+func (d *DualResourceController) SetActiveWorkerCount(n int) {
 	if n < 1 {
 		n = 1
 	}
 	d.mu.Lock()
 	d.activeWorkerCount = n
 	d.mu.Unlock()
+	d.Refresh() // TBD: Should refresh be called here? It may be better to let the caller decide when to refresh.
 }
 
 // Refresh polls the authoritative ResourceStats source, updates mode and target
@@ -431,8 +432,8 @@ func (d *DualResourceController) applyProactiveLocked(stats ResourceStats) {
 	if workers < 1 {
 		workers = 1
 	}
-	iopsShare := stats.IopsLimit / workers
-	bwShare := stats.BandwidthLimitBytesPerSec / workers
+	iopsShare := stats.IopsLimit / int64(workers)
+	bwShare := stats.BandwidthLimitBytesPerSec / int64(workers)
 	d.setRatesLocked(bwShare, iopsShare)
 }
 
