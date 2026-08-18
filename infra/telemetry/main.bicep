@@ -43,6 +43,7 @@ var commonTags = {
   service: 'azcopy-telemetry'
   environment: environmentName
   managedBy: 'bicep'
+  Mover: 'Dev'
 }
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
