@@ -27,6 +27,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -532,6 +533,63 @@ func TestDetectInvocationContext(t *testing.T) {
 		}
 		return ""
 	}))
+}
+
+func TestInstallationIDPersistsOutsideJobPlanFolder(t *testing.T) {
+	rootDir := t.TempDir()
+	appDataDir := filepath.Join(rootDir, ".azcopy")
+	jobPlanDir := filepath.Join(rootDir, "plans")
+	require.NoError(t, os.Mkdir(jobPlanDir, 0700))
+
+	first := installationIDInDir(appDataDir)
+	second := installationIDInDir(appDataDir)
+
+	assert.Len(t, first, 32)
+	assert.Equal(t, first, second)
+	assert.FileExists(t, filepath.Join(appDataDir, installationIDFileName))
+
+	entries, err := os.ReadDir(jobPlanDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+func TestInstallationIDIsStableAcrossConcurrentCalls(t *testing.T) {
+	appDataDir := filepath.Join(t.TempDir(), ".azcopy")
+	const callCount = 16
+	results := make(chan string, callCount)
+
+	for i := 0; i < callCount; i++ {
+		go func() {
+			results <- installationIDInDir(appDataDir)
+		}()
+	}
+
+	first := <-results
+	require.Len(t, first, 32)
+	for i := 1; i < callCount; i++ {
+		assert.Equal(t, first, <-results)
+	}
+}
+
+func TestInstallationIDRecoversMalformedFileAcrossConcurrentCalls(t *testing.T) {
+	appDataDir := filepath.Join(t.TempDir(), ".azcopy")
+	require.NoError(t, os.Mkdir(appDataDir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(appDataDir, installationIDFileName), []byte("partial"), 0600))
+
+	const callCount = 16
+	results := make(chan string, callCount)
+	for i := 0; i < callCount; i++ {
+		go func() {
+			results <- installationIDInDir(appDataDir)
+		}()
+	}
+
+	first := <-results
+	require.Len(t, first, 32)
+	for i := 1; i < callCount; i++ {
+		assert.Equal(t, first, <-results)
+	}
+	assert.Equal(t, first, readInstallationID(filepath.Join(appDataDir, installationIDFileName)))
 }
 
 func TestNewTelemetryInvocationID(t *testing.T) {
