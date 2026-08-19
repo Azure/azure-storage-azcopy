@@ -34,6 +34,15 @@ func init() {
 	common.RegisterSharePacerFactory(func() common.SharePacer {
 		return NewDualTokenBucketPacer(0, 0)
 	})
+
+	// ADD THIS: Register the azFileShareStatsSource factory
+    // This enables GetShareStats polling for every Files share
+    common.RegisterResourceStatsSourceFactory(
+        ShareStatsSourceFactory(
+            common.GetGlobalHTTPClient(nil),
+            common.NewLogger(logSeverity.Info), // or pass existing logger
+        ),
+    )
 }
 
 // shareScopedPacer routes pacing for a single Azure Files destination share.

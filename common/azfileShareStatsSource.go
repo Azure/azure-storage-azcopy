@@ -86,6 +86,7 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 	sample := &shareStatsSample{
 		timestamp:                 time.Now(),
 		startTime:                 ts.StartTime,
+		endTime:                   ts.EndTime,
 		totalEgressBytes:          ts.TotalEgressBytes,
 		egressThrottledBytes:      ts.EgressThrottledBytes,
 		iopsThrottledRequestCount: ts.IopsThrottledRequestCount,
@@ -96,27 +97,46 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 		throttlingAvailable:       true,
 	}
 
-	// Detect counter reset: if StartTime changed, the aggregator restarted
-	// and all cumulative counters were zeroed. Reset our baseline so the
-	// controller sees a zero delta for this interval instead of a huge negative.
-	if s.prevSample != nil && !s.prevSample.startTime.Equal(sample.startTime) {
+	if (s.prevSample == nil) {
+		// First call: store baseline and return limits with zero throttle counters.
+		s.prevSample = sample
+
+		return ResourceStats{
+			IopsLimit:                 ts.IopsLimit,
+			BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
+			IopsThrottleCount:         ts.IopsThrottledRequestCount,
+			BandwidthThrottleCount:    ts.EgressThrottledBytes,
+		}, nil
+	} else {
+		// Detect counter reset: if StartTime changed, the aggregator restarted
+		// and all cumulative counters were zeroed. Reset our baseline so the
+		// controller sees a zero delta for this interval instead of a huge negative.
+		if !s.prevSample.startTime.Equal(sample.startTime) {
+			s.prevSample = sample
+			return ResourceStats{
+				IopsLimit:                 ts.IopsLimit,
+				BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
+				IopsThrottleCount:         0, // reset baseline
+				BandwidthThrottleCount:    0,
+			}, nil
+		}
+
+		prevEndTime := s.prevSample.endTime
+		curEndTime := sample.endTime
+		timeDelta := curEndTime.Sub(prevEndTime).Seconds()		
+		if (timeDelta > 20 && timeDelta < 60) {
+			fmt.Sprintf("GetShareStats poll interval: %.1f seconds", timeDelta)			
+		}
+		currentIopsThrottleCount := sample.iopsThrottledRequestCount - s.prevSample.iopsThrottledRequestCount
+		currentBandwidthThrottleCount := sample.egressThrottledBytes - s.prevSample.egressThrottledBytes
 		s.prevSample = sample
 		return ResourceStats{
 			IopsLimit:                 ts.IopsLimit,
 			BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
-			IopsThrottleCount:         0, // reset baseline
-			BandwidthThrottleCount:    0,
-		}, nil
-	}
-
-	s.prevSample = sample
-
-	return ResourceStats{
-		IopsLimit:                 ts.IopsLimit,
-		BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
-		IopsThrottleCount:         ts.IopsThrottledRequestCount,
-		BandwidthThrottleCount:    ts.EgressThrottledBytes,
-	}, nil
+			IopsThrottleCount:         currentIopsThrottleCount,
+			BandwidthThrottleCount:    currentBandwidthThrottleCount,
+		}, nil	
+	}	
 }
 
 // ShareStatsSourceFactory returns a factory function suitable for registration
