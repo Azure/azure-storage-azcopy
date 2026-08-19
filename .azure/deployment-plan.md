@@ -41,14 +41,15 @@ Status: Validated
   `azcopy-telemetry-test-ai`.
 - Apply a 90-day retention period and 1 GB/day ingestion cap for synthetic E2E
   telemetry.
-- Apply `service`, `environment`, `managedBy`, and `Mover=Dev` tags.
+- Apply `service`, `environment`, `managedBy`, `Mover=Dev`, and `team` tags.
 - Grant the runtime workload identity
   `28a5f214-22ad-42fc-833f-019f71f9bf60`:
   - Reader on the Application Insights component.
   - Log Analytics Reader on the workspace.
 - Keep the connection string out of pipeline variables and secrets. The E2E
   job reads it from ARM at runtime.
-- Keep infrastructure deployment separate from AzCopy binary build/deployment.
+- Keep infrastructure deployment as a separately selected mode of the existing
+  AzCopy pipeline, not as part of normal build and E2E execution.
 
 ## 4. Pipeline Changes
 
@@ -57,9 +58,18 @@ Status: Validated
 - Preserve the Python E2E command's exit code while still producing coverage
   artifacts. Coverage conversion failures must also remain visible when tests
   pass.
-- Add `telemetry-infrastructure-pipeline.yml` with no CI or PR trigger.
-- The infrastructure pipeline performs compile, ARM validation, what-if,
-  explicit manual approval, deployment, and a Log Analytics query smoke test.
+- Add safe, compile-time-selected modes to the existing pipeline:
+  `Tests` (default), `ValidateTelemetryInfrastructure`, and
+  `DeployTelemetryInfrastructure`.
+- Automatic CI and PR runs use `Tests`. Infrastructure modes omit all test jobs
+  and include only the reusable telemetry stages, so normal runs never reference
+  the deployment service connection.
+- The reusable infrastructure stages perform compile, ARM validation, what-if,
+  explicit manual approval for deployment, deployment, and a Log Analytics
+  query smoke test.
+- Keep `telemetry-infrastructure-pipeline.yml` as a no-trigger compatibility
+  wrapper over the same reusable stages; it contains no duplicated deployment
+  logic.
 - Each E2E matrix leg runs an ingestion canary after building AzCopy and before
   starting the long test suite. The canary invokes `azcopy jobs list` with a
   unique correlation ID and polls for its `azcopy.command.invoked` event, so
@@ -153,10 +163,9 @@ standalone Python YAML parse was unavailable on this machine; Azure Pipelines
 will perform authoritative parsing when the pipeline definition is created or
 queued.
 
-The dedicated Azure DevOps service connection
-`azcopytelemetrydeploymentidentity` is not yet visible in project
-`AzCopy-NextGen`. A project administrator must create and authorize that
-workload-identity service connection before the infrastructure deployment
-pipeline can execute. Its principal requires Contributor and Role Based Access
-Control Administrator (or User Access Administrator) scoped only to
+The dedicated workload-identity Azure Resource Manager service connection
+`azcopytelemetrydeploymentidentity` has been created in project
+`AzCopy-NextGen`. Existing pipeline ID 2 must be authorized to use it before a
+manual infrastructure mode can execute. Its principal has Contributor and Role
+Based Access Control Administrator scoped only to
 `azcopy-telemetry-test-rg`.

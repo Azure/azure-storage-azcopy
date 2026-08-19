@@ -1,0 +1,162 @@
+parameters:
+  - name: action
+    type: string
+    values:
+      - Validate
+      - Deploy
+  - name: azureServiceConnection
+    type: string
+    default: azcopytelemetrydeploymentidentity
+  - name: subscriptionId
+    type: string
+    default: '31347be8-d066-464e-9866-7e58d85027b7'
+  - name: resourceGroup
+    type: string
+    default: azcopy-telemetry-test-rg
+  - name: location
+    type: string
+    default: eastus
+  - name: deploymentName
+    type: string
+    default: azcopy-telemetry-test
+
+stages:
+  - stage: ValidateTelemetryInfrastructure
+    displayName: 'Validate and preview telemetry infrastructure'
+    jobs:
+      - job: ValidateAndPreview
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Compile, validate, and preview Bicep'
+            inputs:
+              azureSubscription: ${{ parameters.azureServiceConnection }}
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $ErrorActionPreference = 'Stop'
+                az account set --subscription '${{ parameters.subscriptionId }}'
+                if ($LASTEXITCODE -ne 0) {
+                  throw 'Failed to select the telemetry subscription.'
+                }
+
+                $resourceGroupLocation = az group show `
+                  --name '${{ parameters.resourceGroup }}' `
+                  --query location `
+                  --output tsv
+                if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($resourceGroupLocation)) {
+                  throw 'The telemetry resource group does not exist. Bootstrap it before running this pipeline.'
+                }
+                if ($resourceGroupLocation -ne '${{ parameters.location }}') {
+                  throw "The telemetry resource group is in '$resourceGroupLocation', not '${{ parameters.location }}'."
+                }
+
+                az bicep build --file infra/telemetry/main.bicep --stdout | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                  throw 'Bicep compilation failed.'
+                }
+                az bicep build-params --file infra/telemetry/test.bicepparam --stdout | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                  throw 'Bicep parameter compilation failed.'
+                }
+
+                az deployment group validate `
+                  --resource-group '${{ parameters.resourceGroup }}' `
+                  --name '${{ parameters.deploymentName }}-validate' `
+                  --template-file infra/telemetry/main.bicep `
+                  --parameters infra/telemetry/test.bicepparam `
+                  --output none
+                if ($LASTEXITCODE -ne 0) {
+                  throw 'ARM deployment validation failed.'
+                }
+
+                az deployment group what-if `
+                  --resource-group '${{ parameters.resourceGroup }}' `
+                  --name '${{ parameters.deploymentName }}-what-if' `
+                  --template-file infra/telemetry/main.bicep `
+                  --parameters infra/telemetry/test.bicepparam
+                if ($LASTEXITCODE -ne 0) {
+                  throw 'ARM deployment what-if failed.'
+                }
+
+  - ${{ if eq(parameters.action, 'Deploy') }}:
+    - stage: ApproveTelemetryInfrastructure
+      displayName: 'Approve telemetry infrastructure deployment'
+      dependsOn: ValidateTelemetryInfrastructure
+      jobs:
+        - job: WaitForApproval
+          displayName: 'Manual deployment approval'
+          pool: server
+          timeoutInMinutes: 1441
+          steps:
+            - task: ManualValidation@0
+              timeoutInMinutes: 1440
+              inputs:
+                notifyUsers: ''
+                instructions: |
+                  Review the validation stage's ARM what-if output. Resume only if
+                  the changes are limited to the dedicated AzCopy telemetry test
+                  resources and their scoped role assignments.
+                onTimeout: reject
+
+    - stage: DeployTelemetryInfrastructure
+      displayName: 'Deploy and verify telemetry infrastructure'
+      dependsOn: ApproveTelemetryInfrastructure
+      jobs:
+        - job: DeployAndVerify
+          pool:
+            vmImage: 'ubuntu-latest'
+          steps:
+            - task: AzureCLI@2
+              displayName: 'Deploy Bicep and run Log Analytics smoke query'
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                scriptType: pscore
+                scriptLocation: inlineScript
+                inlineScript: |
+                  $ErrorActionPreference = 'Stop'
+                  az account set --subscription '${{ parameters.subscriptionId }}'
+                  if ($LASTEXITCODE -ne 0) {
+                    throw 'Failed to select the telemetry subscription.'
+                  }
+
+                  $deployment = az deployment group create `
+                    --resource-group '${{ parameters.resourceGroup }}' `
+                    --name '${{ parameters.deploymentName }}' `
+                    --template-file infra/telemetry/main.bicep `
+                    --parameters infra/telemetry/test.bicepparam `
+                    --output json | ConvertFrom-Json
+                  if ($LASTEXITCODE -ne 0 -or $deployment.properties.provisioningState -ne 'Succeeded') {
+                    throw 'Telemetry infrastructure deployment failed.'
+                  }
+
+                  $appInsightsName = $deployment.properties.outputs.appInsightsName.value
+                  $workspaceName = $deployment.properties.outputs.workspaceName.value
+                  $workspaceCustomerId = $deployment.properties.outputs.workspaceCustomerId.value
+
+                  az resource show `
+                    --resource-group '${{ parameters.resourceGroup }}' `
+                    --name $appInsightsName `
+                    --resource-type 'Microsoft.Insights/components' `
+                    --api-version '2020-02-02' `
+                    --output none
+                  if ($LASTEXITCODE -ne 0) {
+                    throw 'Application Insights deployment verification failed.'
+                  }
+
+                  az monitor log-analytics workspace show `
+                    --resource-group '${{ parameters.resourceGroup }}' `
+                    --workspace-name $workspaceName `
+                    --output none
+                  if ($LASTEXITCODE -ne 0) {
+                    throw 'Log Analytics workspace deployment verification failed.'
+                  }
+
+                  az monitor log-analytics query `
+                    --workspace $workspaceCustomerId `
+                    --analytics-query 'AppEvents | take 1' `
+                    --output none
+                  if ($LASTEXITCODE -ne 0) {
+                    throw 'Log Analytics smoke query failed.'
+                  }

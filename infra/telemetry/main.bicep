@@ -44,6 +44,7 @@ var commonTags = {
   environment: environmentName
   managedBy: 'bicep'
   Mover: 'Dev'
+  team: 'Discovery'
 }
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
