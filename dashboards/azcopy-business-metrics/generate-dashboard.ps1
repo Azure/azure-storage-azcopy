@@ -1,8 +1,18 @@
 param(
-    [string]$OutputPath = (Join-Path $PSScriptRoot "azcopy-business-metrics.dashboard.json")
+    [string]$OutputPath = (Join-Path $PSScriptRoot "azcopy-business-metrics.dashboard.json"),
+    [string]$AppInsightsSubscriptionId = "31347be8-d066-464e-9866-7e58d85027b7",
+    [string]$AppInsightsResourceGroup = "sharankur_playground",
+    [string]$AppInsightsApp = "sharankur_insights1",
+    [string]$DashboardVariant = ""
 )
 
 $ErrorActionPreference = "Stop"
+$basePrefix = "azcopy-business-metrics"
+$variantId = ($DashboardVariant.Trim().ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim([char]'-')
+$prefix = if ($variantId) { "${basePrefix}:$variantId" } else { $basePrefix }
+$titleSuffix = if ($DashboardVariant.Trim()) { " - $($DashboardVariant.Trim())" } else { "" }
+$defaultAppInsightsTable = "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents"
+$appInsightsTable = "cluster('https://adx.monitor.azure.com/subscriptions/$AppInsightsSubscriptionId/resourcegroups/$AppInsightsResourceGroup/providers/microsoft.insights/components/$AppInsightsApp').database('$AppInsightsApp').customEvents"
 
 function New-StableGuid([string]$Seed) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -19,9 +29,9 @@ function New-StableGuid([string]$Seed) {
 function Read-Query([string]$RelativePath) {
     $path = Join-Path $PSScriptRoot $RelativePath
     $text = (Get-Content $path | Where-Object { $_ -notmatch '^\s*//' }) -join "`n"
+    $text = $text.Replace($defaultAppInsightsTable, $appInsightsTable)
 
     if ($RelativePath -like "queries/client/*") {
-        $appInsightsTable = "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents"
         $text = [regex]::Replace(
             $text,
             '(?m)^(\s*)customEvents\b',
@@ -132,15 +142,15 @@ function New-VisualOptions([string]$VisualType) {
     }
 }
 
-$dataSourceId = New-StableGuid "azcopy-business-metrics:data-source:xstore"
+$dataSourceId = New-StableGuid "${prefix}:data-source:xstore"
 $pages = @(
-    [ordered]@{ name = "Overview"; id = New-StableGuid "azcopy-business-metrics:page:overview" },
-    [ordered]@{ name = "Performance"; id = New-StableGuid "azcopy-business-metrics:page:performance" },
-    [ordered]@{ name = "Reliability"; id = New-StableGuid "azcopy-business-metrics:page:reliability" },
-    [ordered]@{ name = "Adoption"; id = New-StableGuid "azcopy-business-metrics:page:adoption" },
-    [ordered]@{ name = "Data Quality"; id = New-StableGuid "azcopy-business-metrics:page:data-quality" },
-    [ordered]@{ name = "Customer Drilldown"; id = New-StableGuid "azcopy-business-metrics:page:customer" },
-    [ordered]@{ name = "Server Correlation"; id = New-StableGuid "azcopy-business-metrics:page:server" }
+    [ordered]@{ name = "Overview"; id = New-StableGuid "${prefix}:page:overview" },
+    [ordered]@{ name = "Performance"; id = New-StableGuid "${prefix}:page:performance" },
+    [ordered]@{ name = "Reliability"; id = New-StableGuid "${prefix}:page:reliability" },
+    [ordered]@{ name = "Adoption"; id = New-StableGuid "${prefix}:page:adoption" },
+    [ordered]@{ name = "Data Quality"; id = New-StableGuid "${prefix}:page:data-quality" },
+    [ordered]@{ name = "Customer Drilldown"; id = New-StableGuid "${prefix}:page:customer" },
+    [ordered]@{ name = "Server Correlation"; id = New-StableGuid "${prefix}:page:server" }
 )
 $pageIds = @{}
 foreach ($page in $pages) { $pageIds[$page.name] = $page.id }
@@ -222,7 +232,7 @@ $tiles = @()
 foreach ($item in $manifest) {
     if ($item.Visual -eq "markdownCard") {
         $tiles += [ordered]@{
-            id = New-StableGuid "azcopy-business-metrics:tile:markdown:$($item.Title)"
+            id = New-StableGuid "${prefix}:tile:markdown:$($item.Title)"
             title = $item.Title
             description = ""
             visualType = $item.Visual
@@ -234,8 +244,8 @@ foreach ($item in $manifest) {
         continue
     }
 
-    $queryId = New-StableGuid "azcopy-business-metrics:query:$($item.File)"
-    $tileId = New-StableGuid "azcopy-business-metrics:tile:$($item.File)"
+    $queryId = New-StableGuid "${prefix}:query:$($item.File)"
+    $tileId = New-StableGuid "${prefix}:tile:$($item.File)"
     $text = Read-Query $item.File
     $usedVariables = @("_startTime", "_endTime")
     if ($text.Contains("_account")) { $usedVariables += "_account" }
@@ -261,16 +271,16 @@ foreach ($item in $manifest) {
 
 $dashboard = [ordered]@{
     '$schema' = "https://dataexplorer.azure.com/static/d/schema/60/dashboard.json"
-    id = New-StableGuid "azcopy-business-metrics:dashboard"
-    eTag = New-StableGuid "azcopy-business-metrics:etag:v1"
-    title = "AzCopy Business Metrics"
+    id = New-StableGuid "${prefix}:dashboard"
+    eTag = New-StableGuid "${prefix}:etag:v1"
+    title = "AzCopy Business Metrics$titleSuffix"
     schema_version = "60"
     tiles = $tiles
     baseQueries = @()
     parameters = @(
         [ordered]@{
             kind = "duration"
-            id = New-StableGuid "azcopy-business-metrics:parameter:time-range"
+            id = New-StableGuid "${prefix}:parameter:time-range"
             displayName = "Time range"
             description = ""
             beginVariableName = "_startTime"
@@ -281,7 +291,7 @@ $dashboard = [ordered]@{
         [ordered]@{
             kind = "string"
             selectionType = "freetext"
-            id = New-StableGuid "azcopy-business-metrics:parameter:account"
+            id = New-StableGuid "${prefix}:parameter:account"
             displayName = "Storage account"
             variableName = "_account"
             description = "Optional source or destination storage account filter. Leave empty for all accounts."
@@ -294,7 +304,7 @@ $dashboard = [ordered]@{
             id = $dataSourceId
             kind = "manual-kusto"
             scopeId = "kusto"
-            name = "AzCopy Analytics"
+            name = "AzCopy Analytics$titleSuffix"
             clusterUri = "https://azcore.centralus.kusto.windows.net/"
             database = "Xstore"
         }

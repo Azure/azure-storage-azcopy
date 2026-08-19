@@ -10,6 +10,11 @@ This directory contains an importable ADX dashboard and its source KQL for the b
 4. Select `azcopy-business-metrics.dashboard.json` from this directory.
 5. Name the dashboard `AzCopy Business Metrics` and select **Create**.
 
+To query client events from the provisioned E2E telemetry resource instead,
+import `azcopy-business-metrics.telemetry-test.dashboard.json`. It has distinct
+dashboard and data-source IDs, so it can coexist with the default dashboard.
+Its XStore, XDataAnalytics, and ARG sources are unchanged.
+
 The imported dashboard contains 37 tiles across seven pages and uses one XStore data source. Client telemetry, XDataAnalytics, and ARG 1P queries use explicit cross-cluster references, so no additional dashboard data sources are required.
 
 If the imported XStore source needs reconnecting, set it to:
@@ -23,6 +28,17 @@ Regenerate the dashboard after changing a source `.kql` file:
 
 ```powershell
 ./dashboards/azcopy-business-metrics/generate-dashboard.ps1
+```
+
+Generate the provisioned E2E telemetry variant:
+
+```powershell
+./dashboards/azcopy-business-metrics/generate-dashboard.ps1 `
+  -OutputPath ./dashboards/azcopy-business-metrics/azcopy-business-metrics.telemetry-test.dashboard.json `
+  -AppInsightsSubscriptionId 31347be8-d066-464e-9866-7e58d85027b7 `
+  -AppInsightsResourceGroup azcopy-telemetry-test-rg `
+  -AppInsightsApp azcopy-telemetry-test-ai `
+  -DashboardVariant "Telemetry Test"
 ```
 
 The generator uses Microsoft's documented ADX dashboard schema version 60 and stable IDs, so regeneration produces reviewable output rather than unrelated ID churn.
@@ -42,6 +58,14 @@ https://ade.applicationinsights.io/subscriptions/31347be8-d066-464e-9866-7e58d85
 Database: `sharankur_insights1`
 
 Table: `customEvents` (numeric `customMeasurements` are expanded into a virtual metric name/value shape by each query)
+
+The telemetry-test artifact uses the same table in:
+
+```text
+https://ade.applicationinsights.io/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai
+```
+
+Database: `azcopy-telemetry-test-ai`
 
 For cross-service queries initiated from a native ADX cluster, use `https://adx.monitor.azure.com/...` as shown in `queries/server/04_client_server_account_hour.kql`.
 

@@ -1,8 +1,17 @@
 param(
-    [string]$OutputPath = (Join-Path $PSScriptRoot "azcopy-telemetry-metrics.dashboard.json")
+    [string]$OutputPath = (Join-Path $PSScriptRoot "azcopy-telemetry-metrics.dashboard.json"),
+    [string]$AppInsightsSubscriptionId = "31347be8-d066-464e-9866-7e58d85027b7",
+    [string]$AppInsightsResourceGroup = "sharankur_playground",
+    [string]$AppInsightsApp = "sharankur_insights1",
+    [string]$DashboardVariant = ""
 )
 
 $ErrorActionPreference = "Stop"
+$basePrefix = "azcopy-telemetry-metrics"
+$variantId = ($DashboardVariant.Trim().ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim([char]'-')
+$prefix = if ($variantId) { "${basePrefix}:$variantId" } else { $basePrefix }
+$titleSuffix = if ($DashboardVariant.Trim()) { " - $($DashboardVariant.Trim())" } else { "" }
+$appInsightsTable = "cluster('https://adx.monitor.azure.com/subscriptions/$AppInsightsSubscriptionId/resourcegroups/$AppInsightsResourceGroup/providers/microsoft.insights/components/$AppInsightsApp').database('$AppInsightsApp').customEvents"
 
 function New-StableGuid([string]$Seed) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -19,7 +28,6 @@ function New-StableGuid([string]$Seed) {
 function Read-Query([string]$RelativePath) {
     $path = Join-Path $PSScriptRoot $RelativePath
     $text = (Get-Content $path | Where-Object { $_ -notmatch '^\s*//' }) -join "`n"
-    $appInsightsTable = "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents"
     return ([regex]::Replace($text, '(?m)^customEvents', $appInsightsTable, 1)).Trim()
 }
 
@@ -103,7 +111,6 @@ function New-VisualOptions([string]$VisualType) {
     }
 }
 
-$prefix = "azcopy-telemetry-metrics"
 $dataSourceId = New-StableGuid "${prefix}:data-source:xstore"
 $pages = @(
     [ordered]@{ name = "Overview"; id = New-StableGuid "${prefix}:page:overview" },
@@ -292,7 +299,7 @@ $dashboard = [ordered]@{
     '$schema' = "https://dataexplorer.azure.com/static/d/schema/60/dashboard.json"
     id = New-StableGuid "${prefix}:dashboard"
     eTag = New-StableGuid "${prefix}:etag:v9"
-    title = "AzCopy Telemetry Metrics"
+    title = "AzCopy Telemetry Metrics$titleSuffix"
     schema_version = "60"
     tiles = $tiles
     baseQueries = @()
@@ -313,7 +320,7 @@ $dashboard = [ordered]@{
             id = $dataSourceId
             kind = "manual-kusto"
             scopeId = "kusto"
-            name = "AzCopy Telemetry"
+            name = "AzCopy Telemetry$titleSuffix"
             clusterUri = "https://azcore.centralus.kusto.windows.net/"
             database = "Xstore"
         }

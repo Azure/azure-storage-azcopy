@@ -1,0 +1,2223 @@
+{
+  "$schema": "https://dataexplorer.azure.com/static/d/schema/60/dashboard.json",
+  "id": "c45aee83-a49d-59ce-cf54-5ef4ef5eb85b",
+  "eTag": "90137b0f-09ce-707d-25ad-defcd00fe0a3",
+  "title": "AzCopy Telemetry Metrics - Telemetry Test",
+  "schema_version": "60",
+  "tiles": [
+    {
+      "id": "4a7a3e46-de9e-05a0-07d6-6b69a206fb3d",
+      "title": "Lifecycle activity",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "0bdf009a-035b-5c6c-699a-e239afbf9556",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "8d94ed00-35ca-9e0f-1622-0f8e4ecb7057"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "a72f385a-6ad0-5c95-f333-0989aa180ba1",
+      "title": "Complete metric catalog",
+      "description": "",
+      "visualType": "table",
+      "pageId": "0bdf009a-035b-5c6c-699a-e239afbf9556",
+      "layout": {
+        "x": 12,
+        "y": 0,
+        "width": 10,
+        "height": 18
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "f2382cde-9e08-6e36-7ef7-a8b2f0905f4f"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "5c3c5d98-dd39-4b9e-d5ee-4be1beaa4c0b",
+      "title": "Transfer dimension mix",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "0bdf009a-035b-5c6c-699a-e239afbf9556",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4c3464ba-4953-14c4-0163-3836d36f7283"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "e633e0f9-0a70-1011-7771-4fd7f916bda4",
+      "title": "Bytes",
+      "description": "azcopy.bytes_enumerated is the sum of source sizes in job-plan transfer entries selected after filters and copy/sync comparison; it is not every source byte scanned. Use azcopy.source_bytes_scanned for traversal volume.\nazcopy.bytes_expected: successful payload plus work still expected to succeed; never exceeds enumerated bytes.\nazcopy.bytes_transferred: logical payload bytes successfully transferred, without retry duplication.\nazcopy.bytes_over_wire: physical payload traffic including retries and failed or incomplete transfer traffic; never below transferred bytes and may exceed enumerated bytes.",
+      "visualType": "timechart",
+      "pageId": "edad2e9a-58fd-00a2-25d7-174eea1df61b",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "20d3899c-d8f0-7d4e-6eaa-ce27d4f844e8"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "33f00678-2650-bf34-eb87-d669e266cf7f",
+      "title": "Byte metric definitions",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "edad2e9a-58fd-00a2-25d7-174eea1df61b",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 22,
+        "height": 8
+      },
+      "markdownText": "**How to read the byte series**\r\n\r\n- **azcopy.bytes_enumerated**: Legacy name for the sum of source sizes in transfer entries added to job plans after filters and copy/sync comparison. For sync, it represents items selected as needing transfer, not every file examined.\r\n- **azcopy.bytes_expected**: Successful payload plus work still expected to succeed. This never exceeds enumerated bytes.\r\n- **azcopy.bytes_transferred**: Logical payload bytes successfully transferred. Retries are not counted again.\r\n- **azcopy.bytes_over_wire**: Physical payload traffic, including retries and failed or incomplete transfer traffic. This is never below transferred bytes and can exceed enumerated bytes.\r\n\r\nExpected relationship: `bytes_transferred <= bytes_expected <= bytes_enumerated`; `bytes_over_wire >= bytes_transferred`.\r\n\r\nTo measure source payload examined during traversal, use **azcopy.source_bytes_scanned** (and **azcopy.source_objects_scanned**) on the Source Profile page.",
+      "visualOptions": {}
+    },
+    {
+      "id": "ff883000-c625-19d4-d1ab-367269452b81",
+      "title": "Scheduled object composition",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "edad2e9a-58fd-00a2-25d7-174eea1df61b",
+      "layout": {
+        "x": 0,
+        "y": 17,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "518f0f88-d035-fb79-3648-1891f83666cf"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "7c42fcb0-37a0-ea66-aa2a-cf3e0cd56e3a",
+      "title": "Object and folder outcomes",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "edad2e9a-58fd-00a2-25d7-174eea1df61b",
+      "layout": {
+        "x": 11,
+        "y": 17,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "60c5ce29-fed2-c220-1cb5-a028dd614463"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "f20fbe60-a0df-2625-9ae3-45ce56b0b8c2",
+      "title": "Outcome metric relationships",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "edad2e9a-58fd-00a2-25d7-174eea1df61b",
+      "layout": {
+        "x": 0,
+        "y": 26,
+        "width": 22,
+        "height": 6
+      },
+      "markdownText": "**How the outcome panels relate**\r\n\r\n- **Transfer outcomes** is the rollup of all scheduled job-plan entries.\r\n- **Object and folder outcomes** splits the same entries into payload objects and folder-property operations.\r\n- For each outcome: `transfers_* = objects_* + folder_properties_*`.\r\n- Also: `transfers_total = objects_scheduled + folder_properties_scheduled`.\r\n\r\nUnchanged sync objects are compared and scanned but are not scheduled, so they do not appear as skipped transfers.",
+      "visualOptions": {}
+    },
+    {
+      "id": "465976c3-25aa-cebf-da22-374728aa5e90",
+      "title": "Transfer outcomes",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "edad2e9a-58fd-00a2-25d7-174eea1df61b",
+      "layout": {
+        "x": 0,
+        "y": 32,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "5f53bba4-dffb-fee1-fb5c-2e95855a2e91"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "7c588a42-303a-5094-49a5-19b63de85ff7",
+      "title": "Scanned and touched inventory",
+      "description": "",
+      "visualType": "multistat",
+      "pageId": "c0b6c888-6f4c-b76d-2956-9c0988275afd",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 6
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c385439b-5bc7-5f11-29a1-5eb12c32ce04"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "b759e48a-70e6-5370-3778-8067f70dd03a",
+      "title": "Scanned source object-size statistics",
+      "description": "",
+      "visualType": "table",
+      "pageId": "c0b6c888-6f4c-b76d-2956-9c0988275afd",
+      "layout": {
+        "x": 0,
+        "y": 6,
+        "width": 12,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "96e5c389-39d9-c759-81d0-017953121d81"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "44415e07-583e-05cd-c58a-86dee86d29bc",
+      "title": "Scanned source small-object share and directory depth",
+      "description": "",
+      "visualType": "table",
+      "pageId": "c0b6c888-6f4c-b76d-2956-9c0988275afd",
+      "layout": {
+        "x": 12,
+        "y": 6,
+        "width": 10,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "6abfba87-d044-a1c2-c067-06823731b1ed"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "7ba4b770-026d-a51a-d74d-13799ec1987f",
+      "title": "Phase durations",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "cf535aa3-79da-de51-9ea5-7b35044f316a"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "32d4792f-35ee-0e8a-021c-8e7da034187d",
+      "title": "Throughput",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "e4f1c307-f843-ee2f-75f6-712e3929bd58"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "df2a8c74-1ff9-be91-9eae-6b354a6b09a2",
+      "title": "Storage latency and IOPS",
+      "description": "",
+      "visualType": "table",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 12,
+        "y": 9,
+        "width": 10,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d31a7e77-622a-2ba3-3ad7-b98585eded31"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "e6545015-6c58-7006-e5e9-7fa2a1175fdd",
+      "title": "Performance constraint",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "7d52b58d-e27c-d843-a881-798183b7ce1c"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "414fe96e-b696-f963-81fa-ac37f6768136",
+      "title": "Performance advice codes",
+      "description": "",
+      "visualType": "column",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 11,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "e27a062d-7734-c0e2-9826-79441284376d"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "6cbc2b59-f607-1c52-2d51-aa389e90f0b8",
+      "title": "Configured concurrency",
+      "description": "Distribution of AZCOPY_CONCURRENCY_VALUE recorded in OptConcurrency. Runs without an explicit setting appear as 'not set'.",
+      "visualType": "column",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 0,
+        "y": 27,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "48e9f648-2ad0-8ed9-ddb5-704ae617e311"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "38d147a6-c4c7-8d6a-fd73-a2e031d2a764",
+      "title": "Configured buffer size (GB)",
+      "description": "Distribution of AZCOPY_BUFFER_GB recorded in OptBufferGB. Runs without an explicit setting appear as 'not set'.",
+      "visualType": "column",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 0,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "27ea65b0-1171-7a42-5423-7cf303d52775"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "60919fb5-d50c-9f3f-5584-08c65a3b6ff6",
+      "title": "Configured throughput cap (Mbps)",
+      "description": "Distribution of --cap-mbps recorded in OptCapMbps. Runs without an explicit setting appear as 'not set'.",
+      "visualType": "column",
+      "pageId": "9d412876-f8e2-6354-68ff-4a4ce56fcde8",
+      "layout": {
+        "x": 11,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c8b3d7c2-01ba-ce1b-231c-a0b65bccd0e7"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "2d80edb1-45c8-1524-e314-ba59608b5f04",
+      "title": "Reliability panel guide",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "6e8af246-4377-2714-76b7-ff81ea09c813",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 9
+      },
+      "markdownText": "**How to read the reliability panels**\r\n\r\n- **HTTP, network, and overflow error counts**: Hourly raw totals. `storage_http_attempt_count` counts instrumented Storage HTTP attempts, including retries; `network_error_attempt_count` counts attempts that ended in a non-cancellation network error; `failure_error_other_count` counts failed-transfer errors omitted from the bounded top error-code histogram, not HTTP attempts.\r\n- **Server busy counts**: Hourly Storage 503 attempts. `server_busy_503_count` is the total; throughput, IOPS, and other are its reason categories, so the total should equal their sum.\r\n- **Error and completion percentages**: Hourly unweighted averages of per-job values. Server-busy and network-error percentages use Storage HTTP attempts as their denominator. Percent complete is transfer progress, especially useful for cancelled jobs; it is not an error rate.\r\n- **Job error distribution**: Count of sampled finished job attempts grouped by terminal error category/code, terminal reason, and stage. This is job-level failure context, not a count of individual failed files or HTTP attempts.\r\n\r\nCounts are raw sampled telemetry observations. Percentage lines are averages across jobs, not ratios recomputed from the hourly count totals.",
+      "visualOptions": {}
+    },
+    {
+      "id": "c5daf8d5-ef44-ef07-04dd-4bcc458fda16",
+      "title": "HTTP, network, and overflow error counts",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "6e8af246-4377-2714-76b7-ff81ea09c813",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4c13f7ef-63ae-1d70-809f-572e83598251"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "dfa1beb1-bf4a-eeef-dbae-8625752c2fc7",
+      "title": "Server busy counts",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "6e8af246-4377-2714-76b7-ff81ea09c813",
+      "layout": {
+        "x": 11,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "da69ddd2-52fd-b7f6-c189-89b866e6c23b"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "75fc354d-04c7-22e0-6803-3353b9f8747f",
+      "title": "Error and completion percentages",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "6e8af246-4377-2714-76b7-ff81ea09c813",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "745059c5-01fd-6bd0-8b48-302a8b5279cf"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "00a3df03-ae08-9dfb-b91f-fbf26a9b63d7",
+      "title": "Job error distribution",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "6e8af246-4377-2714-76b7-ff81ea09c813",
+      "layout": {
+        "x": 11,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "05c360f9-b2ea-49f1-432f-19a74bb17e0d"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "9072ea5a-3cd9-f67c-58f0-a9c022744be2",
+      "title": "AzCopy version",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4b5627d8-7d11-d527-c0fa-6c991b9b4a32"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "e0c5ae12-9564-1f6e-f6d8-9a05dd613198",
+      "title": "Telemetry schema version",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 11,
+        "y": 0,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "147d3fd0-f0a1-0203-fe49-b3acc9ab119b"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "f5218ba9-39a8-0b09-7b4c-af1f55fb8e05",
+      "title": "Operating system",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "fd2082b2-2bec-aa16-b97e-8332765163f4"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "f969de9c-7cc9-3927-d1c5-c544e9060f16",
+      "title": "Operating system version",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 11,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c216ca4b-210c-d0ee-1068-f666deaa88ef"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "b46ab76c-e1ff-fb89-9560-003a929b91fe",
+      "title": "Host architecture",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d2826a01-ea25-bde2-1e51-47592ac2afbc"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "5e596deb-111b-d44f-cf43-65eddcfa7fd0",
+      "title": "Logical CPU count",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 11,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a92dfa5f-11fe-8825-d43e-11826ea8336b"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "f86fc4c6-ded5-4457-4bfe-825e3786f060",
+      "title": "CPU model",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 27,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "cc7fcc11-dd26-0d91-ebe6-f003b06f561a"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "158edea7-644b-acb8-544b-8b5b1be0ba4f",
+      "title": "Host memory",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 11,
+        "y": 27,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "115c8ee2-bf19-ed06-298c-516489bfe19e"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "8aad3742-0c4c-415b-5841-1a5f03803c31",
+      "title": "NIC speed bucket",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "f64128c8-bfed-c3d0-34f2-5384dc31ba82"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "7d3f99da-878d-21ee-5d4b-1c4e702e6038",
+      "title": "Azure VM detected",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 11,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "b03f2b03-ce77-7b1e-48d1-0a6c9821ba9a"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "ce2be6df-665a-b438-77c4-65ab5cedfba0",
+      "title": "Country or region (IP-derived)",
+      "description": "",
+      "visualType": "column",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 45,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d386747d-4d2f-c045-8d7a-8770ad0bd6fa"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "2a2ea4bf-0a61-0f7c-19e7-7a42892fdeb6",
+      "title": "Invocation context",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 11,
+        "y": 45,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4f9b7b89-3b07-7649-c99e-80b92a5dd4cd"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "ce50c486-a504-f81a-0eee-d9b7bb0081f5",
+      "title": "Combined host and runtime details",
+      "description": "",
+      "visualType": "table",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 54,
+        "width": 22,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c00b54b7-924c-67c8-5dfc-d76275b30925"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "7daf0757-4e10-7d2c-cf41-35a144fc68e8",
+      "title": "Recent finished attempts and dimensions",
+      "description": "",
+      "visualType": "table",
+      "pageId": "31d5a6e6-e132-b8c0-815e-b7a364893658",
+      "layout": {
+        "x": 0,
+        "y": 64,
+        "width": 22,
+        "height": 12
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "1c6f0717-62fa-f4e5-359a-61c7caa21c3e"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    }
+  ],
+  "baseQueries": [],
+  "parameters": [
+    {
+      "kind": "duration",
+      "id": "f9b1ce87-b8a1-cfcb-fba1-8f6e90bc80e6",
+      "displayName": "Time range",
+      "description": "",
+      "beginVariableName": "_startTime",
+      "endVariableName": "_endTime",
+      "defaultValue": {
+        "kind": "dynamic",
+        "count": 24,
+        "unit": "hours"
+      },
+      "showOnPages": {
+        "kind": "all"
+      }
+    }
+  ],
+  "dataSources": [
+    {
+      "id": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d",
+      "kind": "manual-kusto",
+      "scopeId": "kusto",
+      "name": "AzCopy Telemetry - Telemetry Test",
+      "clusterUri": "https://azcore.centralus.kusto.windows.net/",
+      "database": "Xstore"
+    }
+  ],
+  "pages": [
+    {
+      "name": "Overview",
+      "id": "0bdf009a-035b-5c6c-699a-e239afbf9556"
+    },
+    {
+      "name": "Data Volume",
+      "id": "edad2e9a-58fd-00a2-25d7-174eea1df61b"
+    },
+    {
+      "name": "Source Profile",
+      "id": "c0b6c888-6f4c-b76d-2956-9c0988275afd"
+    },
+    {
+      "name": "Performance",
+      "id": "9d412876-f8e2-6354-68ff-4a4ce56fcde8"
+    },
+    {
+      "name": "Reliability",
+      "id": "6e8af246-4377-2714-76b7-ff81ea09c813"
+    },
+    {
+      "name": "Environment",
+      "id": "31d5a6e6-e132-b8c0-815e-b7a364893658"
+    }
+  ],
+  "queries": [
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.command.invoked', 'azcopy.job.started', 'azcopy.job.finished')\n| summarize Value = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "8d94ed00-35ca-9e0f-1622-0f8e4ecb7057",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| summarize\n    Samples = count(),\n    NonZeroSamples = countif(value != 0),\n    Minimum = min(value),\n    Average = avg(value),\n    P50 = percentile(value, 50),\n    P95 = percentile(value, 95),\n    Maximum = max(value)\n  by Metric = name\n| project Metric, Samples, NonZeroSamples, Minimum, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "f2382cde-9e08-6e36-7ef7-a8b2f0905f4f",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend\n    Command = tostring(customDimensions.Command),\n    FromTo = tostring(customDimensions.FromTo),\n    SourceType = tostring(customDimensions.SourceType),\n    DestType = tostring(customDimensions.DestType),\n    LegacyDirection = tostring(customDimensions.TransferDirection),\n    LegacyTopology = tostring(customDimensions.TransferTopology)\n| extend\n    Direction = iif(isnotempty(LegacyDirection), LegacyDirection, case(\n        DestType == 'Trash', 'delete',\n        SourceType in ('Local', 'Benchmark', 'Pipe'), 'upload',\n        DestType in ('Local', 'Pipe'), 'download',\n        SourceType !in ('', 'None') and DestType !in ('', 'None'), 's2s',\n        'unknown')),\n    Topology = iif(isnotempty(LegacyTopology), LegacyTopology, case(\n        SourceType == 'S3' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',\n        SourceType == 'GCP' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',\n        SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',\n        DestType == 'Trash', 'azure-delete',\n        SourceType in ('Local', 'Benchmark', 'Pipe') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',\n        SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Local', 'Pipe'), 'azure-to-local',\n        SourceType !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestType !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',\n        'unknown'))\n| summarize Attempts = count() by Command, FromTo, Direction, Topology, SourceType, DestType\n| top 30 by Attempts desc",
+      "id": "4c3464ba-4953-14c4-0163-3836d36f7283",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.bytes_enumerated', 'azcopy.bytes_expected', 'azcopy.bytes_transferred', 'azcopy.bytes_over_wire')\n| summarize Bytes = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "20d3899c-d8f0-7d4e-6eaa-ce27d4f844e8",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.objects_scheduled',\n    'azcopy.regular_files_scheduled',\n    'azcopy.symlinks_scheduled',\n    'azcopy.hardlinks_converted_scheduled',\n    'azcopy.folder_properties_scheduled')\n| summarize Objects = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "518f0f88-d035-fb79-3648-1891f83666cf",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.objects_completed',\n    'azcopy.objects_failed',\n    'azcopy.objects_skipped',\n    'azcopy.folder_properties_completed',\n    'azcopy.folder_properties_failed',\n    'azcopy.folder_properties_skipped')\n| summarize Objects = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "60c5ce29-fed2-c220-1cb5-a028dd614463",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.transfers_completed', 'azcopy.transfers_failed', 'azcopy.transfers_skipped', 'azcopy.transfers_total')\n| summarize Transfers = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "5f53bba4-dffb-fee1-fb5c-2e95855a2e91",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| summarize\n    SourceObjectsScanned = sumif(value, name == 'azcopy.source_objects_scanned'),\n    SourceBytesScanned = sumif(value, name == 'azcopy.source_bytes_scanned'),\n    ContainersScanned = sumif(value, name == 'azcopy.containers_scanned'),\n    ContainersTouched = sumif(value, name == 'azcopy.containers_touched'),\n    BucketsScanned = sumif(value, name == 'azcopy.buckets_scanned'),\n    BucketsTouched = sumif(value, name == 'azcopy.buckets_touched')\n| project\n    Metrics = pack_array('Source objects scanned', 'Source bytes scanned', 'Containers scanned', 'Containers touched', 'Buckets scanned', 'Buckets touched'),\n    Values = pack_array(SourceObjectsScanned, SourceBytesScanned, ContainersScanned, ContainersTouched, BucketsScanned, BucketsTouched)\n| mv-expand Metric = Metrics to typeof(string), Value = Values to typeof(real)\n| project Metric, Value",
+      "id": "c385439b-5bc7-5f11-29a1-5eb12c32ce04",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.source_average_object_size_bytes',\n    'azcopy.source_object_size_p50_bytes_approx',\n    'azcopy.source_object_size_p90_bytes_approx',\n    'azcopy.source_object_size_p95_bytes_approx')\n| summarize SampleSize = count(), Average = avg(value), P50 = percentile(value, 50), P95 = percentile(value, 95), Maximum = max(value) by Metric = name\n| project Metric, SampleSize, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "96e5c389-39d9-c759-81d0-017953121d81",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.source_objects_under_1_mib', 'azcopy.source_objects_under_1_mib_ratio_pct', 'azcopy.source_max_directory_depth')\n| summarize SampleSize = count(), Average = avg(value), P50 = percentile(value, 50), P95 = percentile(value, 95), Maximum = max(value) by Metric = name\n| project Metric, SampleSize, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "6abfba87-d044-a1c2-c067-06823731b1ed",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job_duration_seconds', 'azcopy.enumeration_phase_duration_seconds', 'azcopy.transfer_phase_duration_seconds')\n| summarize AverageSeconds = avg(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "cf535aa3-79da-de51-9ea5-7b35044f316a",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job_throughput_mbps', 'azcopy.transfer_phase_throughput_mbps')\n| summarize AverageMbps = avg(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "e4f1c307-f843-ee2f-75f6-712e3929bd58",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.average_storage_http_attempt_e2e_ms', 'azcopy.avg_iops')\n| summarize SampleSize = count(), Average = avg(value), P50 = percentile(value, 50), P95 = percentile(value, 95), Maximum = max(value) by Metric = name\n| project Metric, SampleSize, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "d31a7e77-622a-2ba3-3ad7-b98585eded31",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.PerformanceConstraint)\n| extend Value = iif(isempty(Value), 'none', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "7d52b58d-e27c-d843-a881-798183b7ce1c",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend AdviceCodes = split(tostring(customDimensions.PerformanceAdviceCodes), ',')\n| mv-expand Value = AdviceCodes to typeof(string)\n| extend Value = iif(isempty(Value), 'none', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "e27a062d-7734-c0e2-9826-79441284376d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OptConcurrency)\n| extend Value = iif(isempty(Value), 'not set', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "48e9f648-2ad0-8ed9-ddb5-704ae617e311",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OptBufferGB)\n| extend Value = iif(isempty(Value), 'not set', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "27ea65b0-1171-7a42-5423-7cf303d52775",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OptCapMbps)\n| extend Value = iif(isempty(Value), 'not set', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "c8b3d7c2-01ba-ce1b-231c-a0b65bccd0e7",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.storage_http_attempt_count', 'azcopy.network_error_attempt_count', 'azcopy.failure_error_other_count')\n| summarize Attempts = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "4c13f7ef-63ae-1d70-809f-572e83598251",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.server_busy_503_count',\n    'azcopy.server_busy_throughput_count',\n    'azcopy.server_busy_iops_count',\n    'azcopy.server_busy_other_count')\n| summarize Responses = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "da69ddd2-52fd-b7f6-c189-89b866e6c23b",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.server_busy_pct', 'azcopy.network_error_pct', 'azcopy.percent_complete')\n| summarize AveragePct = avg(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "745059c5-01fd-6bd0-8b48-302a8b5279cf",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend\n    Category = tostring(customDimensions.JobErrorCategory),\n    Code = tostring(customDimensions.JobErrorCode),\n    JobStatus = tostring(customDimensions.JobStatus),\n    TerminalStage = tostring(customDimensions.TerminalStage)\n| extend Error = strcat(iif(isempty(Category), 'none', Category), ' / ', iif(isempty(Code), 'none', Code))\n| summarize Attempts = count() by Error, JobStatus, TerminalStage\n| top 30 by Attempts desc",
+      "id": "05c360f9-b2ea-49f1-432f-19a74bb17e0d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion))\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "4b5627d8-7d11-d527-c0fa-6c991b9b4a32",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.SchemaVersion)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "147d3fd0-f0a1-0203-fe49-b3acc9ab119b",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OSType)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "fd2082b2-2bec-aa16-b97e-8332765163f4",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OSVersion)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "c216ca4b-210c-d0ee-1068-f666deaa88ef",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.HostArch)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "d2826a01-ea25-bde2-1e51-47592ac2afbc",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend NumericValue = toint(customDimensions.HostNumCPU)\n| extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', tostring(NumericValue))\n| summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))\n| order by SortValue asc\n| project Value, Attempts",
+      "id": "a92dfa5f-11fe-8825-d43e-11826ea8336b",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.HostCPUModel)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "cc7fcc11-dd26-0d91-ebe6-f003b06f561a",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend NumericValue = toint(customDimensions.HostMemoryTotalGB)\n| extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', strcat(tostring(NumericValue), ' GB'))\n| summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))\n| order by SortValue asc\n| project Value, Attempts",
+      "id": "115c8ee2-bf19-ed06-298c-516489bfe19e",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.HostNICSpeedBucket)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| extend SortValue = case(Value == 'unknown', 0, Value == '<1gbps', 1, Value == '1-<10gbps', 2, Value == '10-<40gbps', 3, Value == '>=40gbps', 4, 5)\n| summarize Attempts = count() by Value, SortValue\n| order by SortValue asc\n| project Value, Attempts",
+      "id": "f64128c8-bfed-c3d0-34f2-5384dc31ba82",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend NewValue = tostring(customDimensions.AzureVMDetected)\n| extend Value = case(\n    isnotempty(NewValue), NewValue,\n    tostring(customDimensions.HostVirtualization) == 'azure-vm' or tostring(customDimensions.NetworkRunContext) == 'azure-vm', 'true',\n    isnotempty(tostring(customDimensions.HostVirtualization)) or isnotempty(tostring(customDimensions.NetworkRunContext)), 'false',\n    'unknown')\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "b03f2b03-ce77-7b1e-48d1-0a6c9821ba9a",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(client_CountryOrRegion)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "d386747d-4d2f-c045-8d7a-8770ad0bd6fa",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.InvocationContext)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "4f9b7b89-3b07-7649-c99e-80b92a5dd4cd",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend\n    Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),\n    SchemaVersion = tostring(customDimensions.SchemaVersion),\n    OSType = tostring(customDimensions.OSType),\n    OSVersion = tostring(customDimensions.OSVersion),\n    Architecture = tostring(customDimensions.HostArch),\n    CPUCount = toint(customDimensions.HostNumCPU),\n    CPUModel = tostring(customDimensions.HostCPUModel),\n    MemoryGB = toint(customDimensions.HostMemoryTotalGB),\n    NICSpeedBucket = tostring(customDimensions.HostNICSpeedBucket),\n    AzureVMDetectedNew = tostring(customDimensions.AzureVMDetected),\n    CountryOrRegion = tostring(client_CountryOrRegion),\n    InvocationContext = tostring(customDimensions.InvocationContext)\n| extend AzureVMDetected = case(\n    isnotempty(AzureVMDetectedNew), AzureVMDetectedNew,\n    tostring(customDimensions.HostVirtualization) == 'azure-vm' or tostring(customDimensions.NetworkRunContext) == 'azure-vm', 'true',\n    isnotempty(tostring(customDimensions.HostVirtualization)) or isnotempty(tostring(customDimensions.NetworkRunContext)), 'false',\n    'unknown')\n| project-away AzureVMDetectedNew\n| summarize Attempts = count() by Version, SchemaVersion, OSType, OSVersion, Architecture, CPUCount, CPUModel, MemoryGB, NICSpeedBucket, AzureVMDetected, CountryOrRegion, InvocationContext\n| top 100 by Attempts desc",
+      "id": "c00b54b7-924c-67c8-5dfc-d76275b30925",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "e46cd2b3-e7c8-d8a0-01e6-e083a5318b9d"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| project\n    timestamp,\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    Command = tostring(customDimensions.Command),\n    SummaryCounterScope = tostring(coalesce(customDimensions.SummaryCounterScope, iif(tostring(customDimensions.MeasurementScope) == 'job-cumulative', 'job-cumulative', ''))),\n    JobStatus = tostring(customDimensions.JobStatus),\n    TerminalStage = tostring(customDimensions.TerminalStage),\n    PerformanceConstraint = tostring(customDimensions.PerformanceConstraint),\n    SourceProtocol = tostring(customDimensions.SourceProtocol),\n    SourceMountType = tostring(customDimensions.SourceMountType),\n    SourceScope = tostring(customDimensions.SourceScope),\n    SourceCloud = tostring(customDimensions.SourceCloudType),\n    SourceAuth = tostring(customDimensions.SourceAuthMechanism),\n    DestProtocol = tostring(customDimensions.DestProtocol),\n    DestScope = tostring(customDimensions.DestScope),\n    DestEndpointKind = tostring(customDimensions.DestEndpointKind),\n    DestCloud = tostring(customDimensions.DestCloudType),\n    DestAuth = tostring(customDimensions.DestAuthMechanism),\n    FailureErrorCodes = tostring(customDimensions.FailureErrorCodes),\n    PerformanceAdviceCodes = tostring(customDimensions.PerformanceAdviceCodes),\n    FlagsSet = tostring(customDimensions.OptFlagsSet),\n    EnvVarsSet = tostring(customDimensions.OptEnvVarsSet)\n| top 200 by timestamp desc",
+      "id": "1c6f0717-62fa-f4e5-359a-61c7caa21c3e",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    }
+  ]
+}

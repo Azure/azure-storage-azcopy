@@ -10,6 +10,10 @@ This dashboard displays the complete numeric telemetry inventory emitted by `tel
 4. Select `azcopy-telemetry-metrics.dashboard.json` from this directory.
 5. Name the dashboard `AzCopy Telemetry Metrics` and select **Create**.
 
+To query the provisioned E2E telemetry resource instead, import
+`azcopy-telemetry-metrics.telemetry-test.dashboard.json`. It has distinct
+dashboard and data-source IDs, so it can coexist with the default dashboard.
+
 The import contains 39 tiles across six pages. It uses an XStore dashboard data source to execute explicit cross-cluster queries against Application Insights. If the source needs reconnecting, use:
 
 ```text
@@ -38,6 +42,17 @@ Regenerate the deterministic schema-v60 import artifact:
 ./dashboards/azcopy-telemetry-metrics/generate-dashboard.ps1
 ```
 
+Generate the provisioned E2E telemetry variant:
+
+```powershell
+./dashboards/azcopy-telemetry-metrics/generate-dashboard.ps1 `
+  -OutputPath ./dashboards/azcopy-telemetry-metrics/azcopy-telemetry-metrics.telemetry-test.dashboard.json `
+  -AppInsightsSubscriptionId 31347be8-d066-464e-9866-7e58d85027b7 `
+  -AppInsightsResourceGroup azcopy-telemetry-test-rg `
+  -AppInsightsApp azcopy-telemetry-test-ai `
+  -DashboardVariant "Telemetry Test"
+```
+
 The generator validates ADX's minimum tile size, rejects overlapping tiles, and compares the queries with the metric names in `telemetry/events.go`. It fails when a newly emitted metric is not represented in the query set.
 
 Execute every source query against the live Application Insights component:
@@ -46,4 +61,7 @@ Execute every source query against the live Application Insights component:
 ./dashboards/azcopy-telemetry-metrics/validate-queries.ps1
 ```
 
-The default dashboard time range is 24 hours. The source data is the `customEvents` table in `sharankur_insights1`; each query expands the packed `customMeasurements` bag into a virtual metric name/value shape.
+The default dashboard time range is 24 hours. The default artifact reads the
+`customEvents` table in `sharankur_insights1`; the telemetry-test artifact reads
+it from `azcopy-telemetry-test-ai`. Each query expands the packed
+`customMeasurements` bag into a virtual metric name/value shape.
