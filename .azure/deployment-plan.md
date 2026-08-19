@@ -39,7 +39,7 @@ Status: Validated
   `azcopy-telemetry-test-law`.
 - Deploy one workspace-based Application Insights component:
   `azcopy-telemetry-test-ai`.
-- Apply a 90-day retention period and 1 GB/day ingestion cap for synthetic E2E
+- Apply a 90-day retention period and 0.1 GB/day ingestion cap for synthetic E2E
   telemetry.
 - Apply `service`, `environment`, `managedBy`, `Mover=Dev`, and `team` tags.
 - Grant the runtime workload identity

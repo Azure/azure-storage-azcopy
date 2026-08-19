@@ -27,9 +27,8 @@ param baseName string = 'azcopy-telemetry'
 @maxValue(730)
 param retentionInDays int = 730
 
-@description('Daily ingestion cap in GB. Bounds cost and protects against runaway/bogus ingestion.')
-@minValue(1)
-param dailyQuotaGb int = 10
+@description('Daily ingestion cap in GB. Decimal values are passed as strings because Bicep has no floating-point type.')
+param dailyQuotaGb string = '10'
 
 @description('Optional object ID of the E2E workload identity. When provided, grants only the read/query roles required by telemetry validation.')
 param e2eQueryPrincipalId string = ''
@@ -57,7 +56,7 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
     }
     retentionInDays: retentionInDays
     workspaceCapping: {
-      dailyQuotaGb: dailyQuotaGb
+      dailyQuotaGb: json(dailyQuotaGb)
     }
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true

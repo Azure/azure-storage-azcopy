@@ -7,4 +7,4 @@ using './main.bicep'
 param environmentName = 'prod'
 param location = 'eastus'
 param retentionInDays = 730
-param dailyQuotaGb = 10
+param dailyQuotaGb = '10'
