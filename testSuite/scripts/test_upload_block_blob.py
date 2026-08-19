@@ -206,8 +206,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "20")
-        self.assertEquals(x.TransfersCompleted, "0")
+        self.assertEqual(x.TransfersSkipped, "20")
+        self.assertEqual(x.TransfersCompleted, "0")
 
         # uploading a sub-directory inside the above dir with 20 files inside the sub-directory.
         # total number of file inside the dir is 40
@@ -243,8 +243,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in json format')
-        self.assertEquals(x.TransfersCompleted, "20")
-        self.assertEquals(x.TransfersSkipped, "20")
+        self.assertEqual(x.TransfersCompleted, "20")
+        self.assertEqual(x.TransfersSkipped, "20")
 
 
     def test_force_flag_set_to_false_download(self):
@@ -287,10 +287,10 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         try:
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
-            self.fail('erorr parsing the output in Json Format')
+            self.fail('error parsing the output in Json Format')
         # Since all files exists locally and overwrite flag is set to false, all 20 transfers will be skipped
-        self.assertEquals(x.TransfersSkipped, "20")
-        self.assertEquals(x.TransfersCompleted, "0")
+        self.assertEqual(x.TransfersSkipped, "20")
+        self.assertEqual(x.TransfersCompleted, "0")
 
         # removing 5 files with suffix from 10 to 14
         for index in range(10, 15):
@@ -311,8 +311,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "15")
-        self.assertEquals(x.TransfersCompleted, "5")
+        self.assertEqual(x.TransfersSkipped, "15")
+        self.assertEqual(x.TransfersCompleted, "5")
 
     def test_overwrite_flag_set_to_if_source_new_upload(self):
         # creating directory with 20 files in it.
@@ -337,8 +337,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "20")
-        self.assertEquals(x.TransfersCompleted, "0")
+        self.assertEqual(x.TransfersSkipped, "20")
+        self.assertEqual(x.TransfersCompleted, "0")
 
         time.sleep(10)
         # refresh the lmts of the source files so that they appear newer
@@ -358,8 +358,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "0")
-        self.assertEquals(x.TransfersCompleted, "20")
+        self.assertEqual(x.TransfersSkipped, "0")
+        self.assertEqual(x.TransfersCompleted, "20")
 
     def test_overwrite_flag_set_to_if_source_new_download(self):
         # creating directory with 20 files in it.
@@ -389,8 +389,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "0")
-        self.assertEquals(x.TransfersCompleted, "20")
+        self.assertEqual(x.TransfersSkipped, "0")
+        self.assertEqual(x.TransfersCompleted, "20")
 
         # case 2: local files are newer
         # download the directory again with force flag set to ifSourceNewer.
@@ -406,8 +406,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "20")
-        self.assertEquals(x.TransfersCompleted, "0")
+        self.assertEqual(x.TransfersSkipped, "20")
+        self.assertEqual(x.TransfersCompleted, "0")
 
         # re-uploading the directory with 20 files in it, to refresh the lmts of the source
         time.sleep(2)
@@ -427,8 +427,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, "0")
-        self.assertEquals(x.TransfersCompleted, "20")
+        self.assertEqual(x.TransfersSkipped, "0")
+        self.assertEqual(x.TransfersCompleted, "20")
 
     # test_upload_block_blob_include_flag tests the include flag in the upload scenario
     def test_upload_block_blob_include_flag(self):
@@ -454,8 +454,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing output in Json format')
         # Number of successful transfer should be 4 and there should be not a failed transfer
-        self.assertEquals(x.TransfersCompleted, "4")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "4")
+        self.assertEqual(x.TransfersFailed, "0")
 
         # uploading the directory with sub-dir in the include flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
@@ -470,8 +470,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
         # Number of successful transfer should be 10 and there should be not failed transfer
-        self.assertEquals(x.TransfersCompleted, "10")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "10")
+        self.assertEqual(x.TransfersFailed, "0")
 
     # test_upload_block_blob_exclude_flag tests the exclude flag in the upload scenario
     def test_upload_block_blob_exclude_flag(self):
@@ -499,8 +499,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # Number of successful transfer should be 16 and there should be not failed transfer
         # Since total number of files inside dir_exclude_flag_set_upload is 20 and 4 files are set
         # to exclude, so total number of transfer should be 16
-        self.assertEquals(x.TransfersCompleted, "16")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "16")
+        self.assertEqual(x.TransfersFailed, "0")
 
         # uploading the directory with sub-dir in the exclude flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
@@ -518,8 +518,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # Number of successful transfer should be 10 and there should be not failed transfer
         # Since the total number of files in dir_exclude_flag_set_upload is 20 and sub_dir_exclude_flag_set_upload
         # sub-dir is set to exclude, total number of transfer will be 10
-        self.assertEquals(x.TransfersCompleted, "10")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "10")
+        self.assertEqual(x.TransfersFailed, "0")
 
     def test_download_blob_include_flag(self):
         # create dir and 10 files of size 1024 inside it
@@ -555,8 +555,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersCompleted, "6")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "6")
+        self.assertEqual(x.TransfersFailed, "0")
 
         # download from container with sub-dir in include flags
         # TODO: Make this use include-path in the DL refactor
@@ -572,8 +572,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersCompleted, "10")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "10")
+        self.assertEqual(x.TransfersFailed, "0")
 
     def test_download_blob_exclude_flag(self):
         # create dir and 10 files of size 1024 inside it
@@ -610,8 +610,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in JSON Format')
         # Number of expected successful transfer should be 18 since two files in directory are set to exclude
-        self.assertEquals(x.TransfersCompleted, "14")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "14")
+        self.assertEqual(x.TransfersFailed, "0")
 
         # download from container with sub-dir in exclude flags
         destination_sas = util.get_resource_sas(dir_name)
@@ -629,8 +629,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             self.fail('error parsing the output in Json Format')
 
         # Number of Expected Transfer should be 10 since sub-dir is to exclude which has 10 files in it.
-        self.assertEquals(x.TransfersCompleted, "10")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "10")
+        self.assertEqual(x.TransfersFailed, "0")
 
     def test_0KB_blob_upload(self):
         # Creating a single File Of size 0 KB
@@ -673,8 +673,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersCompleted, "10")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "10")
+        self.assertEqual(x.TransfersFailed, "0")
 
     def test_upload_download_file_non_ascii_characters(self):
         file_name = u"Espa\u00F1a"
@@ -690,8 +690,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
 
-        self.assertEquals(x.TransfersCompleted, "1")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "1")
+        self.assertEqual(x.TransfersFailed, "0")
 
         #download the file
         dir_path = os.path.join(util.test_directory_path, "non-ascii-dir")
@@ -710,8 +710,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersCompleted, "1")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "1")
+        self.assertEqual(x.TransfersFailed, "0")
 
     def test_long_file_path_upload_with_nested_directories(self):
         dir_name = "dir_lfpupwnds"
@@ -732,8 +732,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
 
-        self.assertEquals(x.TransfersCompleted, "310")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "310")
+        self.assertEqual(x.TransfersFailed, "0")
 
     def test_follow_symlinks_upload(self):
         link_name = "dir_link"
@@ -760,5 +760,5 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in JSON format')
 
-        self.assertEquals(x.TransfersCompleted, "10")
-        self.assertEquals(x.TransfersFailed, "0")
+        self.assertEqual(x.TransfersCompleted, "10")
+        self.assertEqual(x.TransfersFailed, "0")
