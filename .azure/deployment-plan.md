@@ -60,6 +60,10 @@ Status: Validated
 - Add `telemetry-infrastructure-pipeline.yml` with no CI or PR trigger.
 - The infrastructure pipeline performs compile, ARM validation, what-if,
   explicit manual approval, deployment, and a Log Analytics query smoke test.
+- Each E2E matrix leg runs an ingestion canary after building AzCopy and before
+  starting the long test suite. The canary invokes `azcopy jobs list` with a
+  unique correlation ID and polls for its `azcopy.command.invoked` event, so
+  resource, RBAC, emission, and ingestion failures surface before the tests.
 - Use a dedicated Azure DevOps workload-identity service connection named
   `azcopytelemetrydeploymentidentity`.
 - Scope the deployment identity to the telemetry test resource group with:
@@ -113,6 +117,10 @@ Status: Validated
 - Validate the changed Azure Pipelines YAML.
 - Trigger the main E2E pipeline and verify ARM discovery, telemetry ingestion,
   and terminal-event validation.
+- Terminal-event validation tracks only commands that use job-attempt telemetry
+  (`copy`, `sync`, and `jobs resume`). Commands such as `remove` emit
+  `azcopy.command.invoked` and must not be treated as missing
+  `azcopy.job.finished` events.
 - If legacy S2S tests fail with SAS signature errors, regenerate
   `S2S_SRC_BLOB_ACCOUNT_SAS_URL` and `S2S_SRC_FILE_ACCOUNT_SAS_URL`.
 

@@ -152,6 +152,14 @@ jobs:
               go build -cover -o "$(build_name)"
             }
 
+            $azCopyExecutablePath = Join-Path $env:SYSTEM_DEFAULTWORKINGDIRECTORY "$(build_name)"
+            $telemetryCanaryScript = Join-Path $env:SYSTEM_DEFAULTWORKINGDIRECTORY "azurePipelineTemplates/verify-telemetry-ingestion.ps1"
+            & $telemetryCanaryScript `
+              -AzCopyExecutablePath $azCopyExecutablePath `
+              -ConnectionString $env:AZCOPY_TELEMETRY_CONNECTION_STRING `
+              -WorkspaceId $env:NEW_E2E_APP_INSIGHTS_WORKSPACE_ID `
+              -RunId $env:AZCOPY_E2E_TELEMETRY_RUN_ID
+
             # Az PS login
             Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
             $null = Get-AzAccessToken -AsSecureString
