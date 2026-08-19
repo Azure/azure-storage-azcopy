@@ -373,7 +373,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
+	if cca.fromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
@@ -392,7 +392,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
+	if cca.fromTo.To().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
