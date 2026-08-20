@@ -1,3 +1,4 @@
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -470,7 +471,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := (fromTo.To().IsFile()) ||
+	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
 		fromTo == common.EFromTo.FileTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
@@ -988,7 +989,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From().IsFile() || cca.FromTo.To().IsFile()) && enum.EEnvironmentVariable.ConcurrencyValue().Get() == "" {
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && enum.EEnvironmentVariable.ConcurrencyValue().Get() == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1717,7 +1718,7 @@ func init() {
 
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "",
 		"Set the cache-control header. Returned on download.")
-
+    
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
 		"Specify this flag if you want to preserve properties during the transfer operation."+
 			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag"+
@@ -1918,8 +1919,8 @@ func init() {
 		cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 
 		if !displayDeveloperOptions {
-			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-
+	        _ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+        
 			// Hide the old SMB-specific flags
 			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
