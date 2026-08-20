@@ -201,6 +201,8 @@ func (t *testJobPartTransferManager) SetErrorCode(errorCode int32) {
 	panic("implement me")
 }
 
+func (t *testJobPartTransferManager) SetErrorMessage(errorMessage string) {}
+
 func (t *testJobPartTransferManager) SetNumberOfChunks(numChunks uint32) {
 	panic("implement me")
 }
