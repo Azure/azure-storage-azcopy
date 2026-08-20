@@ -240,6 +240,10 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 		return opts, err
 	}
 
+	if err = opts.PosixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+		return opts, err
+	}
+
 	err = opts.BlobType.Parse(raw.blobType)
 	if err != nil {
 		return opts, err
