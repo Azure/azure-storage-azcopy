@@ -1,4 +1,4 @@
-package ste
+package common
 
 import (
 	"context"
@@ -6,32 +6,12 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
-
-// ResourceStats is the storage-service-agnostic view of a throttled resource's
-// limits and cumulative throttle counters. This mirrors common.ResourceStats
-// from the throttle branch (common/dualResourceController.go). When that branch
-// merges, this type should be replaced with common.ResourceStats.
-type ResourceStats struct {
-	IopsLimit                 int64 // ops/sec; 0 = unlimited
-	BandwidthLimitBytesPerSec int64 // bytes/sec; 0 = unlimited
-	IopsThrottleCount         int64 // cumulative IOPS throttle counter
-	BandwidthThrottleCount    int64 // cumulative bandwidth throttle counter
-}
-
-// ResourceStatsSource abstracts the authoritative, poll-based limits/throttle
-// signal. This mirrors common.ResourceStatsSource from the throttle branch.
-// The shareController poll loop calls PollStats() every 30s.
-type ResourceStatsSource interface {
-	PollStats() (ResourceStats, error)
-}
 
 // azfileShareStatsSource implements ResourceStatsSource by polling the Azure
 // Files GetShareStats API with x-ms-file-return-throttling-stats: true. It
 // maps the XML ShareThrottlingStats response onto ResourceStats for consumption
-// by the DualResourceController.
+// by the RateLimitController.
 //
 // Lifecycle: one instance per share key. Created by the factory registered via
 // RegisterResourceStatsSourceFactory (in shareController.go on the throttle
@@ -47,7 +27,7 @@ type azfileShareStatsSource struct {
 // NewAzfileShareStatsSource creates a ResourceStatsSource for the given share.
 // shareURL must include any SAS token required for auth. httpClient should be
 // the global AzCopy HTTP client.
-func NewAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger common.ILogger) ResourceStatsSource {
+func NewAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger ILogger) ResourceStatsSource {
 	return &azfileShareStatsSource{
 		provider: NewShareStatsProvider(shareURL, httpClient, logger),
 	}
@@ -97,8 +77,9 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 		throttlingAvailable:       true,
 	}
 
-	if (s.prevSample == nil) {
-		// First call: store baseline and return limits with zero throttle counters.
+	if s.prevSample == nil {
+		// First poll only establishes the baseline; the controller's own `primed`
+		// flag discards this interval's delta.
 		s.prevSample = sample
 
 		return ResourceStats{
@@ -107,48 +88,45 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 			IopsThrottleCount:         ts.IopsThrottledRequestCount,
 			BandwidthThrottleCount:    ts.EgressThrottledBytes,
 		}, nil
-	} else {
-		// Detect counter reset: if StartTime changed, the aggregator restarted
-		// and all cumulative counters were zeroed. Reset our baseline so the
-		// controller sees a zero delta for this interval instead of a huge negative.
-		if !s.prevSample.startTime.Equal(sample.startTime) {
-			s.prevSample = sample
-			return ResourceStats{
-				IopsLimit:                 ts.IopsLimit,
-				BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
-				IopsThrottleCount:         0, // reset baseline
-				BandwidthThrottleCount:    0,
-			}, nil
-		}
+	}
 
-		prevEndTime := s.prevSample.endTime
-		curEndTime := sample.endTime
-		timeDelta := curEndTime.Sub(prevEndTime).Seconds()		
-		if (timeDelta > 20 && timeDelta < 60) {
-			fmt.Sprintf("GetShareStats poll interval: %.1f seconds", timeDelta)			
-		}
-		currentIopsThrottleCount := sample.iopsThrottledRequestCount - s.prevSample.iopsThrottledRequestCount
-		currentBandwidthThrottleCount := sample.egressThrottledBytes - s.prevSample.egressThrottledBytes
+	// A changed StartTime means the service-side aggregator restarted and zeroed
+	// its counters, so rebaseline rather than reporting a huge negative delta.
+	if !s.prevSample.startTime.Equal(sample.startTime) {
 		s.prevSample = sample
 		return ResourceStats{
 			IopsLimit:                 ts.IopsLimit,
 			BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
-			IopsThrottleCount:         currentIopsThrottleCount,
-			BandwidthThrottleCount:    currentBandwidthThrottleCount,
-		}, nil	
-	}	
+			IopsThrottleCount:         0,
+			BandwidthThrottleCount:    0,
+		}, nil
+	}
+
+	samplingPeriodInSecs := sample.endTime.Sub(s.prevSample.endTime).Seconds()
+
+	if l := s.provider.logger; l != nil && l.ShouldLog(LogDebug) {
+		if (samplingPeriodInSecs <= 10 || samplingPeriodInSecs >= 50)  {
+			l.Log(LogError, fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs))
+		}
+		l.Log(LogDebug, fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs))
+	}
+	s.prevSample = sample
+
+	// Counters stay cumulative here; RateLimitController.Refresh computes the deltas.
+	return ResourceStats{
+		IopsLimit:                 ts.IopsLimit,
+		BandwidthLimitBytesPerSec: ts.BandwidthLimitMiBps * 1024 * 1024,
+		IopsThrottleCount:         ts.IopsThrottledRequestCount,
+		BandwidthThrottleCount:    ts.EgressThrottledBytes,
+	}, nil
 }
 
 // ShareStatsSourceFactory returns a factory function suitable for registration
-// via common.RegisterResourceStatsSourceFactory. It constructs an
+// via RegisterResourceStatsSourceFactory. It constructs an
 // azfileShareStatsSource per share key using the provided HTTP client and logger.
 //
-// Integration (in ste/dualShareController.go init, once the throttle branch merges):
-//
-//	common.RegisterResourceStatsSourceFactory(
-//	    ShareStatsSourceFactory(common.GlobalHTTPClient, logger),
-//	)
-func ShareStatsSourceFactory(httpClient *http.Client, logger common.ILogger) func(shareKey string) ResourceStatsSource {
+// Registered from jobsAdmin.MainSTE when Azure Files proactive stats are enabled.
+func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey string) ResourceStatsSource {
 	return func(shareKey string) ResourceStatsSource {
 		// shareKey is "account.file.core.windows.net/sharename" (no scheme).
 		// Reconstruct a full HTTPS URL for the raw HTTP call.

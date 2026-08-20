@@ -73,7 +73,7 @@ func (r *recordingSink) rates() (bw, iops int64) {
 	return r.bw, r.iops
 }
 
-var _ DualRateSink = (*recordingSink)(nil)
+var _ RateLimitSink = (*recordingSink)(nil)
 
 // fakeStatsSource is a controllable ResourceStatsSource for deterministic tests.
 type fakeStatsSource struct{ stats ResourceStats }
@@ -91,7 +91,7 @@ func TestDualResource_ProactiveEqualShareBothDimensions(t *testing.T) {
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
 	sink := &recordingSink{}
 
-	d := newDualResourceControllerWithClock(sink, src, clk, numofWorkers, DefaultDualResourceConfig(), true) // 1 active worker
+	d := newRateLimitControllerWithClock(sink, src, clk, numofWorkers, DefaultRateLimitConfig(), true) // 1 active worker
 	t.Logf("setup: workers=%d iopsLimit=%d bwLimit=%d", numofWorkers, src.stats.IopsLimit, src.stats.BandwidthLimitBytesPerSec)
 
 	if _, err := d.Refresh(); err != nil {
@@ -123,7 +123,7 @@ func TestDualResource_UpdateIopsBwLimits(t *testing.T) {
 	bwLimit := int64(100 * 1024 * 1024)
 	clk := newManualTestClock(time.Unix(0, 0))
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, DefaultDualResourceConfig(), true)
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, DefaultRateLimitConfig(), true)
 
 	// Prime the baseline (no delta yet).
 	if _, err := d.Refresh(); err != nil {
@@ -178,8 +178,8 @@ func TestDualResource_ResponseSignalTriggersReactive(t *testing.T) {
 	bwLimit := int64(100 * 1024 * 1024)
 	clk := newManualTestClock(time.Unix(0, 0))
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
-	cfg := DefaultDualResourceConfig()
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+	cfg := DefaultRateLimitConfig()
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
 
 	// Prime proactive baseline; no throttles yet.
 	if _, err := d.Refresh(); err != nil {
@@ -222,8 +222,8 @@ func TestDualResource_ResponseSignalTriggersReactiveBandwidth(t *testing.T) {
 	bwLimit := int64(100 * 1024 * 1024)
 	clk := newManualTestClock(time.Unix(0, 0))
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
-	cfg := DefaultDualResourceConfig()
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+	cfg := DefaultRateLimitConfig()
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
 
 	// Prime proactive baseline; no throttles yet.
 	if _, err := d.Refresh(); err != nil {
@@ -262,8 +262,8 @@ func TestDualResource_ResponseRetryAfterOverridesBackoff(t *testing.T) {
 	numofWorkers := 1
 	clk := newManualTestClock(time.Unix(0, 0))
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: 1000, BandwidthLimitBytesPerSec: 100 * 1024 * 1024}}
-	cfg := DefaultDualResourceConfig()
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+	cfg := DefaultRateLimitConfig()
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
 	if _, err := d.Refresh(); err != nil {
 		t.Fatalf("prime: %v", err)
 	}
@@ -285,8 +285,8 @@ func TestDualResource_ReturnToProactiveRequiresBothQuiet(t *testing.T) {
 	clk := newManualTestClock(time.Unix(0, 0))
 	numofWorkers := 1
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: 1000, BandwidthLimitBytesPerSec: 100 * 1024 * 1024}}
-	cfg := DefaultDualResourceConfig()
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+	cfg := DefaultRateLimitConfig()
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
 	if _, err := d.Refresh(); err != nil {
 		t.Fatalf("prime: %v", err)
 	}
@@ -336,8 +336,8 @@ func TestDualResource_BlobIgnoresStatsSignal(t *testing.T) {
 	clk := newManualTestClock(time.Unix(0, 0))
 	// Blob is bandwidth-only: IopsLimit 0 (unlimited), bandwidth from job rate.
 	src := &fakeStatsSource{stats: ResourceStats{BandwidthLimitBytesPerSec: 100 * 1024 * 1024}}
-	cfg := DefaultDualResourceConfig()
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, false) // no poll-based stats signal
+	cfg := DefaultRateLimitConfig()
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, false) // no poll-based stats signal
 
 	if _, err := d.Refresh(); err != nil {
 		t.Fatalf("prime: %v", err)
@@ -382,7 +382,7 @@ func TestDualResource_MultiWorker(t *testing.T) {
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
 	sink := &recordingSink{}
 
-	d := newDualResourceControllerWithClock(sink, src, clk, numofWorkers, DefaultDualResourceConfig(), true) // 1 active worker
+	d := newRateLimitControllerWithClock(sink, src, clk, numofWorkers, DefaultRateLimitConfig(), true) // 1 active worker
 	t.Logf("setup: workers=%d iopsLimit=%d bwLimit=%d", numofWorkers, src.stats.IopsLimit, src.stats.BandwidthLimitBytesPerSec)
 
 	if _, err := d.Refresh(); err != nil {
@@ -443,7 +443,7 @@ func TestDualResource_ReactiveMultiplicativeDecrease(t *testing.T) {
 	numofWorkers := 1
 	clk := newManualTestClock(time.Unix(0, 0))
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, DefaultDualResourceConfig(), true)
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, DefaultRateLimitConfig(), true)
 
 	// Prime the baseline; the first poll never counts as a throttle.
 	if _, err := d.Refresh(); err != nil {
@@ -486,8 +486,8 @@ func TestDualResource_ReactiveAdditiveIncrease(t *testing.T) {
 
 	clk := newManualTestClock(time.Unix(0, 0))
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
-	cfg := DefaultDualResourceConfig()
-	d := newDualResourceControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+	cfg := DefaultRateLimitConfig()
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
 
 	if _, err := d.Refresh(); err != nil {
 		t.Fatalf("prime: %v", err)

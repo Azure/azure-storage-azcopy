@@ -35,7 +35,7 @@ func isAzureFilesThrottleResponse(statusCode int) bool {
 }
 
 // classifyAzureFilesThrottle maps an Azure Files HTTP status + error body onto
-// the storage-service-agnostic common.ThrottleKind the DualResourceController
+// the storage-service-agnostic common.ThrottleKind the RateLimitController
 // consumes. It reuses the AzCopy xferStatsPolicy convention:
 //
 //	"Operations per second is over the account limit" -> IOPS

@@ -1,4 +1,4 @@
-package ste
+package common
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // ShareStatsProvider fetches throttling statistics from the Azure Files GetShareStats API.
@@ -24,12 +22,12 @@ type ShareStatsProvider struct {
 	httpClient *http.Client
 
 	// logger for diagnostics.
-	logger common.ILogger
+	logger ILogger
 }
 
 // NewShareStatsProvider creates a provider that can fetch throttling stats for the given share.
 // shareURL should be the full share URL as returned by share.Client.URL() (includes SAS if present).
-func NewShareStatsProvider(shareURL string, httpClient *http.Client, logger common.ILogger) *ShareStatsProvider {
+func NewShareStatsProvider(shareURL string, httpClient *http.Client, logger ILogger) *ShareStatsProvider {
 	return &ShareStatsProvider{
 		shareURL:   shareURL,
 		httpClient: httpClient,
@@ -51,7 +49,7 @@ func (p *ShareStatsProvider) FetchStats(ctx context.Context) (*ShareStatsRespons
 
 	// Required headers
 	req.Header.Set("x-ms-file-return-throttling-stats", "true")
-	req.Header.Set("x-ms-version", DefaultServiceApiVersion)
+	req.Header.Set("x-ms-version", GetEnvironmentVariable(EEnvironmentVariable.DefaultServiceApiVersion()))
 	req.Header.Set("x-ms-date", time.Now().UTC().Format(http.TimeFormat))
 
 	resp, err := p.httpClient.Do(req)

@@ -1,4 +1,4 @@
-package ste
+package common
 
 import (
 	"encoding/xml"
@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,9 +16,9 @@ import (
 // testLogger is a minimal ILogger for testing.
 type sourceTestLogger struct{}
 
-func (sourceTestLogger) ShouldLog(_ common.LogLevel) bool { return false }
-func (sourceTestLogger) Log(_ common.LogLevel, _ string)  {}
-func (sourceTestLogger) Panic(err error)                   { panic(err) }
+func (sourceTestLogger) ShouldLog(_ LogLevel) bool { return false }
+func (sourceTestLogger) Log(_ LogLevel, _ string)  {}
+func (sourceTestLogger) Panic(err error)           { panic(err) }
 
 // ============================================================================
 // XML parsing

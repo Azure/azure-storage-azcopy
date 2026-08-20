@@ -1,4 +1,4 @@
-package ste
+package common
 
 import (
 	"encoding/xml"
@@ -68,6 +68,7 @@ type ShareStatsSnapshot struct {
 type shareStatsSample struct {
 	timestamp                 time.Time
 	startTime                 time.Time // From ShareThrottlingStats.StartTime; used to detect counter resets.
+	endTime                   time.Time // From ShareThrottlingStats.EndTime; used to measure the poll interval.
 	totalEgressBytes          int64
 	egressThrottledBytes      int64
 	iopsThrottledRequestCount int64

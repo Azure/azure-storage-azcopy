@@ -27,22 +27,13 @@ import (
 )
 
 // init injects the concrete per-share pacer constructor into common, so the
-// per-share registry (which lives in common alongside the DualResourceController)
+// per-share registry (which lives in common alongside the RateLimitController)
 // can build real dual token-bucket pacers without common ever importing ste.
 // The pacer starts fully unlimited (0,0); the controller drives it thereafter.
 func init() {
 	common.RegisterSharePacerFactory(func() common.SharePacer {
-		return NewDualTokenBucketPacer(0, 0)
+		return NewRateLimitTokenBucketPacer(0, 0)
 	})
-
-	// ADD THIS: Register the azFileShareStatsSource factory
-    // This enables GetShareStats polling for every Files share
-    common.RegisterResourceStatsSourceFactory(
-        ShareStatsSourceFactory(
-            common.GetGlobalHTTPClient(nil),
-            common.NewLogger(logSeverity.Info), // or pass existing logger
-        ),
-    )
 }
 
 // shareScopedPacer routes pacing for a single Azure Files destination share.

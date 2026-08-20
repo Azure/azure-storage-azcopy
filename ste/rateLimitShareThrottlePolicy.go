@@ -29,7 +29,7 @@ import (
 )
 
 // azureFilesThrottlePolicy is a per-retry pipeline policy that feeds every
-// Azure Files HTTP outcome into that share's DualResourceController fast path
+// Azure Files HTTP outcome into that share's RateLimitController fast path
 // (HandleResponse). This is the real-time reactive signal that lets a share's
 // bandwidth/IOPS targets drop before the next ~30s GetShareStats poll.
 //

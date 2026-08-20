@@ -30,7 +30,7 @@ import (
 func TestShareScopedPacer_ChargesBothBandwidthAndIops(t *testing.T) {
 	global := NewTokenBucketPacer(1024*1024, 0)
 	defer func() { _ = global.Close() }()
-	sharePacer := NewDualTokenBucketPacer(0, 0) // unlimited per-share dims
+	sharePacer := NewRateLimitTokenBucketPacer(0, 0) // unlimited per-share dims
 	defer func() { _ = sharePacer.Close() }()
 
 	scoped := newShareScopedPacer(global, sharePacer).(*shareScopedPacer)
@@ -52,7 +52,7 @@ func TestShareScopedPacer_ChargesBothBandwidthAndIops(t *testing.T) {
 func TestShareScopedPacer_EnforcesGlobalCap(t *testing.T) {
 	global := NewTokenBucketPacer(1000, 0) // tiny cap
 	defer func() { _ = global.Close() }()
-	sharePacer := NewDualTokenBucketPacer(0, 0)
+	sharePacer := NewRateLimitTokenBucketPacer(0, 0)
 	defer func() { _ = sharePacer.Close() }()
 
 	scoped := newShareScopedPacer(global, sharePacer).(*shareScopedPacer)

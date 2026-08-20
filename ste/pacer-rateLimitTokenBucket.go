@@ -26,7 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// dualTokenBucketPacer meters two independent dimensions:
+// rateLimitTokenBucketPacer meters two independent dimensions:
 //   - bandwidth (bytes/s) via the embedded tokenBucketPacer (unchanged behavior)
 //   - IOPS      (ops/s)   via a second tokenBucketPacer reused as an op counter
 //
@@ -34,16 +34,16 @@ import (
 // (so the same instance can be handed to enumeration traversers as their
 // ScanPacer). All legacy pacer/PacerAdmin methods are inherited from the embedded
 // bandwidth bucket.
-type dualTokenBucketPacer struct {
+type rateLimitTokenBucketPacer struct {
 	*tokenBucketPacer                   // bandwidth dimension (also provides GetTotalTraffic, UndoRequest, ...)
 	iopsBucket        *tokenBucketPacer // IOPS dimension (rate = ops/s; the "bytes" arg is treated as ops)
 }
 
-// NewDualTokenBucketPacer builds a pacer that caps both bandwidth and IOPS.
+// NewRateLimitTokenBucketPacer builds a pacer that caps both bandwidth and IOPS.
 // opsPerSecond == 0 makes the IOPS dimension unlimited (a plain bandwidth cap),
 // which is how a job that has not opted into IOPS pacing behaves.
-func NewDualTokenBucketPacer(bytesPerSecond, opsPerSecond int64) *dualTokenBucketPacer {
-	return &dualTokenBucketPacer{
+func NewRateLimitTokenBucketPacer(bytesPerSecond, opsPerSecond int64) *rateLimitTokenBucketPacer {
+	return &rateLimitTokenBucketPacer{
 		tokenBucketPacer: NewTokenBucketPacer(bytesPerSecond, 0),
 		iopsBucket:       NewTokenBucketPacer(opsPerSecond, 0),
 	}
@@ -52,7 +52,7 @@ func NewDualTokenBucketPacer(bytesPerSecond, opsPerSecond int64) *dualTokenBucke
 // AcquireIO reserves IOPS first (cheap, small counts), then bandwidth. If the
 // bandwidth reservation cannot be met it rolls back the IOP reservation so the
 // two dimensions stay consistent (reserve both or reserve none).
-func (d *dualTokenBucketPacer) AcquireIO(ctx context.Context, bytes, ops int64) error {
+func (d *rateLimitTokenBucketPacer) AcquireIO(ctx context.Context, bytes, ops int64) error {
 	if ops > 0 {
 		if err := d.iopsBucket.RequestTrafficAllocation(ctx, ops); err != nil {
 			return err
@@ -71,18 +71,18 @@ func (d *dualTokenBucketPacer) AcquireIO(ctx context.Context, bytes, ops int64) 
 
 // UpdateTargetIOPS adjusts the IOPS rate independently of bandwidth (used by the
 // Azure Files reactive AIMD / proactive equal-share controller).
-func (d *dualTokenBucketPacer) UpdateTargetIOPS(opsPerSecond int64) {
+func (d *rateLimitTokenBucketPacer) UpdateTargetIOPS(opsPerSecond int64) {
 	d.iopsBucket.UpdateTargetBytesPerSecond(opsPerSecond)
 }
 
-func (d *dualTokenBucketPacer) Close() error {
+func (d *rateLimitTokenBucketPacer) Close() error {
 	_ = d.iopsBucket.Close()
 	return d.tokenBucketPacer.Close()
 }
 
 var (
-	_ ioPacer           = (*dualTokenBucketPacer)(nil)
-	_ PacerAdmin        = (*dualTokenBucketPacer)(nil)
-	_ common.IOPSPacer  = (*dualTokenBucketPacer)(nil)
-	_ common.DualRateSink = (*dualTokenBucketPacer)(nil) // the dual-mode controller drives this pacer's IOPS + bandwidth targets
+	_ ioPacer           = (*rateLimitTokenBucketPacer)(nil)
+	_ PacerAdmin        = (*rateLimitTokenBucketPacer)(nil)
+	_ common.IOPSPacer  = (*rateLimitTokenBucketPacer)(nil)
+	_ common.RateLimitSink = (*rateLimitTokenBucketPacer)(nil) // the dual-mode controller drives this pacer's IOPS + bandwidth targets
 )

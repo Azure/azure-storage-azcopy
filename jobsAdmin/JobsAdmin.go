@@ -123,7 +123,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	// Use a dual-dimension pacer so the AzureFiles -> AzureFiles data plane can
 	// meter IOPS alongside bandwidth. A zero IOPS rate leaves the IOPS dimension
 	// unlimited, so every non-Files job behaves exactly as before (bandwidth-only).
-	pacer := ste.NewDualTokenBucketPacer(targetRateInBytesPerSec, 0 /* unlimited IOPS by default */)
+	pacer := ste.NewRateLimitTokenBucketPacer(targetRateInBytesPerSec, 0 /* unlimited IOPS by default */)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	ja := &jobsAdmin{

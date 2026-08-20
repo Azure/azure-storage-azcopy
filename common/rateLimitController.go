@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-// Control-mode names reported by DualResourceController.Mode() for observability.
+// Control-mode names reported by RateLimitController.Mode() for observability.
 const (
 	ModeProactive = "proactive"
 	ModeReactive  = "reactive"
@@ -76,18 +76,18 @@ const (
 	ThrottleUnknown
 )
 
-// DualRateSink receives the IOPS and bandwidth targets the controller computes.
-// The ste dualTokenBucketPacer implements it (UpdateTargetBytesPerSecond +
+// RateLimitSink receives the IOPS and bandwidth targets the controller computes.
+// The ste rateLimitTokenBucketPacer implements it (UpdateTargetBytesPerSecond +
 // UpdateTargetIOPS), so the controller drives enforcement without importing ste
 // or owning any token buckets itself. A value of 0 on either dimension means
 // "unlimited" for that dimension, matching the pacer's null-pacer semantics.
-type DualRateSink interface {
+type RateLimitSink interface {
 	UpdateTargetBytesPerSecond(bytesPerSecond int64)
 	UpdateTargetIOPS(opsPerSecond int64)
 }
 
-// DualResourceConfig tunes the dual-bucket (IOPS + bandwidth) controller.
-type DualResourceConfig struct {
+// RateLimitConfig tunes the dual-bucket (IOPS + bandwidth) controller.
+type RateLimitConfig struct {
 	MinIops                 int64
 	MinBandwidth            int64
 	IopsStep                int64
@@ -106,9 +106,9 @@ type DualResourceConfig struct {
 	ResponseMinRatio  float64
 }
 
-// DefaultDualResourceConfig returns the recommended defaults.
-func DefaultDualResourceConfig() DualResourceConfig {
-	return DualResourceConfig{
+// DefaultRateLimitConfig returns the recommended defaults.
+func DefaultRateLimitConfig() RateLimitConfig {
+	return RateLimitConfig{
 		MinIops:                 100,
 		MinBandwidth:            1 * 1024 * 1024,
 		IopsStep:                100,
@@ -123,8 +123,8 @@ func DefaultDualResourceConfig() DualResourceConfig {
 	}
 }
 
-func normalizeDualConfig(cfg DualResourceConfig) DualResourceConfig {
-	d := DefaultDualResourceConfig()
+func normalizeRateLimitConfig(cfg RateLimitConfig) RateLimitConfig {
+	d := DefaultRateLimitConfig()
 	if cfg.MinIops <= 0 {
 		cfg.MinIops = d.MinIops
 	}
@@ -164,7 +164,7 @@ func normalizeDualConfig(cfg DualResourceConfig) DualResourceConfig {
 // ResourceController is the pluggable dual-dimension throttling "brain" that the
 // per-share registry and the response policy depend on (instead of a concrete
 // type), so each storage service can supply its own control strategy while
-// sharing the same wiring. The default implementation is DualResourceController
+// sharing the same wiring. The default implementation is RateLimitController
 // (proactive equal-share + reactive AIMD); services select it via the
 // per-service constructors (NewAzureFilesController, NewBlobController).
 type ResourceController interface {
@@ -178,9 +178,9 @@ type ResourceController interface {
 	Mode() string
 }
 
-// DualResourceController is the storage-service-agnostic "brain" of the dual-mode
+// RateLimitController is the storage-service-agnostic "brain" of the dual-mode
 // rate limiter. It does NOT own token buckets; instead it computes IOPS and
-// bandwidth targets and pushes them to a DualRateSink (the ste pacer), switching
+// bandwidth targets and pushes them to a RateLimitSink (the ste pacer), switching
 // between proactive equal-share and per-resource reactive AIMD based on
 // poll-based ResourceStats throttle-counter deltas fused with the real-time HTTP
 // 429/503 response stream. Service specifics (GetShareStats mapping, 429/503 body
@@ -188,17 +188,17 @@ type ResourceController interface {
 //
 // Concurrency: Refresh (the ~30s poll) and HandleResponse (the per-request fast
 // path) may run concurrently; all mutable state is guarded by mu.
-type DualResourceController struct {
+type RateLimitController struct {
 	mu     sync.Mutex
 	clock  pacerClock
-	cfg    DualResourceConfig
+	cfg    RateLimitConfig
 	rng    *rand.Rand
 	source ResourceStatsSource
-	sink   DualRateSink
+	sink   RateLimitSink
 
 	// detector fuses the real-time 429/503 response stream with the
 	// poll-based stats delta signal, per resource (IOPS and bandwidth).
-	detector *dualThrottleDetector
+	detector *rateLimitThrottleDetector
 
 	// pollStatsSignal reports whether the poll-based (e.g. GetShareStats) throttle
 	// signal participates in mode decisions. False for services without one (e.g.
@@ -233,24 +233,24 @@ type DualResourceController struct {
 	lastBwDecreaseAt   time.Time
 }
 
-// NewDualResourceController creates a dual-resource controller in proactive
+// NewRateLimitController creates a dual-resource controller in proactive
 // mode, driving sink. Call Refresh every poll interval (~30s), and HandleResponse
 // on every relevant HTTP outcome. activeWorkers is the equal-share denominator
 // (1 for single-process).
-func NewDualResourceController(sink DualRateSink, source ResourceStatsSource, activeWorkers int, cfg DualResourceConfig) *DualResourceController {
-	return newDualResourceControllerWithClock(sink, source, realPacerClock{}, activeWorkers, cfg, true)
+func NewRateLimitController(sink RateLimitSink, source ResourceStatsSource, activeWorkers int, cfg RateLimitConfig) *RateLimitController {
+	return newRateLimitControllerWithClock(sink, source, realPacerClock{}, activeWorkers, cfg, true)
 }
 
 // Compile-time proof that the shared engine satisfies the pluggable interface.
-var _ ResourceController = (*DualResourceController)(nil)
+var _ ResourceController = (*RateLimitController)(nil)
 
 // NewAzureFilesController builds a ResourceController for AzureFiles -> AzureFiles
 // copies. It is the shared AIMD engine fed by a GetShareStats-backed
 // ResourceStatsSource (dual dimension: IOPS + bandwidth) and Azure Files 429/503
 // classification (done in ste). The core engine is unchanged; only the injected
 // source/classification/config differ per service.
-func NewAzureFilesController(sink DualRateSink, source ResourceStatsSource, activeWorkers int, cfg DualResourceConfig) ResourceController {
-	return NewDualResourceController(sink, source, activeWorkers, cfg)
+func NewAzureFilesController(sink RateLimitSink, source ResourceStatsSource, activeWorkers int, cfg RateLimitConfig) ResourceController {
+	return NewRateLimitController(sink, source, activeWorkers, cfg)
 }
 
 // NewBlobController builds a ResourceController for Blob -> Blob copies. Blob is
@@ -261,16 +261,16 @@ func NewAzureFilesController(sink DualRateSink, source ResourceStatsSource, acti
 // generic real-time HTTP 429/503 signal governs mode - GetShareStats-style deltas
 // are irrelevant to Blob. It reuses the same shared AIMD engine, so the Blob path
 // can be wired in later without changing any core throttling logic.
-func NewBlobController(sink DualRateSink, source ResourceStatsSource, activeWorkers int, cfg DualResourceConfig) ResourceController {
-	return newDualResourceControllerWithClock(sink, source, realPacerClock{}, activeWorkers, cfg, false)
+func NewBlobController(sink RateLimitSink, source ResourceStatsSource, activeWorkers int, cfg RateLimitConfig) ResourceController {
+	return newRateLimitControllerWithClock(sink, source, realPacerClock{}, activeWorkers, cfg, false)
 }
 
-func newDualResourceControllerWithClock(sink DualRateSink, source ResourceStatsSource, clock pacerClock, activeWorkers int, cfg DualResourceConfig, pollStatsSignal bool) *DualResourceController {
-	cfg = normalizeDualConfig(cfg)
+func newRateLimitControllerWithClock(sink RateLimitSink, source ResourceStatsSource, clock pacerClock, activeWorkers int, cfg RateLimitConfig, pollStatsSignal bool) *RateLimitController {
+	cfg = normalizeRateLimitConfig(cfg)
 	if activeWorkers < 1 {
 		activeWorkers = 1
 	}
-	return &DualResourceController{
+	return &RateLimitController{
 		clock:             clock,
 		cfg:               cfg,
 		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -279,7 +279,7 @@ func newDualResourceControllerWithClock(sink DualRateSink, source ResourceStatsS
 		mode:              ModeProactive,
 		activeWorkerCount: activeWorkers,
 		pollStatsSignal:   pollStatsSignal,
-		detector: newDualThrottleDetector(
+		detector: newRateLimitThrottleDetector(
 			cfg.ResponseWindow, cfg.ResponseMinEvents, cfg.ResponseMinRatio, cfg.QuietForProactiveReturn, pollStatsSignal,
 		),
 	}
@@ -287,7 +287,7 @@ func newDualResourceControllerWithClock(sink DualRateSink, source ResourceStatsS
 
 // SetActiveWorkerCount updates the equal-share denominator. Rates are recomputed
 // on the next proactive refresh.
-func (d *DualResourceController) SetActiveWorkerCount(n int) {
+func (d *RateLimitController) SetActiveWorkerCount(n int) {
 	if n < 1 {
 		n = 1
 	}
@@ -301,7 +301,7 @@ func (d *DualResourceController) SetActiveWorkerCount(n int) {
 // rates, and returns the backoff the caller should sleep (0 when proactive/quiet).
 // This is the authoritative, poll-paced path (~30s) and is the only path that
 // additively increases targets during recovery.
-func (d *DualResourceController) Refresh() (time.Duration, error) {
+func (d *RateLimitController) Refresh() (time.Duration, error) {
 	stats, err := d.source.PollStats()
 	if err != nil {
 		return 0, err
@@ -360,7 +360,7 @@ func (d *DualResourceController) Refresh() (time.Duration, error) {
 // kind is classified by the caller (e.g. ste maps Azure Files 429/503 bodies)
 // so the controller remains storage-service agnostic. ThrottleUnknown is applied
 // conservatively to both resources.
-func (d *DualResourceController) HandleResponse(kind ThrottleKind, retryAfterSec float64) time.Duration {
+func (d *RateLimitController) HandleResponse(kind ThrottleKind, retryAfterSec float64) time.Duration {
 	now := d.clock.Now()
 
 	d.mu.Lock()
@@ -397,12 +397,12 @@ func (d *DualResourceController) HandleResponse(kind ThrottleKind, retryAfterSec
 }
 
 // setRatesLocked stores and pushes both target rates to the sink.
-func (d *DualResourceController) setRatesLocked(bwRate, iopsRate int64) {
+func (d *RateLimitController) setRatesLocked(bwRate, iopsRate int64) {
 	d.setBandwidthRateLocked(bwRate)
 	d.setIopsRateLocked(iopsRate)
 }
 
-func (d *DualResourceController) setBandwidthRateLocked(bwRate int64) {
+func (d *RateLimitController) setBandwidthRateLocked(bwRate int64) {
 	if bwRate < 0 {
 		bwRate = 0
 	}
@@ -412,7 +412,7 @@ func (d *DualResourceController) setBandwidthRateLocked(bwRate int64) {
 	}
 }
 
-func (d *DualResourceController) setIopsRateLocked(iopsRate int64) {
+func (d *RateLimitController) setIopsRateLocked(iopsRate int64) {
 	if iopsRate < 0 {
 		iopsRate = 0
 	}
@@ -422,7 +422,7 @@ func (d *DualResourceController) setIopsRateLocked(iopsRate int64) {
 	}
 }
 
-func (d *DualResourceController) applyProactiveLocked(stats ResourceStats) {
+func (d *RateLimitController) applyProactiveLocked(stats ResourceStats) {
 	d.mode = ModeProactive
 	d.iopsStreak = 0
 	d.bwStreak = 0
@@ -441,7 +441,7 @@ func (d *DualResourceController) applyProactiveLocked(stats ResourceStats) {
 // combined detector reports BOTH resources quiet across BOTH signals (no
 // poll delta within the quiet window AND no sustained real-time throttling).
 // Until then it stays reactive, letting AIMD ramp back up.
-func (d *DualResourceController) maybeReturnToProactiveLocked(stats ResourceStats, now time.Time) {
+func (d *RateLimitController) maybeReturnToProactiveLocked(stats ResourceStats, now time.Time) {
 	if d.mode == ModeProactive {
 		d.applyProactiveLocked(stats)
 		return
@@ -459,7 +459,7 @@ func (d *DualResourceController) maybeReturnToProactiveLocked(stats ResourceStat
 // toward its limit; the per-response fast path passes false so recovery stays
 // poll-paced. retryAfterSec, when > 0, overrides the computed backoff with the
 // server-provided Retry-After. It returns the backoff to sleep.
-func (d *DualResourceController) applyReactiveLocked(stats ResourceStats, iopsThrottled, bwThrottled bool, now time.Time, retryAfterSec float64, allowIncrease bool) time.Duration {
+func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrottled, bwThrottled bool, now time.Time, retryAfterSec float64, allowIncrease bool) time.Duration {
 	d.mode = ModeReactive
 	d.lastThrottleAt = now
 	limitBw := stats.BandwidthLimitBytesPerSec
@@ -485,8 +485,8 @@ func (d *DualResourceController) applyReactiveLocked(stats ResourceStats, iopsTh
 	if retryAfterSec > 0 {
 		return time.Duration(retryAfterSec * float64(time.Second))
 	}
-	backoffIops := computeDualBackoff(d.iopsStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, d.cfg.JitterFraction, d.rng)
-	backoffBw := computeDualBackoff(d.bwStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, d.cfg.JitterFraction, d.rng)
+	backoffIops := computeRateLimitBackoff(d.iopsStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, d.cfg.JitterFraction, d.rng)
+	backoffBw := computeRateLimitBackoff(d.bwStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, d.cfg.JitterFraction, d.rng)
 	if backoffIops > backoffBw {
 		return backoffIops
 	}
@@ -495,8 +495,8 @@ func (d *DualResourceController) applyReactiveLocked(stats ResourceStats, iopsTh
 
 // decreaseIopsLocked multiplicatively halves the IOPS target toward MinIops,
 // debounced so concurrent throttles inside one congestion window halve once.
-func (d *DualResourceController) decreaseIopsLocked(now time.Time, seedLimit int64) {
-	window := computeDualBackoff(d.iopsStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, 0, nil)
+func (d *RateLimitController) decreaseIopsLocked(now time.Time, seedLimit int64) {
+	window := computeRateLimitBackoff(d.iopsStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, 0, nil)
 	if !d.lastIopsDecreaseAt.IsZero() && now.Sub(d.lastIopsDecreaseAt) < window {
 		return
 	}
@@ -511,8 +511,8 @@ func (d *DualResourceController) decreaseIopsLocked(now time.Time, seedLimit int
 }
 
 // decreaseBandwidthLocked mirrors decreaseIopsLocked for the bandwidth target.
-func (d *DualResourceController) decreaseBandwidthLocked(now time.Time, seedLimit int64) {
-	window := computeDualBackoff(d.bwStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, 0, nil)
+func (d *RateLimitController) decreaseBandwidthLocked(now time.Time, seedLimit int64) {
+	window := computeRateLimitBackoff(d.bwStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, 0, nil)
 	if !d.lastBwDecreaseAt.IsZero() && now.Sub(d.lastBwDecreaseAt) < window {
 		return
 	}
@@ -527,30 +527,30 @@ func (d *DualResourceController) decreaseBandwidthLocked(now time.Time, seedLimi
 }
 
 // Mode reports proactive vs. reactive.
-func (d *DualResourceController) Mode() string {
+func (d *RateLimitController) Mode() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.mode
 }
 
 // IopsRate returns the current IOPS target (ops/sec) pushed to the sink.
-func (d *DualResourceController) IopsRate() int64 {
+func (d *RateLimitController) IopsRate() int64 {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.curIops
 }
 
 // BandwidthRate returns the current bandwidth target (bytes/sec) pushed to the sink.
-func (d *DualResourceController) BandwidthRate() int64 {
+func (d *RateLimitController) BandwidthRate() int64 {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.curBw
 }
 
-// computeDualBackoff returns exponential backoff for the given streak. An
+// computeRateLimitBackoff returns exponential backoff for the given streak. An
 // explicit Retry-After (seconds) takes precedence. When jitterFrac > 0 and
 // rng != nil, +/- jitter is applied.
-func computeDualBackoff(streak int, retryAfterSec float64, base, maxBackoff time.Duration, jitterFrac float64, rng *rand.Rand) time.Duration {
+func computeRateLimitBackoff(streak int, retryAfterSec float64, base, maxBackoff time.Duration, jitterFrac float64, rng *rand.Rand) time.Duration {
 	if retryAfterSec > 0 {
 		return time.Duration(retryAfterSec * float64(time.Second))
 	}
@@ -579,7 +579,7 @@ func computeDualBackoff(streak int, retryAfterSec float64, base, maxBackoff time
 // pollInterval until ctx is cancelled, sleeping any returned backoff. It is
 // optional: callers that already own a polling loop can call
 // Refresh directly.
-func (d *DualResourceController) runPollLoop(ctx context.Context, pollInterval time.Duration) {
+func (d *RateLimitController) runPollLoop(ctx context.Context, pollInterval time.Duration) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for {

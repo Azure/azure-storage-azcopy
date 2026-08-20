@@ -461,6 +461,13 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return nil, err
 	}
 
+	
+	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
+	file2FilesEnum := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
+		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
+	}
+
 	var (
 		output ResourceTraverser
 	)

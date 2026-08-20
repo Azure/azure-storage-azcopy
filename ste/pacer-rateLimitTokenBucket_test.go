@@ -33,7 +33,7 @@ func TestDualPacer_AcquireIO_RollsBackIopsOnBandwidthFailure(t *testing.T) {
 	// Bandwidth target is smaller than the requested byte count, so the
 	// bandwidth reservation fails immediately (request size > pacer target).
 	// The IOPS target is generous, so its reservation succeeds first.
-	p := NewDualTokenBucketPacer(1000, 1000)
+	p := NewRateLimitTokenBucketPacer(1000, 1000)
 	defer func() { _ = p.Close() }()
 
 	err := p.AcquireIO(context.Background(), 5000 /* bytes */, 1 /* ops */)
@@ -51,7 +51,7 @@ func TestDualPacer_AcquireIO_RollsBackIopsOnBandwidthFailure(t *testing.T) {
 // TestDualPacer_AcquireIO_BothDimensionsCharged verifies that a successful
 // AcquireIO charges both the bandwidth and IOPS buckets.
 func TestDualPacer_AcquireIO_BothDimensionsCharged(t *testing.T) {
-	p := NewDualTokenBucketPacer(1024*1024, 1000)
+	p := NewRateLimitTokenBucketPacer(1024*1024, 1000)
 	defer func() { _ = p.Close() }()
 
 	if err := p.AcquireIO(context.Background(), 100 /* bytes */, 1 /* ops */); err != nil {
@@ -69,7 +69,7 @@ func TestDualPacer_AcquireIO_BothDimensionsCharged(t *testing.T) {
 // makes the IOPS dimension unlimited (a plain bandwidth cap), matching the
 // null-pacer semantics.
 func TestDualPacer_AcquireIO_UnlimitedIopsWhenZero(t *testing.T) {
-	p := NewDualTokenBucketPacer(1024*1024, 0 /* unlimited IOPS */)
+	p := NewRateLimitTokenBucketPacer(1024*1024, 0 /* unlimited IOPS */)
 	defer func() { _ = p.Close() }()
 
 	// A huge op count must still be admitted because IOPS is unlimited.
@@ -81,7 +81,7 @@ func TestDualPacer_AcquireIO_UnlimitedIopsWhenZero(t *testing.T) {
 // TestDualPacer_AcquireIO_MetadataOpChargesIopsOnly verifies that a zero-byte
 // metadata operation charges only the IOPS dimension.
 func TestDualPacer_AcquireIO_MetadataOpChargesIopsOnly(t *testing.T) {
-	p := NewDualTokenBucketPacer(1024*1024, 1000)
+	p := NewRateLimitTokenBucketPacer(1024*1024, 1000)
 	defer func() { _ = p.Close() }()
 
 	if err := p.AcquireIO(context.Background(), 0 /* bytes */, 1 /* ops */); err != nil {
@@ -98,7 +98,7 @@ func TestDualPacer_AcquireIO_MetadataOpChargesIopsOnly(t *testing.T) {
 // TestDualPacer_AcquireIO_DataOpChargesBandwidthOnly verifies that a zero-op
 // data body charges only the bandwidth dimension.
 func TestDualPacer_AcquireIO_DataOpChargesBandwidthOnly(t *testing.T) {
-	p := NewDualTokenBucketPacer(1024*1024, 1000)
+	p := NewRateLimitTokenBucketPacer(1024*1024, 1000)
 	defer func() { _ = p.Close() }()
 
 	if err := p.AcquireIO(context.Background(), 100 /* bytes */, 0 /* ops */); err != nil {

@@ -32,12 +32,12 @@ import (
 // authoritative GetShareStats signal.
 const GetShareStatsPollInterval = 30 * time.Second
 
-// SharePacer is everything a per-share limiter must be: the DualRateSink the
+// SharePacer is everything a per-share limiter must be: the RateLimitSink the
 // controller drives, the IOPSPacer callers acquire from, and a Closer. The ste
-// dualTokenBucketPacer implements it and is injected via RegisterSharePacerFactory
+// rateLimitTokenBucketPacer implements it and is injected via RegisterSharePacerFactory
 // so this package (common) never depends on ste.
 type SharePacer interface {
-	DualRateSink
+	RateLimitSink
 	IOPSPacer
 	Close() error
 }
@@ -92,8 +92,8 @@ func (stubResourceStatsSource) PollStats() (ResourceStats, error) {
 	return ResourceStats{}, nil // all zero => unlimited, no throttles
 }
 
-// shareControl bundles the per-share pacer (the DualRateSink the controller
-// drives) with its DualResourceController and the poll loop's cancel func.
+// shareControl bundles the per-share pacer (the RateLimitSink the controller
+// drives) with its RateLimitController and the poll loop's cancel func.
 type shareControl struct {
 	pacer SharePacer
 	ctrl  ResourceController
@@ -103,13 +103,13 @@ type shareControl struct {
 // ControllerFactory builds the per-resource ResourceController for a resource
 // key. It is swappable so a future Blob path can register NewBlobController
 // without changing the registry or the core engine.
-type ControllerFactory func(sink DualRateSink, source ResourceStatsSource, workers int64) ResourceController
+type ControllerFactory func(sink RateLimitSink, source ResourceStatsSource, workers int64) ResourceController
 
 // controllerFactory defaults to the AzureFiles strategy (the only active path
 // today). Register a different factory to change how per-resource controllers
 // are built.
-var controllerFactory ControllerFactory = func(sink DualRateSink, source ResourceStatsSource, workers int64) ResourceController {
-	return NewAzureFilesController(sink, source, int(workers), DefaultDualResourceConfig())
+var controllerFactory ControllerFactory = func(sink RateLimitSink, source ResourceStatsSource, workers int64) ResourceController {
+	return NewAzureFilesController(sink, source, int(workers), DefaultRateLimitConfig())
 }
 
 // RegisterControllerFactory injects the per-resource controller constructor

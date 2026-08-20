@@ -146,8 +146,12 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	// global --cap-mbps pacer. Non-Files/unresolvable shares fall back to the
 	// global pacer unchanged.
 	scopedPacer := pacer
-	if sp := common.GetOrCreateSharePacer(shareClient.URL(), 1); sp != nil {
-		scopedPacer = newShareScopedPacer(pacer, sp)
+	file2FileCopy := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	fromTo := jptm.FromTo()
+	if file2FileCopy == "true" && fromTo.From() == common.ELocation.File() && fromTo.To() == common.ELocation.File() {
+		if sp := common.GetOrCreateSharePacer(shareClient.URL(), 1); sp != nil {
+			scopedPacer = newShareScopedPacer(pacer, sp)
+		}
 	}
 
 	return &azureFileSenderBase{

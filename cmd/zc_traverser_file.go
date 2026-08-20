@@ -616,13 +616,11 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	}
 
 	// Meter enumeration (metadata) IOPS against the source share's per-share
-	// dual-resource budget, unless a caller supplied an explicit ScanPacer.
-	var enumScanPacer common.IOPSPacer
-	file2FilesEnum := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
-	if cca.FromTo.From().IsFile() && file2FilesEnum == "true" {
-		// For Files-to-* transfers, meter enumeration IOPS against the share's dual-resource budget
-		enumScanPacer = common.GetShareScanPacer(cca.Source.Value)
-		t.scanPacer = enumScanPacer
+	// rate-limit budget, unless a caller supplied an explicit ScanPacer.
+	// GetShareScanPacer returns nil for non-Files URLs, leaving scanning unmetered.
+	if t.scanPacer == nil &&
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats()) == "true" {
+		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 
 	t.skipRootProperties = UseSyncOrchestrator && !t.recursive

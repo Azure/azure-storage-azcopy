@@ -166,7 +166,7 @@ func (s *statsThrottleSignal) isQuiet(r throttleResource, now time.Time) bool {
 	return now.Sub(s.at[r]) >= s.quiet
 }
 
-// dualThrottleDetector fuses the generic real-time response signal with the
+// rateLimitThrottleDetector fuses the generic real-time response signal with the
 // OPTIONAL poll-based stats signal, per resource:
 //
 //   - Fast, real-time signal (always present): responseThrottleDetector.
@@ -176,16 +176,16 @@ func (s *statsThrottleSignal) isQuiet(r throttleResource, now time.Time) bool {
 // A resource is "throttled now" when the response signal fires; it is "quiet"
 // only when the response signal is quiet AND (the stats signal is absent OR also
 // quiet).
-type dualThrottleDetector struct {
+type rateLimitThrottleDetector struct {
 	resp  *responseThrottleDetector
 	stats *statsThrottleSignal // nil => no poll-based signal (e.g. Blob)
 }
 
-// newDualThrottleDetector builds the detector. When withStatsSignal is false the
+// newRateLimitThrottleDetector builds the detector. When withStatsSignal is false the
 // poll-based stats signal is omitted entirely, so GetShareStats-style deltas play
 // no part (the Blob case).
-func newDualThrottleDetector(window time.Duration, minEvents int, minRatio float64, quiet time.Duration, withStatsSignal bool) *dualThrottleDetector {
-	d := &dualThrottleDetector{resp: newResponseThrottleDetector(window, minEvents, minRatio, quiet)}
+func newRateLimitThrottleDetector(window time.Duration, minEvents int, minRatio float64, quiet time.Duration, withStatsSignal bool) *rateLimitThrottleDetector {
+	d := &rateLimitThrottleDetector{resp: newResponseThrottleDetector(window, minEvents, minRatio, quiet)}
 	if withStatsSignal {
 		d.stats = newStatsThrottleSignal(quiet)
 	}
@@ -193,13 +193,13 @@ func newDualThrottleDetector(window time.Duration, minEvents int, minRatio float
 }
 
 // observeResponse feeds a single real-time HTTP outcome into the generic signal.
-func (d *dualThrottleDetector) observeResponse(r throttleResource, throttled bool, now time.Time) {
+func (d *rateLimitThrottleDetector) observeResponse(r throttleResource, throttled bool, now time.Time) {
 	d.resp.observe(r, throttled, now)
 }
 
 // observeStatsThrottle records a non-zero poll-delta for the resource. It is a
 // no-op when the poll-based signal is not configured (e.g. Blob).
-func (d *dualThrottleDetector) observeStatsThrottle(r throttleResource, now time.Time) {
+func (d *rateLimitThrottleDetector) observeStatsThrottle(r throttleResource, now time.Time) {
 	if d.stats != nil {
 		d.stats.observe(r, now)
 	}
@@ -208,7 +208,7 @@ func (d *dualThrottleDetector) observeStatsThrottle(r throttleResource, now time
 // sustainedThrottling reports whether the real-time response stream alone
 // indicates sustained throttling for the resource. This is the fast trigger used
 // to switch to reactive AIMD before the next poll.
-func (d *dualThrottleDetector) sustainedThrottling(r throttleResource, now time.Time) bool {
+func (d *rateLimitThrottleDetector) sustainedThrottling(r throttleResource, now time.Time) bool {
 	return d.resp.sustainedThrottling(r, now)
 }
 
@@ -216,7 +216,7 @@ func (d *dualThrottleDetector) sustainedThrottling(r throttleResource, now time.
 // the response stream has seen no throttle for its quiet window AND (there is no
 // poll-based signal OR it too has seen no delta within its quiet window). Only
 // when every resource is quiet may the limiter return to proactive equal-share.
-func (d *dualThrottleDetector) quiet(r throttleResource, now time.Time) bool {
+func (d *rateLimitThrottleDetector) quiet(r throttleResource, now time.Time) bool {
 	if !d.resp.quiet(r, now) {
 		return false
 	}
