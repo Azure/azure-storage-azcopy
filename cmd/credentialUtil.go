@@ -133,7 +133,7 @@ func GetTargetCredInfo(resourceString common.ResourceString, location common.Loc
 		return getBlobCredInfo(resourceString, opts)
 	case common.ELocation.BlobFS():
 		return getBlobFSCredInfo(resourceString, opts)
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.File():
 		return getFileCredInfo(resourceString, opts)
 	case common.ELocation.S3():
 		return getS3CredInfo()
