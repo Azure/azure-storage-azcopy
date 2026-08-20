@@ -67,7 +67,7 @@ Status: Validated
 - The reusable infrastructure stages perform compile, ARM validation, what-if,
   explicit manual approval for deployment, deployment, and a Log Analytics
   query smoke test.
-- Keep `telemetry-infrastructure-pipeline.yml` as a no-trigger compatibility
+- Keep `telemetry-test-infrastructure-pipeline.yml` as a no-trigger compatibility
   wrapper over the same reusable stages; it contains no duplicated deployment
   logic.
 - Each E2E matrix leg runs an ingestion canary after building AzCopy and before

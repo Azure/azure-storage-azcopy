@@ -1,6 +1,8 @@
 trigger: none
 pr: none
 
+# Manually validates or deploys the dedicated E2E telemetry test resources.
+# Production telemetry uses a separate EV2/Managed SDP rollout.
 parameters:
   - name: action
     displayName: 'Action'
