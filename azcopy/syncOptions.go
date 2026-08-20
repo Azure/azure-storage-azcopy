@@ -56,6 +56,12 @@ type cookedSyncOptions struct {
 	preservePermissions     common.PreservePermissionsOption
 	symlinks                common.SymlinkHandlingType
 	hardlinks               common.HardlinkHandlingType
+	contentType             string
+	contentEncoding         string
+	contentDisposition      string
+	contentLanguage         string
+	cacheControl            string
+	noGuessMimeType         bool
 
 	// destSymlinks is the destination symlink handling mode.
 	// This was introduced because of a bug with sync --delete-destination.
@@ -194,6 +200,12 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.preservePermissions = common.NewPreservePermissionsOption(opts.PreservePermissions, preserveOwner, s.fromTo)
 	s.symlinks = opts.Symlinks
 	s.hardlinks = opts.Hardlinks
+	s.contentType = opts.ContentType
+	s.contentEncoding = opts.ContentEncoding
+	s.contentLanguage = opts.ContentLanguage
+	s.contentDisposition = opts.ContentDisposition
+	s.cacheControl = opts.CacheControl
+	s.noGuessMimeType = opts.NoGuessMimeType
 	s.dryrun = opts.dryrun
 	s.deleteDestinationFileIfNecessary = opts.deleteDestinationFileIfNecessary
 	s.commandString = opts.commandString
@@ -206,6 +218,11 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 		// Save any new MD5s on files we download.
 		s.putMd5 = true
 	default: // no need to put a hash of any kind.
+	}
+
+	// Specifying a content type implies that AzCopy should not guess the MIME type from the file.
+	if opts.ContentType != "" {
+		s.noGuessMimeType = true
 	}
 
 	if !s.fromTo.IsS2S() {
@@ -318,6 +335,28 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 
 	if err = ValidateMd5Option(s.checkMd5, s.fromTo); err != nil {
 		return err
+	}
+
+	// Content headers and MIME-type guessing are only meaningful when uploading.
+	// On download there is nothing to set them on, and on S2S the destination always
+	// inherits the source's properties, so honouring these flags there would be a silent no-op.
+	hasContentHeaders := len(s.contentType) > 0 || len(s.contentEncoding) > 0 || len(s.contentLanguage) > 0 ||
+		len(s.contentDisposition) > 0 || len(s.cacheControl) > 0
+	switch {
+	case s.fromTo.IsDownload():
+		if s.noGuessMimeType {
+			return fmt.Errorf("no-guess-mime-type is not supported while downloading")
+		}
+		if hasContentHeaders {
+			return fmt.Errorf("content-type, content-encoding, content-language, content-disposition, or cache-control is not supported while downloading")
+		}
+	case s.fromTo.IsS2S():
+		if s.noGuessMimeType {
+			return fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
+		}
+		if hasContentHeaders {
+			return fmt.Errorf("content-type, content-encoding, content-language, content-disposition, or cache-control is not supported while copying from service to service")
+		}
 	}
 
 	// Check if user has provided `s2s-preserve-blob-tags` flag.

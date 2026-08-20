@@ -69,6 +69,12 @@ type SyncOptions struct {
 	Symlinks                common.SymlinkHandlingType
 	PreservePermissions     bool
 	Hardlinks               common.HardlinkHandlingType
+	ContentType             string
+	ContentEncoding         string
+	ContentDisposition      string
+	ContentLanguage         string
+	CacheControl            string
+	NoGuessMimeType         bool
 
 	dryrun                           bool
 	deleteDestinationFileIfNecessary bool

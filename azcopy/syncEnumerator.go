@@ -184,6 +184,12 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			BlockSizeInBytes:                 s.opts.blockSize,
 			PutBlobSizeInBytes:               s.opts.putBlobSize,
 			DeleteDestinationFileIfNecessary: s.opts.deleteDestinationFileIfNecessary,
+			ContentType:                      s.opts.contentType,
+			ContentEncoding:                  s.opts.contentEncoding,
+			ContentLanguage:                  s.opts.contentLanguage,
+			ContentDisposition:               s.opts.contentDisposition,
+			CacheControl:                     s.opts.cacheControl,
+			NoGuessMimeType:                  s.opts.noGuessMimeType,
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                s.opts.forceIfReadOnly,
