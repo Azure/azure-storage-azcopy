@@ -39,6 +39,7 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -50,13 +51,16 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
 	s, ok := baseSender.(folderSender)
 	if !ok {
-		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support folders", 0)
+		err_msg := "sender implementation does not support folders"
+		jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
