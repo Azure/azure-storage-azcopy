@@ -85,14 +85,14 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 			//	 We'll favor correctness over memory-efficiency for now, and leave the code as it is.
 			//   If we find that memory usage is an issue in cases with lots of failures, we can revisit in the future.
 		}
-		if jptm.ShouldLog(common.LogInfo) {
-			if status == common.ETransferStatus.Failed() {
+		if status == common.ETransferStatus.Failed() {
+			if jptm.ShouldLog(common.LogInfo) {
 				jptm.LogError(info.Source, "DELETE ERROR ", err)
-				jptm.SetErrorMessage(fmt.Sprintf("DELETE FAILED: %v, %v", info.Source, err.Error()))
-			} else {
-				if jptm.ShouldLog(common.LogInfo) {
-					jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
-				}
+			}
+			jptm.SetErrorMessage(fmt.Sprintf("DELETE FAILED: source %v, error %v", info.Source, err.Error()))
+		} else {
+			if jptm.ShouldLog(common.LogInfo) {
+				jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			}
 		}
 		jptm.SetStatus(status)
