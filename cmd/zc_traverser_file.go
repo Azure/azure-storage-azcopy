@@ -612,9 +612,8 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 
 	// Meter enumeration (metadata) IOPS against the source share's per-share
 	// rate-limit budget, unless a caller supplied an explicit ScanPacer.
-	// Destination enumeration is left unmetered, as is any non-Files URL
-	// (GetShareScanPacer returns nil for those).
-	if t.scanPacer == nil && !opts.IsSyncDestination &&
+	// GetShareScanPacer returns nil for non-Files URLs, leaving scanning unmetered.
+	if t.scanPacer == nil &&
 		common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats()) == "true" {
 		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
