@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,9 +54,21 @@ func ToFixed(num float64, precision int) float64 {
 
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
+	
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
+
+
+	file2FileCopy := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	// Register the Azure Files stats source factory for Files-to-Files scenarios
+	// when proactive stats polling is enabled
+	if strings.EqualFold(file2FileCopy, "true") {
+		httpClient := common.GetGlobalHTTPClient(common.AzcopyCurrentJobLogger)
+		common.RegisterResourceStatsSourceFactory(
+			common.ShareStatsSourceFactory(httpClient, common.AzcopyCurrentJobLogger),
+		)
+	}
 
 	// if we've a custom mime map
 	if path := common.GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {

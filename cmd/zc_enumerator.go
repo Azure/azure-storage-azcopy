@@ -420,6 +420,12 @@ type InitResourceTraverserOptions struct {
 	// IsSyncDestination indicates this traverser is enumerating the destination side of a sync job.
 	// Used to return specific not-found errors that the sync orchestrator handles gracefully.
 	IsSyncDestination bool
+
+	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
+	// (List, GetProperties) issued during enumeration, so scanning respects the
+	// same storage IOPS budget as the transfer phase. Currently wired for Azure
+	// Files; nil means uncapped scanning (unchanged behavior).
+	ScanPacer common.IOPSPacer
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers
@@ -453,6 +459,13 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 	err := opts.PerformChecks()
 	if err != nil {
 		return nil, err
+	}
+
+	
+	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
+	file2FilesEnum := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
+		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
 	}
 
 	var (

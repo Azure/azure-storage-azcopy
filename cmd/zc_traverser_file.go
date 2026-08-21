@@ -67,6 +67,11 @@ type fileTraverser struct {
 	// To retrieve current property values, use x-ms-file-extended-info: true for a directory
 	// located on a File Share with SMB protocol enabled, or call Get File Properties against the specific file.
 	includeExtendedInfo bool // whether to include extended info in the listing, such as SMB properties
+
+	// scanPacer, when non-nil, meters the IOPS consumed by enumeration metadata
+	// operations (List, GetProperties) so scanning respects the same storage IOPS
+	// budget as the transfer phase. nil means uncapped scanning.
+	scanPacer common.IOPSPacer
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -335,7 +340,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// When includeExtendedInfo is true, we already have the properties from the listing API
 		// so we don't need to fetch full properties (which would make individual API calls)
 		needsFullPropertiesFetch := !t.includeExtendedInfo && t.getProperties
-		fullProperties, err := f.propertyGetter(t.ctx, needsFullPropertiesFetch)
+		fullProperties, err := f.propertyGetter(t.ctx, needsFullPropertiesFetch, t.scanPacer)
 		if err != nil {
 			return StoredObject{
 				relativePath: relativePath,
@@ -417,6 +422,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger,
 			"directory properties",
 			func() (directory.GetPropertiesResponse, error) {
+				// Charged per attempt: a retry is another real request against the share's IOPS budget.
+				if err := common.ScanPacerAcquire(t.ctx, t.scanPacer, 1); err != nil {
+					return directory.GetPropertiesResponse{}, err
+				}			
 				return directoryClient.GetProperties(t.ctx, nil)
 			})
 		if err == nil || targetURLParts.DirectoryOrFilePath == "" {
@@ -457,6 +466,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				azcopyScanningLogger,
 				"directory enumeration",
 				func() (directory.ListFilesAndDirectoriesResponse, error) {
+					// Charged per attempt: a retry is another real request against the share's IOPS budget.
+					if err := common.ScanPacerAcquire(t.ctx, t.scanPacer, 1); err != nil {
+						return directory.ListFilesAndDirectoriesResponse{}, err
+					}
 					return pager.NextPage(t.ctx)
 				})
 
@@ -594,6 +607,15 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		trailingDot:                 opts.TrailingDotOption,
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
+		scanPacer:                   opts.ScanPacer,
+	}
+
+	// Meter enumeration (metadata) IOPS against the source share's per-share
+	// rate-limit budget, unless a caller supplied an explicit ScanPacer.
+	// GetShareScanPacer returns nil for non-Files URLs, leaving scanning unmetered.
+	if t.scanPacer == nil &&
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats()) == "true" {
+		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 
 	t.skipRootProperties = UseSyncOrchestrator && !t.recursive
@@ -611,7 +633,7 @@ type azfileEntity struct {
 	name           string
 	contentLength  int64
 	url            string
-	propertyGetter func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error)
+	propertyGetter func(ctx context.Context, fetchFullProperties bool, scanPacer common.IOPSPacer) (filePropsProvider, error)
 	entityType     common.EntityType
 }
 
@@ -621,13 +643,17 @@ func newAzFileFileEntity(parentDirectoryClient *directory.Client, fileInfo *dire
 		*fileInfo.Name,
 		*fileInfo.Properties.ContentLength,
 		fileClient.URL(),
-		func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error) {
+		func(ctx context.Context, fetchFullProperties bool, scanPacer common.IOPSPacer) (filePropsProvider, error) {
 			if fetchFullProperties {
 				fileProperties, err := common.WithNetworkRetry(
 					ctx,
 					azcopyScanningLogger,
 					"file properties",
 					func() (file.GetPropertiesResponse, error) {
+						// Charged per attempt: a retry is another real request against the share's IOPS budget.
+						if err := common.ScanPacerAcquire(ctx, scanPacer, 1); err != nil {
+							return file.GetPropertiesResponse{}, err
+						}					
 						return fileClient.GetProperties(ctx, nil)
 					})
 				if err != nil {
@@ -664,13 +690,17 @@ func newAzFileRootDirectoryEntity(directoryClient *directory.Client, dirInfo *di
 		dirName,
 		0,
 		directoryClient.URL(),
-		func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error) {
+		func(ctx context.Context, fetchFullProperties bool, scanPacer common.IOPSPacer) (filePropsProvider, error) {
 			if fetchFullProperties {
 				directoryProperties, err := common.WithNetworkRetry(
 					ctx,
 					azcopyScanningLogger,
 					"directory properties",
-					func() (directory.GetPropertiesResponse, error) {
+					func() (directory.GetPropertiesResponse, error) {						
+						// Charged per attempt: a retry is another real request against the share's IOPS budget.
+						if err := common.ScanPacerAcquire(ctx, scanPacer, 1); err != nil {
+							return directory.GetPropertiesResponse{}, err
+						}					
 						return directoryClient.GetProperties(ctx, nil)
 					})
 				if err != nil {
