@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/golang/groupcache/lru"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // securityInfoPersistenceManager implements a system to interface with Azure Files
@@ -79,6 +81,9 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareClient
 	//remove snap if any
 	shareClient, err := shareClient.WithSnapshot("") 
 	if err != nil {
+		return "", err
+	}
+	if err := common.ScanPacerAcquire(sipm.ctx, sourceSharePacer(shareClient.URL()), 1); err != nil {
 		return "", err
 	}
 	si, err := shareClient.GetPermission(sipm.ctx, id, nil)

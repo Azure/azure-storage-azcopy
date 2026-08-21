@@ -45,6 +45,9 @@ type ioPacer interface {
 //	ops == 0   -> bandwidth-only (e.g. a streamed data body already metered)
 //	bytes == 0 -> metadata op (GetProperties/SetProperties): charge IOPS only
 func pacerAcquire(ctx context.Context, p pacer, bytes, ops int64) error {
+	if p == nil {
+		return nil // unpaced callers
+	}
 	if iop, ok := p.(ioPacer); ok {
 		return iop.AcquireIO(ctx, bytes, ops)
 	}
@@ -53,4 +56,15 @@ func pacerAcquire(ctx context.Context, p pacer, bytes, ops int64) error {
 		return p.RequestTrafficAllocation(ctx, bytes)
 	}
 	return nil
+}
+
+// sourceSharePacer returns the per-share IOPS pacer for an Azure Files source
+// URL, so reads from the source draw on the same budget the enumeration scan
+// pacer uses. It returns nil when share-scoped pacing is off or the URL is not
+// Azure Files, which callers treat as unlimited.
+func sourceSharePacer(sourceURL string) common.IOPSPacer {
+	if common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats()) != "true" {
+		return nil
+	}
+	return common.GetShareScanPacer(sourceURL)
 }
