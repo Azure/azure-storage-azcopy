@@ -175,12 +175,18 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		if f.useOrchestratorOptions {
 			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
 			if processed {
+				//DEBUG
+				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessary(); entity was handled by processIfNecessaryWithOrchestrator(); returning", true)
 				return nil
+			} else {
+				//DEBUG
+				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessary(); entity was NOT handled by processIfNecessaryWithOrchestrator(); continuing", true)
 			}
 		}
 
 		if f.disableComparison {
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+			// DEBUG: changed to stdout true
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, true)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -189,17 +195,20 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.md5 == nil {
 					if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
-						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
+						// DEBUG: changed to stdout true
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, true)
 						return f.copyTransferScheduler(sourceObjectInMap)
 					} else {
 						// skip if dest is more recent
-						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
+						// DEBUG: changed to stdout true
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, true)
 						return nil
 					}
 				}
 
 				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
-					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+					// DEBUG: changed to stdout true
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, true)
 
 					// hash inequality = source "newer" in this model.
 					return f.copyTransferScheduler(sourceObjectInMap)
@@ -208,10 +217,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
+			// DEBUG: changed to stdout true
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, true)
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+			// DEBUG: changed to stdout true
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, true)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -221,7 +232,8 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		}
 
 		// skip if dest is more recent
-		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
+		// DEBUG: changed to stdout true
+		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, true)
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
@@ -240,6 +252,8 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 
 	if sourceObjectInMap.entityType == common.EEntityType.Other() {
 		// As of now, for special files at source, fallback to the default behavior
+		// DEBUG
+		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, "[DEBUG] processIfNecessaryWithOrchestrator() src entity type is other", true)
 		return false, nil
 	}
 
@@ -266,7 +280,8 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 			if f.deleteDestination == common.EDeleteDestination.True() {
 				err := f.destinationCleaner(destinationObject)
 				if err != nil {
-					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
+					// DEBUG
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, "[DEBUG] processIfNecessaryWithOrchestrator() src NOT hardlink; src and dest not same entity type; dest is folder; deleteDestination is true; destinationClearner returned error", true)
 					if f.incrementNotTransferred != nil {
 						// XDM:maybe we should have a different counter for skipped transfers
 						f.incrementNotTransferred(sourceObjectInMap.entityType)
@@ -286,12 +301,16 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		}
 
 		// if its files, STE would do the right thing here and deletes the file at destination
+		// DEBUG
+		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessaryWithOrchestrator() src NOT hardlink; src and dest not same entity type; dest is NOT folder", true)
 		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
 
 	dataChanged, metadataChanged := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 
 	if dataChanged {
+		// DEBUG
+		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessaryWithOrchestrator() dataChanged is true", true)
 		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
 
@@ -302,6 +321,8 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		// If metadata has changed for a symlink, both mtime and ctime will change
 		// so data change will take care of it.
 		if sourceObjectInMap.entityType == common.EEntityType.Folder() {
+			// DEBUG
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessaryWithOrchestrator() metadataChanged is true; src is folder", true)
 			return true, f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -316,6 +337,8 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 			// Set entity type to FileProperties to indicate metadata transfer.
 			sourceObjectInMap.entityType = common.EEntityType.FileProperties()
 
+			// DEBUG
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessaryWithOrchestrator() metadataChanged is true; src is file", true)
 			return true, f.copyTransferScheduler(sourceObjectInMap)
 		}
 	}
@@ -325,7 +348,8 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		f.incrementNotTransferred(sourceObjectInMap.entityType)
 	}
 
-	syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
+	// DEBUG: changed to stdout true
+	syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, true)
 	return true, nil
 }
 
