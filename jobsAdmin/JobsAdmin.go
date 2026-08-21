@@ -636,7 +636,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 		averageBytesPerFile = int64(bytesInJob / uint64(filesInJob))
 	}
 
-	isToAzureFiles := fromTo.To().IsFile()
+	isToAzureFiles := fromTo.To() == common.ELocation.File()
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
