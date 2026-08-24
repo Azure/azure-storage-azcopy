@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
@@ -44,7 +43,12 @@ func (s *JobsCleanSuite) Scenario_JobsCleanAll(svm *ScenarioVariationManager) {
 			},
 		})
 
-	ValidateMessageOutput(svm, jobsCleanOutput, cmd.JobsCleanupSuccessMsg, true)
+	// LOCAL WORKAROUND -- do not commit.
+	// Upstream this is cmd.JobsCleanupSuccessMsg, defined in cmd/jobsClean.go on main.
+	// That file does not exist on the feature/azfilestofilesazcopy line, so the reference
+	// fails to compile and takes the whole e2etest package with it. Inlined here purely so
+	// other e2e suites can run; the literal is copied from origin/main:cmd/jobsClean.go:34.
+	ValidateMessageOutput(svm, jobsCleanOutput, "Successfully removed all jobs.", true)
 	validateDirSize(svm, logsDir, 1) // log directory will have a file matching the current job ID.
 	validateDirSize(svm, jobPlanDir, 0)
 }
