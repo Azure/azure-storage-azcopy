@@ -175,12 +175,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		if f.useOrchestratorOptions {
 			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
 			if processed {
-				//DEBUG
-				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessary(); entity was handled by processIfNecessaryWithOrchestrator(); returning", true)
 				return nil
-			} else {
-				//DEBUG
-				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, "[DEBUG] processIfNecessary(); entity was NOT handled by processIfNecessaryWithOrchestrator(); continuing", true)
 			}
 		}
 
@@ -391,14 +386,20 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		if f.orchestratorOptions.optimizeEnumerationByCTime && !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 			// if last succesful job start time is available and valid, compare with change time to decide
 			if sourceObject.changeTime.IsZero() {
+				// DEBUG
+				syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, "[DEBUG] compareSourceAndDestinationObject() metadataChanged = true b/c IsNFSCopy() is true, optimizeEnumerationByCTime is true, lastSuccessfulSyncJobStartTime is valid (nonzero), and source's change time is 0", true)
 				// invalid change time
 				// assume metadata change
 				return false, true
 			} else {
+				// DEBUG
+				syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, fmt.Sprintf("[DEBUG] compareSourceAndDestinationObject() metadataChanged = %t b/c IsNFSCopy() is true, optimizeEnumerationByCTime is true, lastSuccessfulSyncJobStartTime is valid (nonzero), source's change time = %v, which is after lastSuccessfulSyncJobStartTime = %v (both truncated to microseconds: %v > %v)", timeAfter(sourceObject.changeTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime, true), sourceObject.changeTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime, sourceObject.changeTime.Truncate(time.Microsecond), f.orchestratorOptions.lastSuccessfulSyncJobStartTime.Truncate(time.Microsecond)), true)
 				// else check if source changed after job start time
 				return false, timeAfter(sourceObject.changeTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime, true)
 			}
 		} else {
+			// DEBUG
+			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, fmt.Sprintf("[DEBUG] compareSourceAndDestinationObject() metadataChanged = true b/c IsNFSCopy() is true, optimizeEnumerationByCTime is %v, lastSuccessfulSyncJobStartTime is %v", f.orchestratorOptions.optimizeEnumerationByCTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime), true)
 			// If last successful job start time can't be used, we assume its changed
 			// this will lead to more work but it is necessary to maintain fidelity
 			return false, true
@@ -408,11 +409,15 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	// if its not NFS copy, we assume reliable change time is available in target
 
 	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+		// DEBUG
+		syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, fmt.Sprintf("[DEBUG] compareSourceAndDestinationObject() metadataChanged = true b/c IsNFSCopy() is !!!FALSE!!!, sourceObject.changeTime is %v, destinationObject.changeTime is %v (one of them is 0)", sourceObject.changeTime, destinationObject.changeTime), true)
 		return false, true
 	}
 
 	// Compare change times with precision tolerance
 	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, common.IsNFSCopy()) {
+		// DEBUG
+		syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, fmt.Sprintf("[DEBUG] compareSourceAndDestinationObject() metadataChanged = true b/c IsNFSCopy() is !!!FALSE!!!, sourceObject.changeTime is %v which is NOT equal to destinationObject.changeTime is %v (NOT truncated to microseconds)", sourceObject.changeTime, destinationObject.changeTime), true)
 		return false, true
 	}
 
