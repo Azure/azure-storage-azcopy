@@ -30,6 +30,29 @@ func init() {
 //
 // So the assertions below are deliberately about the *content* of the parsed response,
 // not just about the call succeeding.
+//
+// # Running these
+//
+// Requires a real premium (Kind=FileStorage) storage account. The share itself is created
+// and deleted by the framework; you only supply the account.
+//
+//	export NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME='<premium acct>'
+//	export NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY='<key>'
+//	export NEW_E2E_AZCOPY_PATH='<path to azcopy binary>'   # required by config; unused here
+//	export NEW_E2E_STATIC_TENANT_ID='<tenant guid>'
+//	export NEW_E2E_STATIC_CLI_INHERIT=true                 # else SetupOAuthCache fails
+//	unset NEW_E2E_SUBSCRIPTION_ID                          # selects static-account mode
+//
+//	go test ./e2etest/ -v -timeout 30m \
+//	  -run 'TestNewE2E/FileShareStatsTestSuite/Scenario_GetShareStatsPremiumShare'
+//
+// Add NEW_E2E_STANDARD_ACCOUNT_NAME/_KEY and drop the scenario name from -run to also run
+// Scenario_GetShareStatsStandardShare. Keep -v: the raw XML is logged, which is the point.
+//
+// Known framework issue: DeleteCreatedResources (newe2e_scenario_variation_manager.go)
+// requires both Delete() and EntityType(); FileShareResourceManager lacks EntityType, so
+// created shares are silently skipped at cleanup and leak. Harmless in dynamic mode (the
+// whole account is torn down), but in static mode shares accumulate -- delete them by hand.
 type FileShareStatsTestSuite struct{}
 
 // shareStatsScenarioLogger adapts the scenario asserter to common.ILogger so provider
