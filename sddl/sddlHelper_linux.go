@@ -1127,7 +1127,7 @@ func getDaclString(sd []byte) (string, error) {
 
 	if !isRangeValid(dacloffset, 8, uint32(len(sd))) {
 		return "", fmt.Errorf("dacloffset (%d) points outside Security Descriptor of size %d bytes!",
-			dacloffset+8, len(sd))
+			uint64(dacloffset)+8, len(sd))
 	}
 
 	// ACL.AclRevision.

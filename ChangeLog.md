@@ -1,6 +1,27 @@
 
 # Change Log
 
+## Version 10.32.7
+
+### Dependency updates
+
+1. Upgraded minio from `v6.0.14+incompatible` to `minio-go/v7 v7.2.1` to better support more recent S3 regions. ([#3495](https://github.com/Azure/azure-storage-azcopy/pull/3495))
+2. Azure Storage SDKs: azblob v1.6.2 -> v1.8.0, azdatalake v1.2.0 -> v1.6.0, azfile v1.5.2 -> v1.7.0, azcore v1.18.1 -> v1.22.0, azidentity v1.10.1 -> v1.14.0
+3. cloud.google.com/go/storage v1.50.0 -> v1.64.0, google.golang.org/api v0.249.0 -> v0.289.0
+4. golang.org/x/crypto v0.53.0 -> v0.54.0
+5. golang.org/x/net v0.55.0 -> v0.57.0
+6. golang.org/x/oauth2 v0.34.0 -> v0.36.0
+7. golang.org/x/sync v0.21.0 -> v0.22.0
+8. golang.org/x/sys v0.46.0 -> v0.47.0
+
+### Bug Fixes
+
+1. Fixed a bug where AzCopy would hang on SIGTERM cancellation when enumeration was still in progress, since the lifecycle manager synchronously prompted for stdin before scheduling job cancellation.
+
+### Code Improvements
+
+1. The Windows `resource.syso` files are now generated and embedded into the executable as part of the build pipeline. ([#3479](https://github.com/Azure/azure-storage-azcopy/pull/3479))
+
 ## Version 10.32.6
 
 ### Dependency updates

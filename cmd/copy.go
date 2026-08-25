@@ -1495,12 +1495,6 @@ func init() {
 		"Exclude all the relative path of the files that align with regular expressions. "+
 			"Separate regular expressions with ';'.")
 
-	// This flag is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
-		"Defines the location of text file which has the list of files to be copied. "+
-			"\n The text file should contain paths from root for each file name or directory"+
-			"written on a separate line.")
-
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "",
 		"Exclude these files when copying. This option supports wildcard characters (*). "+
 			"\n Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
@@ -1578,12 +1572,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false,
 		"False by default. Preserves Last Modified Time. Only available when destination is file system.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false,
-		"False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files SMB). "+
-			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner"+
-			"will not be the user running AzCopy.\n This flag applies to both files and folders, unless a file-only"+
-			"filter is specified (e.g. include-pattern).")
-
 	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true,
 		"True by default. Places folder sources as subdirectories under the destination.")
 
@@ -1593,16 +1581,6 @@ func init() {
 			"\n If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group "+
 			"will be based on the user running AzCopy")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"),
-		"Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files SMB). "+
-			"\n On windows, this flag will be set to true by default. If the source or destination is a "+
-			"volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
-			"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored."+
-			"This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
-			"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-
-	//Marking this flag as hidden as we might not support it in the future
-	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, azcopy.PreserveInfoFlag, false,
 		"Specify this flag if you want to preserve properties during the transfer operation."+
 			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag"+
@@ -1708,19 +1686,6 @@ func init() {
 			"If you set the --overwrite flag to false, files in the source directory are listed "+
 			"even if those files exist in the destination directory.")
 
-	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
-	// right before transferring in ste(backend).
-	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
-	// while this could cause big performance issue for S3 and Azure file, where listing doesn't return full properties,
-	// and enumerating logic do fetching properties sequentially!
-	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
-	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
-	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true,
-		"True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed."+
-			"\n Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we "+
-			"need the properties for modification time checks or MD5 checks.")
-
 	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "",
 		"Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 			"\n 'Enable'(Default) treats trailing dot file operations in a safe manner between systems that support these files. "+
@@ -1754,23 +1719,6 @@ func init() {
 			"\n Provided key and its hash will be fetched from environment variables"+
 			"(CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
 
-	// permanently hidden
-	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
-	_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
-
-	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	_ = cpCmd.PersistentFlags().MarkHidden("include")
-	_ = cpCmd.PersistentFlags().MarkHidden("exclude")
-
-	// Hide the flush-threshold flag since it is implemented only for CI.
-	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
-	_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
-
-	// Deprecate the old persist-smb-permissions flag
-	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, azcopy.PreservePermissionsFlag, false, "False by default."+
 		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
 		"\n permissions between aware resources(Linux to Azure Files NFS). \n"+
@@ -1780,10 +1728,60 @@ func init() {
 		"\n  For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy."+
 		"\n  This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
-	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
-	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
-		"\n Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
-	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+	{ // Hidden flags
+		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+
+			"\n On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
+			"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
+			"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+
+		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files SMB). "+
+			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner"+
+			"will not be the user running AzCopy.\n This flag applies to both files and folders, unless a file-only"+
+			"filter is specified (e.g. include-pattern).")
+
+		// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+		cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+		cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+
+		// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+		cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
+			"\n Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+
+		// This flag is implemented only for Storage Explorer.
+		cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
+			"Defines the location of text file which has the list of files to be copied. "+
+				"\n The text file should contain paths from root for each file name or directory written on a separate line.")
+		// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
+		// right before transferring in ste(backend).
+		// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
+		// while this could cause big performance issue for S3 and Azure file, where listing doesn't return full properties,
+		// and enumerating logic do fetching properties sequentially!
+		// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
+		// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
+		// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
+		cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed. "+
+			"\n Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks.")
+
+		// Hide the flush-threshold flag since it is implemented only for CI.
+		cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
+
+		if !displayDeveloperOptions {
+			// Hide the old SMB-specific flags
+			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+
+			// legacy include/exclude flags
+			_ = cpCmd.PersistentFlags().MarkHidden("include")
+			_ = cpCmd.PersistentFlags().MarkHidden("exclude")
+
+			// Flag intended for use for support
+			_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
+			_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
+			_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+			_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+		}
+	}
 
 	cpCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
 		"Specifies how hardlinks should be handled. "+

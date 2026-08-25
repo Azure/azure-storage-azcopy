@@ -1,5 +1,10 @@
 package common
 
+import (
+	"context"
+	"fmt"
+)
+
 // JobErrorHandler defines a simple interface for handling errors that occur
 // during the job lifecycle.
 //
@@ -30,10 +35,11 @@ type JobErrorHandler interface {
 //   h.Warn("this uses the custom override")
 
 type JobUIHooks struct {
-	Prompt                 func(message string, details PromptDetails) ResponseOption
-	Info                   func(string)
-	Warn                   func(string)
-	E2EAwaitAllowOpenFiles func()
+	Prompt                   func(message string, details PromptDetails) ResponseOption
+	Info                     func(string)
+	Warn                     func(string)
+	E2EAwaitAllowOpenFiles   func()
+	E2EAwaitEnumerationStart func(context.Context)
 }
 
 func NewJobUIHooks() *JobUIHooks {
@@ -50,13 +56,39 @@ func NewJobUIHooks() *JobUIHooks {
 		E2EAwaitAllowOpenFiles: func() {
 			// default: no-op
 		},
+		E2EAwaitEnumerationStart: func(context.Context) {
+			// default: no-op
+		},
 	}
 }
 
 // TODO : (gapra) : Refactor these names, leaving them as-is for now to limit the scope of changes.
 var lcm *JobUIHooks
 
-func GetLifecycleMgr() *JobUIHooks {
+// fallbackLcm is used when GetLifecycleMgr is called with allowFallback set to
+// true and no handler has been installed globally via SetUIHooks. It outputs all
+// job messages to stdout so library callers get useful feedback by default.
+var fallbackLcm = &JobUIHooks{
+	Prompt: func(message string, details PromptDetails) ResponseOption {
+		return EResponseOption.Yes() // auto-answer in non-interactive mode
+	},
+	Info:  func(msg string) { fmt.Println(msg) },
+	Warn:  func(msg string) { fmt.Println(msg) },
+	E2EAwaitAllowOpenFiles: func() {
+		// default: no-op
+	},
+	E2EAwaitEnumerationStart: func(context.Context) {
+		// default: no-op
+	},
+}
+
+func GetLifecycleMgr(allowFallback ...bool) *JobUIHooks {
+	if lcm != nil {
+		return lcm
+	}
+	if len(allowFallback) > 0 && allowFallback[0] {
+		return fallbackLcm
+	}
 	return lcm
 }
 

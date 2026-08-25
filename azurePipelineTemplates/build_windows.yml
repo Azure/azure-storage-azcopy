@@ -10,6 +10,10 @@ steps:
     displayName: 'Create output path'
 
   - script: |
+      go run "common\manifest\main.go"
+    displayName: 'Create resource.syso files'
+
+  - script: |
       go build -o "$(binaries)\azcopy_windows_amd64.exe"
     displayName: 'Generate Windows AMD64'
     env:
