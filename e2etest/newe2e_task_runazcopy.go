@@ -545,9 +545,20 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		Stderr: stderr.String(),
 	})
 
-	if parsed, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok && parsed.InitMsg.JobID != "" {
+	if parsed, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok &&
+		azCopyVerbProducesJobFinishedTelemetry(commandSpec.Verb) &&
+		parsed.InitMsg.JobID != "" {
 		RegisterExpectedAppInsightsJob(parsed.InitMsg.JobID)
 	}
 
 	return out, &AzCopyJobPlan{}
+}
+
+func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
+	switch verb {
+	case AzCopyVerbCopy, AzCopyVerbSync, AzCopyVerbJobsResume:
+		return true
+	default:
+		return false
+	}
 }

@@ -77,7 +77,9 @@ const (
 	// telemetrySendTimeout bounds how long a single send may block.
 	telemetrySendTimeout = 5 * time.Second
 	// installationIDFileName stores the anonymous, per-install identifier.
-	installationIDFileName = "installation_id"
+	installationIDFileName       = "installation_id"
+	installationIDLockRetryDelay = 10 * time.Millisecond
+	installationIDLockAttempts   = 100
 )
 
 // telemetryAgent owns the (optional) telemetry reporter plus the cached,
@@ -475,24 +477,92 @@ func nicSpeedBucket(speedMbps int) string {
 }
 
 // installationID returns a stable, anonymous per-install identifier. It is a
-// random 128-bit value persisted alongside the job plan files. It is NOT derived
-// from any machine identity and contains no PII.
+// random 128-bit value persisted with AzCopy's application data. It is NOT
+// derived from any machine identity and contains no PII.
 func installationID() string {
-	if common.AzcopyJobPlanFolder == "" {
+	return installationIDInDir(common.GetAzCopyAppPath())
+}
+
+func installationIDInDir(appDataDir string) string {
+	if appDataDir == "" {
 		return ""
 	}
-	p := filepath.Join(common.AzcopyJobPlanFolder, installationIDFileName)
-	if b, err := os.ReadFile(p); err == nil {
-		if id := strings.TrimSpace(string(b)); id != "" {
+	if err := os.MkdirAll(appDataDir, 0700); err != nil {
+		return ""
+	}
+
+	p := filepath.Join(appDataDir, installationIDFileName)
+	lockPath := p + ".lock"
+	for attempt := 0; attempt < installationIDLockAttempts; attempt++ {
+		if id := readInstallationID(p); id != "" {
 			return id
 		}
+
+		lockFile, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err == nil {
+			if closeErr := lockFile.Close(); closeErr != nil {
+				_ = os.Remove(lockPath)
+				return ""
+			}
+			return createInstallationID(p, lockPath, appDataDir)
+		}
+		if !os.IsExist(err) {
+			return ""
+		}
+		time.Sleep(installationIDLockRetryDelay)
 	}
+	return ""
+}
+
+func readInstallationID(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	id := strings.TrimSpace(string(b))
+	if len(id) != 32 {
+		return ""
+	}
+	if _, err = hex.DecodeString(id); err != nil {
+		return ""
+	}
+	return id
+}
+
+func createInstallationID(path, lockPath, appDataDir string) string {
+	defer os.Remove(lockPath)
+
+	if id := readInstallationID(path); id != "" {
+		return id
+	}
+
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
 		return ""
 	}
 	id := hex.EncodeToString(buf)
-	_ = os.WriteFile(p, []byte(id), 0600)
+
+	tempFile, err := os.CreateTemp(appDataDir, "."+installationIDFileName+"-*")
+	if err != nil {
+		return ""
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+
+	if _, err = tempFile.WriteString(id); err != nil {
+		_ = tempFile.Close()
+		return ""
+	}
+	if err = tempFile.Close(); err != nil {
+		return ""
+	}
+
+	if err = os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return ""
+	}
+	if err = os.Rename(tempPath, path); err != nil {
+		return ""
+	}
 	return id
 }
 

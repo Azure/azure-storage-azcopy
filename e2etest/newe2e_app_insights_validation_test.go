@@ -64,6 +64,26 @@ func TestExpectedAppInsightsJobsAreCountedConcurrently(t *testing.T) {
 	assert.Equal(t, registrations, snapshot.expectedJobs["job-1"])
 }
 
+func TestAzCopyVerbProducesJobFinishedTelemetry(t *testing.T) {
+	for _, verb := range []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync, AzCopyVerbJobsResume} {
+		assert.True(t, azCopyVerbProducesJobFinishedTelemetry(verb), verb)
+	}
+
+	for _, verb := range []AzCopyVerb{
+		AzCopyVerbRemove,
+		AzCopyVerbList,
+		AzCopyVerbLogin,
+		AzCopyVerbLoginStatus,
+		AzCopyVerbLogout,
+		AzCopyVerbJobsList,
+		AzCopyVerbJobsClean,
+		AzCopyVerbJobsRemove,
+		AzCopyVerbJobsShow,
+	} {
+		assert.False(t, azCopyVerbProducesJobFinishedTelemetry(verb), verb)
+	}
+}
+
 func TestBuildFinishedEventQuery(t *testing.T) {
 	startedAt := time.Date(2026, 7, 1, 12, 30, 0, 0, time.UTC)
 	query := buildFinishedEventQuery(`run"id`, startedAt)
