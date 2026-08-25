@@ -57,6 +57,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
 	dl, err := df(jptm)
 	if err != nil {
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -109,6 +110,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 		// This will save hours in the event a user has say, a several hundred gigabyte file.
 		if len(info.SrcHTTPHeaders.ContentMD5) == 0 {
 			jptm.LogDownloadError(info.Source, info.Destination, errExpectedMd5Missing.Error(), 0)
+			jptm.SetErrorMessage(errExpectedMd5Missing.Error())
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -255,7 +257,9 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 	/*
 		dstFileInfo, err := dstFile.Stat()
 		if err != nil || (dstFileInfo.Size() != blobSize) {
-			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			err_msg := "File Creation Error " + err.Error()
+			jptm.LogDownloadError(info.Source, info.Destination, err_msg, 0)
+			jptm.SetErrorMessage(err_msg)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// Since the transfer failed, the file created above should be deleted
 			// If there was an error while opening / creating the file, delete will fail.
