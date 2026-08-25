@@ -294,7 +294,13 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
-	progressTracker := newSyncProgressTracker(jobID, opts.Handler, cookedOpts.fromTo, cookedOpts.symlinks, cookedOpts.hardlinks)
+	progressTracker := newSyncProgressTracker(
+		jobID,
+		opts.Handler,
+		cookedOpts.fromTo,
+		cookedOpts.symlinks,
+		cookedOpts.hardlinks,
+		getTelemetryAgent().shouldCollectSourceShape(jobID.String()))
 	sync := &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}
 
 	// Ensure that resources are eventually released even if the caller forgets to close the syncer.

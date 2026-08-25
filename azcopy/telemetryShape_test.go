@@ -1,11 +1,13 @@
 package azcopy
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSourceShapeTracker(t *testing.T) {
@@ -57,6 +59,26 @@ func TestSourceShapeTrackerEmptyAndDirectBucket(t *testing.T) {
 	assert.Zero(t, summary.ObjectsUnder1MiBRatioPct)
 	assert.Equal(t, int64(1), summary.BucketsScanned)
 	assert.Equal(t, int64(1), summary.BucketsTouched)
+}
+
+func TestSourceShapeTrackerDerivesAccountScopesWithoutPreEnumeration(t *testing.T) {
+	tracker := newSourceShapeTracker(common.ELocation.Blob(), common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow())
+	accountTraverser := traverser.NewBlobAccountTraverser(nil, "", context.Background(), traverser.InitResourceTraverserOptions{})
+
+	require.NoError(t, tracker.initializeScopes(accountTraverser))
+	for _, object := range []traverser.StoredObject{
+		{EntityType: common.EEntityType.File(), ContainerName: "one"},
+		{EntityType: common.EEntityType.File(), ContainerName: "one"},
+		{EntityType: common.EEntityType.File(), ContainerName: "two"},
+		{EntityType: common.EEntityType.File()},
+	} {
+		require.NoError(t, tracker.recordScanned(object))
+		tracker.recordScheduled(object)
+	}
+
+	summary := tracker.snapshot()
+	assert.Equal(t, int64(2), summary.ContainersScanned)
+	assert.Equal(t, int64(2), summary.ContainersTouched)
 }
 
 func TestRelativePathDepth(t *testing.T) {

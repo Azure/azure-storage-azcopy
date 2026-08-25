@@ -507,12 +507,13 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	stderr := &bytes.Buffer{}
+	jobIDCapture := newAzCopyJobIDCapture(out)
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
 		Args: args,
 		Env:  env,
 
-		Stdout: out, // todo
+		Stdout: jobIDCapture,
 		Stderr: stderr,
 	}
 	in, err := command.StdinPipe()
@@ -545,10 +546,15 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		Stderr: stderr.String(),
 	})
 
-	if parsed, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok &&
-		azCopyVerbProducesJobFinishedTelemetry(commandSpec.Verb) &&
-		parsed.InitMsg.JobID != "" {
-		RegisterExpectedAppInsightsJob(parsed.InitMsg.JobID)
+	if azCopyCommandProducesJobFinishedTelemetry(commandSpec.Verb, flagMap) {
+		jobID := jobIDCapture.JobID()
+		if AppInsightsTelemetryValidationEnabled() && jobID == "" {
+			a.NoError("capture AzCopy job ID for Application Insights validation",
+				fmt.Errorf("AzCopy %s output did not contain a valid job ID", commandSpec.Verb))
+		}
+		if jobID != "" {
+			RegisterExpectedAppInsightsJob(jobID)
+		}
 	}
 
 	return out, &AzCopyJobPlan{}
@@ -561,4 +567,9 @@ func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
 	default:
 		return false
 	}
+}
+
+func azCopyCommandProducesJobFinishedTelemetry(verb AzCopyVerb, flags map[string]string) bool {
+	return azCopyVerbProducesJobFinishedTelemetry(verb) &&
+		!strings.EqualFold(flags["dry-run"], "true")
 }

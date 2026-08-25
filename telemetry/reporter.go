@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -368,9 +369,81 @@ func postEnvelopes(ctx context.Context, client httpDoer, endpoint string, envelo
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusPartialContent {
+		if err := validatePartialIngestionResponse(resp.Body); err != nil {
+			return resp.StatusCode, err
+		}
+	}
 	if resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
 		return resp.StatusCode, fmt.Errorf("app insights returned %d: %s", resp.StatusCode, string(respBody))
 	}
 	return resp.StatusCode, nil
+}
+
+type partialIngestionResponse struct {
+	ItemsReceived int                     `json:"itemsReceived"`
+	ItemsAccepted int                     `json:"itemsAccepted"`
+	Errors        []partialIngestionIssue `json:"errors"`
+}
+
+type partialIngestionIssue struct {
+	Index      int    `json:"index"`
+	StatusCode int    `json:"statusCode"`
+	Message    string `json:"message"`
+}
+
+func validatePartialIngestionResponse(body io.Reader) error {
+	var result partialIngestionResponse
+	decoder := json.NewDecoder(io.LimitReader(body, 64*1024))
+	if err := decoder.Decode(&result); err != nil {
+		return fmt.Errorf("app insights returned 206 with an invalid response: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("app insights returned 206 with an invalid response: trailing content")
+	}
+	if result.ItemsReceived <= 0 || result.ItemsAccepted < 0 || result.ItemsAccepted > result.ItemsReceived {
+		return fmt.Errorf(
+			"app insights returned 206 with invalid item counts (received=%d accepted=%d)",
+			result.ItemsReceived,
+			result.ItemsAccepted)
+	}
+
+	rejected := result.ItemsReceived - result.ItemsAccepted
+	if rejected <= 0 || len(result.Errors) != rejected {
+		return fmt.Errorf(
+			"app insights returned 206 with inconsistent rejection details (received=%d accepted=%d errors=%d)",
+			result.ItemsReceived,
+			result.ItemsAccepted,
+			len(result.Errors))
+	}
+	rejectedIndexes := make(map[int]struct{}, len(result.Errors))
+	for _, issue := range result.Errors {
+		if issue.Index < 0 || issue.Index >= result.ItemsReceived {
+			return fmt.Errorf(
+				"app insights returned 206 with an invalid rejected item index %d (received=%d)",
+				issue.Index,
+				result.ItemsReceived)
+		}
+		if _, exists := rejectedIndexes[issue.Index]; exists {
+			return fmt.Errorf("app insights returned 206 with duplicate rejected item index %d", issue.Index)
+		}
+		rejectedIndexes[issue.Index] = struct{}{}
+		if issue.StatusCode < http.StatusBadRequest || issue.StatusCode > 599 {
+			return fmt.Errorf(
+				"app insights returned 206 with invalid rejection status %d at item index %d",
+				issue.StatusCode,
+				issue.Index)
+		}
+	}
+
+	first := result.Errors[0]
+	return fmt.Errorf(
+		"app insights partially accepted telemetry (received=%d accepted=%d rejected=%d; first rejection index=%d status=%d: %s)",
+		result.ItemsReceived,
+		result.ItemsAccepted,
+		rejected,
+		first.Index,
+		first.StatusCode,
+		strings.TrimSpace(first.Message))
 }

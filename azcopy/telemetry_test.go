@@ -24,11 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -291,7 +294,6 @@ func TestResumeJobDimensions(t *testing.T) {
 	assert.Equal(t, "job-cumulative", dimensions.SummaryCounterScope)
 	assert.Equal(t, "NotApplicable", dimensions.SourceAuthMechanism)
 	assert.Equal(t, "SAS", dimensions.DestAuthMechanism)
-	assert.Equal(t, "account", dimensions.DestStorageAccount)
 	assert.Empty(t, dimensions.SourceCloudType)
 	assert.Equal(t, "public", dimensions.DestCloudType)
 	assert.Equal(t, []string{"include"}, dimensions.Options.FlagsSet)
@@ -466,39 +468,6 @@ func TestPerformanceAdviceAttributes(t *testing.T) {
 	assert.Equal(t, []string{"NetworkErrors", "AccountIOPS"}, codes)
 }
 
-func TestStorageAccountName(t *testing.T) {
-	a := assert.New(t)
-	// Azure remote: first DNS label is the account name.
-	a.Equal("myaccount", storageAccountName(
-		common.ResourceString{Value: "https://myaccount.blob.core.windows.net/container/path"},
-		common.ELocation.Blob()))
-	a.Equal("acct2", storageAccountName(
-		common.ResourceString{Value: "https://acct2.dfs.core.windows.net/fs"},
-		common.ELocation.BlobFS()))
-	a.Equal("privateacct", storageAccountName(
-		common.ResourceString{Value: "https://privateacct.privatelink.blob.core.windows.net/container"},
-		common.ELocation.Blob()))
-	// Azure-typed custom endpoints do not emit a hostname-derived identity.
-	a.Equal("", storageAccountName(
-		common.ResourceString{Value: "https://acct.blob.example.com/container"},
-		common.ELocation.Blob()))
-	// Local locations return empty.
-	a.Equal("", storageAccountName(
-		common.ResourceString{Value: "/local/path"},
-		common.ELocation.Local()))
-	// Non-Azure providers never emit bucket names.
-	a.Equal("", storageAccountName(
-		common.ResourceString{Value: "https://bucket.s3.amazonaws.com/key"},
-		common.ELocation.S3()))
-	a.Equal("", storageAccountName(
-		common.ResourceString{Value: "https://storage.cloud.google.com/mybucket/object"},
-		common.ELocation.GCP()))
-	// Hostless values return empty.
-	a.Equal("", storageAccountName(
-		common.ResourceString{Value: "relative/path"},
-		common.ELocation.Blob()))
-}
-
 func TestAuthMechanism(t *testing.T) {
 	resourceWithSAS := common.ResourceString{Value: "https://account.blob.core.windows.net/container", SAS: "?sig=secret"}
 	assert.Equal(t, "SAS", authMechanism(common.ECredentialType.Anonymous(), resourceWithSAS, common.ELocation.Blob()))
@@ -617,6 +586,56 @@ func TestShouldSampleTelemetry(t *testing.T) {
 	}
 	assert.Greater(t, includedAtOnePercent, 70)
 	assert.Less(t, includedAtOnePercent, 130)
+}
+
+func TestShouldCollectSourceShape(t *testing.T) {
+	original := telemetrySamplingRate
+	t.Cleanup(func() { telemetrySamplingRate = original })
+
+	telemetrySamplingRate = 1
+	assert.False(t, (*telemetryAgent)(nil).shouldCollectSourceShape("job"))
+	assert.False(t, (&telemetryAgent{}).shouldCollectSourceShape("job"))
+	assert.True(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape("job"))
+
+	telemetrySamplingRate = 0
+	assert.False(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape("job"))
+}
+
+func TestProgressTrackersOnlyCollectSourceShapeWhenEligible(t *testing.T) {
+	jobID := common.NewJobID()
+	copyWithoutShape := newTransferProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		false)
+	copyWithShape := newTransferProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		true)
+	syncWithoutShape := newSyncProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		false)
+	syncWithShape := newSyncProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		true)
+
+	assert.Nil(t, copyWithoutShape.shapeTracker)
+	assert.NotNil(t, copyWithShape.shapeTracker)
+	assert.Nil(t, syncWithoutShape.shapeTracker)
+	assert.NotNil(t, syncWithShape.shapeTracker)
 }
 
 func TestBuildResourceAttributesSamplingMetadata(t *testing.T) {
@@ -781,6 +800,97 @@ func TestDisabledAgentIsNoop(t *testing.T) {
 	disabled.reportStarted(telemetry.JobDimensions{}, "id", "invocation", time.Now())
 	disabled.reportFinished(telemetry.JobFinishedEvent{})
 	a.False(disabled.enabled)
+}
+
+type orderedTelemetryClient struct {
+	mu           sync.Mutex
+	eventNames   []string
+	firstEntered chan struct{}
+	releaseFirst chan struct{}
+}
+
+func (c *orderedTelemetryClient) Do(req *http.Request) (*http.Response, error) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	eventName := ""
+	for _, candidate := range []string{"azcopy.job.started", "azcopy.job.finished"} {
+		if strings.Contains(string(body), candidate) {
+			eventName = candidate
+			break
+		}
+	}
+
+	c.mu.Lock()
+	c.eventNames = append(c.eventNames, eventName)
+	callNumber := len(c.eventNames)
+	c.mu.Unlock()
+	if callNumber == 1 {
+		close(c.firstEntered)
+		<-c.releaseFirst
+	}
+
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestFinishedTelemetryWaitsForStartedDelivery(t *testing.T) {
+	original := telemetrySamplingRate
+	telemetrySamplingRate = 1
+	t.Cleanup(func() { telemetrySamplingRate = original })
+
+	client := &orderedTelemetryClient{
+		firstEntered: make(chan struct{}),
+		releaseFirst: make(chan struct{}),
+	}
+	agent := &telemetryAgent{
+		enabled: true,
+		reporter: telemetry.NewReporter(telemetry.Config{
+			Backend:          telemetry.BackendAppInsights,
+			ConnectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000001;IngestionEndpoint=https://example.test",
+			HTTPClient:       client,
+		}),
+	}
+	const jobID = "job"
+	const invocationID = "invocation"
+	agent.reportStarted(telemetry.JobDimensions{}, jobID, invocationID, time.Now())
+	<-client.firstEntered
+
+	finished := make(chan struct{})
+	go func() {
+		agent.reportFinished(telemetry.JobFinishedEvent{
+			JobID:        jobID,
+			InvocationID: invocationID,
+			EndTimestamp: time.Now(),
+		})
+		close(finished)
+	}()
+
+	select {
+	case <-finished:
+		t.Fatal("finished telemetry completed before started telemetry")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	client.mu.Lock()
+	assert.Equal(t, []string{"azcopy.job.started"}, client.eventNames)
+	client.mu.Unlock()
+
+	close(client.releaseFirst)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("finished telemetry did not complete after started telemetry")
+	}
+
+	client.mu.Lock()
+	assert.Equal(t, []string{"azcopy.job.started", "azcopy.job.finished"}, client.eventNames)
+	client.mu.Unlock()
 }
 
 func telemetryResourceForTest() telemetry.ResourceAttributes {

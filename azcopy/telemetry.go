@@ -86,9 +86,10 @@ const (
 // process-wide resource attributes. All methods are safe to call when the agent
 // is nil or disabled, in which case they are no-ops.
 type telemetryAgent struct {
-	enabled  bool
-	reporter *telemetry.Reporter
-	resource telemetry.ResourceAttributes
+	enabled      bool
+	reporter     *telemetry.Reporter
+	resource     telemetry.ResourceAttributes
+	startedSends sync.Map
 }
 
 var (
@@ -155,7 +156,15 @@ func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invo
 		Timestamp:    start,
 		StartedCount: 1,
 	}
-	go a.sendSafely(evt)
+	sendComplete := make(chan struct{})
+	a.startedSends.Store(startedSendKey(runID, invocationID), sendComplete)
+	go func() {
+		defer func() {
+			close(sendComplete)
+			a.startedSends.CompareAndDelete(startedSendKey(runID, invocationID), sendComplete)
+		}()
+		a.sendSafely(evt)
+	}()
 }
 
 // reportFinished emits a job.finished event synchronously (bounded by
@@ -165,7 +174,14 @@ func (a *telemetryAgent) reportFinished(evt telemetry.JobFinishedEvent) {
 	if a == nil || !a.enabled || !shouldSampleTelemetry(evt.JobID, telemetrySamplingRate) {
 		return
 	}
+	if sendComplete, ok := a.startedSends.LoadAndDelete(startedSendKey(evt.JobID, evt.InvocationID)); ok {
+		<-sendComplete.(chan struct{})
+	}
 	a.sendSafely(evt)
+}
+
+func startedSendKey(jobID, invocationID string) string {
+	return jobID + "\x00" + invocationID
 }
 
 type attemptTelemetryFinalizer struct {
@@ -420,6 +436,10 @@ func shouldSampleTelemetry(jobID string, rate float64) bool {
 	return float64(value)/float64(bucketCount) < rate
 }
 
+func (a *telemetryAgent) shouldCollectSourceShape(jobID string) bool {
+	return a != nil && a.enabled && shouldSampleTelemetry(jobID, telemetrySamplingRate)
+}
+
 func (a *telemetryAgent) sendSafely(evt telemetry.MetricEvent) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -599,9 +619,7 @@ func resumeJobDimensions(jobDetails common.GetJobDetailsResponse, source, destin
 	d := baseJobDimensions("jobs.resume", jobDetails.FromTo, srcCredType, dstCredType)
 	d.SummaryCounterScope = "job-cumulative"
 	d.SourceMountType = sourceMountType(jobDetails.FromTo.From(), source.Value)
-	d.SourceStorageAccount = storageAccountName(source, jobDetails.FromTo.From())
 	d.SourceScope = scopeForLocation(source, jobDetails.FromTo.From(), true)
-	d.DestStorageAccount = storageAccountName(destination, jobDetails.FromTo.To())
 	d.DestScope = scopeForLocation(destination, jobDetails.FromTo.To(), false)
 	d.SourceAuthMechanism = authMechanism(srcCredType, source, jobDetails.FromTo.From())
 	d.DestAuthMechanism = authMechanism(dstCredType, destination, jobDetails.FromTo.To())
@@ -662,38 +680,6 @@ func sourceMountType(loc common.Location, localPath string) string {
 		return mt
 	}
 	return "local-disk"
-}
-
-// storageAccountName returns the Azure storage account name (the first DNS
-// label of the host) for recognized Azure Storage endpoints. It returns "" for
-// non-Azure resources, custom endpoints, and values that cannot be parsed.
-func storageAccountName(r common.ResourceString, loc common.Location) string {
-	if !loc.IsAzure() {
-		return ""
-	}
-	host := hostOf(r)
-	if host == "" || !isRecognizedAzureStorageHost(host) {
-		return ""
-	}
-	if i := strings.IndexByte(host, '.'); i > 0 {
-		return host[:i]
-	}
-	return ""
-}
-
-func isRecognizedAzureStorageHost(host string) bool {
-	for _, suffix := range []string{
-		".core.windows.net",
-		".storage.azure.net",
-		".core.usgovcloudapi.net",
-		".core.chinacloudapi.cn",
-		".core.cloudapi.de",
-	} {
-		if strings.HasSuffix(host, suffix) {
-			return true
-		}
-	}
-	return false
 }
 
 func authMechanism(credType common.CredentialType, resource common.ResourceString, location common.Location) string {
@@ -805,9 +791,7 @@ func cloudTypeFromHost(host string) string {
 func copyJobDimensions(o *CookedTransferOptions, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
 	d := baseJobDimensions("copy", o.fromTo, srcCredType, dstCredType)
 	d.SourceMountType = sourceMountType(o.fromTo.From(), o.source.Value)
-	d.SourceStorageAccount = storageAccountName(o.source, o.fromTo.From())
 	d.SourceScope = scopeForLocation(o.source, o.fromTo.From(), true)
-	d.DestStorageAccount = storageAccountName(o.destination, o.fromTo.To())
 	d.DestScope = scopeForLocation(o.destination, o.fromTo.To(), false)
 	d.SourceAuthMechanism = authMechanism(srcCredType, o.source, o.fromTo.From())
 	d.DestAuthMechanism = authMechanism(dstCredType, o.destination, o.fromTo.To())
@@ -834,9 +818,7 @@ func shouldEmitCopyTelemetry(o *CookedTransferOptions) bool {
 func syncJobDimensions(o *cookedSyncOptions, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
 	d := baseJobDimensions("sync", o.fromTo, srcCredType, dstCredType)
 	d.SourceMountType = sourceMountType(o.fromTo.From(), o.source.Value)
-	d.SourceStorageAccount = storageAccountName(o.source, o.fromTo.From())
 	d.SourceScope = scopeForLocation(o.source, o.fromTo.From(), true)
-	d.DestStorageAccount = storageAccountName(o.destination, o.fromTo.To())
 	d.DestScope = scopeForLocation(o.destination, o.fromTo.To(), false)
 	d.SourceAuthMechanism = authMechanism(srcCredType, o.source, o.fromTo.From())
 	d.DestAuthMechanism = authMechanism(dstCredType, o.destination, o.fromTo.To())

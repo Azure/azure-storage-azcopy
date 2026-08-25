@@ -69,7 +69,16 @@ type imdsInfo struct {
 // link-local address visible only to Azure VMs, and the response is not
 // security-sensitive.
 func probeIMDS() imdsInfo {
-	return probeIMDSWithClient(&http.Client{Timeout: imdsTimeout})
+	return probeIMDSWithClient(newIMDSHTTPClient())
+}
+
+func newIMDSHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	return &http.Client{
+		Timeout:   imdsTimeout,
+		Transport: transport,
+	}
 }
 
 // probeIMDSWithClient is the testable core of probeIMDS.
@@ -87,12 +96,7 @@ func probeIMDSWithClient(client *http.Client) imdsInfo {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		// A response (even a non-200) still tells us we are on an Azure VM.
-		return imdsInfo{isAzureVM: true}
-	}
-
-	return imdsInfo{isAzureVM: true}
+	return imdsInfo{isAzureVM: resp.StatusCode == http.StatusOK}
 }
 
 // ---------------------------------------------------------------------------

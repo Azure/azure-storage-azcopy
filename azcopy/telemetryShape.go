@@ -93,7 +93,7 @@ func (t *sourceShapeTracker) initializeScopes(resourceTraverser traverser.Resour
 		return nil
 	}
 
-	accountTraverser, isAccount := resourceTraverser.(traverser.AccountTraverser)
+	_, isAccount := resourceTraverser.(traverser.AccountTraverser)
 	t.mu.Lock()
 	t.accountScope = isAccount
 	t.mu.Unlock()
@@ -102,13 +102,6 @@ func (t *sourceShapeTracker) initializeScopes(resourceTraverser traverser.Resour
 		return nil
 	}
 
-	scopes, err := accountTraverser.ListContainers()
-	if err != nil {
-		return err
-	}
-	for _, scope := range scopes {
-		t.addScannedScope(scope)
-	}
 	return nil
 }
 
@@ -125,6 +118,9 @@ func (t *sourceShapeTracker) recordScanned(object traverser.StoredObject) error 
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.accountScope && object.ContainerName != "" {
+		t.scannedScope[object.ContainerName] = struct{}{}
+	}
 	t.objectCount++
 	t.bytesScanned += uint64(size)
 	if size < smallSourceObjectThresholdBytes {

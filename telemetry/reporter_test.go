@@ -463,7 +463,6 @@ func TestEventPropertiesAreBoundedBeforeExport(t *testing.T) {
 	event := sampleFinished()
 	event.Resource.OSVersion = oversized
 	event.Resource.HostCPUModel = oversized
-	event.Dimensions.SourceStorageAccount = oversized
 	event.Dimensions.Options = OptionAttributes{
 		FlagsSet: []string{oversized, oversized},
 		Values:   map[string]string{"OptFutureValue": oversized},
@@ -531,6 +530,10 @@ func TestEventToEnvelopes(t *testing.T) {
 	assert.False(t, hasSourceEndpointIdentity)
 	_, hasDestEndpointIdentity := envelope.Data.BaseData.Properties["DestEndpointIdentity"]
 	assert.False(t, hasDestEndpointIdentity)
+	_, hasSourceStorageAccount := envelope.Data.BaseData.Properties["SourceStorageAccount"]
+	assert.False(t, hasSourceStorageAccount)
+	_, hasDestStorageAccount := envelope.Data.BaseData.Properties["DestStorageAccount"]
+	assert.False(t, hasDestStorageAccount)
 	_, hasCloudType := envelope.Data.BaseData.Properties["CloudType"]
 	assert.False(t, hasCloudType)
 }
@@ -572,6 +575,56 @@ func TestReportEventAppInsightsServerError(t *testing.T) {
 	err := r.ReportEvent(context.Background(), sampleStarted())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "500")
+}
+
+func TestReportEventAppInsightsRejectsPartialAcceptance(t *testing.T) {
+	client := &stubClient{
+		status:   http.StatusPartialContent,
+		respBody: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":1,"statusCode":400,"message":"invalid field"}]}`,
+	}
+	r := NewReporter(Config{
+		Backend:          BackendAppInsights,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+
+	err := r.ReportEvent(context.Background(), sampleStarted())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "partially accepted telemetry")
+	assert.ErrorContains(t, err, "index=1 status=400")
+}
+
+func TestReportEventAppInsightsRejectsInvalidPartialResponses(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty", body: "", want: "invalid response"},
+		{name: "malformed", body: "{", want: "invalid response"},
+		{name: "invalid counts", body: `{"itemsReceived":1,"itemsAccepted":2}`, want: "invalid item counts"},
+		{name: "missing errors", body: `{"itemsReceived":2,"itemsAccepted":1}`, want: "inconsistent rejection details"},
+		{name: "invalid index", body: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":2}]}`, want: "invalid rejected item index"},
+		{name: "no rejection", body: `{"itemsReceived":1,"itemsAccepted":1}`, want: "inconsistent rejection details"},
+		{name: "trailing content", body: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":1,"statusCode":400}]} trailing`, want: "trailing content"},
+		{name: "duplicate index", body: `{"itemsReceived":3,"itemsAccepted":1,"errors":[{"index":1,"statusCode":400},{"index":1,"statusCode":400}]}`, want: "duplicate rejected item index"},
+		{name: "invalid status", body: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":1,"statusCode":0}]}`, want: "invalid rejection status"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &stubClient{status: http.StatusPartialContent, respBody: test.body}
+			r := NewReporter(Config{
+				Backend:          BackendAppInsights,
+				ConnectionString: testConnString,
+				HTTPClient:       client,
+			})
+
+			err := r.ReportEvent(context.Background(), sampleStarted())
+			require.Error(t, err)
+			assert.ErrorContains(t, err, test.want)
+		})
+	}
 }
 
 func TestReportEventTransportError(t *testing.T) {

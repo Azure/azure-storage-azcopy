@@ -63,11 +63,15 @@ type syncProgressTracker struct {
 	shapeTracker *sourceShapeTracker
 }
 
-func newSyncProgressTracker(jobID common.JobID, handler SyncHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) *syncProgressTracker {
+func newSyncProgressTracker(jobID common.JobID, handler SyncHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType, collectSourceShape bool) *syncProgressTracker {
+	var shapeTracker *sourceShapeTracker
+	if collectSourceShape {
+		shapeTracker = newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling)
+	}
 	return &syncProgressTracker{
 		jobID:        jobID,
 		handler:      handler,
-		shapeTracker: newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling),
+		shapeTracker: shapeTracker,
 	}
 }
 

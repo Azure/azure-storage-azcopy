@@ -156,13 +156,17 @@ func (tpt *transferProgressTracker) GetEnumerationElapsedTime() time.Duration {
 	return elapsed
 }
 
-func newTransferProgressTracker(jobID common.JobID, handler CopyHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) *transferProgressTracker {
+func newTransferProgressTracker(jobID common.JobID, handler CopyHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType, collectSourceShape bool) *transferProgressTracker {
+	var shapeTracker *sourceShapeTracker
+	if collectSourceShape {
+		shapeTracker = newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling)
+	}
 	return &transferProgressTracker{
 		jobID:        jobID,
 		handler:      handler,
 		isCleanupJob: false, // TODO: when implementing benchmark, set this properly
 		fromTo:       fromTo,
-		shapeTracker: newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling),
+		shapeTracker: shapeTracker,
 		//jobType:      common.EJobType.Copy(), // TODO: when implementing benchmark, set this properly
 	}
 }

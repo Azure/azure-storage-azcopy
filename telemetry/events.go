@@ -129,10 +129,8 @@ type JobDimensions struct {
 	DestType                  string
 	SourceProtocol            string // "smb" | "nfs" | "local" | "https" | "s3" | "gcs"
 	SourceMountType           string // "nas-smb" | "nas-nfs" | "local-disk" | "cloud-azure" | ...
-	SourceStorageAccount      string // Azure storage account name; empty for non-Azure or unrecognized endpoints
 	SourceScope               string // service | container | share | bucket | object-or-prefix | local-* | stream | benchmark
 	DestProtocol              string
-	DestStorageAccount        string // Azure storage account name; empty for non-Azure or unrecognized endpoints
 	DestScope                 string
 	DestEndpointKind          string // "public" | "private-endpoint"
 	SourceCloudType           string // Azure environment: "public" | "gov" | "china" | "germany"; empty for non-Azure
@@ -150,22 +148,20 @@ type JobDimensions struct {
 
 func (jd JobDimensions) props() map[string]string {
 	props := map[string]string{
-		"Command":              jd.Command,
-		"FromTo":               jd.FromTo,
-		"SourceType":           jd.SourceType,
-		"DestType":             jd.DestType,
-		"SourceProtocol":       jd.SourceProtocol,
-		"SourceMountType":      jd.SourceMountType,
-		"SourceStorageAccount": jd.SourceStorageAccount,
-		"SourceScope":          jd.SourceScope,
-		"DestProtocol":         jd.DestProtocol,
-		"DestStorageAccount":   jd.DestStorageAccount,
-		"DestScope":            jd.DestScope,
-		"DestEndpointKind":     jd.DestEndpointKind,
-		"SourceCloudType":      jd.SourceCloudType,
-		"DestCloudType":        jd.DestCloudType,
-		"SourceAuthMechanism":  jd.SourceAuthMechanism,
-		"DestAuthMechanism":    jd.DestAuthMechanism,
+		"Command":             jd.Command,
+		"FromTo":              jd.FromTo,
+		"SourceType":          jd.SourceType,
+		"DestType":            jd.DestType,
+		"SourceProtocol":      jd.SourceProtocol,
+		"SourceMountType":     jd.SourceMountType,
+		"SourceScope":         jd.SourceScope,
+		"DestProtocol":        jd.DestProtocol,
+		"DestScope":           jd.DestScope,
+		"DestEndpointKind":    jd.DestEndpointKind,
+		"SourceCloudType":     jd.SourceCloudType,
+		"DestCloudType":       jd.DestCloudType,
+		"SourceAuthMechanism": jd.SourceAuthMechanism,
+		"DestAuthMechanism":   jd.DestAuthMechanism,
 	}
 	if jd.SummaryCounterScope != "" {
 		props["SummaryCounterScope"] = jd.SummaryCounterScope
@@ -472,10 +468,8 @@ var propertyValueLimits = map[string]int{
 	"DestType":                  64,
 	"SourceProtocol":            32,
 	"SourceMountType":           64,
-	"SourceStorageAccount":      maxHostValueLen,
 	"SourceScope":               64,
 	"DestProtocol":              32,
-	"DestStorageAccount":        maxHostValueLen,
 	"DestScope":                 64,
 	"DestEndpointKind":          64,
 	"SourceCloudType":           32,
