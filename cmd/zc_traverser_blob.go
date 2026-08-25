@@ -615,7 +615,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	// Blob/BlobFS -> Local, File, S3, etc.
 	randomDequeue := buildmode.HighPerf() && t.destResourceType != nil &&
 		(*t.destResourceType == common.ELocation.Blob() || *t.destResourceType == common.ELocation.BlobFS())
-	cCrawled, _ := parallel.CrawlWithOptions(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, randomDequeue)
+	cCrawled, _ := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, parallel.CrawlOptions{RandomDequeue: randomDequeue})
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {

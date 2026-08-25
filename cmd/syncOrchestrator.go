@@ -41,6 +41,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
@@ -638,7 +639,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		if orchestratorOptions != nil {
 			orchestratorOptions.parallelTraversers = mergeJoinParallelTraversers
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (MOVER_SYNC_MJ_TRAV)", mergeJoinParallelTraversers), true)
+				"Streaming merge-join directory-crawl parallelism set to %d (%s)", mergeJoinParallelTraversers, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
 		}
 	} else if cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -1111,14 +1112,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	// avoid partition hotspotting when writing to Azure Blob Storage. Fall back to the original
 	// BFS/DFS-hybrid dequeue for everything else (default azcopy CLI, mover-default builds, and
 	// non-Blob/BlobFS pairs even in mover-high-perf, e.g. S3 -> Blob).
-	isAzureToAzure := func(loc common.Location) bool {
+	isAzureBlobLocation := func(loc common.Location) bool {
 		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
 	}
-	randomDequeue := buildmode.HighPerf() && isAzureToAzure(cca.fromTo.From()) && isAzureToAzure(cca.fromTo.To())
+	randomDequeue := buildmode.HighPerf() && isAzureBlobLocation(cca.fromTo.From()) && isAzureBlobLocation(cca.fromTo.To())
 
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
 	// merge-join producers) has returned — the drain signal we use on cancellation below.
-	crawlOutput, crawlStats := parallel.CrawlWithOptions(mainCtx, root, syncOneDir, int(crawlParallelism), randomDequeue)
+	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue})
 
 	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
 	// workers, queued directories, in-flight merge-join directory syncs, and goroutine count. This

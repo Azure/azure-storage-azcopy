@@ -63,6 +63,19 @@ func (r CrawlResult) Item() (interface{}, error) {
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
 type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error
 
+// CrawlOptions carries optional, non-default crawl behavior. The zero value preserves the original
+// crawl behavior, so callers only populate the fields they want to change.
+type CrawlOptions struct {
+	// RandomDequeue, when true, dequeues the unstarted-directories queue in random order instead of
+	// the default BFS/DFS-hybrid order. It should only be set for mover-high-perf Blob/BlobFS<->Blob/BlobFS
+	// transfers (see buildmode.HighPerf() callers in cmd/zc_traverser_blob.go and cmd/syncOrchestrator.go):
+	// it spreads workers across diverse prefixes, which helps avoid partition hotspotting when writing to
+	// Azure Blob Storage (where lexicographically adjacent keys often land on the same partition). For all
+	// other cases (default azcopy CLI, mover-default builds, and non-Blob/BlobFS pairs even in
+	// mover-high-perf) leave it false to preserve the original dequeue behavior.
+	RandomDequeue bool
+}
+
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
 func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
@@ -70,22 +83,16 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 	return ch
 }
 
-// CrawlWithStats is like Crawl but also returns live CrawlStats that the
-// caller can poll to observe active worker count and queue depth.
-func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) (<-chan CrawlResult, *CrawlStats) {
-	return CrawlWithOptions(ctx, root, worker, parallelism, false)
-}
-
-// CrawlWithOptions is like Crawl but also returns live CrawlStats, and allows opting into random
-// dequeue of the unstarted-directories queue instead of the default BFS/DFS-hybrid dequeue.
+// CrawlWithStats is like Crawl but also returns live CrawlStats that the caller can poll to observe
+// active worker count and queue depth.
 //
-// randomDequeue should only be set true for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers
-// (see buildmode.HighPerf() callers in cmd/zc_traverser_blob.go and cmd/syncOrchestrator.go): it
-// spreads workers across diverse prefixes, which helps avoid partition hotspotting when writing to
-// Azure Blob Storage (where lexicographically adjacent keys often land on the same partition). For
-// all other cases (default azcopy CLI, mover-default builds, and non-Blob/BlobFS pairs even in
-// mover-high-perf) this should be left false to preserve the original dequeue behavior below.
-func CrawlWithOptions(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int, randomDequeue bool) (<-chan CrawlResult, *CrawlStats) {
+// Optional CrawlOptions may be supplied to opt into non-default behavior (e.g. random dequeue); when
+// omitted the crawl uses the default BFS/DFS-hybrid dequeue. Only the last CrawlOptions is used.
+func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int, opts ...CrawlOptions) (<-chan CrawlResult, *CrawlStats) {
+	var o CrawlOptions
+	if len(opts) > 0 {
+		o = opts[len(opts)-1]
+	}
 	stats := &CrawlStats{}
 	c := &crawler{
 		unstartedDirs: make([]Directory, 0, 1024),
@@ -93,7 +100,7 @@ func CrawlWithOptions(ctx context.Context, root Directory, worker EnumerateOneDi
 		workerBody:    worker,
 		parallelism:   parallelism,
 		stats:         stats,
-		randomDequeue: randomDequeue,
+		randomDequeue: o.RandomDequeue,
 		cond:          sync.NewCond(&sync.Mutex{}),
 	}
 	go c.start(ctx, root)
@@ -165,7 +172,7 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		if !stop {
 			if len(c.unstartedDirs) > 0 {
 				if c.randomDequeue {
-					// Random dequeue (mover-high-perf Blob/BlobFS<->Blob/BlobFS only, see CrawlWithOptions):
+					// Random dequeue (mover-high-perf Blob/BlobFS<->Blob/BlobFS only, see CrawlOptions.RandomDequeue):
 					// pick a random directory from the queue and swap-remove it (O(1)). This spreads
 					// workers across diverse prefixes, avoiding partition hotspotting when writing to
 					// Azure Blob Storage (where lexicographically adjacent keys often land on the same

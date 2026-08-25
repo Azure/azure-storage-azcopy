@@ -26,7 +26,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +33,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ============================================================================
@@ -413,7 +413,7 @@ const mergeJoinDefaultParallelTraversers int32 = 32
 // Override with MOVER_SYNC_MJ_TRAV as a positive integer. The indexMap sync path is unaffected and
 // keeps its own parallelism (orchestratorOptions.parallelTraversers).
 var mergeJoinParallelTraversers = func() int32 {
-	if v := strings.TrimSpace(os.Getenv("MOVER_SYNC_MJ_TRAV")); v != "" {
+	if v := strings.TrimSpace(enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Get()); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return int32(n)
 		}

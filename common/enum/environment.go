@@ -165,6 +165,14 @@ func (eEnvironmentVariable) ShuffleThresholdParts() EnvironmentVariable {
 	}
 }
 
+func (eEnvironmentVariable) MoverSyncMergeJoinTraversers() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:            "MOVER_SYNC_MJ_TRAV",
+		Description:     "Sync orchestrator (streaming merge-join only): directory-crawl parallelism. Positive integer; defaults to 32. Does not affect the indexMap sync path.",
+		DeveloperOption: true,
+	}
+}
+
 const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
 
 func (eEnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
