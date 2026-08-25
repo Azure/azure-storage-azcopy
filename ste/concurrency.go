@@ -26,6 +26,7 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
@@ -124,6 +125,12 @@ type ConcurrencySettings struct {
 
 	// CheckCpuWhenTuning determines whether CPU usage should be taken into account when auto-tuning
 	CheckCpuWhenTuning *ConfiguredBool
+
+	// SchedulerParallelism is the number of goroutines that pull job parts off the parts channel
+	// and schedule their transfers concurrently. Increasing this prevents the per-transfer creation
+	// loop (ScheduleTransfers) from becoming a single-threaded bottleneck that starves the
+	// transfer-initiation and chunk worker pools when copying huge numbers of small files.
+	SchedulerParallelism *ConfiguredInt
 }
 
 // AutoTuneMainPool says whether the main pool size should by dynamically tuned
@@ -134,6 +141,7 @@ func (c ConcurrencySettings) AutoTuneMainPool() bool {
 const defaultTransferInitiationPoolSize = 64
 const defaultEnumerationPoolSize = 16
 const concurrentFilesFloor = 32
+const defaultSchedulerParallelism = 1
 
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
@@ -149,6 +157,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 		EnumerationPoolSize:        GetEnumerationPoolSize(),
 		ParallelStatFiles:          GetParallelStatFiles(),
 		CheckCpuWhenTuning:         getCheckCpuUsageWhenTuning(),
+		SchedulerParallelism:       getSchedulerParallelism(),
 	}
 
 	s.MaxOpenDownloadFiles = getMaxOpenPayloadFiles(maxFileAndSocketHandles,
@@ -188,6 +197,11 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 		return c.Value, c // initial and max are same, fixed to the env var
 	}
 
+	if !autoTune && buildmode.HighPerf() && buildmode.ConcurrencyValue() > 0 {
+		defaultValue := buildmode.ConcurrencyValue()
+		return defaultValue, &ConfiguredInt{defaultValue, false, envVar.Name, "mover high-perf profile"}
+	}
+
 	var initialValue int
 
 	if autoTune {
@@ -211,6 +225,9 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 	if autoTune {
 		reason = "auto-tuning limit"
 		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
+		if buildmode.HighPerf() {
+			maxValue = 20000
+		}
 	}
 
 	return initialValue, &ConfiguredInt{maxValue, false, envVar.Name, reason}
@@ -223,7 +240,25 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 		return c
 	}
 
+	if buildmode.HighPerf() {
+		return &ConfiguredInt{buildmode.ConcurrentFiles(), false, envVar.Name, "mover high-perf profile"}
+	}
+
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
+}
+
+func getSchedulerParallelism() *ConfiguredInt {
+	envVar := enum.EEnvironmentVariable.SchedulerParallelism()
+
+	if c := tryNewConfiguredInt(envVar); c != nil {
+		return c
+	}
+
+	if buildmode.HighPerf() {
+		return &ConfiguredInt{buildmode.ConcurrentSchedulers(), false, envVar.Name, "mover high-perf profile"}
+	}
+
+	return &ConfiguredInt{defaultSchedulerParallelism, false, envVar.Name, "hard-coded default"}
 }
 
 func GetEnumerationPoolSize() *ConfiguredInt {
@@ -231,6 +266,10 @@ func GetEnumerationPoolSize() *ConfiguredInt {
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
 		return c
+	}
+
+	if buildmode.HighPerf() {
+		return &ConfiguredInt{buildmode.ConcurrentScan(), false, envVar.Name, "mover high-perf profile"}
 	}
 
 	return &ConfiguredInt{defaultEnumerationPoolSize, false, envVar.Name, "hard-coded default"}

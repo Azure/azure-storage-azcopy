@@ -23,7 +23,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -34,7 +37,63 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
+
+// Shuffle/backpressure tuning. The scanner buffers transfers, shuffles a window across the key range,
+// then dispatches plan parts asynchronously (plan files on the SMB share are the durable store).
+//
+// inMemoryWindowMultiplier: park watermark = this * shuffle window. Parking at 2x keeps the park point
+// above the flush point (so a full window can fill without deadlock) with a double-buffer of runway.
+const inMemoryWindowMultiplier = 2
+
+// scannerBackpressureWindowParts: floor (in plan-parts) for the park watermark, which is
+// max(getShuffleThresholdParts()*inMemoryWindowMultiplier, scannerBackpressureWindowParts). At 100
+// parts (* 10k transfers/part) the scanner may run ~1M transfers ahead of async dispatch before it
+// parks — a wide hysteresis band that avoids the per-part parking sawtooth. Baked constant (no env).
+const scannerBackpressureWindowParts = 100
+
+var shuffleThresholdLogOnce sync.Once
+
+// getShuffleThresholdParts is the shuffle window in plan-parts. Only reached on the high-perf mover
+// path, where the buildmode profile default is overridable by MOVER_SHUFFLE_PARTS (>=1).
+func getShuffleThresholdParts() int {
+	effective := buildmode.ShuffleThresholdParts()
+	rawMover := strings.TrimSpace(os.Getenv("MOVER_SHUFFLE_PARTS"))
+	if rawMover != "" {
+		if n, err := strconv.Atoi(rawMover); err == nil && n >= 1 {
+			effective = n
+		}
+	}
+	shuffleThresholdLogOnce.Do(func() {
+		fmt.Printf("[ShuffleConfig] MOVER_SHUFFLE_PARTS raw=%q effective=%d\n", rawMover, effective)
+	})
+	return effective
+}
+
+var shuffleEnabledLogOnce sync.Once
+
+// isShuffleEnabled reports whether transfer shuffling is on. Only reached on the high-perf mover path,
+// where the buildmode profile default is overridable by AZCOPY_SHUFFLE_TRANSFERS.
+func isShuffleEnabled() bool {
+	enabled := buildmode.ShuffleEnabled()
+	if raw := enum.EEnvironmentVariable.ShuffleTransfers().Get(); raw != "" {
+		enabled = strings.EqualFold(raw, "true") || raw == "1"
+	}
+	shuffleEnabledLogOnce.Do(func() {
+		fmt.Printf("[ShuffleConfig] shuffle enabled=%v\n", enabled)
+	})
+	return enabled
+}
+
+// dispatchItem is a snapshot of a single part ready for async dispatch to STE.
+// It captures all state needed so the dispatch goroutine can call sendPartToSte
+// without holding any locks on the processor.
+type dispatchItem struct {
+	transfers common.Transfers
+	partNum   common.PartNumber
+}
 
 type copyTransferProcessor struct {
 	numOfTransfersPerPart int
@@ -53,11 +112,35 @@ type copyTransferProcessor struct {
 	hardlinkHandlingType   common.HardlinkHandlingType
 
 	//XDM: This is only essential when sync is through syncOrchestrator
-	syncTransferMutex sync.Mutex // mutex to synchronize access to the transfer scheduler
+	syncTransferMutex sync.Mutex // mutex to synchronize access to the shuffle buffer
+	flushMutex        sync.Mutex // mutex to serialize flush operations (sendPartToSte uses shared copyJobTemplate)
+
+	// shuffleBuffer accumulates transfers across multiple plan parts before shuffling and flushing.
+	// This ensures each plan part contains transfers from diverse key-space prefixes rather than
+	// consecutive ranges, improving storage partition utilization at high throughput.
+	shuffleBuffer            []common.CopyTransfer
+	shuffleBufferSizeInBytes uint64
+	shuffleBufferFileCounts  common.Transfers // tracks entity type counts for the buffer
+
+	// flushWindowCounter is a monotonically increasing flush window ID used for diagnostics.
+	flushWindowCounter uint32
+
+	// High-perf mover path: assembled plan parts are pushed into dispatchCh and a pool
+	// of background goroutines calls sendPartToSte asynchronously, allowing the buffer
+	// to refill concurrently. Non-high-perf stays on synchronous dispatch for mover-default
+	// behavior parity.
+	dispatchCh   chan dispatchItem
+	dispatchOnce sync.Once
+	dispatchErr  error          // first error from dispatch goroutine
+	dispatchWg   sync.WaitGroup // tracks all dispatch workers
+	dispatchDone chan struct{}  // closed when all dispatch workers exit
+
+	// Backpressure signaling
+	bufferDrainCond *sync.Cond // condition variable signaled when the shuffle buffer drains below the high watermark
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
-	return &copyTransferProcessor{
+	p := &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
 		source:                    source,
@@ -69,6 +152,112 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
 	}
+	// High-perf mover only: allocate the async dispatch pipeline + backpressure resources.
+	// Mover-default keeps the original synchronous path with no extra allocation.
+	if useAsyncDispatchPipeline() {
+		p.dispatchCh = make(chan dispatchItem, dispatchChParts())
+		p.dispatchDone = make(chan struct{})
+		p.bufferDrainCond = sync.NewCond(&sync.Mutex{})
+	}
+	return p
+}
+
+// dispatchChParts returns the async-dispatch channel depth in plan-parts (AZCOPY_DISPATCH_CH_PARTS).
+// Each buffered item is a full part (numOfTransfersPerPart CopyTransfers with source+dest URLs), so
+// this directly caps how many transfers sit between flush and the STE when the engine is backpressured.
+// The old hardcoded 5000 (=50M transfers => tens of GB of live CopyTransfers) was the dominant heap holder.
+func dispatchChParts() int {
+	return 128
+}
+
+func useAsyncDispatchPipeline() bool {
+	return buildmode.HighPerf()
+}
+
+func useHighPerfSyncPath() bool {
+	return buildmode.HighPerf()
+}
+
+// startDispatchPipeline ensures the background dispatch worker pool is running.
+// Called lazily on first use via sync.Once.
+func (s *copyTransferProcessor) startDispatchPipeline() {
+	if !useAsyncDispatchPipeline() {
+		return
+	}
+
+	s.dispatchOnce.Do(func() {
+		const numDispatchWorkers = 32 // parallelize fsync-heavy plan file creation
+		s.dispatchWg.Add(numDispatchWorkers)
+		for i := 0; i < numDispatchWorkers; i++ {
+			go s.dispatchWorker()
+		}
+		// Close dispatchDone when all workers finish
+		go func() {
+			s.dispatchWg.Wait()
+			close(s.dispatchDone)
+		}()
+	})
+}
+
+// dispatchWorker is a background goroutine that reads dispatchItems and sends them to STE.
+// Multiple workers run concurrently to parallelize plan file creation (fsync).
+func (s *copyTransferProcessor) dispatchWorker() {
+	defer s.dispatchWg.Done()
+	for item := range s.dispatchCh {
+		if s.dispatchErr != nil {
+			continue // drain channel after first error
+		}
+		if err := s.dispatchPartNow(item); err != nil {
+			s.dispatchErr = err
+		}
+	}
+}
+
+func (s *copyTransferProcessor) dispatchPartNow(item dispatchItem) error {
+	// Build a local copy of the template for this part
+	template := *s.copyJobTemplate
+	template.Transfers = item.transfers
+	template.PartNum = item.partNum
+
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(template)
+
+	// Report first part dispatched if this is part 0
+	if item.partNum == 0 && s.reportFirstPartDispatched != nil {
+		s.reportFirstPartDispatched(resp.JobStarted)
+	}
+
+	if resp.ErrorMsg != "" {
+		return errors.New(string(resp.ErrorMsg))
+	}
+
+	return nil
+}
+
+func (s *copyTransferProcessor) dispatchPart(item dispatchItem) error {
+	if useAsyncDispatchPipeline() {
+		s.startDispatchPipeline()
+		s.dispatchCh <- item
+		if s.dispatchErr != nil {
+			return s.dispatchErr
+		}
+		return nil
+	}
+
+	return s.dispatchPartNow(item)
+}
+
+// waitForDispatchPipeline closes the dispatch channel and waits for all workers, returning the first
+// dispatch error. startDispatchPipeline is called first (idempotent) so small jobs that never flushed
+// a full part don't deadlock on an unclosed dispatchDone.
+func (s *copyTransferProcessor) waitForDispatchPipeline() error {
+	if !useAsyncDispatchPipeline() {
+		return nil
+	}
+
+	s.startDispatchPipeline()
+	close(s.dispatchCh)
+	<-s.dispatchDone
+	return s.dispatchErr
 }
 
 type DryrunTransfer struct {
@@ -287,6 +476,66 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil
 	}
 
+	if UseSyncOrchestrator && useHighPerfSyncPath() {
+		if isShuffleEnabled() {
+			shuffleThreshold := getShuffleThresholdParts()
+
+			// Backpressure: park the scanner only when the buffer runs far ahead of async dispatch.
+			// Park point sits above the flush point (double-buffer) to avoid deadlock, with a floor for
+			// wide hysteresis (no per-part parking -> no sawtooth).
+			parkParts := shuffleThreshold * inMemoryWindowMultiplier
+			if parkParts < scannerBackpressureWindowParts {
+				parkParts = scannerBackpressureWindowParts
+			}
+			highWatermark := s.numOfTransfersPerPart * parkParts
+			s.bufferDrainCond.L.Lock()
+			for len(s.shuffleBuffer) >= highWatermark {
+				s.bufferDrainCond.Wait()
+			}
+			s.bufferDrainCond.L.Unlock()
+
+			var needsFlush bool
+
+			s.syncTransferMutex.Lock()
+			s.shuffleBuffer = append(s.shuffleBuffer, copyTransfer)
+			s.shuffleBufferSizeInBytes += uint64(copyTransfer.SourceSize)
+			switch copyTransfer.EntityType {
+			case common.EEntityType.File():
+				s.shuffleBufferFileCounts.FileTransferCount++
+			case common.EEntityType.Folder():
+				s.shuffleBufferFileCounts.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				s.shuffleBufferFileCounts.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				s.shuffleBufferFileCounts.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				s.shuffleBufferFileCounts.FilePropertyTransferCount++
+			}
+			needsFlush = len(s.shuffleBuffer) >= s.numOfTransfersPerPart*shuffleThreshold
+			s.syncTransferMutex.Unlock()
+
+			if needsFlush {
+				if err := s.flushShuffleBuffer(); err != nil {
+					return err
+				}
+			}
+		} else {
+			// Direct dispatch: accumulate transfers, dispatch immediately when a full part is ready.
+			// No shuffle and no part reordering — bounded O(numOfTransfersPerPart) memory.
+			s.syncTransferMutex.Lock()
+			s.shuffleBuffer = append(s.shuffleBuffer, copyTransfer)
+			needsFlush := len(s.shuffleBuffer) >= s.numOfTransfersPerPart
+			s.syncTransferMutex.Unlock()
+
+			if needsFlush {
+				if err := s.flushDirectBuffer(); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
 	if UseSyncOrchestrator {
 		s.syncTransferMutex.Lock()
 		defer s.syncTransferMutex.Unlock()
@@ -326,10 +575,255 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	return nil
 }
 
+// flushDirectBuffer dispatches accumulated transfers directly to STE without shuffling or
+// part reordering. Used when AZCOPY_SHUFFLE_TRANSFERS is disabled. Memory usage is bounded
+// at O(numOfTransfersPerPart).
+func (s *copyTransferProcessor) flushDirectBuffer() error {
+	s.flushMutex.Lock()
+	defer s.flushMutex.Unlock()
+
+	s.syncTransferMutex.Lock()
+	if len(s.shuffleBuffer) < s.numOfTransfersPerPart {
+		s.syncTransferMutex.Unlock()
+		return nil
+	}
+	toFlush := s.shuffleBuffer
+	s.shuffleBuffer = make([]common.CopyTransfer, 0, s.numOfTransfersPerPart)
+	s.syncTransferMutex.Unlock()
+
+	for len(toFlush) >= s.numOfTransfersPerPart {
+		// Copy batch to a new right-sized slice to avoid retaining the entire toFlush array
+		batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+		copy(batch, toFlush[:s.numOfTransfersPerPart])
+		toFlush = toFlush[s.numOfTransfersPerPart:]
+
+		transfers := common.Transfers{List: batch}
+		for _, t := range batch {
+			transfers.TotalSizeInBytes += uint64(t.SourceSize)
+			switch t.EntityType {
+			case common.EEntityType.File():
+				transfers.FileTransferCount++
+			case common.EEntityType.Folder():
+				transfers.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				transfers.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				transfers.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				transfers.FilePropertyTransferCount++
+			}
+		}
+
+		if err := s.dispatchPart(dispatchItem{
+			transfers: transfers,
+			partNum:   s.copyJobTemplate.PartNum,
+		}); err != nil {
+			return err
+		}
+		s.copyJobTemplate.PartNum++
+	}
+
+	// Put remainder back
+	if len(toFlush) > 0 {
+		s.syncTransferMutex.Lock()
+		s.shuffleBuffer = append(toFlush, s.shuffleBuffer...)
+		s.syncTransferMutex.Unlock()
+	}
+	return nil
+}
+
+// flushShuffleBuffer swaps out the accumulated buffer, shuffles it lock-free, and dispatches it as
+// plan-part-sized batches so transfers from different key-space prefixes are mixed across parts.
+func (s *copyTransferProcessor) flushShuffleBuffer() error {
+	// Phase 1: swap out the buffer under syncTransferMutex so enumeration can refill immediately.
+	s.syncTransferMutex.Lock()
+	if len(s.shuffleBuffer) < s.numOfTransfersPerPart {
+		// Another goroutine already flushed, nothing to do
+		s.syncTransferMutex.Unlock()
+		return nil
+	}
+	// Swap out the buffer — take ownership of the current slice, give the struct a fresh one
+	toFlush := s.shuffleBuffer
+	threshold := getShuffleThresholdParts()
+	newCap := s.numOfTransfersPerPart * threshold
+	if newCap < s.numOfTransfersPerPart*2 {
+		newCap = s.numOfTransfersPerPart * 2
+	}
+	s.shuffleBuffer = make([]common.CopyTransfer, 0, newCap)
+	s.shuffleBufferSizeInBytes = 0
+	s.shuffleBufferFileCounts = common.Transfers{}
+	s.syncTransferMutex.Unlock()
+
+	// Phase 2: shuffle lock-free (we exclusively own toFlush); does not block enumeration.
+	rand.Shuffle(len(toFlush), func(i, j int) {
+		toFlush[i], toFlush[j] = toFlush[j], toFlush[i]
+	})
+
+	// Phase 3: dispatch under flushMutex (serializes copyJobTemplate/PartNum/flushWindowCounter).
+	s.flushMutex.Lock()
+	defer s.flushMutex.Unlock()
+
+	// Track which flush window these batches belong to
+	s.flushWindowCounter++
+	currentWindow := s.flushWindowCounter
+
+	// Log transfer-level shuffle diagnostics
+	if jobsAdmin.JobsAdmin != nil {
+		nBatches := len(toFlush) / s.numOfTransfersPerPart
+		samples := make([]string, 0, 5)
+		step := len(toFlush) / 5
+		if step == 0 {
+			step = 1
+		}
+		for i := 0; i < len(toFlush) && len(samples) < 5; i += step {
+			src := toFlush[i].Source
+			if len(src) > 5 {
+				samples = append(samples, src[:5])
+			}
+		}
+		common.LogToJobLogWithPrefix(
+			fmt.Sprintf("[ShuffleDiag] Transfer-level flush window #%d: shuffled %d transfers -> %d batches, sample prefixes: %v",
+				currentWindow, len(toFlush), nBatches, samples),
+			common.LogInfo)
+	}
+
+	// Dispatch part-sized batches; high-perf uses async pipeline, non-high-perf stays synchronous.
+	for len(toFlush) >= s.numOfTransfersPerPart {
+		// Capped 3-index slice: hand out a view (no per-part malloc/copy); backing array frees when
+		// the last part drains from dispatchCh.
+		n := s.numOfTransfersPerPart
+		batch := toFlush[:n:n]
+		toFlush = toFlush[n:]
+
+		transfers := common.Transfers{List: batch}
+		// Calculate size for this batch
+		for _, t := range batch {
+			transfers.TotalSizeInBytes += uint64(t.SourceSize)
+			switch t.EntityType {
+			case common.EEntityType.File():
+				transfers.FileTransferCount++
+			case common.EEntityType.Folder():
+				transfers.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				transfers.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				transfers.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				transfers.FilePropertyTransferCount++
+			}
+		}
+
+		if err := s.dispatchPart(dispatchItem{
+			transfers: transfers,
+			partNum:   s.copyJobTemplate.PartNum,
+		}); err != nil {
+			return err
+		}
+		s.copyJobTemplate.PartNum++
+	}
+
+	// Wake scanners parked on backpressure; they re-check the watermark (wide hysteresis preserved).
+	s.bufferDrainCond.L.Lock()
+	s.bufferDrainCond.Broadcast()
+	s.bufferDrainCond.L.Unlock()
+
+	// Put any remainder (< numOfTransfersPerPart) back into the buffer
+	if len(toFlush) > 0 {
+		s.syncTransferMutex.Lock()
+		// Prepend remainder to whatever new transfers accumulated while we were flushing
+		s.shuffleBuffer = append(toFlush, s.shuffleBuffer...)
+		for _, t := range toFlush {
+			s.shuffleBufferSizeInBytes += uint64(t.SourceSize)
+			switch t.EntityType {
+			case common.EEntityType.File():
+				s.shuffleBufferFileCounts.FileTransferCount++
+			case common.EEntityType.Folder():
+				s.shuffleBufferFileCounts.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				s.shuffleBufferFileCounts.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				s.shuffleBufferFileCounts.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				s.shuffleBufferFileCounts.FilePropertyTransferCount++
+			}
+		}
+		s.syncTransferMutex.Unlock()
+	}
+
+	return nil
+}
+
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
 var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
+	// Flush any remaining transfers before dispatching the final part
+	if UseSyncOrchestrator && useHighPerfSyncPath() && len(s.shuffleBuffer) > 0 {
+		s.flushMutex.Lock()
+
+		// Dispatch any remaining full plan parts.
+		// The transfer-level shuffle already ran when these transfers were enqueued and the
+		// part-buffering/reorder stage has been removed, so the shuffle and non-shuffle paths
+		// are identical here — send each assembled part directly. Any dispatch
+		// error is surfaced by waitForDispatchPipeline() below.
+		for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
+			batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+			copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
+			s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
+
+			transfers := common.Transfers{List: batch}
+			for _, t := range batch {
+				transfers.TotalSizeInBytes += uint64(t.SourceSize)
+				switch t.EntityType {
+				case common.EEntityType.File():
+					transfers.FileTransferCount++
+				case common.EEntityType.Folder():
+					transfers.FolderTransferCount++
+				case common.EEntityType.Symlink():
+					transfers.SymlinkTransferCount++
+				case common.EEntityType.Hardlink():
+					transfers.HardlinksConvertedCount++
+				case common.EEntityType.FileProperties():
+					transfers.FilePropertyTransferCount++
+				}
+			}
+			if err := s.dispatchPart(dispatchItem{
+				transfers: transfers,
+				partNum:   s.copyJobTemplate.PartNum,
+			}); err != nil {
+				s.flushMutex.Unlock()
+				return false, err
+			}
+			s.copyJobTemplate.PartNum++
+		}
+
+		// Place the last remaining transfers (< numOfTransfersPerPart) into the template for the final part
+		s.copyJobTemplate.Transfers = common.Transfers{List: s.shuffleBuffer}
+		for _, t := range s.shuffleBuffer {
+			s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(t.SourceSize)
+			switch t.EntityType {
+			case common.EEntityType.File():
+				s.copyJobTemplate.Transfers.FileTransferCount++
+			case common.EEntityType.Folder():
+				s.copyJobTemplate.Transfers.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				s.copyJobTemplate.Transfers.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				s.copyJobTemplate.Transfers.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				s.copyJobTemplate.Transfers.FilePropertyTransferCount++
+			}
+		}
+		s.shuffleBuffer = nil
+		s.flushMutex.Unlock()
+	}
+
+	// Wait for all pipelined parts to finish before sending the final part.
+	// The final part must be the last one sent to STE to signal job completion.
+	if err := s.waitForDispatchPipeline(); err != nil {
+		return false, err
+	}
+
 	var resp common.CopyJobPartOrderResponse
 	s.copyJobTemplate.IsFinalPart = true
 	resp = s.sendPartToSte()
