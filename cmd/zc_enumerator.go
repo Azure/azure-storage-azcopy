@@ -36,6 +36,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -386,7 +388,7 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential                  *common.CredentialInfo // Required for most remote traversers
+	Credential           *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
 	IncrementEnumerationFailure enumerationCounterFunc
 
@@ -482,7 +484,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		if resourceLocation.IsLocal() {
 			// First, ignore all escaped stars. Stars can be valid characters on many platforms (out of the 3 we support though, Windows is the only that cannot support it).
 			// In the future, should we end up supporting another OS that does not treat * as a valid character, we should turn these checks into a map-check against runtime.GOOS.
-			tmpResource := common.Iff(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
+			tmpResource := ternary.Iff(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
 			// check for remaining stars. We can't combine list traversers, and wildcarded list traversal occurs below.
 			if strings.Contains(tmpResource, "*") {
 				return nil, errors.New("cannot combine local wildcards with include-path or list-of-files")
@@ -493,15 +495,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return output, nil
 	}
 
-	var reauthTok *common.ScopedAuthenticator
-	if opts.Credential != nil {
-		if at, ok := opts.Credential.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-		}
-	}
-
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := createClientOptions(azcopyScanningLogger, nil, opts.Credential.TokenCredential)
 
 	switch resourceLocation {
 	case common.ELocation.Local():
@@ -566,7 +560,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -619,7 +613,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -662,7 +656,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}

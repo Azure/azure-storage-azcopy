@@ -2,7 +2,9 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -164,10 +166,10 @@ func (e Empty) Format(items ...any) string {
 	}
 
 	if len(failed) == 0 {
-		return "all items were " + common.Iff(e.Invert, "nonzero", "zero")
+		return "all items were " + ternary.Iff(e.Invert, "nonzero", "zero")
 	}
 
-	trait := common.Iff(e.Invert, "zero, expected nonzero values", "nonzero, expected zero values")
+	trait := ternary.Iff(e.Invert, "zero, expected nonzero values", "nonzero, expected zero values")
 
 	return fmt.Sprintf("items %v were %s", failed, trait)
 }

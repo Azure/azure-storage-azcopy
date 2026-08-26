@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2024 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,16 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package cred
 
-// CredCacheOptions contains options could be used in different kinds of cred caches in different platform.
-type CredCacheOptions struct {
-	// Used by credCache in Windows.
-	DPAPIFilePath string
+import (
+	"context"
 
-	// Used by credCacheSegmented in Windows, and keyring in Linux.
-	KeyName string
-	// Used by keychain in Mac OS, and gnome keyring in Linux.
-	ServiceName string
-	AccountName string
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+)
+
+// AuthenticateToken is implemented by token credentials that can authenticate
+// on demand to obtain a persistent auth record. DeviceCodeCredential satisfies this.
+type AuthenticateToken interface {
+	azcore.TokenCredential
+	Authenticate(ctx context.Context, opts *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error)
 }

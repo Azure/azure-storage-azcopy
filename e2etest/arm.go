@@ -3,7 +3,9 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"io"
 	"net/http"
 	"reflect"
@@ -113,7 +115,7 @@ func ResolveAzureAsyncOperation[Props any](OAuth AccessToken, uri string, proper
 		}
 		if retryAfter == 0 { // Fall back to our last wait, exponential, capped to 60s.
 			retryAfter = lastWaitSeconds * 2
-			retryAfter = common.Iff(retryAfter > 60, 60, retryAfter)
+			retryAfter = ternary.Iff(retryAfter > 60, 60, retryAfter)
 			lastWaitSeconds = retryAfter
 		}
 

@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
@@ -42,7 +43,7 @@ type CleanJobsResult struct {
 // If WithStatus is not All, it cleans jobs with that status and returns the count of jobs cleaned and list of job IDs cleaned.
 func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err error) {
 	result = CleanJobsResult{}
-	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
+	status := ternary.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	if status == common.EJobStatus.All() {
 		result.Count, err = jobsAdmin.DeleteAllJobFilesExceptCurrent(c.CurrentJobID)

@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -51,7 +53,7 @@ type scenario struct {
 	operation           Operation
 	validate            Validate
 	fromTo              common.FromTo
-	credTypes           [2]common.CredentialType
+	credTypes           [2]enum.CredentialType
 	p                   params
 	hs                  hooks
 	fs                  testFiles
@@ -263,7 +265,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+			return &resourceLocal{ternary.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File(), common.ELocation.FileNFS():
 			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob(), common.ELocation.BlobFS():
@@ -311,8 +313,8 @@ func (s *scenario) runAzCopy(logDirectory string) {
 		}
 	}
 
-	needsSAS := func(credType common.CredentialType) bool {
-		return credType == common.ECredentialType.Anonymous() || credType == common.ECredentialType.MDOAuthToken()
+	needsSAS := func(credType enum.CredentialType) bool {
+		return credType == enum.ECredentialType.Anonymous() || credType == enum.ECredentialType.MDOAuthToken()
 	}
 
 	needsFromTo := s.destAccountType == EAccountType.Azurite() || s.srcAccountType == EAccountType.Azurite()

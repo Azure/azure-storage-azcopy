@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -71,7 +72,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	}
 
 	// if we've a custom mime map
-	if path := common.GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
+	if path := enum.EEnvironmentVariable.MimeMapping().Get(); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -110,7 +111,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jm.SetInMemoryTransitJobState(
 		ste.InMemoryTransitJobState{
-			CredentialInfo:          order.CredentialInfo,
 			S2SSourceCredentialType: order.S2SSourceCredentialType,
 			Provider:                order.Provider,
 		})
@@ -225,7 +225,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 
 	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
 	// Depending on the FromType, sourceSAS or destinationSAS is checked.
-	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+	if req.TargetCredentialType == enum.ECredentialType.Anonymous() {
 		var errorMsg = ""
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
@@ -301,7 +301,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		// Get credential info from RPC request, and set in InMemoryTransitJobState.
 		jm.SetInMemoryTransitJobState(
 			ste.InMemoryTransitJobState{
-				CredentialInfo:          req.CredentialInfo,
 				Provider:                req.Provider,
 				S2SSourceCredentialType: req.S2SSourceCredentialType,
 			})

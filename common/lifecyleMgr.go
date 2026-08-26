@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // only one instance of the formatter should exist
@@ -213,7 +214,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
 	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	cpuProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
+	cpuProfilePath := enum.EEnvironmentVariable.ProfileCPU().Get()
 	if cpuProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
@@ -236,7 +237,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
 	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	memProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
+	memProfilePath := enum.EEnvironmentVariable.ProfileMemory().Get()
 	if memProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
@@ -679,7 +680,7 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 // Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
 // setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
 func (lcm *lifecycleMgr) SetForceLogging() {
-	disableSyslog, err := strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	disableSyslog, err := strconv.ParseBool(enum.EEnvironmentVariable.DisableSyslog().Get())
 	if err != nil {
 		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
 		disableSyslog = false

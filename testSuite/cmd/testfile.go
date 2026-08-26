@@ -12,7 +12,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/spf13/cobra"
 )
 
@@ -287,29 +287,29 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		expectedContentType = http.DetectContentType(mmap)
 	}
 	expectedContentType = strings.Split(expectedContentType, ";")[0]
-	if !validateString(expectedContentType, common.IffNotNil(get.ContentType, "")) {
-		str1 := fmt.Sprintf(" %s    %s", expectedContentType, common.IffNotNil(get.ContentDisposition, ""))
+	if !validateString(expectedContentType, ternary.IffNotNil(get.ContentType, "")) {
+		str1 := fmt.Sprintf(" %s    %s", expectedContentType, ternary.IffNotNil(get.ContentDisposition, ""))
 		fmt.Println(str1 + "mismatch content type between actual and user given localFile content type")
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testFileCmd.ContentEncoding, common.IffNotNil(get.ContentEncoding, "")) {
+	if !validateString(testFileCmd.ContentEncoding, ternary.IffNotNil(get.ContentEncoding, "")) {
 		fmt.Println("mismatch content encoding between actual and user given localFile content encoding")
 		os.Exit(1)
 	}
 
-	if !validateString(testFileCmd.ContentDisposition, common.IffNotNil(get.ContentDisposition, "")) {
+	if !validateString(testFileCmd.ContentDisposition, ternary.IffNotNil(get.ContentDisposition, "")) {
 		fmt.Println("mismatch content disposition between actual and user given value")
 		os.Exit(1)
 	}
 
-	if !validateString(testFileCmd.ContentLanguage, common.IffNotNil(get.ContentLanguage, "")) {
+	if !validateString(testFileCmd.ContentLanguage, ternary.IffNotNil(get.ContentLanguage, "")) {
 		fmt.Println("mismatch content encoding between actual and user given value")
 		os.Exit(1)
 	}
 
-	if !validateString(testFileCmd.CacheControl, common.IffNotNil(get.CacheControl, "")) {
+	if !validateString(testFileCmd.CacheControl, ternary.IffNotNil(get.CacheControl, "")) {
 		fmt.Println("mismatch cache control between actual and user given value")
 		os.Exit(1)
 	}

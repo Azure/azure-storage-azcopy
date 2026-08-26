@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // Purpose: Tests AZCLI and powershell auth tests
@@ -30,7 +31,7 @@ import (
 func TestBasic_AzCLIAuth(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 		recursive:     true,
-		AutoLoginType: common.EAutoLoginType.AzCLI().String(),
+		AutoLoginType: enum.EAutoLoginType.AzCLI().String(),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -60,7 +61,7 @@ func TestBasic_AzCLIAuthLowerCase(t *testing.T) {
 func TestBasic_PSAuth(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 		recursive:     true,
-		AutoLoginType: common.EAutoLoginType.PsCred().String(),
+		AutoLoginType: enum.EAutoLoginType.PsCred().String(),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
