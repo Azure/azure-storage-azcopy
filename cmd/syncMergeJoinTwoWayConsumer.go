@@ -409,17 +409,21 @@ func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
 // set (and GC pressure) bounded.
 const mergeJoinDefaultParallelTraversers int32 = 32
 
-// mergeJoinParallelTraversers is the directory-crawl parallelism for streaming merge-join jobs.
-// Override with MOVER_SYNC_MJ_TRAV as a positive integer. The indexMap sync path is unaffected and
-// keeps its own parallelism (orchestratorOptions.parallelTraversers).
-var mergeJoinParallelTraversers = func() int32 {
+// resolveMergeJoinParallelTraversers returns the directory-crawl parallelism for streaming
+// merge-join jobs. Override with MOVER_SYNC_MJ_TRAV as a positive integer. The indexMap sync path
+// is unaffected and keeps its own parallelism (orchestratorOptions.parallelTraversers).
+//
+// Resolved per call (per job) rather than at package init so a per-job env override applied after
+// process start (e.g. the mover's featureConfig runtime tuning, which os.Setenv's MOVER_SYNC_MJ_TRAV
+// when a job is picked up) is honored instead of being frozen to the startup value.
+func resolveMergeJoinParallelTraversers() int32 {
 	if v := strings.TrimSpace(enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Get()); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return int32(n)
 		}
 	}
 	return mergeJoinDefaultParallelTraversers
-}()
+}
 
 // useStreamingMergeJoin reports whether the streaming merge-join should be used for
 // this transfer. Enablement is decided entirely in the mover and passed to azcopy as the single

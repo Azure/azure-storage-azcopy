@@ -637,9 +637,10 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
 		// source and destination concurrently within each directory.
 		if orchestratorOptions != nil {
-			orchestratorOptions.parallelTraversers = mergeJoinParallelTraversers
+			mjTrav := resolveMergeJoinParallelTraversers()
+			orchestratorOptions.parallelTraversers = mjTrav
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (%s)", mergeJoinParallelTraversers, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+				"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
 		}
 	} else if cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
