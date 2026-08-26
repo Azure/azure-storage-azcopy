@@ -914,15 +914,6 @@ func countExcludingFolders(total, folders uint32) int64 {
 // with many different failure codes cannot create an unbounded dimension value.
 const maxErrorCodeBuckets = 10
 
-// aggregateErrorCodes summarizes the error codes across failed transfers into a
-// compact, bounded "code:count" histogram ordered by descending count (then by
-// code for stability), e.g. "403:5,500:2". Only the numeric codes are included
-// (no paths/messages), so the result contains no PII. Returns "" when empty.
-func aggregateErrorCodes(failed []common.TransferDetail) string {
-	histogram, _ := aggregateErrorCodesWithOther(failed)
-	return histogram
-}
-
 func aggregateErrorCodesWithOther(failed []common.TransferDetail) (string, int64) {
 	if len(failed) == 0 {
 		return "", 0

@@ -155,3 +155,45 @@ func localMountType(path string) string {
 	}
 	return classifyFSType(bestFSType)
 }
+
+// parseMountinfoLine extracts the mount point (field 5) and filesystem type (the
+// first field after the " - " separator) from a /proc/self/mountinfo line.
+func parseMountinfoLine(line string) (mountPoint, fsType string, ok bool) {
+	sep := strings.Index(line, " - ")
+	if sep < 0 {
+		return "", "", false
+	}
+	left := strings.Fields(line[:sep])
+	right := strings.Fields(line[sep+len(" - "):])
+	if len(left) < 5 || len(right) < 1 {
+		return "", "", false
+	}
+	// Field 5 (index 4) is the mount point; octal-style escapes (e.g. \040 for
+	// space) are left as-is, which is acceptable for prefix matching of typical
+	// mount roots.
+	return left[4], right[0], true
+}
+
+// pathHasMountPrefix reports whether mountPoint is the mount point covering path
+// (either identical, the filesystem root "/", or a path-segment prefix).
+func pathHasMountPrefix(path, mountPoint string) bool {
+	if mountPoint == "/" || path == mountPoint {
+		return true
+	}
+	return strings.HasPrefix(path, mountPoint+"/")
+}
+
+// classifyFSType maps a Linux filesystem type to a telemetry mount category:
+// "nas-nfs" | "nas-smb" | "local-disk", or "" for an empty input.
+func classifyFSType(fsType string) string {
+	switch {
+	case fsType == "":
+		return ""
+	case strings.HasPrefix(fsType, "nfs"): // nfs, nfs4
+		return "nas-nfs"
+	case fsType == "cifs" || strings.HasPrefix(fsType, "smb"): // cifs, smb3, smbfs
+		return "nas-smb"
+	default:
+		return "local-disk"
+	}
+}

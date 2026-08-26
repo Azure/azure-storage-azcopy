@@ -11,6 +11,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var telemetryFlagDenylist = map[string]struct{}{
+	"aad-endpoint":               {},
+	"application-id":             {},
+	"await-continue":             {},
+	"await-open":                 {},
+	"certificate-path":           {},
+	"debug-skip-files":           {},
+	"destination-sas":            {},
+	"hash-meta-dir":              {},
+	"help":                       {},
+	"identity-client-id":         {},
+	"identity-object-id":         {},
+	"identity-resource-id":       {},
+	"list-of-files":              {},
+	"list-of-versions":           {},
+	"memory-profile":             {},
+	"output-location":            {},
+	"show-sensitive":             {},
+	"source-sas":                 {},
+	"tenant-id":                  {},
+	"trusted-microsoft-suffixes": {},
+}
+
 func TestCommandTelemetryName(t *testing.T) {
 	root := &cobra.Command{Use: "azcopy"}
 	jobs := &cobra.Command{Use: "jobs"}

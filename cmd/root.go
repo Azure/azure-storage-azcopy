@@ -119,29 +119,6 @@ var telemetryFlagAllowlist = map[string]struct{}{
 	"with-status": {},
 }
 
-var telemetryFlagDenylist = map[string]struct{}{
-	"aad-endpoint":               {},
-	"application-id":             {},
-	"await-continue":             {},
-	"await-open":                 {},
-	"certificate-path":           {},
-	"debug-skip-files":           {},
-	"destination-sas":            {},
-	"hash-meta-dir":              {},
-	"help":                       {},
-	"identity-client-id":         {},
-	"identity-object-id":         {},
-	"identity-resource-id":       {},
-	"list-of-files":              {},
-	"list-of-versions":           {},
-	"memory-profile":             {},
-	"output-location":            {},
-	"show-sensitive":             {},
-	"source-sas":                 {},
-	"tenant-id":                  {},
-	"trusted-microsoft-suffixes": {},
-}
-
 type telemetryValuePolicy struct {
 	property  string
 	normalize func(string) (string, bool)

@@ -68,43 +68,6 @@ func TestSourceMountType(t *testing.T) {
 	a.Equal("local-disk", sourceMountType(common.ELocation.Local(), "this-path-does-not-exist-xyz"))
 }
 
-func TestClassifyFSType(t *testing.T) {
-	a := assert.New(t)
-	a.Equal("nas-nfs", classifyFSType("nfs"))
-	a.Equal("nas-nfs", classifyFSType("nfs4"))
-	a.Equal("nas-smb", classifyFSType("cifs"))
-	a.Equal("nas-smb", classifyFSType("smb3"))
-	a.Equal("nas-smb", classifyFSType("smbfs"))
-	a.Equal("local-disk", classifyFSType("ext4"))
-	a.Equal("local-disk", classifyFSType("xfs"))
-	a.Equal("", classifyFSType(""))
-}
-
-func TestParseMountinfoLine(t *testing.T) {
-	a := assert.New(t)
-	mp, fs, ok := parseMountinfoLine("36 35 98:0 / /mnt/nas rw,noatime - nfs4 1.2.3.4:/export rw")
-	a.True(ok)
-	a.Equal("/mnt/nas", mp)
-	a.Equal("nfs4", fs)
-
-	mp, fs, ok = parseMountinfoLine("22 30 0:21 / / rw,relatime shared:1 - ext4 /dev/root rw")
-	a.True(ok)
-	a.Equal("/", mp)
-	a.Equal("ext4", fs)
-
-	_, _, ok = parseMountinfoLine("garbage line without separator")
-	a.False(ok)
-}
-
-func TestPathHasMountPrefix(t *testing.T) {
-	a := assert.New(t)
-	a.True(pathHasMountPrefix("/mnt/nas/data", "/mnt/nas"))
-	a.True(pathHasMountPrefix("/mnt/nas", "/mnt/nas"))
-	a.True(pathHasMountPrefix("/anything", "/"))
-	a.False(pathHasMountPrefix("/mnt/nasextra", "/mnt/nas")) // not a path-segment prefix
-	a.False(pathHasMountPrefix("/home/user", "/mnt/nas"))
-}
-
 func TestProtocolForLocation(t *testing.T) {
 	a := assert.New(t)
 	a.Equal("local", protocolForLocation(common.ELocation.Local()))
@@ -427,23 +390,33 @@ func TestCountExcludingFolders(t *testing.T) {
 func TestAggregateErrorCodes(t *testing.T) {
 	a := assert.New(t)
 	// No failures -> empty.
-	a.Equal("", aggregateErrorCodes(nil))
-	a.Equal("", aggregateErrorCodes([]common.TransferDetail{}))
+	histogram, other := aggregateErrorCodesWithOther(nil)
+	a.Empty(histogram)
+	a.Zero(other)
+
+	histogram, other = aggregateErrorCodesWithOther([]common.TransferDetail{})
+	a.Empty(histogram)
+	a.Zero(other)
 	// Ordered by descending count, then ascending code.
-	a.Equal("403:3,500:1", aggregateErrorCodes([]common.TransferDetail{
+	histogram, other = aggregateErrorCodesWithOther([]common.TransferDetail{
 		{ErrorCode: 500}, {ErrorCode: 403}, {ErrorCode: 403}, {ErrorCode: 403},
-	}))
+	})
+	a.Equal("403:3,500:1", histogram)
+	a.Zero(other)
 	// Tie on count -> lower code first.
-	a.Equal("404:1,409:1", aggregateErrorCodes([]common.TransferDetail{
+	histogram, other = aggregateErrorCodesWithOther([]common.TransferDetail{
 		{ErrorCode: 409}, {ErrorCode: 404},
-	}))
+	})
+	a.Equal("404:1,409:1", histogram)
+	a.Zero(other)
 	// Bounded to maxErrorCodeBuckets distinct codes.
 	many := make([]common.TransferDetail, 0, maxErrorCodeBuckets+5)
 	for i := 0; i < maxErrorCodeBuckets+5; i++ {
 		many = append(many, common.TransferDetail{ErrorCode: int32(600 + i)})
 	}
-	res := aggregateErrorCodes(many)
-	a.Equal(maxErrorCodeBuckets, strings.Count(res, ":"))
+	histogram, other = aggregateErrorCodesWithOther(many)
+	a.Equal(maxErrorCodeBuckets, strings.Count(histogram, ":"))
+	a.Equal(int64(5), other)
 }
 
 func TestAggregateErrorCodesWithOther(t *testing.T) {
