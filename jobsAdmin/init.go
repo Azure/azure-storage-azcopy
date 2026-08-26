@@ -61,7 +61,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 
-	file2FileCopy := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	file2FileCopy := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
 	// Register the Azure Files stats source factory for Files-to-Files scenarios
 	// when proactive stats polling is enabled
 	if strings.EqualFold(file2FileCopy, "true") {

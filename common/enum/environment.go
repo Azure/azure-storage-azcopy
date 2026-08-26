@@ -400,7 +400,7 @@ func (eEnvironmentVariable) CredentialType() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) EnableAzFilesProactiveStats() EnvironmentVariable {
+func (eEnvironmentVariable) EnableAzFilesProactiveStats() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_ENABLE_AZFILES_PROACTIVE_STATS",
 		DefaultValue: "false",

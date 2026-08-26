@@ -22,8 +22,8 @@ package ste
 
 import (
 	"context"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ioPacer optionally extends pacer with an IOPS (operations/second) dimension.
@@ -63,7 +63,7 @@ func pacerAcquire(ctx context.Context, p pacer, bytes, ops int64) error {
 // pacer uses. It returns nil when share-scoped pacing is off or the URL is not
 // Azure Files, which callers treat as unlimited.
 func sourceSharePacer(sourceURL string) common.IOPSPacer {
-	if common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats()) != "true" {
+	if enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() != "true" {
 		return nil
 	}
 	return common.GetShareScanPacer(sourceURL)

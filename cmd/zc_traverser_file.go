@@ -35,6 +35,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
@@ -614,7 +615,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	// rate-limit budget, unless a caller supplied an explicit ScanPacer.
 	// GetShareScanPacer returns nil for non-Files URLs, leaving scanning unmetered.
 	if t.scanPacer == nil &&
-		common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats()) == "true" {
+		(enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
 		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 

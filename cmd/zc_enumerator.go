@@ -45,6 +45,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -465,7 +466,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 	
 	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
-	file2FilesEnum := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	file2FilesEnum := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
 	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
 		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
 	}

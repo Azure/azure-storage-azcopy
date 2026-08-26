@@ -38,6 +38,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	
 )
 
 type FileClientStub interface {
@@ -146,7 +148,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	// pacer, against the same share budget the enumeration scan pacer already uses.
 	// Non-Files/unresolvable shares fall back to the global pacer unchanged.
 	scopedPacer := pacer
-	file2FileCopy := common.GetEnvironmentVariable(common.EEnvironmentVariable.EnableAzFilesProactiveStats())
+	file2FileCopy := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
 	fromTo := jptm.FromTo()
 	if file2FileCopy == "true" && fromTo.From() == common.ELocation.File() && fromTo.To() == common.ELocation.File() {
 		if sp := common.GetOrCreateSharePacer(info.Source, 1); sp != nil {

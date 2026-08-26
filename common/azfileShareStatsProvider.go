@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ShareStatsProvider fetches throttling statistics from the Azure Files GetShareStats API.
@@ -48,8 +49,8 @@ func (p *ShareStatsProvider) FetchStats(ctx context.Context) (*ShareStatsRespons
 	}
 
 	// Required headers
-	req.Header.Set("x-ms-file-return-throttling-stats", "true")
-	req.Header.Set("x-ms-version", GetEnvironmentVariable(EEnvironmentVariable.DefaultServiceApiVersion()))
+	req.Header.Set("x-ms-file-return-throttling-stats", "true")	
+	req.Header.Set("x-ms-version", enum.EEnvironmentVariable.DefaultServiceApiVersion().Get())
 	req.Header.Set("x-ms-date", time.Now().UTC().Format(http.TimeFormat))
 
 	resp, err := p.httpClient.Do(req)
