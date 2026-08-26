@@ -104,6 +104,68 @@ func TestAzCopyCommandProducesJobFinishedTelemetryExcludesDryRuns(t *testing.T) 
 		map[string]string{"dry-run": "false"}))
 }
 
+func TestDecideAppInsightsJobValidation(t *testing.T) {
+	jobID := common.NewJobID().String()
+	tests := []struct {
+		name       string
+		verb       AzCopyVerb
+		flags      map[string]string
+		shouldFail bool
+		jobID      string
+		expected   appInsightsJobValidationDecision
+	}{
+		{
+			name:     "successful command requires a job ID",
+			verb:     AzCopyVerbCopy,
+			expected: appInsightsJobValidationDecision{missingJobID: true},
+		},
+		{
+			name:       "expected failure may omit a job ID",
+			verb:       AzCopyVerbSync,
+			shouldFail: true,
+			expected:   appInsightsJobValidationDecision{},
+		},
+		{
+			name:       "expected failure still registers an emitted job ID",
+			verb:       AzCopyVerbCopy,
+			shouldFail: true,
+			jobID:      jobID,
+			expected:   appInsightsJobValidationDecision{jobID: jobID},
+		},
+		{
+			name:  "successful command registers an emitted job ID",
+			verb:  AzCopyVerbJobsResume,
+			jobID: jobID,
+			expected: appInsightsJobValidationDecision{
+				jobID: jobID,
+			},
+		},
+		{
+			name:     "dry run does not require or register a job ID",
+			verb:     AzCopyVerbCopy,
+			flags:    map[string]string{"dry-run": "true"},
+			jobID:    jobID,
+			expected: appInsightsJobValidationDecision{},
+		},
+		{
+			name:     "non-terminal command does not require or register a job ID",
+			verb:     AzCopyVerbRemove,
+			jobID:    jobID,
+			expected: appInsightsJobValidationDecision{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, decideAppInsightsJobValidation(
+				test.verb,
+				test.flags,
+				test.shouldFail,
+				test.jobID))
+		})
+	}
+}
+
 func TestAzCopyJobIDCaptureForwardsAndCapturesJSONOutput(t *testing.T) {
 	var target bytes.Buffer
 	capture := newAzCopyJobIDCapture(&testAzCopyStdout{Buffer: &target})

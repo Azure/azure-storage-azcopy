@@ -546,16 +546,16 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		Stderr: stderr.String(),
 	})
 
-	if azCopyCommandProducesJobFinishedTelemetry(commandSpec.Verb, flagMap) {
-		jobID := jobIDCapture.JobID()
-		if AppInsightsTelemetryValidationEnabled() && jobID == "" {
-			a.NoError("capture AzCopy job ID for Application Insights validation",
-				fmt.Errorf("AzCopy %s output did not contain a valid job ID", commandSpec.Verb))
-		}
-		if jobID != "" {
-			RegisterExpectedAppInsightsJob(jobID)
-		}
+	validationDecision := decideAppInsightsJobValidation(
+		commandSpec.Verb,
+		flagMap,
+		commandSpec.ShouldFail,
+		jobIDCapture.JobID())
+	if AppInsightsTelemetryValidationEnabled() && validationDecision.missingJobID {
+		a.NoError("capture AzCopy job ID for Application Insights validation",
+			fmt.Errorf("AzCopy %s output did not contain a valid job ID", commandSpec.Verb))
 	}
+	RegisterExpectedAppInsightsJob(validationDecision.jobID)
 
 	return out, &AzCopyJobPlan{}
 }
@@ -572,4 +572,24 @@ func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
 func azCopyCommandProducesJobFinishedTelemetry(verb AzCopyVerb, flags map[string]string) bool {
 	return azCopyVerbProducesJobFinishedTelemetry(verb) &&
 		!strings.EqualFold(flags["dry-run"], "true")
+}
+
+type appInsightsJobValidationDecision struct {
+	missingJobID bool
+	jobID        string
+}
+
+func decideAppInsightsJobValidation(
+	verb AzCopyVerb,
+	flags map[string]string,
+	shouldFail bool,
+	jobID string,
+) appInsightsJobValidationDecision {
+	if !azCopyCommandProducesJobFinishedTelemetry(verb, flags) {
+		return appInsightsJobValidationDecision{}
+	}
+	if jobID != "" {
+		return appInsightsJobValidationDecision{jobID: jobID}
+	}
+	return appInsightsJobValidationDecision{missingJobID: !shouldFail}
 }
