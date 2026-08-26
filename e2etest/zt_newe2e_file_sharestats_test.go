@@ -84,7 +84,7 @@ func getShareStatsRaw(a Asserter, shareURLWithSAS string) (status int, body stri
 	a.NoError("build GetShareStats request", err, true)
 
 	req.Header.Set("x-ms-file-return-throttling-stats", "true")
-	req.Header.Set("x-ms-version", common.GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion()))
+	req.Header.Set("x-ms-version", enum.EEnvironmentVariable.DefaultServiceApiVersion().Get())
 
 	resp, err := http.DefaultClient.Do(req)
 	a.NoError("execute GetShareStats request", err, true)
