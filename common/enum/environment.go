@@ -400,6 +400,14 @@ func (eEnvironmentVariable) CredentialType() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) EnableAzFilesProactiveStats() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_ENABLE_AZFILES_PROACTIVE_STATS",
+		DefaultValue: "false",
+		Description:  "When set to true, enables proactive polling of Azure Files share throttling statistics via GetShareStats for File-to-File transfers.",
+	}
+}
+
 func (eEnvironmentVariable) UserDir() EnvironmentVariable {
 	// Only used internally, not listed in the environment variables.
 	return EnvironmentVariable{
@@ -417,6 +425,7 @@ func (eEnvironmentVariable) AppDir() EnvironmentVariable {
 		DeveloperOption: true,
 	}
 }
+
 
 // Lookup returns the value of the environment variable and whether it was set.
 // If not set, the default value and false are returned.
