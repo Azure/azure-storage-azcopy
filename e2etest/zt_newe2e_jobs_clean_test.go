@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
@@ -44,7 +43,14 @@ func (s *JobsCleanSuite) Scenario_JobsCleanAll(svm *ScenarioVariationManager) {
 			},
 		})
 
-	ValidateMessageOutput(svm, jobsCleanOutput, cmd.JobsCleanupSuccessMsg, true)
+	// TEMPORARY -- revert when this branch picks up cmd/jobsClean.go.
+	// Upstream this is cmd.JobsCleanupSuccessMsg (origin/main:cmd/jobsClean.go:34).
+	// cmd/jobsClean.go does not exist anywhere on the feature/azfilestofilesazcopy line,
+	// so that reference fails to compile and takes the ENTIRE e2etest package with it --
+	// meaning no e2e test of any kind can run. Inlined here so the rest of the suite is
+	// usable. Note Scenario_JobsCleanAll itself still cannot pass on this branch, because
+	// the jobs-clean command it drives doesn't exist here either; don't include it in -run.
+	ValidateMessageOutput(svm, jobsCleanOutput, "Successfully removed all jobs.", true)
 	validateDirSize(svm, logsDir, 1) // log directory will have a file matching the current job ID.
 	validateDirSize(svm, jobPlanDir, 0)
 }
