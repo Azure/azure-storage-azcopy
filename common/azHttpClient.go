@@ -21,9 +21,13 @@
 package common
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptrace"
+	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -31,6 +35,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
@@ -43,13 +48,159 @@ var (
 const (
 	maxIdleConnsPerHost_MaxValue = 3000
 	httpTraceTickerInterval      = time.Minute * 1
+	shardStatsLogInterval        = time.Minute * 5
 )
+
+func useHighPerfNetworkPath() bool {
+	return buildmode.HighPerf()
+}
+
+// ShardedTransport implements http.RoundTripper by distributing requests across
+// N underlying http.Transport instances via atomic round-robin. Each transport has
+// its own connection pool and connsPerHostMu lock, so contention is reduced by N×.
+// This is critical for high-IOPS workloads where thousands of goroutines compete.
+type ShardedTransport struct {
+	transports []*http.Transport
+	counter    atomic.Uint64
+	shardStats []shardMetrics
+}
+
+// shardMetrics tracks per-shard connection and concurrency statistics.
+type shardMetrics struct {
+	inFlight   atomic.Int64 // current in-flight requests
+	peakFlight atomic.Int64 // peak in-flight since last log
+	totalReqs  atomic.Int64 // total requests routed to this shard
+	connNew    atomic.Int64 // new connections (not reused)
+	connReused atomic.Int64 // reused connections
+}
+
+func (s *ShardedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	idx := s.counter.Add(1) % uint64(len(s.transports))
+	m := &s.shardStats[idx]
+
+	// Track in-flight concurrency
+	inflight := m.inFlight.Add(1)
+	m.totalReqs.Add(1)
+	// Update peak (relaxed CAS loop)
+	for {
+		peak := m.peakFlight.Load()
+		if inflight <= peak || m.peakFlight.CompareAndSwap(peak, inflight) {
+			break
+		}
+	}
+
+	// Inject httptrace to count connections per shard
+	trace := &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			if info.Reused {
+				m.connReused.Add(1)
+			} else {
+				m.connNew.Add(1)
+			}
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+	resp, err := s.transports[idx].RoundTrip(req)
+	m.inFlight.Add(-1)
+	return resp, err
+}
+
+// startShardLogger logs per-shard stats periodically (every shardStatsLogInterval).
+func (s *ShardedTransport) startShardLogger() {
+	go func() {
+		ticker := time.NewTicker(shardStatsLogInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			for i := range s.shardStats {
+				m := &s.shardStats[i]
+				inflight := m.inFlight.Load()
+				peak := m.peakFlight.Swap(0) // reset peak each interval
+				total := m.totalReqs.Load()
+				connNew := m.connNew.Load()
+				connReused := m.connReused.Load()
+				// Only log shards that had traffic
+				if total > 0 {
+					fmt.Fprintf(os.Stderr,
+						"SHARD[%d]: inFlight=%d peakFlight=%d totalReqs=%d connNew=%d connReused=%d activeConns~%d\n",
+						i, inflight, peak, total, connNew, connReused, connNew)
+				}
+			}
+		}
+	}()
+}
+
+// getNumTransportShards returns the shard count for the active high-perf profile. Only reached on the
+// high-perf network path; sharding does not exist in the mover-default path.
+func getNumTransportShards() int {
+	return buildmode.TransportShards()
+}
+
+// newShardedTransport creates N http.Transport instances with identical configuration, where N is
+// getNumTransportShards() (default 32, overridable via AZCOPY_TRANSPORT_SHARDS). Azure Blob Storage
+// only supports HTTP/1.1 (per MS docs), so we optimize for maximum parallel connections. Sharding is
+// what eliminates pool lock contention; maxConnsPerHost is a per-shard ceiling (1024) sized well
+// above observed peak usage (~190 conns/shard) so it never gates concurrency.
+func newShardedTransport(maxConnsPerHost int) *ShardedTransport {
+	numShards := getNumTransportShards()
+	shards := make([]*http.Transport, numShards)
+	for i := range shards {
+		dialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+		shards[i] = &http.Transport{
+			Proxy: GlobalProxyLookup,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, addr)
+			},
+			MaxConnsPerHost:        maxConnsPerHost,
+			MaxIdleConns:           0,
+			MaxIdleConnsPerHost:    maxConnsPerHost,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     true,
+			MaxResponseHeaderBytes: 0,
+			WriteBufferSize:        64 * 1024,
+			ReadBufferSize:         64 * 1024,
+			ForceAttemptHTTP2:      false, // Azure Blob doesn't support h2
+			TLSClientConfig: &tls.Config{
+				NextProtos: []string{"http/1.1"},
+			},
+		}
+	}
+	st := &ShardedTransport{
+		transports: shards,
+		shardStats: make([]shardMetrics, numShards),
+	}
+	st.startShardLogger()
+	return st
+}
 
 // GetGlobalHTTPClient initializes and returns the process-global HTTP client exactly once.
 // Subsequent calls return the same client. The logger function, if provided on the first call,
 // will be invoked with status messages.
 func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 	globalHTTPClientOnce.Do(func() {
+		if useHighPerfNetworkPath() {
+			const maxConnsPerHost = 1024
+			shardedTransport := newShardedTransport(maxConnsPerHost)
+			client := &http.Client{
+				Transport: shardedTransport,
+			}
+			GlobalHTTPClient = client
+			msg := fmt.Sprintf(
+				"GetGlobalHTTPClient: SHARDED_TRANSPORT_V6 initialized %p shards=%d MaxConnsPerHost=%d HTTP1.1_ONLY",
+				client, len(shardedTransport.transports), maxConnsPerHost)
+			fmt.Fprintln(os.Stderr, msg)
+			if logger != nil {
+				logger.Log(LogError, msg)
+			}
+			return
+		}
+
 		const concurrentDialsPerCpu = 10
 		client := &http.Client{
 			Transport: &http.Transport{
@@ -93,6 +244,13 @@ func GetMaxIdleConnsPerHost() int {
 		concurrencyVal, err := strconv.ParseInt(envValue, 10, 0)
 		if err == nil {
 			concurrencyValue = min(int(concurrencyVal), concurrencyValue)
+			autoTune = false
+		}
+	}
+
+	if autoTune && useHighPerfNetworkPath() {
+		if defaultValue := buildmode.ConcurrencyValue(); defaultValue > 0 {
+			concurrencyValue = min(defaultValue, concurrencyValue)
 			autoTune = false
 		}
 	}

@@ -374,8 +374,11 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	// 1) Source is local, and source's size is > 1 chunk.  (why not always?  Since getting LMT is not "free" at very small sizes)
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.ModifiedTimeRefresh())
+	// When the source-change access-condition is in effect (mover Blob->Blob), the condition is
+	// enforced by the service on each copy request, so skip the redundant pre-transfer GetProperties.
 	if _, isS2SCopier := s.(s2sCopier); numChunks > 1 &&
-		(srcInfoProvider.IsLocal() || isS2SCopier && info.S2SSourceChangeValidation) {
+		(srcInfoProvider.IsLocal() || isS2SCopier && info.S2SSourceChangeValidation) &&
+		!useSourceChangeAccessCondition(jptm) {
 		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
 			err_msg := "Couldn't get source's last modified time-" + err.Error()
@@ -630,6 +633,37 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 	return startIndex == 0 && fileSize == 0
 }
 
+// useSourceChangeAccessCondition reports whether source-change detection for this transfer is
+// enforced via a source access-condition (SourceIfUnmodifiedSince) attached to the copy request
+// itself, instead of separate GetProperties round-trips before and after the transfer.
+//
+// It is enabled only in the mover high-perf profile (buildmode.HighPerf(), i.e. MOVER_HIGH_PERF set
+// in a mover build), only when S2SSourceChangeValidation is requested, and only for Blob->Blob
+// copies: the block-blob "from URL" sender attaches the access-condition to every
+// StageBlockFromURL/UploadBlobFromURL call, and Azure Storage enforces it natively against the
+// source blob (returning 412 Precondition Failed if the source changed since enumeration, which
+// gates CommitBlockList so no torn blob is ever committed). When this is active, BOTH the
+// pre-transfer and post-transfer GetFreshFileLastModifiedTime checks are skipped, so no extra
+// GetProperties calls are made against the source.
+func useSourceChangeAccessCondition(jptm IJobPartTransferMgr) bool {
+	return buildmode.HighPerf() &&
+		jptm.Info().S2SSourceChangeValidation &&
+		jptm.FromTo() == common.EFromTo.BlobBlob()
+}
+
+// skipDestLengthValidation reports whether the post-commit destination length check should be
+// skipped for this transfer. That check calls GetDestinationLength() (a GetProperties round-trip on
+// the just-written destination blob) in the epilogue to compare the destination content-length
+// against the source size. In the mover high-perf profile (buildmode.HighPerf()) for Blob->Blob
+// server-side copy it is skipped: a successful CommitBlockList already fixes the destination blob
+// length deterministically from the committed block list, so the readback is redundant. It
+// otherwise accounts for ~25% of destination transactions (one per blob), so skipping it reduces
+// service request load and removes a synchronous round-trip from every transfer's critical path.
+func skipDestLengthValidation(jptm IJobPartTransferMgr) bool {
+	return buildmode.HighPerf() &&
+		jptm.FromTo() == common.EFromTo.BlobBlob()
+}
+
 // Complete epilogue. Handles both success and failure.
 func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISourceInfoProvider) {
 	info := jptm.Info()
@@ -644,7 +678,11 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}
 	if jptm.IsLive() {
-		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
+		// When the source-change access-condition is in effect (mover high-perf Blob->Blob), a source
+		// change is detected atomically by the service on each StageBlockFromURL/UploadBlobFromURL
+		// (412), so skip the redundant post-transfer GetProperties source-change check entirely.
+		if _, isS2SCopier := s.(s2sCopier); !useSourceChangeAccessCondition(jptm) &&
+			(sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation)) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
@@ -696,7 +734,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	//  or should we redefine epilogue to be success-path only, and only call it in that case?
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
-	if jptm.IsLive() && info.DestLengthValidation {
+	if jptm.IsLive() && info.DestLengthValidation && !skipDestLengthValidation(jptm) {
 		_, isS2SCopier := s.(s2sCopier)
 		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
