@@ -300,7 +300,7 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 		cookedOpts.fromTo,
 		cookedOpts.symlinks,
 		cookedOpts.hardlinks,
-		getTelemetryAgent().shouldCollectSourceShape(jobID.String()))
+		getTelemetryAgent().shouldCollectSourceShape())
 	sync := &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}
 
 	// Ensure that resources are eventually released even if the caller forgets to close the syncer.

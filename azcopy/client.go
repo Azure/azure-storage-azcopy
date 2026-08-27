@@ -21,9 +21,7 @@
 package azcopy
 
 import (
-	"fmt"
 	"log"
-	"math"
 	"runtime"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -61,17 +59,13 @@ type Client struct {
 }
 
 type ClientOptions struct {
-	CapMbps               float64
-	TrustedSuffixes       string
-	LogLevel              *common.LogLevel
-	DisableTelemetry      bool
-	TelemetrySamplingRate *float64
+	CapMbps          float64
+	TrustedSuffixes  string
+	LogLevel         *common.LogLevel
+	DisableTelemetry bool
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
-	if err := configureTelemetrySamplingRate(opts.TelemetrySamplingRate); err != nil {
-		return Client{}, err
-	}
 	telemetryDisabledByFlag = opts.DisableTelemetry
 	c := Client{
 		logLevel: common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
@@ -108,18 +102,6 @@ func NewClient(opts ClientOptions) (Client, error) {
 		AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
 	})
 	return c, nil
-}
-
-func configureTelemetrySamplingRate(rate *float64) error {
-	telemetrySamplingRate = defaultTelemetrySamplingRate
-	if rate == nil {
-		return nil
-	}
-	if math.IsNaN(*rate) || math.IsInf(*rate, 0) || *rate < 0 || *rate > 1 {
-		return fmt.Errorf("telemetry sampling rate must be between 0.0 and 1.0, got %v", *rate)
-	}
-	telemetrySamplingRate = *rate
-	return nil
 }
 
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.

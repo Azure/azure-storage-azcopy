@@ -29,6 +29,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,7 +100,7 @@ func parseConnectionString(cs string) map[string]string {
 	for _, part := range strings.Split(cs, ";") {
 		kv := strings.SplitN(part, "=", 2)
 		if len(kv) == 2 {
-			m[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+			m[strings.ToLower(strings.TrimSpace(kv[0]))] = strings.TrimSpace(kv[1])
 		}
 	}
 	return m
@@ -109,10 +110,39 @@ func parseConnectionString(cs string) map[string]string {
 // ingestion endpoint (no trailing slash) and instrumentation key.
 func (r *Reporter) endpointAndKey() (endpoint, ikey string, err error) {
 	parts := parseConnectionString(r.cfg.ConnectionString)
-	endpoint = strings.TrimRight(parts["IngestionEndpoint"], "/")
-	ikey = parts["InstrumentationKey"]
-	if endpoint == "" || ikey == "" {
-		return "", "", fmt.Errorf("connection string must contain IngestionEndpoint and InstrumentationKey")
+	ikey = parts["instrumentationkey"]
+	if ikey == "" {
+		return "", "", fmt.Errorf("connection string must contain InstrumentationKey")
+	}
+	if authorization := parts["authorization"]; authorization != "" && !strings.EqualFold(authorization, "ikey") {
+		return "", "", fmt.Errorf("unsupported Application Insights authorization %q", authorization)
+	}
+
+	endpoint = parts["ingestionendpoint"]
+	if endpoint == "" {
+		suffix := parts["endpointsuffix"]
+		if suffix == "" {
+			return "", "", fmt.Errorf("connection string must contain IngestionEndpoint or EndpointSuffix")
+		}
+		if strings.ContainsAny(suffix, "/:@?#") {
+			return "", "", fmt.Errorf("invalid Application Insights EndpointSuffix %q", suffix)
+		}
+		locationPrefix := ""
+		if location := parts["location"]; location != "" {
+			if strings.ContainsAny(location, "/.:@?#") {
+				return "", "", fmt.Errorf("invalid Application Insights Location %q", location)
+			}
+			locationPrefix = location + "."
+		}
+		endpoint = "https://" + locationPrefix + "dc." + suffix
+	}
+
+	endpoint = strings.TrimRight(endpoint, "/")
+	parsedEndpoint, parseErr := url.Parse(endpoint)
+	if parseErr != nil || parsedEndpoint.Host == "" ||
+		(parsedEndpoint.Scheme != "http" && parsedEndpoint.Scheme != "https") ||
+		parsedEndpoint.User != nil || parsedEndpoint.RawQuery != "" || parsedEndpoint.Fragment != "" {
+		return "", "", fmt.Errorf("invalid Application Insights ingestion endpoint %q", endpoint)
 	}
 	return endpoint, ikey, nil
 }

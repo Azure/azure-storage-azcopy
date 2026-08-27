@@ -23,9 +23,7 @@ package azcopy
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -542,36 +540,10 @@ func TestNewTelemetryInvocationID(t *testing.T) {
 	assert.NotEqual(t, first, second)
 }
 
-func TestShouldSampleTelemetry(t *testing.T) {
-	assert.False(t, shouldSampleTelemetry("", 1))
-	assert.False(t, shouldSampleTelemetry("job", 0))
-	assert.True(t, shouldSampleTelemetry("job", 1))
-
-	includedAtOnePercent := 0
-	for index := 0; index < 10000; index++ {
-		jobID := fmt.Sprintf("job-%d", index)
-		atOnePercent := shouldSampleTelemetry(jobID, 0.01)
-		assert.Equal(t, atOnePercent, shouldSampleTelemetry(jobID, 0.01))
-		if atOnePercent {
-			includedAtOnePercent++
-			assert.True(t, shouldSampleTelemetry(jobID, 0.10), jobID)
-		}
-	}
-	assert.Greater(t, includedAtOnePercent, 70)
-	assert.Less(t, includedAtOnePercent, 130)
-}
-
 func TestShouldCollectSourceShape(t *testing.T) {
-	original := telemetrySamplingRate
-	t.Cleanup(func() { telemetrySamplingRate = original })
-
-	telemetrySamplingRate = 1
-	assert.False(t, (*telemetryAgent)(nil).shouldCollectSourceShape("job"))
-	assert.False(t, (&telemetryAgent{}).shouldCollectSourceShape("job"))
-	assert.True(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape("job"))
-
-	telemetrySamplingRate = 0
-	assert.False(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape("job"))
+	assert.False(t, (*telemetryAgent)(nil).shouldCollectSourceShape())
+	assert.False(t, (&telemetryAgent{}).shouldCollectSourceShape())
+	assert.True(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape())
 }
 
 func TestProgressTrackersOnlyCollectSourceShapeWhenEligible(t *testing.T) {
@@ -611,11 +583,9 @@ func TestProgressTrackersOnlyCollectSourceShapeWhenEligible(t *testing.T) {
 	assert.NotNil(t, syncWithShape.shapeTracker)
 }
 
-func TestBuildResourceAttributesSamplingMetadata(t *testing.T) {
+func TestBuildResourceAttributesSchemaVersion(t *testing.T) {
 	resource := buildResourceAttributes()
 	assert.Equal(t, telemetrySchemaVersion, resource.SchemaVersion)
-	assert.Equal(t, telemetrySamplingRate, resource.SamplingRate)
-	assert.Equal(t, telemetrySamplerVersion, resource.SamplerVersion)
 }
 
 func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
@@ -624,30 +594,6 @@ func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
 
 	t.Setenv(envE2ETelemetryRunID, "   ")
 	assert.Empty(t, buildResourceAttributes().E2ETestRunID)
-}
-
-func TestConfigureTelemetrySamplingRate(t *testing.T) {
-	original := telemetrySamplingRate
-	t.Cleanup(func() { telemetrySamplingRate = original })
-
-	assert.NoError(t, configureTelemetrySamplingRate(nil))
-	assert.Equal(t, defaultTelemetrySamplingRate, telemetrySamplingRate)
-
-	for _, rate := range []float64{0, 0.25, 1} {
-		rate := rate
-		t.Run(fmt.Sprintf("rate-%g", rate), func(t *testing.T) {
-			assert.NoError(t, configureTelemetrySamplingRate(&rate))
-			assert.Equal(t, rate, telemetrySamplingRate)
-			assert.Equal(t, rate, buildResourceAttributes().SamplingRate)
-		})
-	}
-
-	for _, rate := range []float64{-0.01, 1.01, math.NaN(), math.Inf(1), math.Inf(-1)} {
-		rate := rate
-		t.Run(fmt.Sprintf("invalid-%v", rate), func(t *testing.T) {
-			assert.Error(t, configureTelemetrySamplingRate(&rate))
-		})
-	}
 }
 
 func TestConfiguredTelemetryConnectionString(t *testing.T) {
@@ -813,10 +759,6 @@ func (c *orderedTelemetryClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestFinishedTelemetryWaitsForStartedDelivery(t *testing.T) {
-	original := telemetrySamplingRate
-	telemetrySamplingRate = 1
-	t.Cleanup(func() { telemetrySamplingRate = original })
-
 	client := &orderedTelemetryClient{
 		firstEntered: make(chan struct{}),
 		releaseFirst: make(chan struct{}),
@@ -834,20 +776,19 @@ func TestFinishedTelemetryWaitsForStartedDelivery(t *testing.T) {
 	agent.reportStarted(telemetry.JobDimensions{}, jobID, invocationID, time.Now())
 	<-client.firstEntered
 
-	finished := make(chan struct{})
+	finishedReturned := make(chan struct{})
 	go func() {
 		agent.reportFinished(telemetry.JobFinishedEvent{
 			JobID:        jobID,
 			InvocationID: invocationID,
 			EndTimestamp: time.Now(),
 		})
-		close(finished)
+		close(finishedReturned)
 	}()
-
 	select {
-	case <-finished:
-		t.Fatal("finished telemetry completed before started telemetry")
-	case <-time.After(50 * time.Millisecond):
+	case <-finishedReturned:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("reportFinished blocked on telemetry delivery")
 	}
 
 	client.mu.Lock()
@@ -855,15 +796,85 @@ func TestFinishedTelemetryWaitsForStartedDelivery(t *testing.T) {
 	client.mu.Unlock()
 
 	close(client.releaseFirst)
-	select {
-	case <-finished:
-	case <-time.After(time.Second):
-		t.Fatal("finished telemetry did not complete after started telemetry")
-	}
+	agent.flush(time.Second)
 
 	client.mu.Lock()
 	assert.Equal(t, []string{"azcopy.job.started", "azcopy.job.finished"}, client.eventNames)
 	client.mu.Unlock()
+}
+
+type blockingTelemetryClient struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (c *blockingTelemetryClient) Do(*http.Request) (*http.Response, error) {
+	c.once.Do(func() { close(c.entered) })
+	<-c.release
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func newBlockingTelemetryAgent(client *blockingTelemetryClient) *telemetryAgent {
+	return &telemetryAgent{
+		enabled: true,
+		reporter: telemetry.NewReporter(telemetry.Config{
+			Backend:          telemetry.BackendAppInsights,
+			ConnectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000001;IngestionEndpoint=https://example.test",
+			HTTPClient:       client,
+		}),
+	}
+}
+
+func TestCommandTelemetryDoesNotDelayCommandExecution(t *testing.T) {
+	client := &blockingTelemetryClient{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	agent := newBlockingTelemetryAgent(client)
+
+	commandReturned := make(chan struct{})
+	go func() {
+		agent.reportCommand("list", "job", "invocation", telemetry.OptionAttributes{})
+		close(commandReturned)
+	}()
+	select {
+	case <-commandReturned:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("reportCommand blocked on telemetry delivery")
+	}
+	<-client.entered
+
+	close(client.release)
+	agent.flush(time.Second)
+}
+
+func TestTelemetryFlushHasSingleBoundedExitBudget(t *testing.T) {
+	client := &blockingTelemetryClient{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	agent := newBlockingTelemetryAgent(client)
+	agent.reportStarted(telemetry.JobDimensions{}, "job", "invocation", time.Now())
+	<-client.entered
+	agent.reportFinished(telemetry.JobFinishedEvent{
+		JobID:        "job",
+		InvocationID: "invocation",
+		EndTimestamp: time.Now(),
+	})
+
+	startedAt := time.Now()
+	agent.flush(40 * time.Millisecond)
+	elapsed := time.Since(startedAt)
+	assert.GreaterOrEqual(t, elapsed, 30*time.Millisecond)
+	assert.Less(t, elapsed, 200*time.Millisecond)
+
+	close(client.release)
+	agent.flush(time.Second)
 }
 
 func telemetryResourceForTest() telemetry.ResourceAttributes {

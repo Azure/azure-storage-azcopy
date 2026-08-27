@@ -59,7 +59,6 @@ var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
 var disableTelemetry bool
-var telemetrySamplingRate float64
 
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
@@ -115,7 +114,7 @@ var telemetryFlagAllowlist = map[string]struct{}{
 	"s2s-detect-source-changed": {}, "s2s-get-properties-in-backend": {},
 	"s2s-handle-invalid-metadata": {}, "s2s-preserve-access-tier": {},
 	"s2s-preserve-blob-tags": {}, "s2s-preserve-properties": {}, "service-principal": {},
-	"size-per-file": {}, "skip-version-check": {}, "telemetry-sampling-rate": {}, "tenant": {}, "trailing-dot": {},
+	"size-per-file": {}, "skip-version-check": {}, "tenant": {}, "trailing-dot": {},
 	"with-status": {},
 }
 
@@ -476,6 +475,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]" || cmd.Use == "bench [destination]"
+		glcm.RegisterCloseFunc(azcopy.FlushTelemetry)
 		if err := Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID); err != nil {
 			return err
 		}
@@ -510,11 +510,10 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 	glcm.SetOutputVerbosity(OutputLevel)
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{
-		CapMbps:               CapMbps,
-		TrustedSuffixes:       TrustedSuffixes,
-		LogLevel:              &LogLevel,
-		DisableTelemetry:      disableTelemetry,
-		TelemetrySamplingRate: &telemetrySamplingRate,
+		CapMbps:          CapMbps,
+		TrustedSuffixes:  TrustedSuffixes,
+		LogLevel:         &LogLevel,
+		DisableTelemetry: disableTelemetry,
 	})
 	// Run MessagHandler to process messages from Input Watcher
 	if jobsAdmin.JobsAdmin != nil {
@@ -652,9 +651,6 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&disableTelemetry, "disable-telemetry", false,
 		"Opt out of sending anonymous usage telemetry. Telemetry is enabled by default and contains no PII. "+
 			"\n It can also be disabled by setting the AZCOPY_DISABLE_TELEMETRY environment variable to 'true'.")
-	rootCmd.PersistentFlags().Float64Var(&telemetrySamplingRate, "telemetry-sampling-rate", 0.01,
-		"Diagnostic override for the fraction of job IDs included in anonymous telemetry, from 0.0 through 1.0.")
-	_ = rootCmd.PersistentFlags().MarkHidden("telemetry-sampling-rate")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

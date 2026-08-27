@@ -354,7 +354,7 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		cookedOpts.fromTo,
 		cookedOpts.symlinks,
 		cookedOpts.hardlinks,
-		getTelemetryAgent().shouldCollectSourceShape(jobID.String()))
+		getTelemetryAgent().shouldCollectSourceShape())
 
 	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
 }

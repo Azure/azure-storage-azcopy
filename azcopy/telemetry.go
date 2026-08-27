@@ -23,8 +23,6 @@ package azcopy
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -45,12 +43,8 @@ import (
 )
 
 const (
-	telemetrySchemaVersion       = "3"
-	defaultTelemetrySamplingRate = 0.01
-	telemetrySamplerVersion      = "job-id-sha256-v1"
+	telemetrySchemaVersion = "3"
 )
-
-var telemetrySamplingRate = defaultTelemetrySamplingRate
 
 // telemetryConnectionString is injected into official binaries at build time.
 // It remains empty for local builds, which fail closed with telemetry disabled.
@@ -74,8 +68,11 @@ const (
 	// envE2ETelemetryRunID optionally correlates telemetry emitted by one E2E
 	// pipeline matrix leg. It is unset in normal AzCopy usage.
 	envE2ETelemetryRunID = "AZCOPY_E2E_TELEMETRY_RUN_ID"
-	// telemetrySendTimeout bounds how long a single send may block.
-	telemetrySendTimeout = 5 * time.Second
+	// Individual sends are bounded so an ordered started/finished pair fits
+	// within the process-wide shutdown drain.
+	telemetrySendTimeout = time.Second
+	// telemetryFlushTimeout is the maximum telemetry may add to process exit.
+	telemetryFlushTimeout = 2 * time.Second
 	// installationIDFileName stores the anonymous, per-install identifier.
 	installationIDFileName       = "installation_id"
 	installationIDLockRetryDelay = 10 * time.Millisecond
@@ -90,19 +87,38 @@ type telemetryAgent struct {
 	reporter     *telemetry.Reporter
 	resource     telemetry.ResourceAttributes
 	startedSends sync.Map
+	pendingSends sync.WaitGroup
+	sendTimeout  time.Duration
 }
 
 var (
-	telemetryOnce sync.Once
-	telemetryInst *telemetryAgent
+	telemetryOnce   sync.Once
+	telemetryInst   *telemetryAgent
+	telemetryInstMu sync.RWMutex
 )
 
 // getTelemetryAgent lazily builds the process-wide telemetry agent.
 func getTelemetryAgent() *telemetryAgent {
 	telemetryOnce.Do(func() {
-		telemetryInst = newTelemetryAgent()
+		agent := newTelemetryAgent()
+		telemetryInstMu.Lock()
+		telemetryInst = agent
+		telemetryInstMu.Unlock()
 	})
+	telemetryInstMu.RLock()
+	defer telemetryInstMu.RUnlock()
 	return telemetryInst
+}
+
+// FlushTelemetry gives outstanding best-effort telemetry one bounded chance to
+// complete before process exit.
+func FlushTelemetry() {
+	telemetryInstMu.RLock()
+	agent := telemetryInst
+	telemetryInstMu.RUnlock()
+	if agent != nil {
+		agent.flush(telemetryFlushTimeout)
+	}
 }
 
 func newTelemetryAgent() *telemetryAgent {
@@ -145,7 +161,7 @@ func ReportCommandInvoked(command, runID string, options telemetry.OptionAttribu
 // reportStarted emits a job.started event asynchronously (best-effort). It never
 // blocks the caller and never surfaces errors to the user.
 func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invocationID string, start time.Time) {
-	if a == nil || !a.enabled || !shouldSampleTelemetry(runID, telemetrySamplingRate) {
+	if a == nil || !a.enabled {
 		return
 	}
 	evt := telemetry.JobStartedEvent{
@@ -156,28 +172,26 @@ func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invo
 		Timestamp:    start,
 		StartedCount: 1,
 	}
-	sendComplete := make(chan struct{})
-	a.startedSends.Store(startedSendKey(runID, invocationID), sendComplete)
+	key := startedSendKey(runID, invocationID)
+	sendComplete := a.dispatch(evt, nil)
+	a.startedSends.Store(key, sendComplete)
 	go func() {
-		defer func() {
-			close(sendComplete)
-			a.startedSends.CompareAndDelete(startedSendKey(runID, invocationID), sendComplete)
-		}()
-		a.sendSafely(evt)
+		<-sendComplete
+		a.startedSends.CompareAndDelete(key, sendComplete)
 	}()
 }
 
-// reportFinished emits a job.finished event synchronously (bounded by
-// telemetrySendTimeout) so the event is delivered before the process exits.
-// Failures are logged to the job log only.
+// reportFinished queues job.finished after its matching job.started send. The
+// process-wide flush provides the bounded delivery opportunity before exit.
 func (a *telemetryAgent) reportFinished(evt telemetry.JobFinishedEvent) {
-	if a == nil || !a.enabled || !shouldSampleTelemetry(evt.JobID, telemetrySamplingRate) {
+	if a == nil || !a.enabled {
 		return
 	}
+	var startedComplete <-chan struct{}
 	if sendComplete, ok := a.startedSends.LoadAndDelete(startedSendKey(evt.JobID, evt.InvocationID)); ok {
-		<-sendComplete.(chan struct{})
+		startedComplete = sendComplete.(chan struct{})
 	}
-	a.sendSafely(evt)
+	a.dispatch(evt, startedComplete)
 }
 
 func startedSendKey(jobID, invocationID string) string {
@@ -395,14 +409,13 @@ func sanitizeJobErrorCode(code string) string {
 	return code
 }
 
-// reportCommand emits a single command.invoked event synchronously (bounded by
-// telemetrySendTimeout). Used for commands that do not emit paired job-attempt
-// start/finish events. Best-effort; no-op when disabled.
+// reportCommand queues a single command.invoked event without delaying command
+// execution. Best-effort; no-op when disabled.
 func (a *telemetryAgent) reportCommand(command, runID, invocationID string, options telemetry.OptionAttributes) {
-	if a == nil || !a.enabled || !shouldSampleTelemetry(runID, telemetrySamplingRate) {
+	if a == nil || !a.enabled {
 		return
 	}
-	a.sendSafely(telemetry.CommandInvokedEvent{
+	a.dispatch(telemetry.CommandInvokedEvent{
 		Resource:     a.resource,
 		Command:      command,
 		Options:      options.Clone(),
@@ -410,7 +423,7 @@ func (a *telemetryAgent) reportCommand(command, runID, invocationID string, opti
 		InvocationID: invocationID,
 		Timestamp:    time.Now(),
 		InvokedCount: 1,
-	})
+	}, nil)
 }
 
 func newTelemetryInvocationID() string {
@@ -421,23 +434,39 @@ func newTelemetryInvocationID() string {
 	return hex.EncodeToString(buf)
 }
 
-func shouldSampleTelemetry(jobID string, rate float64) bool {
-	if jobID == "" || rate <= 0 {
-		return false
-	}
-	if rate >= 1 {
-		return true
-	}
-	sum := sha256.Sum256([]byte(telemetrySamplerVersion + ":" + jobID))
-	// Use 53 bits so conversion to float64 is exact. Raising the threshold
-	// creates a nested cohort without changing any JobID's stable hash.
-	value := binary.BigEndian.Uint64(sum[:8]) >> 11
-	const bucketCount = uint64(1) << 53
-	return float64(value)/float64(bucketCount) < rate
+func (a *telemetryAgent) shouldCollectSourceShape() bool {
+	return a != nil && a.enabled
 }
 
-func (a *telemetryAgent) shouldCollectSourceShape(jobID string) bool {
-	return a != nil && a.enabled && shouldSampleTelemetry(jobID, telemetrySamplingRate)
+func (a *telemetryAgent) dispatch(evt telemetry.MetricEvent, waitFor <-chan struct{}) chan struct{} {
+	complete := make(chan struct{})
+	a.pendingSends.Add(1)
+	go func() {
+		defer a.pendingSends.Done()
+		defer close(complete)
+		if waitFor != nil {
+			<-waitFor
+		}
+		a.sendSafely(evt)
+	}()
+	return complete
+}
+
+func (a *telemetryAgent) flush(timeout time.Duration) {
+	if a == nil || !a.enabled {
+		return
+	}
+	complete := make(chan struct{})
+	go func() {
+		a.pendingSends.Wait()
+		close(complete)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-complete:
+	case <-timer.C:
+	}
 }
 
 func (a *telemetryAgent) sendSafely(evt telemetry.MetricEvent) {
@@ -446,7 +475,11 @@ func (a *telemetryAgent) sendSafely(evt telemetry.MetricEvent) {
 			common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: recovered from panic while sending %s: %v", evt.EventName(), r), common.LogError)
 		}
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), telemetrySendTimeout)
+	timeout := a.sendTimeout
+	if timeout <= 0 {
+		timeout = telemetrySendTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if err := a.reporter.ReportEvent(ctx, evt); err != nil {
 		common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: failed to send %s: %v", evt.EventName(), err), common.LogWarning)
@@ -464,8 +497,6 @@ func buildResourceAttributes() telemetry.ResourceAttributes {
 	return telemetry.ResourceAttributes{
 		AzCopyVersion:      common.AzcopyVersion,
 		SchemaVersion:      telemetrySchemaVersion,
-		SamplingRate:       telemetrySamplingRate,
-		SamplerVersion:     telemetrySamplerVersion,
 		E2ETestRunID:       strings.TrimSpace(os.Getenv(envE2ETelemetryRunID)),
 		OSType:             runtime.GOOS,
 		OSVersion:          hw.osVersion,

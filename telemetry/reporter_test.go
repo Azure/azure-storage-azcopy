@@ -76,8 +76,6 @@ func sampleStarted() JobStartedEvent {
 		Resource: ResourceAttributes{
 			AzCopyVersion:    "10.32.2",
 			SchemaVersion:    "1",
-			SamplingRate:     0.01,
-			SamplerVersion:   "job-id-sha256-v1",
 			OSType:           "linux",
 			HostArch:         "amd64",
 			HostNumCPU:       8,
@@ -175,26 +173,100 @@ func sampleFinished() JobFinishedEvent {
 
 func TestParseConnectionString(t *testing.T) {
 	m := parseConnectionString(testConnString)
-	assert.Equal(t, "11111111-2222-3333-4444-555555555555", m["InstrumentationKey"])
-	assert.Equal(t, "https://eastus.example.com/", m["IngestionEndpoint"])
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", m["instrumentationkey"])
+	assert.Equal(t, "https://eastus.example.com/", m["ingestionendpoint"])
 
-	// Tolerates whitespace and ignores malformed segments.
-	m = parseConnectionString(" A = 1 ; bogus ; B=2")
-	assert.Equal(t, "1", m["A"])
-	assert.Equal(t, "2", m["B"])
+	// Keys are case-insensitive; whitespace and malformed segments are tolerated.
+	m = parseConnectionString(" A = 1 ; bogus ; b=2")
+	assert.Equal(t, "1", m["a"])
+	assert.Equal(t, "2", m["b"])
 	_, ok := m["bogus"]
 	assert.False(t, ok)
 }
 
 func TestEndpointAndKey(t *testing.T) {
-	r := NewReporter(Config{ConnectionString: testConnString})
-	endpoint, ikey, err := r.endpointAndKey()
-	require.NoError(t, err)
-	assert.Equal(t, "https://eastus.example.com", endpoint) // trailing slash trimmed
-	assert.Equal(t, "11111111-2222-3333-4444-555555555555", ikey)
+	const ikey = "11111111-2222-3333-4444-555555555555"
+	tests := []struct {
+		name           string
+		connection     string
+		wantEndpoint   string
+		wantErrContain string
+	}{
+		{
+			name:         "explicit endpoint",
+			connection:   testConnString,
+			wantEndpoint: "https://eastus.example.com",
+		},
+		{
+			name:         "explicit endpoint takes precedence",
+			connection:   "InstrumentationKey=" + ikey + ";IngestionEndpoint=https://proxy.example.test/custom/;EndpointSuffix=ai.contoso.com;Location=westus2;Authorization=IKEY",
+			wantEndpoint: "https://proxy.example.test/custom",
+		},
+		{
+			name:         "case insensitive keys",
+			connection:   " instrumentationkey=" + ikey + "; ingestionendpoint = https://example.test/ ",
+			wantEndpoint: "https://example.test",
+		},
+		{
+			name:         "endpoint suffix",
+			connection:   "InstrumentationKey=" + ikey + ";EndpointSuffix=applicationinsights.azure.cn",
+			wantEndpoint: "https://dc.applicationinsights.azure.cn",
+		},
+		{
+			name:         "endpoint suffix with location",
+			connection:   "InstrumentationKey=" + ikey + ";EndpointSuffix=ai.contoso.com;Location=westus2",
+			wantEndpoint: "https://westus2.dc.ai.contoso.com",
+		},
+		{
+			name:           "missing instrumentation key",
+			connection:     "IngestionEndpoint=https://example.test",
+			wantErrContain: "InstrumentationKey",
+		},
+		{
+			name:           "missing endpoint configuration",
+			connection:     "InstrumentationKey=" + ikey,
+			wantErrContain: "IngestionEndpoint or EndpointSuffix",
+		},
+		{
+			name:           "unsupported authorization",
+			connection:     "InstrumentationKey=" + ikey + ";IngestionEndpoint=https://example.test;Authorization=AAD",
+			wantErrContain: "unsupported",
+		},
+		{
+			name:           "malformed endpoint",
+			connection:     "InstrumentationKey=" + ikey + ";IngestionEndpoint=example.test",
+			wantErrContain: "invalid",
+		},
+		{
+			name:           "endpoint with query",
+			connection:     "InstrumentationKey=" + ikey + ";IngestionEndpoint=https://example.test?route=ingestion",
+			wantErrContain: "invalid",
+		},
+		{
+			name:           "malformed endpoint suffix",
+			connection:     "InstrumentationKey=" + ikey + ";EndpointSuffix=https://example.test",
+			wantErrContain: "EndpointSuffix",
+		},
+		{
+			name:           "malformed location",
+			connection:     "InstrumentationKey=" + ikey + ";EndpointSuffix=ai.contoso.com;Location=west/us",
+			wantErrContain: "Location",
+		},
+	}
 
-	_, _, err = NewReporter(Config{ConnectionString: "garbage"}).endpointAndKey()
-	assert.Error(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endpoint, gotKey, err := NewReporter(Config{ConnectionString: tt.connection}).endpointAndKey()
+			if tt.wantErrContain != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrContain)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEndpoint, endpoint)
+			assert.Equal(t, ikey, gotKey)
+		})
+	}
 }
 
 func TestEventNamesAndTimestamps(t *testing.T) {
@@ -321,10 +393,6 @@ func TestAttributesIncludeResourceAndDimensions(t *testing.T) {
 	_, hasServiceVersion := attrs["ServiceVersion"]
 	assert.False(t, hasServiceVersion)
 	assert.Equal(t, "1", attrs["SchemaVersion"])
-	assert.Equal(t, "0.01", attrs["SamplingRate"])
-	_, hasSamplingUnit := attrs["SamplingUnit"]
-	assert.False(t, hasSamplingUnit)
-	assert.Equal(t, "job-id-sha256-v1", attrs["SamplerVersion"])
 	assert.Equal(t, "true", attrs["AzureVMDetected"])
 	_, hasHostVirtualization := attrs["HostVirtualization"]
 	assert.False(t, hasHostVirtualization)

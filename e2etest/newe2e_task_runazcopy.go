@@ -397,9 +397,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a, ctx)
-		if AppInsightsTelemetryValidationEnabled() {
-			flagMap["telemetry-sampling-rate"] = "1"
-		}
 		for k, v := range flagMap {
 			out = append(out, fmt.Sprintf("--%s=%s", k, v))
 		}

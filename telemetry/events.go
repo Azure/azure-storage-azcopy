@@ -42,8 +42,6 @@ import (
 type ResourceAttributes struct {
 	AzCopyVersion      string // "10.32.2"
 	SchemaVersion      string
-	SamplingRate       float64
-	SamplerVersion     string
 	E2ETestRunID       string // optional correlation ID used only by AzCopy E2E validation
 	OSType             string // runtime.GOOS
 	OSVersion          string // uname / RtlGetVersion
@@ -62,8 +60,6 @@ func (ra ResourceAttributes) props() map[string]string {
 	props := map[string]string{
 		"AzCopyVersion":      ra.AzCopyVersion,
 		"SchemaVersion":      ra.SchemaVersion,
-		"SamplingRate":       strconv.FormatFloat(ra.SamplingRate, 'f', -1, 64),
-		"SamplerVersion":     ra.SamplerVersion,
 		"OSType":             ra.OSType,
 		"OSVersion":          ra.OSVersion,
 		"HostArch":           ra.HostArch,
@@ -447,8 +443,6 @@ const (
 var propertyValueLimits = map[string]int{
 	"AzCopyVersion":             64,
 	"SchemaVersion":             32,
-	"SamplingRate":              32,
-	"SamplerVersion":            64,
 	"E2ETestRunID":              maxIdentifierValueLen,
 	"OSType":                    32,
 	"OSVersion":                 maxHostValueLen,
