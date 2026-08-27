@@ -66,7 +66,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	// when proactive stats polling is enabled
 	if strings.EqualFold(file2FileCopy, "true") {
 		httpClient := common.GetGlobalHTTPClient(common.AzcopyCurrentJobLogger)
-		jm.Log(common.LogInfo, "Registering Azure Files stats source factory.")
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, "Registering Azure Files stats source factory.")		
 		common.RegisterResourceStatsSourceFactory(
 			common.ShareStatsSourceFactory(httpClient, common.AzcopyCurrentJobLogger),
 		)

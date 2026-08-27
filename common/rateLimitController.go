@@ -289,14 +289,10 @@ func newRateLimitControllerWithClock(sink RateLimitSink, source ResourceStatsSou
 	return d
 }
 
-// trace emits a rate-limit diagnostic to the job log, tagged with the resource
-// key. It is safe to call while mu is held (it touches no controller state).
+// trace emits a rate-limit diagnostic to the job log. It is safe to call while
+// mu is held (it touches no controller state).
 func (d *RateLimitController) trace(level LogLevel, format string, a ...any) {
-	key := d.cfg.ResourceKey
-	if key == "" {
-		key = "unscoped"
-	}
-	LogToJobLogWithPrefix(fmt.Sprintf("[ratelimit %s] %s", key, fmt.Sprintf(format, a...)), level)
+	LogToJobLogWithPrefix("[ratelimit] "+fmt.Sprintf(format, a...), level)
 }
 
 // SetActiveWorkerCount updates the equal-share denominator. Rates are recomputed
