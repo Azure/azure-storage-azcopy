@@ -28,6 +28,7 @@ type azfileShareStatsSource struct {
 // shareURL must include any SAS token required for auth. httpClient should be
 // the global AzCopy HTTP client.
 func NewAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger ILogger) ResourceStatsSource {
+	logger.Log(LogInfo, fmt.Sprintf("Initializing azfileShareStatsSource for %s", shareURL))
 	return &azfileShareStatsSource{
 		provider: NewShareStatsProvider(shareURL, httpClient, logger),
 	}
@@ -75,7 +76,9 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 		burstIosAvailable:         ts.BurstIosAvailable,
 		burstIosLimit:             ts.BurstIosLimit,
 		throttlingAvailable:       true,
-	}
+	}	
+
+
 
 	if s.prevSample == nil {
 		// First poll only establishes the baseline; the controller's own `primed`
@@ -109,6 +112,8 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 			l.Log(LogError, fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs))
 		}
 		l.Log(LogDebug, fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs))
+		l.Log(LogDebug, fmt.Sprintf("Current Stats: %+v", ts))
+		l.Log(LogDebug, fmt.Sprintf("Previous Stats: %+v", s.prevSample))		
 	}
 	s.prevSample = sample
 
@@ -127,6 +132,7 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 //
 // Registered from jobsAdmin.MainSTE when Azure Files proactive stats are enabled.
 func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey string) ResourceStatsSource {
+	logger.Log(LogInfo, fmt.Sprintf("Initializing ShareStatsSourceFactory"))
 	return func(shareKey string) ResourceStatsSource {
 		// shareKey is "account.file.core.windows.net/sharename" (no scheme).
 		// Reconstruct a full HTTPS URL for the raw HTTP call.

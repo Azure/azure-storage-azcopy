@@ -43,6 +43,7 @@ type rateLimitTokenBucketPacer struct {
 // opsPerSecond == 0 makes the IOPS dimension unlimited (a plain bandwidth cap),
 // which is how a job that has not opted into IOPS pacing behaves.
 func NewRateLimitTokenBucketPacer(bytesPerSecond, opsPerSecond int64) *rateLimitTokenBucketPacer {
+	LogToJobLogWithPrefix(fmt.Sprintf("rateLimitTokenBucketPacer: Initializing with bytesPerSecond=%d, opsPerSecond=%d", bytesPerSecond, opsPerSecond), LogDebug)
 	return &rateLimitTokenBucketPacer{
 		tokenBucketPacer: NewTokenBucketPacer(bytesPerSecond, 0),
 		iopsBucket:       NewTokenBucketPacer(opsPerSecond, 0),
@@ -55,11 +56,13 @@ func NewRateLimitTokenBucketPacer(bytesPerSecond, opsPerSecond int64) *rateLimit
 func (d *rateLimitTokenBucketPacer) AcquireIO(ctx context.Context, bytes, ops int64) error {
 	if ops > 0 {
 		if err := d.iopsBucket.RequestTrafficAllocation(ctx, ops); err != nil {
+			LogToJobLogWithPrefix(fmt.Sprintf("rateLimitTokenBucketPacer: Failed to acquire IOPS tokens: ops=%d, err=%v", ops, err), LogError)
 			return err
 		}
 	}
 	if bytes > 0 {
 		if err := d.tokenBucketPacer.RequestTrafficAllocation(ctx, bytes); err != nil {
+			LogToJobLogWithPrefix(fmt.Sprintf("rateLimitTokenBucketPacer: Failed to acquire bandwidth tokens: bytes=%d, err=%v", bytes, err), LogError)
 			if ops > 0 {
 				d.iopsBucket.UndoRequest(ops) // give the IOP token back
 			}
@@ -72,6 +75,7 @@ func (d *rateLimitTokenBucketPacer) AcquireIO(ctx context.Context, bytes, ops in
 // UpdateTargetIOPS adjusts the IOPS rate independently of bandwidth (used by the
 // Azure Files reactive AIMD / proactive equal-share controller).
 func (d *rateLimitTokenBucketPacer) UpdateTargetIOPS(opsPerSecond int64) {
+	LogToJobLogWithPrefix(fmt.Sprintf("rateLimitTokenBucketPacer: Updating Target IOPS: opsPerSecond=%d", opsPerSecond), LogInfo)
 	d.iopsBucket.UpdateTargetBytesPerSecond(opsPerSecond)
 }
 

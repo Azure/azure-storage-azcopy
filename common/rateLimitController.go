@@ -22,6 +22,7 @@ package common
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -270,7 +271,7 @@ func newRateLimitControllerWithClock(sink RateLimitSink, source ResourceStatsSou
 	if activeWorkers < 1 {
 		activeWorkers = 1
 	}
-	return &RateLimitController{
+	d := &RateLimitController{
 		clock:             clock,
 		cfg:               cfg,
 		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -283,6 +284,19 @@ func newRateLimitControllerWithClock(sink RateLimitSink, source ResourceStatsSou
 			cfg.ResponseWindow, cfg.ResponseMinEvents, cfg.ResponseMinRatio, cfg.QuietForProactiveReturn, pollStatsSignal,
 		),
 	}
+	d.trace(LogInfo, "created: mode=%s workers=%d pollStatsSignal=%v minIops=%d minBw=%d responseGate=%d/%.2f in %s",
+		d.mode, activeWorkers, pollStatsSignal, cfg.MinIops, cfg.MinBandwidth, cfg.ResponseMinEvents, cfg.ResponseMinRatio, cfg.ResponseWindow)
+	return d
+}
+
+// trace emits a rate-limit diagnostic to the job log, tagged with the resource
+// key. It is safe to call while mu is held (it touches no controller state).
+func (d *RateLimitController) trace(level LogLevel, format string, a ...any) {
+	key := d.cfg.ResourceKey
+	if key == "" {
+		key = "unscoped"
+	}
+	LogToJobLogWithPrefix(fmt.Sprintf("[ratelimit %s] %s", key, fmt.Sprintf(format, a...)), level)
 }
 
 // SetActiveWorkerCount updates the equal-share denominator. Rates are recomputed
@@ -304,6 +318,7 @@ func (d *RateLimitController) SetActiveWorkerCount(n int) {
 func (d *RateLimitController) Refresh() (time.Duration, error) {
 	stats, err := d.source.PollStats()
 	if err != nil {
+		d.trace(LogError, "stats poll failed: %v", err)
 		return 0, err
 	}
 
@@ -343,6 +358,9 @@ func (d *RateLimitController) Refresh() (time.Duration, error) {
 	// real-time responses. Either signal keeps the resource in reactive AIMD.
 	iopsThrottled := deltaIops > 0 || d.detector.sustainedThrottling(resourceIops, now)
 	bwThrottled := deltaBw > 0 || d.detector.sustainedThrottling(resourceBandwidth, now)
+
+	d.trace(LogDebug, "poll: mode=%s iopsLimit=%d bwLimit=%d deltaIops=%d deltaBw=%d iopsThrottled=%v bwThrottled=%v",
+		d.mode, stats.IopsLimit, stats.BandwidthLimitBytesPerSec, deltaIops, deltaBw, iopsThrottled, bwThrottled)
 
 	if iopsThrottled || bwThrottled {
 		return d.applyReactiveLocked(stats, iopsThrottled, bwThrottled, now, 0, true), nil
@@ -393,7 +411,10 @@ func (d *RateLimitController) HandleResponse(kind ThrottleKind, retryAfterSec fl
 	}
 	// Fast path applies multiplicative decrease only; additive increase stays
 	// poll-paced in Refresh.
-	return d.applyReactiveLocked(d.lastStats, iopsThrottled, bwThrottled, now, retryAfterSec, false)
+	backoff := d.applyReactiveLocked(d.lastStats, iopsThrottled, bwThrottled, now, retryAfterSec, false)
+	d.trace(LogDebug, "sustained response throttling: kind=%v iops=%v bw=%v retryAfter=%.1fs backoff=%s",
+		kind, iopsThrottled, bwThrottled, retryAfterSec, backoff)
+	return backoff
 }
 
 // setRatesLocked stores and pushes both target rates to the sink.
@@ -423,6 +444,9 @@ func (d *RateLimitController) setIopsRateLocked(iopsRate int64) {
 }
 
 func (d *RateLimitController) applyProactiveLocked(stats ResourceStats) {
+	if d.mode != ModeProactive {
+		d.trace(LogInfo, "mode %s -> %s (both resources quiet)", d.mode, ModeProactive)
+	}
 	d.mode = ModeProactive
 	d.iopsStreak = 0
 	d.bwStreak = 0
@@ -434,6 +458,9 @@ func (d *RateLimitController) applyProactiveLocked(stats ResourceStats) {
 	}
 	iopsShare := stats.IopsLimit / int64(workers)
 	bwShare := stats.BandwidthLimitBytesPerSec / int64(workers)
+	if iopsShare != d.curIops || bwShare != d.curBw {
+		d.trace(LogDebug, "proactive equal-share: iops=%d bw=%d (workers=%d)", iopsShare, bwShare, workers)
+	}
 	d.setRatesLocked(bwShare, iopsShare)
 }
 
@@ -460,6 +487,9 @@ func (d *RateLimitController) maybeReturnToProactiveLocked(stats ResourceStats, 
 // poll-paced. retryAfterSec, when > 0, overrides the computed backoff with the
 // server-provided Retry-After. It returns the backoff to sleep.
 func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrottled, bwThrottled bool, now time.Time, retryAfterSec float64, allowIncrease bool) time.Duration {
+	if d.mode != ModeReactive {
+		d.trace(LogInfo, "mode %s -> %s (iopsThrottled=%v bwThrottled=%v)", d.mode, ModeReactive, iopsThrottled, bwThrottled)
+	}
 	d.mode = ModeReactive
 	d.lastThrottleAt = now
 	limitBw := stats.BandwidthLimitBytesPerSec
@@ -470,6 +500,7 @@ func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrot
 	} else if allowIncrease && d.targetIops > 0 {
 		d.targetIops = min(d.targetIops+d.cfg.IopsStep, stats.IopsLimit)
 		d.iopsStreak = 0
+		d.trace(LogWarning, "iops additive increase -> %d", d.targetIops)
 		d.setIopsRateLocked(d.targetIops)
 	}
 
@@ -479,6 +510,7 @@ func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrot
 	} else if allowIncrease && d.targetBw > 0 {
 		d.targetBw = min(d.targetBw+d.cfg.BandwidthStep, limitBw)
 		d.bwStreak = 0
+		d.trace(LogWarning, "bandwidth additive increase -> %d", d.targetBw)
 		d.setBandwidthRateLocked(d.targetBw)
 	}
 
@@ -498,8 +530,10 @@ func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrot
 func (d *RateLimitController) decreaseIopsLocked(now time.Time, seedLimit int64) {
 	window := computeRateLimitBackoff(d.iopsStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, 0, nil)
 	if !d.lastIopsDecreaseAt.IsZero() && now.Sub(d.lastIopsDecreaseAt) < window {
+		d.trace(LogDebug, "iops decrease debounced (congestion window %s)", window)
 		return
 	}
+	prev := d.targetIops
 	if d.targetIops == 0 {
 		d.targetIops = max(seedLimit/2, d.cfg.MinIops)
 	} else {
@@ -507,6 +541,7 @@ func (d *RateLimitController) decreaseIopsLocked(now time.Time, seedLimit int64)
 	}
 	d.iopsStreak++
 	d.lastIopsDecreaseAt = now
+	d.trace(LogInfo, "iops multiplicative decrease %d -> %d (streak=%d limit=%d)", prev, d.targetIops, d.iopsStreak, seedLimit)
 	d.setIopsRateLocked(d.targetIops)
 }
 
@@ -514,8 +549,10 @@ func (d *RateLimitController) decreaseIopsLocked(now time.Time, seedLimit int64)
 func (d *RateLimitController) decreaseBandwidthLocked(now time.Time, seedLimit int64) {
 	window := computeRateLimitBackoff(d.bwStreak, 0, d.cfg.BaseBackoff, d.cfg.MaxBackoff, 0, nil)
 	if !d.lastBwDecreaseAt.IsZero() && now.Sub(d.lastBwDecreaseAt) < window {
+		d.trace(LogDebug, "bandwidth decrease debounced (congestion window %s)", window)
 		return
 	}
+	prev := d.targetBw
 	if d.targetBw == 0 {
 		d.targetBw = max(seedLimit/2, d.cfg.MinBandwidth)
 	} else {
@@ -523,6 +560,7 @@ func (d *RateLimitController) decreaseBandwidthLocked(now time.Time, seedLimit i
 	}
 	d.bwStreak++
 	d.lastBwDecreaseAt = now
+	d.trace(LogInfo, "bandwidth multiplicative decrease %d -> %d (streak=%d limit=%d)", prev, d.targetBw, d.bwStreak, seedLimit)
 	d.setBandwidthRateLocked(d.targetBw)
 }
 
@@ -580,6 +618,7 @@ func computeRateLimitBackoff(streak int, retryAfterSec float64, base, maxBackoff
 // optional: callers that already own a polling loop can call
 // Refresh directly.
 func (d *RateLimitController) runPollLoop(ctx context.Context, pollInterval time.Duration) {
+
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for {
