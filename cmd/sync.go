@@ -102,6 +102,14 @@ type rawSyncCmdArgs struct {
 	preserveInfo bool
 	hardlinks    string
 	hashMetaDir  string
+
+	// blob HTTP header properties to set on the destination
+	contentType        string
+	contentEncoding    string
+	contentDisposition string
+	contentLanguage    string
+	cacheControl       string
+	noGuessMimeType    bool
 }
 
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
@@ -123,6 +131,12 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		IncludeRoot:             raw.includeRoot,
 		HashMetaDir:             raw.hashMetaDir,
 		PreservePermissions:     raw.preservePermissions,
+		ContentType:             raw.contentType,
+		ContentEncoding:         raw.contentEncoding,
+		ContentDisposition:      raw.contentDisposition,
+		ContentLanguage:         raw.contentLanguage,
+		CacheControl:            raw.cacheControl,
+		NoGuessMimeType:         raw.noGuessMimeType,
 	}
 	opts.FromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
@@ -500,6 +514,25 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.hashMetaDir, "hash-meta-dir", "",
 		"When using `--local-hash-storage-mode=HiddenFiles` "+
 			"\n you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
+
+	syncCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "",
+		"Specifies the content type of the file. \n Implies no-guess-mime-type flag is set to true. Returned on download.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "",
+		"Set the content-encoding header. Returned on download.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "",
+		"Set the content-disposition header. Returned on download.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "",
+		"Set the content-language header. Returned on download.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "",
+		"Set the cache-control header. Returned on download.")
+
+	syncCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false,
+		"False by default. "+
+			"Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode",
 		common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; "+
