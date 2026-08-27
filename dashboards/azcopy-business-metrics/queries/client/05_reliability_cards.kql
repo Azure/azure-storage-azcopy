@@ -1,0 +1,59 @@
+// Visual: Multi stat
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobStatusValue = tostring(customDimensions.JobStatus),
+    IsResumeValue = tostring(customDimensions.Command) == 'jobs.resume'
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),
+    IsResume = take_any(IsResumeValue),
+    ObjectsScheduled = maxif(value, name == 'azcopy.objects_scheduled'),
+    ObjectsFailed = maxif(value, name == 'azcopy.objects_failed'),
+    HttpAttempts = maxif(value, name == 'azcopy.storage_http_attempt_count'),
+    ServerBusy503 = maxif(value, name == 'azcopy.server_busy_503_count'),
+    NetworkErrors = maxif(value, name == 'azcopy.network_error_attempt_count')
+  by InvocationID
+| where FinishedRows > 0
+| summarize
+    Attempts = count(),
+    Successes = countif(JobStatus in ('Completed', 'CompletedWithSkipped')),
+    PartialSuccesses = countif(JobStatus == 'CompletedWithErrors'),
+    Failures = countif(JobStatus == 'Failed'),
+    Cancellations = countif(JobStatus == 'Cancelled'),
+    ResumeAttempts = countif(IsResume),
+    SuccessfulResumes = countif(IsResume and JobStatus in ('Completed', 'CompletedWithSkipped')),
+    ObjectsScheduled = sum(ObjectsScheduled),
+    ObjectsFailed = sum(ObjectsFailed),
+    HttpAttempts = sum(HttpAttempts),
+    ServerBusy503 = sum(ServerBusy503),
+    NetworkErrors = sum(NetworkErrors)
+| project
+    CompletionRatePct = round(100.0 * Successes / iif(Attempts > 0, Attempts, 1), 2),
+    PartialSuccessRatePct = round(100.0 * PartialSuccesses / iif(Attempts > 0, Attempts, 1), 2),
+    FailureRatePct = round(100.0 * Failures / iif(Attempts > 0, Attempts, 1), 2),
+    CancellationRatePct = round(100.0 * Cancellations / iif(Attempts > 0, Attempts, 1), 2),
+    FailedObjectRatePct = round(100.0 * ObjectsFailed / iif(ObjectsScheduled > 0.0, ObjectsScheduled, 1.0), 4),
+    ServerBusyRatePct = round(100.0 * ServerBusy503 / iif(HttpAttempts > 0.0, HttpAttempts, 1.0), 4),
+    NetworkErrorRatePct = round(100.0 * NetworkErrors / iif(HttpAttempts > 0.0, HttpAttempts, 1.0), 4),
+    ResumeSuccessRatePct = round(100.0 * SuccessfulResumes / iif(ResumeAttempts > 0, ResumeAttempts, 1), 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),
+    bag_pack('Metric', 'Partial success rate (%)', 'Value', PartialSuccessRatePct),
+    bag_pack('Metric', 'Failure rate (%)', 'Value', FailureRatePct),
+    bag_pack('Metric', 'Cancellation rate (%)', 'Value', CancellationRatePct),
+    bag_pack('Metric', 'Failed object rate (%)', 'Value', FailedObjectRatePct),
+    bag_pack('Metric', 'Server busy rate (%)', 'Value', ServerBusyRatePct),
+    bag_pack('Metric', 'Network error rate (%)', 'Value', NetworkErrorRatePct),
+    bag_pack('Metric', 'Resume success rate (%)', 'Value', ResumeSuccessRatePct))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

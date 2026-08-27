@@ -1,0 +1,21 @@
+// Visual: Stacked column chart
+// X column: timestamp; Y: Invocations; Series: Command
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| where name in ('azcopy.job.finished', 'azcopy.command.invoked')
+| extend
+    Command = tostring(customDimensions.Command),
+    Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion))
+| summarize Invocations = count() by Week = startofweek(timestamp), Command, Version
+| project
+    timestamp = Week,
+    Command = iif(isempty(Command), 'unknown', Command),
+    Version = iif(isempty(Version), 'unknown', Version),
+    Invocations
+| order by timestamp asc, Invocations desc

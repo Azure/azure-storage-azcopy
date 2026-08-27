@@ -1,0 +1,37 @@
+// Visual: Table
+let QueryStart = _startTime;
+let QueryEnd = _endTime;
+{{ENRICHED_FINISHED_JOBS}}
+{{ENRICHMENT_FILTERS}}
+let AccountCoverage = FilteredFinishedJobs
+    | summarize Jobs = count(), BytesTransferred = sum(BytesTransferred)
+      by Status = AccountInventoryStatus
+    | extend Inventory = 'Historical account inventory';
+let ResourceCoverage = FilteredFinishedJobs
+    | summarize Jobs = count(), BytesTransferred = sum(BytesTransferred)
+      by Status = ResourceInventoryStatus
+    | extend Inventory = 'Current ARM resource inventory';
+let SubscriptionCoverage = FilteredFinishedJobs
+    | summarize Jobs = count(), BytesTransferred = sum(BytesTransferred)
+      by Status = SubscriptionInventoryStatus
+    | extend Inventory = 'Current subscription inventory';
+let AipddSubscriptionCoverage = FilteredFinishedJobs
+    | summarize Jobs = count(), BytesTransferred = sum(BytesTransferred)
+      by Status = AipddSubscriptionInventoryStatus
+    | extend Inventory = 'AIPDD subscription inventory';
+let CustomerCoverage = FilteredFinishedJobs
+    | summarize Jobs = count(), BytesTransferred = sum(BytesTransferred)
+      by Status = CustomerInventoryStatus
+    | extend Inventory = 'AIPDD top-parent customer inventory';
+union
+    AccountCoverage,
+    ResourceCoverage,
+    SubscriptionCoverage,
+    AipddSubscriptionCoverage,
+    CustomerCoverage
+| project
+    Inventory,
+    Status,
+    Jobs,
+    DataTB = round(BytesTransferred / 1000000000000.0, 3)
+| order by Inventory asc, Jobs desc

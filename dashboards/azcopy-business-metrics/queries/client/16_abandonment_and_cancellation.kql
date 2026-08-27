@@ -1,0 +1,57 @@
+// Visual: Multi stat
+// An unmatched start older than 30 minutes is a telemetry proxy, not proof of abandonment.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. (_endTime + 30m))
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    StatusValue = tostring(customDimensions.JobStatus),
+    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
+    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    StartedAt = minif(timestamp, name == 'azcopy.job.started' and timestamp <= _endTime),
+    FinishedAt = maxif(timestamp, name == 'azcopy.job.finished'),
+    StartedRows = countif(name == 'azcopy.job.started' and timestamp <= _endTime),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    PercentComplete = maxif(value, name == 'azcopy.percent_complete')
+  by InvocationID
+| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account
+| extend
+    IsMatureStart = StartedRows > 0 and StartedAt <= _endTime - 30m,
+    IsUnmatchedStart = StartedRows > 0 and FinishedRows == 0 and StartedAt <= _endTime - 30m,
+    IsCancellation = FinishedRows > 0 and JobStatus == 'Cancelled'
+| summarize
+    ObservedMatureStarts = countif(IsMatureStart),
+    ObservedUnmatchedStarts = countif(IsUnmatchedStart),
+    ObservedCancellations = countif(IsCancellation),
+    AvgCancelPercentComplete = avg(iff(IsCancellation, PercentComplete, real(null))),
+    CancelPercentCompleteP50 = percentile(iff(IsCancellation, PercentComplete, real(null)), 50),
+    CancelPercentCompleteP90 = percentile(iff(IsCancellation, PercentComplete, real(null)), 90)
+| project
+    ObservedMatureStarts,
+    ObservedUnmatchedStarts,
+    UnmatchedStartRatePct = round(100.0 * ObservedUnmatchedStarts / iif(ObservedMatureStarts > 0, ObservedMatureStarts, 1), 2),
+    ObservedCancellations,
+    AvgCancelPercentComplete = round(AvgCancelPercentComplete, 2),
+    CancelPercentCompleteP50 = round(CancelPercentCompleteP50, 2),
+    CancelPercentCompleteP90 = round(CancelPercentCompleteP90, 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Starts eligible after 30 min', 'Value', ObservedMatureStarts),
+    bag_pack('Metric', 'Eligible starts without finish', 'Value', ObservedUnmatchedStarts),
+    bag_pack('Metric', 'Missing finish rate (%)', 'Value', UnmatchedStartRatePct),
+    bag_pack('Metric', 'Explicitly cancelled jobs', 'Value', ObservedCancellations),
+    bag_pack('Metric', 'Average completion at cancel (%)', 'Value', AvgCancelPercentComplete),
+    bag_pack('Metric', 'P50 completion at cancel (%)', 'Value', CancelPercentCompleteP50),
+    bag_pack('Metric', 'P90 completion at cancel (%)', 'Value', CancelPercentCompleteP90))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

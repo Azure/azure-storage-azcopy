@@ -1,0 +1,409 @@
+set best_effort=true;
+let EnableLiveArgEnrichment = __ENABLE_LIVE_ARG_ENRICHMENT__;
+let EnableAipddEnrichment = __ENABLE_AIPDD_ENRICHMENT__;
+let RawFinishedJobs = materialize(
+    __APP_INSIGHTS_CUSTOM_EVENTS__
+    | where timestamp between (QueryStart .. QueryEnd)
+    | where name == 'azcopy.job.finished'
+    | where tostring(customDimensions.SchemaVersion) in ('2', '3')
+    | extend
+        JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID, customDimensions.InvocationID)),
+        InstallationIDValue = tostring(customDimensions.InstallationID),
+        InvocationContextValue = tostring(customDimensions.InvocationContext),
+        AzCopyVersionValue = tostring(customDimensions.AzCopyVersion),
+        OSTypeValue = tostring(customDimensions.OSType),
+        SourceTypeValue = tostring(customDimensions.SourceType),
+        DestTypeValue = tostring(customDimensions.DestType),
+        FromToValue = tostring(customDimensions.FromTo),
+        SourceMountTypeValue = tostring(customDimensions.SourceMountType),
+        DestEndpointKindValue = tostring(customDimensions.DestEndpointKind),
+        SourceAccountValue = tolower(tostring(customDimensions.SourceStorageAccount)),
+        DestAccountValue = tolower(tostring(customDimensions.DestStorageAccount)),
+        ClientRegionValue = tostring(client_CountryOrRegion),
+        JobStatusValue = tostring(customDimensions.JobStatus),
+        TerminalStageValue = tostring(customDimensions.TerminalStage),
+        JobErrorCategoryValue = tostring(customDimensions.JobErrorCategory),
+        JobErrorCodeValue = tostring(customDimensions.JobErrorCode),
+        CommandValue = tostring(customDimensions.Command),
+        BytesTransferredValue = todouble(customMeasurements['azcopy.bytes_transferred']),
+        ObjectsCompletedValue = todouble(customMeasurements['azcopy.objects_completed']),
+        ObjectsFailedValue = todouble(customMeasurements['azcopy.objects_failed']),
+        TransfersCompletedValue = todouble(customMeasurements['azcopy.transfers_completed']),
+        TransfersFailedValue = todouble(customMeasurements['azcopy.transfers_failed']),
+        JobDurationSecondsValue = todouble(customMeasurements['azcopy.job_duration_seconds']),
+        JobThroughputMbpsValue = todouble(customMeasurements['azcopy.job_throughput_mbps'])
+    | where isnotempty(JobID)
+    | summarize
+        arg_max(
+            timestamp,
+            InstallationIDValue,
+            InvocationContextValue,
+            AzCopyVersionValue,
+            OSTypeValue,
+            SourceTypeValue,
+            DestTypeValue,
+            FromToValue,
+            SourceMountTypeValue,
+            DestEndpointKindValue,
+            SourceAccountValue,
+            DestAccountValue,
+            ClientRegionValue,
+            JobStatusValue,
+            TerminalStageValue,
+            JobErrorCategoryValue,
+            JobErrorCodeValue,
+            CommandValue),
+        BytesTransferred = max(BytesTransferredValue),
+        ObjectsCompleted = max(ObjectsCompletedValue),
+        ObjectsFailed = max(ObjectsFailedValue),
+        TransfersCompleted = max(TransfersCompletedValue),
+        TransfersFailed = max(TransfersFailedValue),
+        JobDurationSeconds = max(JobDurationSecondsValue),
+        JobThroughputMbps = max(JobThroughputMbpsValue)
+      by JobID
+    | extend
+        EndTime = timestamp,
+        ActivityDay = startofday(timestamp),
+        InstallationID = iif(isempty(InstallationIDValue), 'unknown', InstallationIDValue),
+        InvocationContext = iif(isempty(InvocationContextValue), 'unknown', InvocationContextValue),
+        AzCopyVersion = iif(isempty(AzCopyVersionValue), 'unknown', AzCopyVersionValue),
+        OSType = iif(isempty(OSTypeValue), 'unknown', OSTypeValue),
+        SourceType = iif(isempty(SourceTypeValue), 'unknown', SourceTypeValue),
+        DestType = iif(isempty(DestTypeValue), 'unknown', DestTypeValue),
+        FromTo = iif(isempty(FromToValue), 'unknown', FromToValue),
+        SourceMountType = iif(isempty(SourceMountTypeValue), 'unknown', SourceMountTypeValue),
+        DestEndpointKind = iif(isempty(DestEndpointKindValue), 'unknown', DestEndpointKindValue),
+        ClientRegion = iif(isempty(ClientRegionValue), 'unknown', ClientRegionValue),
+        JobStatus = iif(isempty(JobStatusValue), 'unknown', JobStatusValue),
+        TerminalStage = iif(isempty(TerminalStageValue), 'unknown', TerminalStageValue),
+        JobErrorCategory = iif(isempty(JobErrorCategoryValue), 'none', JobErrorCategoryValue),
+        JobErrorCode = iif(isempty(JobErrorCodeValue), 'none', JobErrorCodeValue),
+        Command = iif(isempty(CommandValue), 'unknown', CommandValue),
+        SourceAccount = SourceAccountValue,
+        DestinationAccount = DestAccountValue
+);
+let DestinationAccountDays = materialize(
+    RawFinishedJobs
+    | where isnotempty(DestinationAccount)
+    | distinct ActivityDay, Account = DestinationAccount
+);
+let DestinationAccounts = materialize(
+    DestinationAccountDays
+    | distinct Account
+);
+let DestinationAccountSet = toscalar(
+    DestinationAccounts
+    | summarize make_set(Account)
+);
+let HistoricalAccountProperties = materialize(
+    DestinationAccountDays
+    | join kind=inner hint.remote=right hint.strategy=broadcast (
+        __XSTORE_ACCOUNT_PROPERTIES__
+        | where TimePeriod between ((startofday(QueryStart) - 3d) .. startofday(QueryEnd))
+        | extend Account = tolower(AccountNameWithoutVersion)
+        | where Account in (DestinationAccountSet)
+        | project
+            Account,
+            OwnershipSnapshot = TimePeriod,
+            HistoricalSubscriptionId = tolower(Subscription),
+            StorageRedundancyValue = toupper(tostring(Redundancy)),
+            StorageAccountClassValue = tostring(BillingType),
+            StorageAccessTierValue = tostring(AccessTier),
+            IsHnsEnabledValue = toint(IsHnsEnabled)
+        | extend ActivityDayCandidates = range(
+            startofday(OwnershipSnapshot),
+            startofday(OwnershipSnapshot) + 3d,
+            1d)
+        | mv-expand ActivityDay = ActivityDayCandidates to typeof(datetime)
+        | where ActivityDay between (startofday(QueryStart) .. startofday(QueryEnd))
+      ) on ActivityDay, Account
+    | summarize arg_max(
+        OwnershipSnapshot,
+        HistoricalSubscriptionId,
+        StorageRedundancyValue,
+        StorageAccountClassValue,
+        StorageAccessTierValue,
+        IsHnsEnabledValue)
+      by ActivityDay, Account
+);
+let CurrentStorageResourcesRemote = materialize(
+    __ARG_RESOURCES__
+    | where EnableLiveArgEnrichment
+    | where timestamp > ago(60h)
+    | where type =~ 'microsoft.storage/storageaccounts'
+    | where name in (DestinationAccountSet)
+    | summarize arg_max(
+        timestamp,
+        deleted,
+        subscriptionId,
+        tenantId,
+        location,
+        ['kind'],
+        sku)
+      by Account = tolower(name)
+    | project
+        Account,
+        ResourceSnapshot = timestamp,
+        ResourceDeleted = deleted,
+        ResourceSubscriptionId = tolower(subscriptionId),
+        ResourceTenantId = tolower(tenantId),
+        StorageRegionValue = tolower(location),
+        StorageKindValue = tostring(['kind']),
+        StorageSkuValue = tostring(sku.name),
+        StorageSkuTierValue = tostring(sku.tier)
+);
+let CurrentSubscriptionSet = toscalar(
+    CurrentStorageResourcesRemote
+    | where isnotempty(ResourceSubscriptionId)
+    | summarize make_set(ResourceSubscriptionId)
+);
+let CurrentArgInventoryRemote =
+    CurrentStorageResourcesRemote
+    | join kind=leftouter (
+        __ARG_SUBSCRIPTIONS__
+        | where EnableLiveArgEnrichment
+        | where timestamp > ago(60h)
+        | where subscriptionId in (CurrentSubscriptionSet)
+        | summarize arg_max(timestamp, deleted, properties)
+          by ResourceSubscriptionId = tolower(subscriptionId)
+        | project
+            ResourceSubscriptionId,
+            SubscriptionSnapshot = timestamp,
+            SubscriptionDeleted = deleted,
+            SubscriptionDisplayNameValue = tostring(properties.displayName),
+            OfferTypeValue = tostring(properties.offerType),
+            SubscriptionChannelValue = tostring(properties.billingProperties.channelType)
+    ) on ResourceSubscriptionId
+    | project-away ResourceSubscriptionId1;
+let CurrentArgInventory = materialize(
+    union isfuzzy=true
+       (
+           datatable(
+               Account:string,
+               ResourceSnapshot:datetime,
+               ResourceDeleted:bool,
+               ResourceSubscriptionId:string,
+               ResourceTenantId:string,
+               StorageRegionValue:string,
+               StorageKindValue:string,
+               StorageSkuValue:string,
+               StorageSkuTierValue:string,
+               SubscriptionSnapshot:datetime,
+               SubscriptionDeleted:bool,
+               SubscriptionDisplayNameValue:string,
+               OfferTypeValue:string,
+               SubscriptionChannelValue:string
+           )[]
+       ),
+       CurrentArgInventoryRemote
+);
+let CurrentStorageResources = materialize(
+    CurrentArgInventory
+    | summarize arg_max(
+        ResourceSnapshot,
+        ResourceDeleted,
+        ResourceSubscriptionId,
+        ResourceTenantId,
+        StorageRegionValue,
+        StorageKindValue,
+        StorageSkuValue,
+        StorageSkuTierValue)
+      by Account
+    | where ResourceDeleted == false
+);
+let JobsWithAccountInventory = materialize(
+    RawFinishedJobs
+    | join kind=leftouter HistoricalAccountProperties
+        on ActivityDay, $left.DestinationAccount == $right.Account
+    | project-away Account
+    | join kind=leftouter CurrentStorageResources
+        on $left.DestinationAccount == $right.Account
+    | project-away Account
+    | extend DestinationSubscriptionId = iif(
+        isnotempty(HistoricalSubscriptionId),
+        HistoricalSubscriptionId,
+        ResourceSubscriptionId)
+);
+let DestinationSubscriptionSet = toscalar(
+    JobsWithAccountInventory
+    | where isnotempty(DestinationSubscriptionId)
+    | summarize make_set(DestinationSubscriptionId, 100000)
+);
+let AipddSubscriptionSnapshot = materialize(
+    union isfuzzy=true
+        (
+            datatable(
+                DestinationSubscriptionId:string,
+                AipddFriendlySubscriptionName:string,
+                AipddOfferType:string,
+                AipddCustomerKey:string,
+                AipddCustomerName:string,
+                AipddCurrentSubscriptionStatus:string,
+                AipddSubscriptionBusinessStatus:string,
+                AipddUpdatedAt:datetime
+            )[]
+        ),
+        (
+            __AIPDD_SUBSCRIPTION_SNAPSHOT__
+            | where EnableAipddEnrichment
+            | where array_length(DestinationSubscriptionSet) > 0
+            | where isnotnull(SubscriptionGuid)
+            | extend DestinationSubscriptionId = tolower(tostring(SubscriptionGuid))
+            | where DestinationSubscriptionId in (DestinationSubscriptionSet)
+            | project
+                DestinationSubscriptionId,
+                AipddFriendlySubscriptionName = tostring(FriendlySubscriptionName),
+                AipddOfferType = tostring(AI_OfferType),
+                AipddCustomerKey = tostring(TPID),
+                AipddCustomerName = tostring(TPName),
+                AipddCurrentSubscriptionStatus = tostring(CurrentSubscriptionStatus),
+                AipddSubscriptionBusinessStatus = tostring(AI_SubscriptionBusinessStatus),
+                AipddUpdatedAt = todatetime(AI_UpdatedAt)
+        )
+    | summarize arg_max(
+        AipddUpdatedAt,
+        AipddFriendlySubscriptionName,
+        AipddOfferType,
+        AipddCustomerKey,
+        AipddCustomerName,
+        AipddCurrentSubscriptionStatus,
+        AipddSubscriptionBusinessStatus)
+      by DestinationSubscriptionId
+);
+let CurrentSubscriptionInventory = materialize(
+    CurrentArgInventory
+    | where isnotempty(ResourceSubscriptionId)
+    | summarize arg_max(
+        SubscriptionSnapshot,
+        SubscriptionDeleted,
+        SubscriptionDisplayNameValue,
+        OfferTypeValue,
+        SubscriptionChannelValue)
+      by SubscriptionId = ResourceSubscriptionId
+    | where SubscriptionDeleted == false
+);
+let JobsWithSubscriptionInventory = materialize(
+    JobsWithAccountInventory
+    | join kind=leftouter CurrentSubscriptionInventory
+        on $left.DestinationSubscriptionId == $right.SubscriptionId
+    | project-away SubscriptionId
+);
+let EnrichedFinishedJobs = materialize(
+    JobsWithSubscriptionInventory
+    | join kind=leftouter AipddSubscriptionSnapshot on DestinationSubscriptionId
+    | extend DestinationUsesStorageAccount = DestType in ('Blob', 'BlobFS', 'File', 'FileNFS')
+    | extend
+        DestinationSubscriptionKey = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(DestinationSubscriptionId), 'Unmapped',
+            DestinationSubscriptionId),
+        DestinationSubscription = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(DestinationSubscriptionId), 'Unmapped',
+            isnotempty(AipddFriendlySubscriptionName),
+                strcat(AipddFriendlySubscriptionName, ' (', DestinationSubscriptionId, ')'),
+            isnotempty(SubscriptionDisplayNameValue),
+                strcat(SubscriptionDisplayNameValue, ' (', DestinationSubscriptionId, ')'),
+            DestinationSubscriptionId),
+        OfferType = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isnotempty(AipddOfferType), AipddOfferType,
+            isnotempty(OfferTypeValue), OfferTypeValue,
+            not(EnableAipddEnrichment) and not(EnableLiveArgEnrichment),
+                'Subscription enrichment disabled',
+            'Unknown'),
+        CustomerKey = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableAipddEnrichment), 'AIPDD enrichment disabled',
+            isempty(AipddCustomerKey), 'Unmapped',
+            AipddCustomerKey),
+        CustomerName = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableAipddEnrichment), 'AIPDD enrichment disabled',
+            isnotempty(AipddCustomerName), AipddCustomerName,
+            isnotempty(AipddFriendlySubscriptionName)
+                or isnotempty(AipddOfferType)
+                or isnotempty(AipddCurrentSubscriptionStatus)
+                or isnotempty(AipddSubscriptionBusinessStatus), 'Customer unavailable',
+            'Unmapped customer'),
+        SubscriptionChannel = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            isempty(SubscriptionChannelValue), 'Unknown',
+            SubscriptionChannelValue),
+        SubscriptionScope = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            SubscriptionChannelValue =~ 'Internal', 'Internal',
+            SubscriptionChannelValue in~ ('CustomerLed', 'FieldLed', 'PartnerLed'), 'External',
+            'Unknown'),
+        StorageRegion = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            isempty(StorageRegionValue), 'Unmapped',
+            StorageRegionValue),
+        StorageKind = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            isempty(StorageKindValue), 'Unmapped',
+            StorageKindValue),
+        StorageSku = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            isempty(StorageSkuValue), 'Unmapped',
+            StorageSkuValue),
+        StorageRedundancy = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(StorageRedundancyValue), 'Unmapped',
+            StorageRedundancyValue),
+        StorageNamespace = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isnull(IsHnsEnabledValue), 'Unmapped',
+            IsHnsEnabledValue == 1, 'HNS',
+            'FNS'),
+        StorageAccessTier = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(StorageAccessTierValue), 'Unknown or not set',
+            StorageAccessTierValue),
+        StorageAccountClass = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(StorageAccountClassValue), 'Unmapped',
+            StorageAccountClassValue),
+        AccountInventoryStatus = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(DestinationAccount), 'Missing account name',
+            isnotempty(OwnershipSnapshot), 'Mapped historical',
+            isnotempty(ResourceSnapshot), 'Mapped current only',
+            'Missing account inventory'),
+        ResourceInventoryStatus = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            isempty(DestinationAccount), 'Missing account name',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            isnotempty(ResourceSnapshot), 'Mapped',
+            'Missing current resource inventory'),
+        SubscriptionInventoryStatus = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableLiveArgEnrichment), 'Live ARG disabled',
+            isempty(DestinationSubscriptionId), 'Missing account inventory',
+            isnotempty(SubscriptionSnapshot), 'Mapped',
+            'Missing subscription inventory'),
+        AipddSubscriptionInventoryStatus = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableAipddEnrichment), 'AIPDD enrichment disabled',
+            isempty(DestinationSubscriptionId), 'Missing account inventory',
+            isnotempty(AipddFriendlySubscriptionName)
+                or isnotempty(AipddOfferType)
+                or isnotempty(AipddCurrentSubscriptionStatus)
+                or isnotempty(AipddSubscriptionBusinessStatus), 'Mapped',
+            'Missing AIPDD subscription'),
+        CustomerInventoryStatus = case(
+            not(DestinationUsesStorageAccount), 'Not applicable',
+            not(EnableAipddEnrichment), 'AIPDD enrichment disabled',
+            isempty(DestinationSubscriptionId), 'Missing account inventory',
+            isempty(AipddFriendlySubscriptionName)
+                and isempty(AipddOfferType)
+                and isempty(AipddCurrentSubscriptionStatus)
+                and isempty(AipddSubscriptionBusinessStatus), 'Missing AIPDD subscription',
+            isnotempty(AipddCustomerKey) and isnotempty(AipddCustomerName), 'Mapped',
+            'Subscription mapped, customer unavailable')
+);

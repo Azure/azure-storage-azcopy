@@ -1,0 +1,4 @@
+print Value = 'Internal', Label = 'Internal'
+| union (print Value = 'External', Label = 'External')
+| union (print Value = 'Unknown', Label = 'Unknown')
+| union (print Value = 'Not applicable', Label = 'Not applicable')

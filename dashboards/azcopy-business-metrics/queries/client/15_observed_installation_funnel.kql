@@ -1,0 +1,55 @@
+// Visual: Multi stat
+// These are selected-range installation proxies, not authoritative customer-funnel metrics.
+let Attempts = materialize(
+    customEvents
+    | where timestamp between (_startTime .. _endTime)
+    | where name == 'azcopy.job.finished'
+    | where tostring(customDimensions.SchemaVersion) in ('2', '3')
+    | extend
+        InstallationID = tostring(customDimensions.InstallationID),
+        InvocationID = tostring(customDimensions.InvocationID),
+        JobStatus = tostring(customDimensions.JobStatus)
+    | where isnotempty(InstallationID) and isnotempty(InvocationID)
+    | summarize
+        EndTime = max(timestamp),
+        JobStatus = take_any(JobStatus)
+      by InstallationID, InvocationID);
+let FirstAttempts =
+    Attempts
+    | summarize arg_min(EndTime, JobStatus) by InstallationID
+    | project InstallationID, FirstObservedStatus = JobStatus;
+Attempts
+| summarize
+    ObservedAttempts = count(),
+    FirstObservedTime = min(EndTime),
+    FirstSuccessfulTime = minif(EndTime, JobStatus in ('Completed', 'CompletedWithSkipped'))
+  by InstallationID
+| join kind=inner FirstAttempts on InstallationID
+| extend HoursToFirstObservedSuccess = iif(
+    isnotnull(FirstSuccessfulTime),
+    todouble(datetime_diff('second', FirstSuccessfulTime, FirstObservedTime)) / 3600.0,
+    real(null))
+| summarize
+    ObservedInstallations = count(),
+    FirstObservedSuccesses = countif(FirstObservedStatus in ('Completed', 'CompletedWithSkipped')),
+    InstallationsWithSecondObservedAttempt = countif(ObservedAttempts >= 2),
+    InstallationsWithObservedSuccess = countif(isnotnull(FirstSuccessfulTime)),
+    MedianHoursToFirstObservedSuccess = percentile(HoursToFirstObservedSuccess, 50),
+    P90HoursToFirstObservedSuccess = percentile(HoursToFirstObservedSuccess, 90)
+| project
+    ObservedInstallations,
+    FirstObservedAttemptSuccessRatePct = round(100.0 * FirstObservedSuccesses / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),
+    SecondObservedAttemptRatePct = round(100.0 * InstallationsWithSecondObservedAttempt / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),
+    ObservedSuccessRatePct = round(100.0 * InstallationsWithObservedSuccess / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),
+    MedianHoursToFirstObservedSuccess = round(MedianHoursToFirstObservedSuccess, 2),
+    P90HoursToFirstObservedSuccess = round(P90HoursToFirstObservedSuccess, 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed installations', 'Value', ObservedInstallations),
+    bag_pack('Metric', 'First observed attempt succeeded (%)', 'Value', FirstObservedAttemptSuccessRatePct),
+    bag_pack('Metric', 'Had 2+ observed attempts (%)', 'Value', SecondObservedAttemptRatePct),
+    bag_pack('Metric', 'Had any observed success (%)', 'Value', ObservedSuccessRatePct),
+    bag_pack('Metric', 'Median hours to observed success', 'Value', MedianHoursToFirstObservedSuccess),
+    bag_pack('Metric', 'P90 hours to observed success', 'Value', P90HoursToFirstObservedSuccess))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

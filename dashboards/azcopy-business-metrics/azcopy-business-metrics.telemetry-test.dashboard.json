@@ -1,0 +1,1548 @@
+{
+  "$schema": "https://dataexplorer.azure.com/static/d/schema/60/dashboard.json",
+  "id": "2b32551f-0e9a-74cf-9623-f527b2b94219",
+  "eTag": "5c48603d-a3a4-0ac6-09dc-6551b9e40146",
+  "title": "AzCopy Business Metrics - Telemetry Test",
+  "schema_version": "60",
+  "tiles": [
+    {
+      "id": "0c2e5200-d2d8-4d5d-290a-f27871d5b851",
+      "title": "Overview KPI definitions",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "519a4488-bd91-9322-b6e7-368ac3b49aae",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**KPI** means key performance indicator: each card is one headline value for the selected range. **Attempts** is the number of finished telemetry attempts received. **Data** is the logical payload reported by those attempts. **Completion rate** counts Completed and CompletedWithSkipped finished jobs. **Unmatched starts** have a start event but no finish event in the selected range.",
+      "visualOptions": {}
+    },
+    {
+      "id": "839c5d7f-43cf-c03d-6dba-6bd246a1d065",
+      "title": "Overview KPIs",
+      "description": "",
+      "visualType": "multistat",
+      "pageId": "519a4488-bd91-9322-b6e7-368ac3b49aae",
+      "layout": {
+        "x": 0,
+        "y": 4,
+        "width": 22,
+        "height": 6
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4c1864ef-6fc4-804c-9991-c29c4a797439"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "d1409870-19a7-8bd9-b4ea-e100518d58e8",
+      "title": "Volume by topology",
+      "description": "",
+      "visualType": "stackedcolumn",
+      "pageId": "519a4488-bd91-9322-b6e7-368ac3b49aae",
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 12,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "5b450ebb-f146-ab70-b64c-5d551572dca5"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "598066b9-3612-b4a3-6a1a-57a9cd8fcfdb",
+      "title": "Outcomes by command",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "519a4488-bd91-9322-b6e7-368ac3b49aae",
+      "layout": {
+        "x": 12,
+        "y": 10,
+        "width": 10,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "2bcbc41e-f7b9-b433-1bed-26a88de4ccd6"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "fe758049-b487-122d-3319-a962bc097185",
+      "title": "Weekly command and version trend",
+      "description": "",
+      "visualType": "stackedcolumn",
+      "pageId": "519a4488-bd91-9322-b6e7-368ac3b49aae",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 22,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "8ab11a7b-d831-2d65-c0bc-e225f094917e"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "68d1a678-8b03-782c-4ba6-7cb23677b6f7",
+      "title": "Performance percentiles",
+      "description": "",
+      "visualType": "table",
+      "pageId": "32dcc1d6-5dce-b4f5-511d-54d4c49c3aa3",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "47306514-afe5-2087-a108-7919a6dba1f1"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "d7d8d797-7fc6-4d90-ce8f-3534df97d5bf",
+      "title": "Platform and version mix",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "32dcc1d6-5dce-b4f5-511d-54d4c49c3aa3",
+      "layout": {
+        "x": 0,
+        "y": 8,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "1c223515-9fb1-c977-ddc0-2f02fa15ea0d"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "a8402179-af38-b302-6012-cf77a96dd34b",
+      "title": "Source and destination platform mix",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "32dcc1d6-5dce-b4f5-511d-54d4c49c3aa3",
+      "layout": {
+        "x": 0,
+        "y": 17,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "e3afb314-3a39-89e3-81be-3fdc99fea2f8"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "1a9b82c1-e67d-3769-080b-3b93951f4292",
+      "title": "Reliability-rate definitions",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**Completion rate** is Completed plus CompletedWithSkipped jobs divided by finished attempts. **Partial success rate** is CompletedWithErrors jobs divided by finished attempts. Failure and cancellation rates also use finished attempts. Failed-object rate uses scheduled objects; server-busy and network-error rates use Storage HTTP attempts; resume-success rate uses resume attempts. Because denominators differ, these percentages do not all add to 100%.",
+      "visualOptions": {}
+    },
+    {
+      "id": "44c9dd2c-00b8-39ac-6b67-f8833c73fd39",
+      "title": "Reliability rates",
+      "description": "",
+      "visualType": "multistat",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 0,
+        "y": 4,
+        "width": 22,
+        "height": 6
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "1b209af9-26c6-66b9-1260-0dd172f40629"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "5d47a44a-b74b-77f1-89a9-73c478bb4375",
+      "title": "Error-panel scope",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**Terminal errors** is job-level: each unsuccessful job contributes one final/primary category and code. The values are emitted telemetry strings, not a fixed dashboard enum. **Failed transfer-item error codes** is item-level: it expands the bounded per-job error histogram, so one job can contribute multiple codes and counts across failed files/objects (and some folder-property transfers). Neither panel counts individual HTTP failures.",
+      "visualOptions": {}
+    },
+    {
+      "id": "c03603b4-79f3-33d0-c879-9228158508ce",
+      "title": "Terminal errors (one reason per job)",
+      "description": "Job-level view. Each unsuccessful job contributes one terminal category/code representing its final or primary failure reason. For multiple failures within a job, use the failed transfer-item panel.",
+      "visualType": "bar",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 0,
+        "y": 14,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "e17d31d5-c707-fc18-753e-7eae1dd18150"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "6b8c022d-d354-a236-299f-21ff3786af43",
+      "title": "Failed transfer-item error codes (per item)",
+      "description": "Transfer-item view. Expands the bounded error histogram across failed items within each job. One job may contribute multiple error codes and counts; items are normally files/objects and can include failed folder-property transfers.",
+      "visualType": "bar",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 11,
+        "y": 14,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "32c03315-110e-af24-08ec-9a62763e32c2"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "bf5a7560-2c5e-209c-b699-a6e242639f68",
+      "title": "New-code and lifecycle definitions",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 0,
+        "y": 23,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**Newly observed** means an error code's first event in the retained 730-day lookback occurred during the last 30 days; it does not prove the code never occurred elsewhere. **Starts eligible after 30 min** are old enough for the missing-finish check. An eligible start without a finish is an abandonment/telemetry proxy, not proof of abandonment. Cancellation values describe jobs explicitly reported as Cancelled and their completion percentage at cancellation.",
+      "visualOptions": {}
+    },
+    {
+      "id": "580cf393-7c5e-2d42-2f83-314bd248e539",
+      "title": "Newly observed error codes (30 days)",
+      "description": "",
+      "visualType": "table",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 0,
+        "y": 27,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "da49617d-a34a-4fcc-31f7-8119ec4e813d"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "9ba4540f-490a-4d16-1c7b-b9b28cffdde9",
+      "title": "Job lifecycle gaps and cancellation progress",
+      "description": "Job-level lifecycle view. Eligible starts are at least 30 minutes old. A start without a finish after that grace period is a telemetry/abandonment proxy, not proof the job was abandoned. Cancellation rows show completion percentage for jobs explicitly reported as Cancelled.",
+      "visualType": "table",
+      "pageId": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5",
+      "layout": {
+        "x": 11,
+        "y": 27,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "9bcd7c50-5303-01ca-c2d6-b2a002cb1826"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "12997218-f53d-c096-8c18-f1beb30e138b",
+      "title": "Weekly job frequency and change",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "d325eeea-90e6-90f0-e73a-b775885611a0",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "8b77dfea-2b61-6d9f-9a6b-70b2dd6d6ff1"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "bb1748a8-887f-b707-56f9-5d2508425e63",
+      "title": "Installation-behavior definition",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "d325eeea-90e6-90f0-e73a-b775885611a0",
+      "layout": {
+        "x": 0,
+        "y": 8,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "This panel groups finished jobs in the selected range by pseudonymous **InstallationID**. InstallationID contributes to this installation-behavior analysis, not to the other aggregate business metrics. The rates describe overlapping behaviors: first observed attempt succeeded, 2+ attempts observed, and any observed attempt succeeded. This is not a sequential acquisition funnel or first-ever/second-ever job analysis because jobs outside the selected range are invisible.",
+      "visualOptions": {}
+    },
+    {
+      "id": "0ebf52fb-d8c1-b4e5-4925-1c697904e40a",
+      "title": "Observed installation behavior (range proxy)",
+      "description": "Unique InstallationIDs with finished jobs in the selected range. Rates show whether the first observed attempt succeeded, whether 2+ attempts were observed, and whether any observed attempt succeeded. Time cards measure first observed attempt to first observed success. This is not a true acquisition funnel or first-ever/second-ever job analysis because jobs outside the selected range are invisible.",
+      "visualType": "multistat",
+      "pageId": "d325eeea-90e6-90f0-e73a-b775885611a0",
+      "layout": {
+        "x": 0,
+        "y": 12,
+        "width": 22,
+        "height": 7
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "7f137dd6-d3b3-82ed-e0d0-711e60d5716f"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "7e17e32f-4204-300b-ba67-09350f948c38",
+      "title": "Acceptance definition",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "f347bed8-5055-b42f-aa21-9d824fc5cc66",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 3
+      },
+      "markdownText": "**Accepted** is a client-telemetry integrity result only. It requires one supported schema (v2 or v3), exactly one start and one finish, required fields, a complete finish metric set, a finish after its start, and a reported duration within the allowed tolerance (the greater of 60 seconds or 20%). Storage request evidence is not considered.",
+      "visualOptions": {}
+    },
+    {
+      "id": "4aace564-49a2-ab76-7b89-2a20e062b1f8",
+      "title": "Telemetry acceptance",
+      "description": "Client-telemetry integrity only; Storage request evidence is not considered. Accepted means the attempt uses one supported schema (v2 or v3), has exactly one start and one finish, includes required fields and a complete finish metric set, finishes after it starts, and reports a duration within the allowed tolerance (the greater of 60 seconds or 20%).",
+      "visualType": "multistat",
+      "pageId": "f347bed8-5055-b42f-aa21-9d824fc5cc66",
+      "layout": {
+        "x": 0,
+        "y": 3,
+        "width": 22,
+        "height": 6
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "20629e6d-2d47-2a20-8e4c-b67c28468e9c"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "485de4a2-0957-d558-b86b-3d25e59a9ebc",
+      "title": "Rejected and suspect definitions",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "f347bed8-5055-b42f-aa21-9d824fc5cc66",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 22,
+        "height": 3
+      },
+      "markdownText": "**Rejected (InvalidSchema)** means the attempt used an unsupported or mixed schema. **Suspect** means a supported-schema attempt has a missing or duplicate start/finish, missing required fields, an incomplete finish metric set, a finish before its start, or a duration mismatch. These are client-telemetry checks only; Storage request evidence is not considered. Valid attempts are omitted from the table.",
+      "visualOptions": {}
+    },
+    {
+      "id": "620eccee-e345-dc07-9c07-017240e57474",
+      "title": "Rejected and suspect attempts",
+      "description": "Client-telemetry integrity only; Storage request evidence is not considered. InvalidSchema is rejected because its schema is unsupported or mixed. Suspect means a supported-schema attempt has a missing or duplicate start/finish, missing required fields, an incomplete finish metric set, a finish before its start, or a duration mismatch. Valid attempts are omitted from this table.",
+      "visualType": "table",
+      "pageId": "f347bed8-5055-b42f-aa21-9d824fc5cc66",
+      "layout": {
+        "x": 0,
+        "y": 12,
+        "width": 22,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "ce6d0c6d-86d3-a166-3409-e3d4823f31cd"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "1ce6b30d-165d-d0d5-a3b7-3e08a0dc1e7e",
+      "title": "Storage request evidence definition",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "f347bed8-5055-b42f-aa21-9d824fc5cc66",
+      "layout": {
+        "x": 0,
+        "y": 22,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "This is an **independent corroboration check**; it does not change client acceptance or filter business metrics. Each structurally valid attempt produces one row per recognized Azure Storage endpoint. **SupportingEvidence** means at least one server-observed AzCopy request matched the same account within the expanded five-minute job window. **Suspect** means a recognized account had no matching request. **InsufficientEvidence** means no recognized Azure Storage account was available. Storage requests have no AzCopy JobID, so account/time matching is supporting evidence, not exact job attribution.",
+      "visualOptions": {}
+    },
+    {
+      "id": "193a0db2-fbac-c44f-728a-4bed12a113f5",
+      "title": "Per-attempt Storage request evidence",
+      "description": "Independent corroboration check; it does not change client acceptance or filter business metrics. Each structurally valid attempt produces one row per recognized Azure Storage endpoint. SupportingEvidence means at least one server-observed AzCopy request matched the same account within the expanded five-minute job window; Suspect means a recognized account had no matching request; InsufficientEvidence means no recognized Azure Storage account was available. Storage requests have no AzCopy JobID, so account/time matching is supporting evidence, not exact job attribution.",
+      "visualType": "table",
+      "pageId": "f347bed8-5055-b42f-aa21-9d824fc5cc66",
+      "layout": {
+        "x": 0,
+        "y": 26,
+        "width": 22,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "2ca4b439-a92d-3d57-992d-6d51e8e22510"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "c6b83561-5973-7597-67ba-0f9670239e02",
+      "title": "Account-proxy definition",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "A Storage account is an endpoint/resource proxy, not a unique customer identity. The account filter matches either Azure Storage endpoint. Attempt rows are received telemetry records. Source and destination mover rows must remain separate because one service-to-service job can contribute to both. Account ownership is server-side Storage metadata, and its logical tenant is not the customer's Microsoft Entra tenant ID.",
+      "visualOptions": {}
+    },
+    {
+      "id": "f2885459-2bb9-1f0d-0d05-5162e6161f4b",
+      "title": "Selected account business summary (proxy)",
+      "description": "",
+      "visualType": "multistat",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 0,
+        "y": 4,
+        "width": 22,
+        "height": 6
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "77922ad0-2713-81f3-c33c-e38e791c3583"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "8005701d-9c78-ff82-bb0d-af78d1b9f8e4",
+      "title": "Observed job attempts",
+      "description": "",
+      "visualType": "table",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 22,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d444c75f-6a17-8f06-57d0-1dc2f3847b22"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "43e329fd-c435-0f0b-0686-a35e5dd64741",
+      "title": "Top source and destination movers",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 0,
+        "y": 20,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d4b56f0f-3d73-0131-3ea8-c0f27145442b"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "acdd2d95-5f91-a918-a3d1-3b9855457006",
+      "title": "Account ownership",
+      "description": "",
+      "visualType": "table",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 12,
+        "y": 20,
+        "width": 10,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "b7179e97-948d-0318-3453-85a57a6ef41a"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "b0ec910b-df4d-2f98-8e6d-09b773d7f7cf",
+      "title": "Customer-tenant definition",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 0,
+        "y": 29,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**Customer tenant** means the Microsoft Entra tenant that owns the ARM subscription owning a Storage account. It is an ownership grouping, not a canonical commercial or contractual customer name. Account ownership is selected as of each activity day from XStore; subscription-to-tenant mapping uses the latest non-deleted ARG 1P record in the required 60-hour window. **Subscription names** are ARG display labels for the owning subscriptions; they are not tenant or customer names and can change. **Mapped** rows have both joins. MissingAccountOwnership and MissingTenantInventory expose coverage gaps. Friendly tenant names are intentionally not inferred. Source and destination roles remain separate and must not be summed as global volume.",
+      "visualOptions": {}
+    },
+    {
+      "id": "92391269-9c1a-efca-99ff-7e5da511ad3e",
+      "title": "Top customer tenants and subscriptions",
+      "description": "Ranks Microsoft Entra tenant IDs for resource-owning subscriptions and shows example ARG subscription display names. Account ownership is joined as of each activity day; subscription inventory is the latest non-deleted ARG 1P record in the required 60-hour window. Subscription names are mutable display labels, not tenant/customer names. MappingStatus exposes missing ownership or tenant inventory. Friendly tenant names require a separately approved enrichment source. Source and destination roles remain separate.",
+      "visualType": "table",
+      "pageId": "02515756-8376-9aaf-ebf8-614f5ae612f1",
+      "layout": {
+        "x": 0,
+        "y": 33,
+        "width": 22,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "69f22e3a-9e30-e8d5-f250-84bd667f2228"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "d0f23545-d88d-0838-ab12-353665b08eea",
+      "title": "Server-data provenance",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "2a5622c4-99e2-7879-af2a-867177d9e754",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**Server-observed AzCopy requests** comes from XAggUserAgentTelemetryMetric() in the XStore database and identifies AzCopy from Storage's observed User-Agent telemetry. **Storage API operation mix** comes from XStoreAccountTransactionsHourly in XDataAnalytics; it is account transaction telemetry and can include non-AzCopy callers. These are server-side request aggregates, not client job events.",
+      "visualOptions": {}
+    },
+    {
+      "id": "ae90277f-24e2-7ed8-579a-904466b7667b",
+      "title": "Server-observed AzCopy requests",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "2a5622c4-99e2-7879-af2a-867177d9e754",
+      "layout": {
+        "x": 0,
+        "y": 4,
+        "width": 22,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "bc4c98a8-291a-033d-71a8-f5e186f0dec7"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "28b3b55f-ebfc-219b-2e74-89dc3e388a39",
+      "title": "Aggregate-correlation definition",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "2a5622c4-99e2-7879-af2a-867177d9e754",
+      "layout": {
+        "x": 0,
+        "y": 12,
+        "width": 22,
+        "height": 4
+      },
+      "markdownText": "**Requests per job** joins client finished jobs and server-observed AzCopy requests by destination account and hour. Storage requests do not contain AzCopy JobID, so this is aggregate supporting context, not exact job attribution. The full outer join intentionally shows hours present on only one side.",
+      "visualOptions": {}
+    },
+    {
+      "id": "97de97ee-a855-25ee-237d-ed2d0d5e4cbc",
+      "title": "Storage API operation mix",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "2a5622c4-99e2-7879-af2a-867177d9e754",
+      "layout": {
+        "x": 0,
+        "y": 16,
+        "width": 10,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "bdd780f3-0cc8-0351-1dac-c77745b965de"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "d0532d52-8c4b-2f77-41b8-1688c5d94543",
+      "title": "Requests per job",
+      "description": "",
+      "visualType": "table",
+      "pageId": "2a5622c4-99e2-7879-af2a-867177d9e754",
+      "layout": {
+        "x": 10,
+        "y": 16,
+        "width": 12,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "9d831d32-c45b-c237-827e-aa9419faccb7"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    }
+  ],
+  "baseQueries": [],
+  "parameters": [
+    {
+      "kind": "duration",
+      "id": "b6b4d97f-22d5-071d-f28f-248b8a47c5ec",
+      "displayName": "Time range",
+      "description": "",
+      "beginVariableName": "_startTime",
+      "endVariableName": "_endTime",
+      "defaultValue": {
+        "kind": "dynamic",
+        "count": 24,
+        "unit": "hours"
+      },
+      "showOnPages": {
+        "kind": "all"
+      }
+    },
+    {
+      "kind": "string",
+      "selectionType": "freetext",
+      "id": "96f4fc45-a3cd-1136-27c7-0263c7e71c5e",
+      "displayName": "Storage account",
+      "variableName": "_account",
+      "description": "Optional source or destination storage account filter. Leave empty for all accounts.",
+      "defaultValue": {
+        "kind": "value",
+        "value": ""
+      },
+      "showOnPages": {
+        "kind": "all"
+      }
+    }
+  ],
+  "dataSources": [
+    {
+      "id": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229",
+      "kind": "manual-kusto",
+      "scopeId": "kusto",
+      "name": "AzCopy Analytics - Telemetry Test",
+      "clusterUri": "https://azcore.centralus.kusto.windows.net/",
+      "database": "Xstore"
+    }
+  ],
+  "pages": [
+    {
+      "name": "Overview",
+      "id": "519a4488-bd91-9322-b6e7-368ac3b49aae"
+    },
+    {
+      "name": "Performance",
+      "id": "32dcc1d6-5dce-b4f5-511d-54d4c49c3aa3"
+    },
+    {
+      "name": "Reliability",
+      "id": "bf2aeb36-a31f-c158-495b-02c87d0dbbc5"
+    },
+    {
+      "name": "Adoption",
+      "id": "d325eeea-90e6-90f0-e73a-b775885611a0"
+    },
+    {
+      "name": "Data Quality",
+      "id": "f347bed8-5055-b42f-aa21-9d824fc5cc66"
+    },
+    {
+      "name": "Customer Drilldown",
+      "id": "02515756-8376-9aaf-ebf8-614f5ae612f1"
+    },
+    {
+      "name": "Server Correlation",
+      "id": "2a5622c4-99e2-7879-af2a-867177d9e754"
+    }
+  ],
+  "queries": [
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    JobStatusValue = tostring(customDimensions.JobStatus)\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    StartedRows = countif(name == 'azcopy.job.started'),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')\n    by InvocationID, JobID\n| summarize\n    Attempts = countif(FinishedRows > 0),\n    BytesTransferred = sumif(BytesTransferred, FinishedRows > 0),\n    Completed = countif(FinishedRows > 0 and JobStatus in ('Completed', 'CompletedWithSkipped')),\n    UnmatchedStarts = countif(StartedRows > 0 and FinishedRows == 0)\n| project\n    Attempts,\n    DataTB = round(BytesTransferred / 1e12, 2),\n    CompletionRatePct = round(100.0 * Completed / iif(Attempts > 0, Attempts, 1), 2),\n    UnmatchedStarts\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Attempts', 'Value', Attempts),\n    bag_pack('Metric', 'Data (TB)', 'Value', DataTB),\n    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),\n    bag_pack('Metric', 'Unmatched starts', 'Value', UnmatchedStarts))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "id": "4c1864ef-6fc4-804c-9991-c29c4a797439",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n  JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n  SourceTypeValue = tostring(customDimensions.SourceType),\n  DestTypeValue = tostring(customDimensions.DestType),\n  LegacyTopologyValue = tostring(customDimensions.TransferTopology)\n| extend TopologyValue = iif(isnotempty(LegacyTopologyValue), LegacyTopologyValue, case(\n  SourceTypeValue == 'S3' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',\n  SourceTypeValue == 'GCP' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',\n  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',\n  DestTypeValue == 'Trash', 'azure-delete',\n  SourceTypeValue in ('Local', 'Benchmark', 'Pipe') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',\n  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Local', 'Pipe'), 'azure-to-local',\n  SourceTypeValue !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestTypeValue !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',\n  'unknown'))\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    EndTime = max(timestamp),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    Topology = take_any(TopologyValue),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')\n  by InvocationID, JobID\n| where FinishedRows > 0\n| summarize\n    Attempts = count(),\n    BytesTransferred = sum(BytesTransferred)\n  by Day = bin(EndTime, 1d), Topology\n| project\n    timestamp = Day,\n    Topology = iif(isempty(Topology), 'unknown', Topology),\n    Attempts,\n    DataTB = round(BytesTransferred / 1000000000000.0, 3)\n| order by timestamp asc, Topology asc",
+      "id": "5b450ebb-f146-ab70-b64c-5d551572dca5",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| where name == 'azcopy.job.finished'\n| extend\n    Command = tostring(customDimensions.Command),\n    JobStatus = tostring(customDimensions.JobStatus)\n| summarize Attempts = count() by Command, JobStatus\n| project\n    Command = iif(isempty(Command), 'unknown', Command),\n    JobStatus = iif(isempty(JobStatus), 'unknown', JobStatus),\n    Attempts\n| order by Command asc, Attempts desc",
+      "id": "2bcbc41e-f7b9-b433-1bed-26a88de4ccd6",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| where name in ('azcopy.job.finished', 'azcopy.command.invoked')\n| extend\n    Command = tostring(customDimensions.Command),\n    Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion))\n| summarize Invocations = count() by Week = startofweek(timestamp), Command, Version\n| project\n    timestamp = Week,\n    Command = iif(isempty(Command), 'unknown', Command),\n    Version = iif(isempty(Version), 'unknown', Version),\n    Invocations\n| order by timestamp asc, Invocations desc",
+      "id": "8ab11a7b-d831-2d65-c0bc-e225f094917e",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n  SourceTypeValue = tostring(customDimensions.SourceType),\n  DestTypeValue = tostring(customDimensions.DestType),\n  LegacyTopologyValue = tostring(customDimensions.TransferTopology)\n| extend TopologyValue = iif(isnotempty(LegacyTopologyValue), LegacyTopologyValue, case(\n  SourceTypeValue == 'S3' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',\n  SourceTypeValue == 'GCP' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',\n  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',\n  DestTypeValue == 'Trash', 'azure-delete',\n  SourceTypeValue in ('Local', 'Benchmark', 'Pipe') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',\n  SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Local', 'Pipe'), 'azure-to-local',\n  SourceTypeValue !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestTypeValue !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',\n  'unknown'))\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    Topology = take_any(TopologyValue),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),\n    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),\n    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps'),\n    EnumerationSeconds = maxif(value, name == 'azcopy.enumeration_phase_duration_seconds'),\n    TransferSeconds = maxif(value, name == 'azcopy.transfer_phase_duration_seconds')\n  by InvocationID\n| where FinishedRows > 0 and BytesTransferred > 0 and JobDurationSeconds > 0\n| extend CompletionSecondsPerTB = JobDurationSeconds * 1000000000000.0 / BytesTransferred\n| summarize\n    SampleSize = count(),\n    AvgJobThroughputMbps = avg(ThroughputMbps),\n    ThroughputP50Mbps = percentile(ThroughputMbps, 50),\n    ThroughputP90Mbps = percentile(ThroughputMbps, 90),\n    ThroughputP95Mbps = percentile(ThroughputMbps, 95),\n    CompletionAvgSecondsPerTB = avg(CompletionSecondsPerTB),\n    CompletionP90SecondsPerTB = percentile(CompletionSecondsPerTB, 90),\n    CompletionP95SecondsPerTB = percentile(CompletionSecondsPerTB, 95),\n    AvgEnumerationSeconds = avg(EnumerationSeconds),\n    EnumerationP90Seconds = percentile(EnumerationSeconds, 90),\n    EnumerationP95Seconds = percentile(EnumerationSeconds, 95),\n    AvgTransferSeconds = avg(TransferSeconds),\n    TransferP90Seconds = percentile(TransferSeconds, 90),\n    TransferP95Seconds = percentile(TransferSeconds, 95)\n  by Topology\n| project\n    Topology = iif(isempty(Topology), 'unknown', Topology),\n    SampleSize,\n    AvgJobThroughputMbps = round(AvgJobThroughputMbps, 2),\n    ThroughputP50Mbps = round(ThroughputP50Mbps, 2),\n    ThroughputP90Mbps = round(ThroughputP90Mbps, 2),\n    ThroughputP95Mbps = round(ThroughputP95Mbps, 2),\n    CompletionAvgHoursPerTB = round(CompletionAvgSecondsPerTB / 3600.0, 2),\n    CompletionP90HoursPerTB = round(CompletionP90SecondsPerTB / 3600.0, 2),\n    CompletionP95HoursPerTB = round(CompletionP95SecondsPerTB / 3600.0, 2),\n    AvgEnumerationSeconds = round(AvgEnumerationSeconds, 2),\n    EnumerationP90Seconds = round(EnumerationP90Seconds, 2),\n    EnumerationP95Seconds = round(EnumerationP95Seconds, 2),\n    AvgTransferSeconds = round(AvgTransferSeconds, 2),\n    TransferP90Seconds = round(TransferP90Seconds, 2),\n    TransferP95Seconds = round(TransferP95Seconds, 2)\n| order by SampleSize desc",
+      "id": "47306514-afe5-2087-a108-7919a6dba1f1",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| where name == 'azcopy.job.finished'\n| extend\n    SourceType = tostring(customDimensions.SourceType),\n    DestType = tostring(customDimensions.DestType),\n    LegacyTopology = tostring(customDimensions.TransferTopology),\n    HostOS = tostring(customDimensions.OSType),\n    Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion))\n| extend Topology = iif(isnotempty(LegacyTopology), LegacyTopology, case(\n    SourceType == 'S3' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',\n    SourceType == 'GCP' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',\n    SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',\n    DestType == 'Trash', 'azure-delete',\n    SourceType in ('Local', 'Benchmark', 'Pipe') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',\n    SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Local', 'Pipe'), 'azure-to-local',\n    SourceType !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestType !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',\n    'unknown'))\n| summarize Attempts = count() by SourceType, DestType, Topology, HostOS, Version\n| top 30 by Attempts desc\n| project SourceType, DestType, Topology, HostOS, Version, Attempts",
+      "id": "1c223515-9fb1-c977-ddc0-2f02fa15ea0d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    SourceType = tostring(customDimensions.SourceType),\n    DestType = tostring(customDimensions.DestType),\n    SourceProtocol = tostring(customDimensions.SourceProtocol),\n    DestProtocol = tostring(customDimensions.DestProtocol)\n| extend Endpoints = pack_array(\n        bag_pack('Role', 'source', 'Platform', SourceType, 'Protocol', SourceProtocol),\n        bag_pack('Role', 'destination', 'Platform', DestType, 'Protocol', DestProtocol))\n| mv-expand Endpoint = Endpoints\n| extend\n    Role = tostring(Endpoint.Role),\n    Platform = tostring(Endpoint.Platform),\n    Protocol = tostring(Endpoint.Protocol)\n| summarize Attempts = count() by Role, Platform, Protocol\n| project\n    Role,\n    Platform = iif(isempty(Platform), 'unknown', Platform),\n    Protocol = iif(isempty(Protocol), 'unknown', Protocol),\n    Attempts\n| order by Role asc, Attempts desc",
+      "id": "e3afb314-3a39-89e3-81be-3fdc99fea2f8",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobStatusValue = tostring(customDimensions.JobStatus),\n    IsResumeValue = tostring(customDimensions.Command) == 'jobs.resume'\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),\n    IsResume = take_any(IsResumeValue),\n    ObjectsScheduled = maxif(value, name == 'azcopy.objects_scheduled'),\n    ObjectsFailed = maxif(value, name == 'azcopy.objects_failed'),\n    HttpAttempts = maxif(value, name == 'azcopy.storage_http_attempt_count'),\n    ServerBusy503 = maxif(value, name == 'azcopy.server_busy_503_count'),\n    NetworkErrors = maxif(value, name == 'azcopy.network_error_attempt_count')\n  by InvocationID\n| where FinishedRows > 0\n| summarize\n    Attempts = count(),\n    Successes = countif(JobStatus in ('Completed', 'CompletedWithSkipped')),\n    PartialSuccesses = countif(JobStatus == 'CompletedWithErrors'),\n    Failures = countif(JobStatus == 'Failed'),\n    Cancellations = countif(JobStatus == 'Cancelled'),\n    ResumeAttempts = countif(IsResume),\n    SuccessfulResumes = countif(IsResume and JobStatus in ('Completed', 'CompletedWithSkipped')),\n    ObjectsScheduled = sum(ObjectsScheduled),\n    ObjectsFailed = sum(ObjectsFailed),\n    HttpAttempts = sum(HttpAttempts),\n    ServerBusy503 = sum(ServerBusy503),\n    NetworkErrors = sum(NetworkErrors)\n| project\n    CompletionRatePct = round(100.0 * Successes / iif(Attempts > 0, Attempts, 1), 2),\n    PartialSuccessRatePct = round(100.0 * PartialSuccesses / iif(Attempts > 0, Attempts, 1), 2),\n    FailureRatePct = round(100.0 * Failures / iif(Attempts > 0, Attempts, 1), 2),\n    CancellationRatePct = round(100.0 * Cancellations / iif(Attempts > 0, Attempts, 1), 2),\n    FailedObjectRatePct = round(100.0 * ObjectsFailed / iif(ObjectsScheduled > 0.0, ObjectsScheduled, 1.0), 4),\n    ServerBusyRatePct = round(100.0 * ServerBusy503 / iif(HttpAttempts > 0.0, HttpAttempts, 1.0), 4),\n    NetworkErrorRatePct = round(100.0 * NetworkErrors / iif(HttpAttempts > 0.0, HttpAttempts, 1.0), 4),\n    ResumeSuccessRatePct = round(100.0 * SuccessfulResumes / iif(ResumeAttempts > 0, ResumeAttempts, 1), 2)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),\n    bag_pack('Metric', 'Partial success rate (%)', 'Value', PartialSuccessRatePct),\n    bag_pack('Metric', 'Failure rate (%)', 'Value', FailureRatePct),\n    bag_pack('Metric', 'Cancellation rate (%)', 'Value', CancellationRatePct),\n    bag_pack('Metric', 'Failed object rate (%)', 'Value', FailedObjectRatePct),\n    bag_pack('Metric', 'Server busy rate (%)', 'Value', ServerBusyRatePct),\n    bag_pack('Metric', 'Network error rate (%)', 'Value', NetworkErrorRatePct),\n    bag_pack('Metric', 'Resume success rate (%)', 'Value', ResumeSuccessRatePct))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "id": "1b209af9-26c6-66b9-1260-0dd172f40629",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| where name == 'azcopy.job.finished'\n| extend\n    ErrorCategory = tostring(customDimensions.JobErrorCategory),\n    ErrorCode = tostring(customDimensions.JobErrorCode),\n    FailureErrorCodes = tostring(customDimensions.FailureErrorCodes)\n| where isnotempty(ErrorCategory) or isnotempty(ErrorCode)\n| extend Error = strcat(iif(isempty(ErrorCategory), 'unknown', ErrorCategory), ' / ', iif(isempty(ErrorCode), 'unknown', ErrorCode))\n| summarize\n    Attempts = count(),\n    TransferCodeExamples = make_set_if(FailureErrorCodes, isnotempty(FailureErrorCodes), 5)\n  by Error\n| top 20 by Attempts desc\n| project Error, Attempts, TransferCodeExamples",
+      "id": "e17d31d5-c707-fc18-753e-7eae1dd18150",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend FailureErrorCodes = tostring(customDimensions.FailureErrorCodes)\n| where isnotempty(FailureErrorCodes)\n| mv-expand Bucket = split(FailureErrorCodes, ',')\n| extend Pair = split(tostring(Bucket), ':')\n| extend\n    ErrorCode = tostring(Pair[0]),\n    ObservedOccurrences = tolong(Pair[1])\n| where isnotempty(ErrorCode) and isnotnull(ObservedOccurrences)\n| summarize\n    AttemptsWithCode = count(),\n    FailedObjects = sum(ObservedOccurrences),\n    FirstSeen = min(timestamp),\n    LastSeen = max(timestamp)\n  by ErrorCode\n| top 20 by FailedObjects desc\n| project\n    ErrorCode,\n    AttemptsWithCode,\n    FailedObjects,\n    FirstSeen,\n    LastSeen",
+      "id": "32c03315-110e-af24-08ec-9a62763e32c2",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "let Base = materialize(\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n    | where timestamp between ((_endTime - 730d) .. _endTime)\n    | where name == 'azcopy.job.finished'\n    | where tostring(customDimensions.SchemaVersion) in ('2', '3')\n    | extend\n        JobErrorCode = tostring(customDimensions.JobErrorCode),\n        FailureErrorCodes = tostring(customDimensions.FailureErrorCodes));\nlet TerminalCodes =\n    Base\n    | where isnotempty(JobErrorCode)\n    | project\n        timestamp,\n        SignalSource = 'terminal-job',\n        ErrorCode = JobErrorCode,\n        Occurrences = 1.0;\nlet FailedObjectCodes =\n    Base\n    | where isnotempty(FailureErrorCodes)\n    | mv-expand Bucket = split(FailureErrorCodes, ',')\n    | extend Pair = split(tostring(Bucket), ':')\n    | extend\n        ErrorCode = tostring(Pair[0]),\n        Occurrences = todouble(Pair[1])\n    | where isnotempty(ErrorCode) and isnotnull(Occurrences)\n    | project\n        timestamp,\n        SignalSource = 'failed-object',\n        ErrorCode,\n        Occurrences;\nunion TerminalCodes, FailedObjectCodes\n| summarize\n    FirstSeen = min(timestamp),\n    LastSeen = max(timestamp),\n    OccurrencesLast30Days = sumif(Occurrences, timestamp >= _endTime - 30d)\n  by SignalSource, ErrorCode\n| where FirstSeen >= _endTime - 30d\n| project\n    SignalSource,\n    ErrorCode,\n    FirstSeen,\n    LastSeen,\n    OccurrencesLast30Days\n| order by FirstSeen desc",
+      "id": "da49617d-a34a-4fcc-31f7-8119ec4e813d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. (_endTime + 30m))\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    StatusValue = tostring(customDimensions.JobStatus),\n    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),\n    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    StartedAt = minif(timestamp, name == 'azcopy.job.started' and timestamp <= _endTime),\n    FinishedAt = maxif(timestamp, name == 'azcopy.job.finished'),\n    StartedRows = countif(name == 'azcopy.job.started' and timestamp <= _endTime),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    PercentComplete = maxif(value, name == 'azcopy.percent_complete')\n  by InvocationID\n| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account\n| extend\n    IsMatureStart = StartedRows > 0 and StartedAt <= _endTime - 30m,\n    IsUnmatchedStart = StartedRows > 0 and FinishedRows == 0 and StartedAt <= _endTime - 30m,\n    IsCancellation = FinishedRows > 0 and JobStatus == 'Cancelled'\n| summarize\n    ObservedMatureStarts = countif(IsMatureStart),\n    ObservedUnmatchedStarts = countif(IsUnmatchedStart),\n    ObservedCancellations = countif(IsCancellation),\n    AvgCancelPercentComplete = avg(iff(IsCancellation, PercentComplete, real(null))),\n    CancelPercentCompleteP50 = percentile(iff(IsCancellation, PercentComplete, real(null)), 50),\n    CancelPercentCompleteP90 = percentile(iff(IsCancellation, PercentComplete, real(null)), 90)\n| project\n    ObservedMatureStarts,\n    ObservedUnmatchedStarts,\n    UnmatchedStartRatePct = round(100.0 * ObservedUnmatchedStarts / iif(ObservedMatureStarts > 0, ObservedMatureStarts, 1), 2),\n    ObservedCancellations,\n    AvgCancelPercentComplete = round(AvgCancelPercentComplete, 2),\n    CancelPercentCompleteP50 = round(CancelPercentCompleteP50, 2),\n    CancelPercentCompleteP90 = round(CancelPercentCompleteP90, 2)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Starts eligible after 30 min', 'Value', ObservedMatureStarts),\n    bag_pack('Metric', 'Eligible starts without finish', 'Value', ObservedUnmatchedStarts),\n    bag_pack('Metric', 'Missing finish rate (%)', 'Value', UnmatchedStartRatePct),\n    bag_pack('Metric', 'Explicitly cancelled jobs', 'Value', ObservedCancellations),\n    bag_pack('Metric', 'Average completion at cancel (%)', 'Value', AvgCancelPercentComplete),\n    bag_pack('Metric', 'P50 completion at cancel (%)', 'Value', CancelPercentCompleteP50),\n    bag_pack('Metric', 'P90 completion at cancel (%)', 'Value', CancelPercentCompleteP90))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "id": "9bcd7c50-5303-01ca-c2d6-b2a002cb1826",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| summarize Attempts = count() by Week = startofweek(timestamp)\n| order by Week asc\n| serialize\n| extend PreviousWeekAttempts = prev(Attempts)\n| extend WoWChangePct = iif(\n    isnotnull(PreviousWeekAttempts) and PreviousWeekAttempts > 0,\n    100.0 * (Attempts - PreviousWeekAttempts) / PreviousWeekAttempts,\n    real(null))\n| project\n    timestamp = Week,\n    Attempts,\n    PreviousWeekAttempts,\n    WoWChangePct = round(WoWChangePct, 2)",
+      "id": "8b77dfea-2b61-6d9f-9a6b-70b2dd6d6ff1",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "let Attempts = materialize(\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n    | where timestamp between (_startTime .. _endTime)\n    | where name == 'azcopy.job.finished'\n    | where tostring(customDimensions.SchemaVersion) in ('2', '3')\n    | extend\n        InstallationID = tostring(customDimensions.InstallationID),\n        InvocationID = tostring(customDimensions.InvocationID),\n        JobStatus = tostring(customDimensions.JobStatus)\n    | where isnotempty(InstallationID) and isnotempty(InvocationID)\n    | summarize\n        EndTime = max(timestamp),\n        JobStatus = take_any(JobStatus)\n      by InstallationID, InvocationID);\nlet FirstAttempts =\n    Attempts\n    | summarize arg_min(EndTime, JobStatus) by InstallationID\n    | project InstallationID, FirstObservedStatus = JobStatus;\nAttempts\n| summarize\n    ObservedAttempts = count(),\n    FirstObservedTime = min(EndTime),\n    FirstSuccessfulTime = minif(EndTime, JobStatus in ('Completed', 'CompletedWithSkipped'))\n  by InstallationID\n| join kind=inner FirstAttempts on InstallationID\n| extend HoursToFirstObservedSuccess = iif(\n    isnotnull(FirstSuccessfulTime),\n    todouble(datetime_diff('second', FirstSuccessfulTime, FirstObservedTime)) / 3600.0,\n    real(null))\n| summarize\n    ObservedInstallations = count(),\n    FirstObservedSuccesses = countif(FirstObservedStatus in ('Completed', 'CompletedWithSkipped')),\n    InstallationsWithSecondObservedAttempt = countif(ObservedAttempts >= 2),\n    InstallationsWithObservedSuccess = countif(isnotnull(FirstSuccessfulTime)),\n    MedianHoursToFirstObservedSuccess = percentile(HoursToFirstObservedSuccess, 50),\n    P90HoursToFirstObservedSuccess = percentile(HoursToFirstObservedSuccess, 90)\n| project\n    ObservedInstallations,\n    FirstObservedAttemptSuccessRatePct = round(100.0 * FirstObservedSuccesses / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),\n    SecondObservedAttemptRatePct = round(100.0 * InstallationsWithSecondObservedAttempt / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),\n    ObservedSuccessRatePct = round(100.0 * InstallationsWithObservedSuccess / iif(ObservedInstallations > 0, ObservedInstallations, 1), 2),\n    MedianHoursToFirstObservedSuccess = round(MedianHoursToFirstObservedSuccess, 2),\n    P90HoursToFirstObservedSuccess = round(P90HoursToFirstObservedSuccess, 2)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Observed installations', 'Value', ObservedInstallations),\n    bag_pack('Metric', 'First observed attempt succeeded (%)', 'Value', FirstObservedAttemptSuccessRatePct),\n    bag_pack('Metric', 'Had 2+ observed attempts (%)', 'Value', SecondObservedAttemptRatePct),\n    bag_pack('Metric', 'Had any observed success (%)', 'Value', ObservedSuccessRatePct),\n    bag_pack('Metric', 'Median hours to observed success', 'Value', MedianHoursToFirstObservedSuccess),\n    bag_pack('Metric', 'P90 hours to observed success', 'Value', P90HoursToFirstObservedSuccess))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "id": "7f137dd6-d3b3-82ed-e0d0-711e60d5716f",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job.started', 'azcopy.job.finished')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    SchemaVersionValue = tostring(customDimensions.SchemaVersion),\n    CommandValue = tostring(customDimensions.Command),\n    FromToValue = tostring(customDimensions.FromTo),\n    SourceTypeValue = tostring(customDimensions.SourceType),\n    DestTypeValue = tostring(customDimensions.DestType),\n    ReportedDurationValue = todouble(customMeasurements['azcopy.job_duration_seconds']),\n    FinishMetricCountValue = array_length(bag_keys(customMeasurements))\n| extend AttemptKey = iif(\n    isnotempty(InvocationID) and isnotempty(JobID),\n    strcat(InvocationID, '/', JobID),\n    strcat('missing-id:', tostring(itemId)))\n| summarize\n    StartEvents = countif(name == 'azcopy.job.started'),\n    FinishEvents = countif(name == 'azcopy.job.finished'),\n    StartTime = minif(timestamp, name == 'azcopy.job.started'),\n    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),\n    SchemaVersionCount = dcount(SchemaVersionValue),\n    SchemaVersion = take_any(SchemaVersionValue),\n    ReportedDurationSeconds = max(ReportedDurationValue),\n    FinishMetricCount = maxif(FinishMetricCountValue, name == 'azcopy.job.finished'),\n    MissingRequiredDimensionRows = countif(\n        isempty(InvocationID) or isempty(JobID) or isempty(CommandValue) or\n        isempty(FromToValue) or isempty(SourceTypeValue) or isempty(DestTypeValue))\n  by AttemptKey\n| extend\n    ObservedDurationSeconds = iif(\n        StartEvents > 0 and FinishEvents > 0,\n        todouble(datetime_diff('millisecond', FinishTime, StartTime)) / 1000.0,\n        real(null)),\n    InvalidSchema = SchemaVersionCount != 1 or SchemaVersion !in ('2', '3'),\n    LifecycleAnomaly = StartEvents != 1 or FinishEvents != 1,\n    MissingRequiredFields = MissingRequiredDimensionRows > 0,\n    IncompleteFinishMetricSet = FinishEvents > 0 and FinishMetricCount < 50\n| extend\n    TimingAnomaly = StartEvents == 1 and FinishEvents == 1 and ObservedDurationSeconds < 0.0,\n    DurationMismatch = StartEvents == 1 and FinishEvents == 1 and\n        isnotnull(ReportedDurationSeconds) and ReportedDurationSeconds >= 0.0 and\n        abs(ObservedDurationSeconds - ReportedDurationSeconds) >\n            max_of(60.0, ReportedDurationSeconds * 0.2)\n| extend Accepted =\n    not(InvalidSchema) and not(LifecycleAnomaly) and not(MissingRequiredFields) and\n    not(IncompleteFinishMetricSet) and not(TimingAnomaly) and not(DurationMismatch)\n| summarize\n    ObservedAttempts = count(),\n    AcceptedAttempts = countif(Accepted),\n    InvalidSchemaAttempts = countif(InvalidSchema),\n    LifecycleSuspectAttempts = countif(LifecycleAnomaly),\n    TimingSuspectAttempts = countif(TimingAnomaly or DurationMismatch),\n    MissingRequiredFieldAttempts = countif(MissingRequiredFields),\n    IncompleteFinishMetricAttempts = countif(IncompleteFinishMetricSet)\n| extend AcceptedRatePercent = round(100.0 * AcceptedAttempts / iif(ObservedAttempts > 0, ObservedAttempts, 1), 2)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Observed attempts', 'Value', ObservedAttempts),\n    bag_pack('Metric', 'Accepted attempts', 'Value', AcceptedAttempts),\n    bag_pack('Metric', 'Accepted rate (%)', 'Value', AcceptedRatePercent),\n    bag_pack('Metric', 'Invalid schema', 'Value', InvalidSchemaAttempts),\n    bag_pack('Metric', 'Lifecycle suspects', 'Value', LifecycleSuspectAttempts),\n    bag_pack('Metric', 'Timing suspects', 'Value', TimingSuspectAttempts),\n    bag_pack('Metric', 'Missing required fields', 'Value', MissingRequiredFieldAttempts),\n    bag_pack('Metric', 'Incomplete finish metrics', 'Value', IncompleteFinishMetricAttempts))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "id": "20629e6d-2d47-2a20-8e4c-b67c28468e9c",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job.started', 'azcopy.job.finished')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    SchemaVersionValue = tostring(customDimensions.SchemaVersion),\n    CommandValue = tostring(customDimensions.Command),\n    FromToValue = tostring(customDimensions.FromTo),\n    SourceTypeValue = tostring(customDimensions.SourceType),\n    DestTypeValue = tostring(customDimensions.DestType),\n    ReportedDurationValue = todouble(customMeasurements['azcopy.job_duration_seconds']),\n    FinishMetricCountValue = array_length(bag_keys(customMeasurements))\n| extend AttemptKey = iif(\n    isnotempty(InvocationID) and isnotempty(JobID),\n    strcat(InvocationID, '/', JobID),\n    strcat('missing-id:', tostring(itemId)))\n| summarize\n    StartEvents = countif(name == 'azcopy.job.started'),\n    FinishEvents = countif(name == 'azcopy.job.finished'),\n    StartTime = minif(timestamp, name == 'azcopy.job.started'),\n    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),\n    SchemaVersionCount = dcount(SchemaVersionValue),\n    SchemaVersion = take_any(SchemaVersionValue),\n    ReportedDurationSeconds = max(ReportedDurationValue),\n    FinishMetricCount = maxif(FinishMetricCountValue, name == 'azcopy.job.finished'),\n    MissingRequiredDimensionRows = countif(\n        isempty(InvocationID) or isempty(JobID) or isempty(CommandValue) or\n        isempty(FromToValue) or isempty(SourceTypeValue) or isempty(DestTypeValue)),\n    InvocationID = take_any(InvocationID),\n    JobID = take_any(JobID)\n  by AttemptKey\n| extend\n    ObservedDurationSeconds = iif(\n        StartEvents > 0 and FinishEvents > 0,\n        todouble(datetime_diff('millisecond', FinishTime, StartTime)) / 1000.0,\n        real(null)),\n    InvalidSchema = SchemaVersionCount != 1 or SchemaVersion !in ('2', '3'),\n    LifecycleAnomaly = StartEvents != 1 or FinishEvents != 1,\n    MissingRequiredFields = MissingRequiredDimensionRows > 0,\n    IncompleteFinishMetricSet = FinishEvents > 0 and FinishMetricCount < 50\n| extend\n    TimingAnomaly = StartEvents == 1 and FinishEvents == 1 and ObservedDurationSeconds < 0.0,\n    DurationMismatch = StartEvents == 1 and FinishEvents == 1 and\n        isnotnull(ReportedDurationSeconds) and ReportedDurationSeconds >= 0.0 and\n        abs(ObservedDurationSeconds - ReportedDurationSeconds) >\n            max_of(60.0, ReportedDurationSeconds * 0.2)\n| extend\n    QualityClass = case(\n        InvalidSchema, 'InvalidSchema',\n        LifecycleAnomaly or MissingRequiredFields or IncompleteFinishMetricSet or TimingAnomaly or DurationMismatch, 'Suspect',\n        'Valid'),\n    Reasons = strcat(\n        iif(InvalidSchema, 'UnsupportedOrMixedSchema; ', ''),\n        iif(StartEvents == 0, 'MissingStart; ', ''),\n        iif(StartEvents > 1, 'DuplicateStart; ', ''),\n        iif(FinishEvents == 0, 'MissingFinish; ', ''),\n        iif(FinishEvents > 1, 'DuplicateFinish; ', ''),\n        iif(MissingRequiredFields, 'MissingRequiredFields; ', ''),\n        iif(IncompleteFinishMetricSet, 'IncompleteFinishMetrics; ', ''),\n        iif(TimingAnomaly, 'FinishBeforeStart; ', ''),\n        iif(DurationMismatch, 'DurationMismatch; ', ''))\n| where QualityClass != 'Valid'\n| project\n    LastObserved = coalesce(FinishTime, StartTime),\n    QualityClass,\n    Reasons,\n    SchemaVersion,\n    InvocationID,\n    JobID,\n    StartEvents,\n    FinishEvents,\n    StartTime,\n    FinishTime,\n    ObservedDurationSeconds = round(ObservedDurationSeconds, 2),\n    ReportedDurationSeconds = round(ReportedDurationSeconds, 2),\n    DurationDifferenceSeconds = round(abs(ObservedDurationSeconds - ReportedDurationSeconds), 2),\n    FinishMetricCount\n| top 200 by LastObserved desc",
+      "id": "ce6d0c6d-86d3-a166-3409-e3d4823f31cd",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "let ValidAttempts = materialize(cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job.started', 'azcopy.job.finished')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    SchemaVersionValue = tostring(customDimensions.SchemaVersion),\n    CommandValue = tostring(customDimensions.Command),\n    FromToValue = tostring(customDimensions.FromTo),\n    SourceTypeValue = tostring(customDimensions.SourceType),\n    DestTypeValue = tostring(customDimensions.DestType),\n    SourceAccountValue = tostring(customDimensions.SourceStorageAccount),\n    DestAccountValue = tostring(customDimensions.DestStorageAccount),\n    ClientStorageHttpAttemptsValue = todouble(customMeasurements['azcopy.storage_http_attempt_count'])\n| where isnotempty(InvocationID) and isnotempty(JobID)\n| summarize\n    StartEvents = countif(name == 'azcopy.job.started'),\n    FinishEvents = countif(name == 'azcopy.job.finished'),\n    StartTime = minif(timestamp, name == 'azcopy.job.started'),\n    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),\n    SchemaVersionCount = dcount(SchemaVersionValue),\n    SchemaVersion = take_any(SchemaVersionValue),\n    Command = take_any(CommandValue),\n    FromTo = take_any(FromToValue),\n    SourceType = take_any(SourceTypeValue),\n    DestType = take_any(DestTypeValue),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    ClientStorageHttpAttempts = max(ClientStorageHttpAttemptsValue)\n  by InvocationID, JobID\n| where StartEvents == 1 and FinishEvents == 1 and StartTime <= FinishTime\n| where SchemaVersionCount == 1 and SchemaVersion in ('2', '3'));\nlet EndpointAttempts = union\n    (ValidAttempts\n    | where SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(SourceAccount)\n    | project InvocationID, JobID, Command, FromTo, StartTime, FinishTime,\n        EndpointRole = 'Source', Account = tolower(SourceAccount), ClientStorageHttpAttempts),\n    (ValidAttempts\n    | where DestType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(DestAccount)\n    | project InvocationID, JobID, Command, FromTo, StartTime, FinishTime,\n        EndpointRole = 'Destination', Account = tolower(DestAccount), ClientStorageHttpAttempts),\n    (ValidAttempts\n    | where not(\n        (SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(SourceAccount)) or\n        (DestType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(DestAccount)))\n    | project InvocationID, JobID, Command, FromTo, StartTime, FinishTime,\n        EndpointRole = 'None', Account = '', ClientStorageHttpAttempts)\n| distinct InvocationID, JobID, Command, FromTo, StartTime, FinishTime, EndpointRole, Account, ClientStorageHttpAttempts\n| where isempty(_account) or Account =~ _account\n| extend RequestWindow = range(bin(StartTime - 5m, 5m), bin(FinishTime + 5m, 5m), 5m)\n| mv-expand RequestWindow to typeof(datetime);\nlet ServerRequests = XAggUserAgentTelemetryMetric()\n| where TimeWindow between ((_startTime - 5m) .. (_endTime + 5m))\n| where Tool =~ 'azcopy'\n| summarize StorageRequests = sum(RequestCount)\n  by RequestWindow = bin(TimeWindow, 5m), Account = tolower(Account);\nEndpointAttempts\n| join kind=leftouter hint.strategy=broadcast ServerRequests on Account, RequestWindow\n| summarize\n    StorageRequests = sum(coalesce(StorageRequests, 0)),\n    CorrelationStart = min(RequestWindow),\n    CorrelationEnd = max(RequestWindow)\n  by InvocationID, JobID, Command, FromTo, StartTime, FinishTime, EndpointRole, Account, ClientStorageHttpAttempts\n| extend\n    EvidenceClass = case(\n        isempty(Account), 'InsufficientEvidence',\n        StorageRequests > 0, 'SupportingEvidence',\n        'Suspect'),\n    RequestsPerClientHttpAttempt = iif(\n        ClientStorageHttpAttempts > 0.0,\n        todouble(StorageRequests) / ClientStorageHttpAttempts,\n        real(null))\n| project\n    FinishTime,\n    EvidenceClass,\n    InvocationID,\n    JobID,\n    Command,\n    FromTo,\n    EndpointRole,\n    Account,\n    StorageRequests,\n    ClientStorageHttpAttempts,\n    RequestsPerClientHttpAttempt = round(RequestsPerClientHttpAttempt, 2),\n    CorrelationStart,\n    CorrelationEnd\n| top 200 by FinishTime desc",
+      "id": "2ca4b439-a92d-3d57-992d-6d51e8e22510",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    CommandValue = tostring(customDimensions.Command),\n    StatusValue = tostring(customDimensions.JobStatus),\n    VersionValue = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),\n    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),\n    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    EndTime = max(timestamp),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    Command = take_any(CommandValue),\n    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),\n    Version = take_any(VersionValue),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),\n    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),\n    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps')\n  by InvocationID, JobID\n| where FinishedRows > 0\n| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account\n| extend CompletionHoursPerTB = iif(BytesTransferred > 0 and JobDurationSeconds > 0, JobDurationSeconds * 1000000000000.0 / BytesTransferred / 3600.0, real(null))\n| summarize\n    Attempts = count(),\n    BytesTransferred = sum(BytesTransferred),\n    AvgThroughputMbps = avg(ThroughputMbps),\n    MigrationP90HoursPerTB = percentile(CompletionHoursPerTB, 90),\n    MigrationP95HoursPerTB = percentile(CompletionHoursPerTB, 95),\n    Failures = countif(JobStatus in ('Failed', 'CompletedWithErrors')),\n    Cancellations = countif(JobStatus == 'Cancelled'),\n    ResumeAttempts = countif(Command == 'jobs.resume'),\n    LastObservedJob = max(EndTime),\n    LastObservedSuccessfulJob = maxif(EndTime, JobStatus in ('Completed', 'CompletedWithSkipped')),\n    Versions = make_set(Version, 10)\n| project\n    Attempts,\n    DataTB = round(BytesTransferred / 1000000000000.0, 3),\n    AvgThroughputMbps = round(AvgThroughputMbps, 2),\n    MigrationP90HoursPerTB = round(MigrationP90HoursPerTB, 2),\n    MigrationP95HoursPerTB = round(MigrationP95HoursPerTB, 2),\n    Failures,\n    Cancellations,\n    ResumeAttempts,\n    DaysSinceLastObservedJob = datetime_diff('day', _endTime, LastObservedJob),\n    DaysSinceLastObservedSuccessfulJob = datetime_diff('day', _endTime, LastObservedSuccessfulJob)\n| mv-expand MetricValue = pack_array(\n    bag_pack('Metric', 'Attempts', 'Value', Attempts),\n    bag_pack('Metric', 'Data (TB)', 'Value', DataTB),\n    bag_pack('Metric', 'Average throughput (Mbps)', 'Value', AvgThroughputMbps),\n    bag_pack('Metric', 'P90 hours per TB', 'Value', MigrationP90HoursPerTB),\n    bag_pack('Metric', 'P95 hours per TB', 'Value', MigrationP95HoursPerTB),\n    bag_pack('Metric', 'Failures', 'Value', Failures),\n    bag_pack('Metric', 'Cancellations', 'Value', Cancellations),\n    bag_pack('Metric', 'Resume attempts', 'Value', ResumeAttempts),\n    bag_pack('Metric', 'Days since observed job', 'Value', DaysSinceLastObservedJob),\n    bag_pack('Metric', 'Days since observed success', 'Value', DaysSinceLastObservedSuccessfulJob))\n| project\n    Metric = tostring(MetricValue.Metric),\n    Value = todouble(MetricValue.Value)",
+      "id": "77922ad0-2713-81f3-c33c-e38e791c3583",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    CommandValue = tostring(customDimensions.Command),\n    StatusValue = tostring(customDimensions.JobStatus),\n    SourceTypeValue = tostring(customDimensions.SourceType),\n    DestTypeValue = tostring(customDimensions.DestType),\n    LegacyTopologyValue = tostring(customDimensions.TransferTopology),\n    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),\n    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), ''),\n    VersionValue = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion))\n| extend TopologyValue = iif(isnotempty(LegacyTopologyValue), LegacyTopologyValue, case(\n    SourceTypeValue == 'S3' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',\n    SourceTypeValue == 'GCP' and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',\n    SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',\n    DestTypeValue == 'Trash', 'azure-delete',\n    SourceTypeValue in ('Local', 'Benchmark', 'Pipe') and DestTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',\n    SourceTypeValue in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestTypeValue in ('Local', 'Pipe'), 'azure-to-local',\n    SourceTypeValue !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestTypeValue !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',\n    'unknown'))\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    EndTime = max(timestamp),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    Command = take_any(CommandValue),\n    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),\n    Topology = take_any(TopologyValue),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    Version = take_any(VersionValue),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),\n    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),\n    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps'),\n    ObjectsFailed = maxif(value, name == 'azcopy.objects_failed')\n  by InvocationID, JobID\n| where FinishedRows > 0\n| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account\n| project\n    EndTime,\n    JobID,\n    InvocationID,\n    Command,\n    JobStatus,\n    Topology,\n    SourceAccount,\n    DestAccount,\n    Version,\n    BytesTransferred,\n    JobDurationSeconds,\n    ThroughputMbps,\n    ObjectsFailed\n| top 200 by EndTime desc",
+      "id": "d444c75f-6a17-8f06-57d0-1dc2f3847b22",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),\n    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')\n  by InvocationID\n| where FinishedRows > 0\n| extend Endpoints = pack_array(\n        bag_pack('Role', 'source', 'Account', SourceAccount),\n        bag_pack('Role', 'destination', 'Account', DestAccount))\n| mv-expand Endpoint = Endpoints\n| extend Role = tostring(Endpoint.Role), Account = tostring(Endpoint.Account)\n| where isnotempty(Account)\n| summarize\n    Attempts = count(),\n    BytesTransferred = sum(BytesTransferred)\n  by Role, Account\n| top 50 by BytesTransferred desc\n| project\n    Role,\n    Account,\n    Attempts,\n    DataTB = round(BytesTransferred / 1000000000000.0, 3)",
+      "id": "d4b56f0f-3d73-0131-3ea8-c0f27145442b",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://xdataanalytics.westcentralus.kusto.windows.net').database('XDataAnalytics').XStoreAccountPropertiesDaily\n| where TimePeriod between ((_startTime - 3d) .. _endTime)\n| where isempty(_account) or AccountNameWithoutVersion =~ _account\n| summarize arg_max(\n    TimePeriod,\n    Subscription,\n    BilledSubscription,\n    ResourceGroup,\n    LogicalTenant,\n    IsLive)\n  by AccountNameWithoutVersion\n| project\n    AccountName = AccountNameWithoutVersion,\n    SubscriptionId = Subscription,\n    BilledSubscriptionId = BilledSubscription,\n    ResourceGroup,\n    StorageTenant = LogicalTenant,\n    IsLive,\n    SnapshotTime = TimePeriod\n| top 500 by AccountName asc",
+      "id": "b7179e97-948d-0318-3453-85a57a6ef41a",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "let AccountActivity = materialize(cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    SourceAccountValue = iif(\n        tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'),\n        tostring(customDimensions.SourceStorageAccount),\n        ''),\n    DestAccountValue = iif(\n        tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'),\n        tostring(customDimensions.DestStorageAccount),\n        '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    SourceAccount = take_any(SourceAccountValue),\n    DestAccount = take_any(DestAccountValue),\n    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')\n  by InvocationID\n| where FinishedRows > 0\n| extend Endpoints = pack_array(\n        bag_pack('Role', 'source', 'Account', SourceAccount),\n        bag_pack('Role', 'destination', 'Account', DestAccount))\n| mv-expand Endpoint = Endpoints\n| extend\n    Role = tostring(Endpoint.Role),\n    Account = tolower(tostring(Endpoint.Account)),\n    ActivityDay = startofday(FinishTime)\n| where isnotempty(Account)\n| where isempty(_account) or Account =~ _account\n| summarize\n    Attempts = count(),\n    BytesTransferred = sum(BytesTransferred)\n  by ActivityDay, Role, Account);\nlet AccountOwnershipByActivityDay = cluster('https://xdataanalytics.westcentralus.kusto.windows.net').database('XDataAnalytics').XStoreAccountPropertiesDaily\n| where TimePeriod between ((startofday(_startTime) - 3d) .. startofday(_endTime))\n| project\n    Account = tolower(AccountNameWithoutVersion),\n    OwnershipSnapshot = TimePeriod,\n    SubscriptionId = tolower(Subscription),\n    BilledSubscriptionId = tolower(BilledSubscription),\n    ResourceGroup,\n    IsLive\n| extend ActivityDayCandidates = range(\n    startofday(OwnershipSnapshot),\n    startofday(OwnershipSnapshot) + 3d,\n    1d)\n| mv-expand ActivityDay = ActivityDayCandidates to typeof(datetime)\n| where ActivityDay between (startofday(_startTime) .. startofday(_endTime))\n| summarize arg_max(\n    OwnershipSnapshot,\n    SubscriptionId,\n    BilledSubscriptionId,\n    ResourceGroup,\n    IsLive)\n  by ActivityDay, Account;\nlet SubscriptionInventory = cluster('https://argeusarm1pone.eastus.kusto.windows.net').database('AzureResourceGraph').InternalSubscriptionResources\n| where timestamp > ago(60h)\n| extend SubscriptionDisplayName = tostring(properties.displayName)\n| summarize hint.strategy=shuffle arg_max(timestamp, tenantId, SubscriptionDisplayName, deleted) by SubscriptionId = tolower(subscriptionId)\n| where deleted == false\n| project\n    SubscriptionId,\n    SubscriptionDisplayName,\n    CustomerTenantId = tolower(tenantId),\n    SubscriptionInventorySnapshot = timestamp;\nlet ActivityWithOwnership = AccountActivity\n| join kind=leftouter hint.remote=right hint.strategy=broadcast AccountOwnershipByActivityDay on ActivityDay, Account\n| project-away ActivityDay1, Account1;\nActivityWithOwnership\n| join kind=leftouter hint.remote=right hint.strategy=broadcast SubscriptionInventory on SubscriptionId\n| project-away SubscriptionId1\n| extend MappingStatus = case(\n    isempty(SubscriptionId), 'MissingAccountOwnership',\n    isempty(CustomerTenantId), 'MissingTenantInventory',\n    'Mapped')\n| summarize\n    Attempts = sum(Attempts),\n    BytesTransferred = sum(BytesTransferred),\n    StorageAccounts = dcount(Account),\n    OwningSubscriptions = dcountif(SubscriptionId, isnotempty(SubscriptionId)),\n    ExampleAccounts = make_set(Account, 5),\n    ExampleOwningSubscriptions = make_set_if(SubscriptionId, isnotempty(SubscriptionId), 5),\n    ExampleOwningSubscriptionNames = make_set_if(SubscriptionDisplayName, isnotempty(SubscriptionDisplayName), 5),\n    AccountOwnershipSnapshot = max(OwnershipSnapshot),\n    SubscriptionInventorySnapshot = max(SubscriptionInventorySnapshot)\n  by Role, CustomerTenantId, MappingStatus\n| top 50 by BytesTransferred desc\n| project\n    Role,\n    CustomerTenantId,\n    MappingStatus,\n    StorageAccounts,\n    OwningSubscriptions,\n    Attempts,\n    DataTB = round(BytesTransferred / 1000000000000.0, 3),\n    ExampleAccounts,\n    ExampleOwningSubscriptions,\n    ExampleOwningSubscriptionNames,\n    AccountOwnershipSnapshot,\n    SubscriptionInventorySnapshot",
+      "id": "69f22e3a-9e30-e8d5-f250-84bd667f2228",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "XAggUserAgentTelemetryMetric()\n| where TimeWindow between (_startTime .. _endTime)\n| where Tool =~ 'azcopy'\n| where isempty(_account) or Account =~ _account\n| summarize Requests = sum(RequestCount)\n  by timestamp = bin(TimeWindow, 5m), ToolVersion, SDK, SDKVersion\n| order by timestamp asc",
+      "id": "bc4c98a8-291a-033d-71a8-f5e186f0dec7",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "cluster('https://xdataanalytics.westcentralus.kusto.windows.net').database('XDataAnalytics').XStoreAccountTransactionsHourly\n| where TimePeriod between (_startTime .. _endTime)\n| where isempty(_account) or AccountNameWithoutVersion =~ _account\n| summarize\n    Requests = sum(TransactionCount),\n    Successes = sum(TotalSuccessCount),\n    Throttles = sum(ThrottlingError),\n    AuthorizationErrors = sum(AuthorizationError),\n    NetworkErrors = sum(NetworkError),\n    IngressBytes = sum(TotalIngress),\n    EgressBytes = sum(TotalEgress)\n  by Service, RequestType, AuthenticationType\n| top 30 by Requests desc",
+      "id": "bdd780f3-0cc8-0351-1dac-c77745b965de",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "4bcf1bb8-18ab-0d6b-2983-8d728f3e6229"
+      },
+      "text": "let ClientMetrics = cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where tostring(customDimensions.SchemaVersion) in ('2', '3')\n| extend\n    InvocationID = tostring(customDimensions.InvocationID),\n    AccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')\n| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'\n| summarize\n    EndTime = max(timestamp),\n    FinishedRows = countif(name == 'azcopy.job.finished'),\n    Account = take_any(AccountValue)\n  by InvocationID\n| where FinishedRows > 0 and isnotempty(Account)\n| summarize Jobs = count() by Hour = bin(EndTime, 1h), Account = tolower(Account);\nlet ServerRequests = XAggUserAgentTelemetryMetric()\n| where TimeWindow between (_startTime .. _endTime)\n| where Tool =~ 'azcopy'\n| summarize Requests = sum(RequestCount)\n  by Hour = bin(TimeWindow, 1h), Account = tolower(Account);\nClientMetrics\n| join kind=fullouter hint.strategy=broadcast ServerRequests on Hour, Account\n| where isempty(_account) or Account =~ _account\n| extend RequestsPerJob = Requests / iif(Jobs > 0, Jobs, 1)\n| project\n    timestamp = Hour,\n    Account,\n    Jobs,\n    Requests,\n    RequestsPerJob = round(RequestsPerJob, 2)\n| order by timestamp asc, Requests desc",
+      "id": "9d831d32-c45b-c237-827e-aa9419faccb7",
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_account"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+// Visual: Time chart
+let QueryStart = _startTime;
+let QueryEnd = _endTime;
+{{ENRICHED_FINISHED_JOBS}}
+{{ENRICHMENT_FILTERS}}
+FilteredFinishedJobs
+| summarize BytesTransferred = sum(BytesTransferred) by timestamp = startofmonth(EndTime)
+| project timestamp, DataTB = round(BytesTransferred / 1000000000000.0, 3)
+| order by timestamp asc

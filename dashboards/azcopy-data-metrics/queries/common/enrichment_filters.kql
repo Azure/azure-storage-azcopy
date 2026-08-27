@@ -1,0 +1,16 @@
+let FilteredFinishedJobs = materialize(
+    EnrichedFinishedJobs
+    | where SourceType in (_sourceType) or isempty(_sourceType)
+    | where DestType in (_destType) or isempty(_destType)
+    | where FromTo in (_fromTo) or isempty(_fromTo)
+    | where SourceMountType in (_sourceMountType) or isempty(_sourceMountType)
+    | where DestEndpointKind in (_destEndpointKind) or isempty(_destEndpointKind)
+    | where ClientRegion in (_clientRegion) or isempty(_clientRegion)
+    | where DestinationSubscriptionKey in (_destSubscription) or isempty(_destSubscription)
+    | where CustomerKey in (_customer) or isempty(_customer)
+    | where OfferType in (_offerType) or isempty(_offerType)
+    | where SubscriptionScope in (_subscriptionScope) or isempty(_subscriptionScope)
+    | where isempty(_account)
+        or SourceAccount =~ _account
+        or DestinationAccount =~ _account
+);
