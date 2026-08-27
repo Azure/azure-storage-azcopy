@@ -364,7 +364,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.
-		if f.orchestratorOptions.optimizeEnumerationByCTime && !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
+		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 			// if last succesful job start time is available and valid, compare with change time to decide
 			if sourceObject.changeTime.IsZero() {
 				// invalid change time
