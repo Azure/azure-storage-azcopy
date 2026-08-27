@@ -619,7 +619,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		// Ideally this should be the default behavior for all AzCopy builds, but this will be done post discussion with the team.
 		targetCheck = (loc == common.ELocation.File())
 	} else {
-		targetCheck = (loc.IsFile())
+		targetCheck = (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())
 	}
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
@@ -634,7 +634,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From().IsFile()))) && !disableAutoDecoding {
+		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
