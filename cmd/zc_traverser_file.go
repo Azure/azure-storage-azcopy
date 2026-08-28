@@ -616,6 +616,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	// GetShareScanPacer returns nil for non-Files URLs, leaving scanning unmetered.
 	if t.scanPacer == nil &&
 		(enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
+		common.LogToJobLogWithPrefix(fmt.Sprintf("[newFileTraverser] Initializing IOPS Pacer for the Enumeration for FileShare: %s", rawURL), common.LogInfo)
 		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 

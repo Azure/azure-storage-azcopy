@@ -22,6 +22,8 @@ package ste
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
@@ -66,5 +68,6 @@ func sourceSharePacer(sourceURL string) common.IOPSPacer {
 	if enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() != "true" {
 		return nil
 	}
+	common.LogToJobLogWithPrefix(fmt.Sprintf("Initializing IOPS Pacer for the COPY operation FileShare URL: %s", sourceURL), common.LogInfo)
 	return common.GetShareScanPacer(sourceURL)
 }

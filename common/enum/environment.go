@@ -402,7 +402,7 @@ func (eEnvironmentVariable) CredentialType() EnvironmentVariable {
 
 func (eEnvironmentVariable) EnableAzFilesProactiveStats() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:         "AZCOPY_ENABLE_AZFILES_PROACTIVE_STATS",
+		Name:         "AZCOPY_AZFILES_STATS_POLL",
 		DefaultValue: "false",
 		Description:  "When set to true, enables proactive polling of Azure Files share throttling statistics via GetShareStats for File-to-File transfers.",
 	}
