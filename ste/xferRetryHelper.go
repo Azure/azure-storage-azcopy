@@ -27,14 +27,30 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Defines the retry policy rules
 var RetryStatusCodes RetryCodes
 
-var platformRetryPolicy func(response *http.Response, err error) bool
+var platformRetriedErrnos []syscall.Errno
 
 type RetryFunc = func(*http.Response, error) bool
+
+func IsOSErrors(err error, errnos ...syscall.Errno) bool {
+	if err == nil {
+		return false
+	}
+
+	for _, v := range errnos {
+		if errors.Is(err, v) ||
+			strings.Contains(strings.ToLower(err.Error()), strings.ToLower(v.Error())) {
+			return true
+		}
+	}
+
+	return false
+}
 
 func GetShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
@@ -81,12 +97,14 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 				}
 			}
 		}
-		// fall back to our platform retry policy
-		if platformRetryPolicy != nil {
-			return platformRetryPolicy(resp, err)
-		} else {
-			return false // If we have none, don't retry.
+
+		// Check if we're in a retriable error defined by the OS specific file
+		if len(platformRetriedErrnos) > 0 &&
+			IsOSErrors(err, platformRetriedErrnos...) {
+			return true
 		}
+
+		return false
 	}
 }
 

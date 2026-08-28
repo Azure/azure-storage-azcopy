@@ -61,6 +61,10 @@ func (m *MockAccountResourceManager) mockSignature() {
 	panic("mockSignature should not be called")
 }
 
+func (m *MockAccountResourceManager) AvailableAuthTypes() ExplicitCredentialTypes {
+	return EExplicitCredentialType // stubbed for now because it isn't really called in dryrun
+}
+
 func (m *MockAccountResourceManager) AccountName() string {
 	return m.accountName
 }

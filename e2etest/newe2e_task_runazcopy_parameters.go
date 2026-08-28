@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // MapFromTags Recursively builds a map[string]string from a reflect.val
@@ -196,6 +197,7 @@ type GlobalFlags struct {
 	CapMbps          *float64 `flag:"cap-mbps"`
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
 	SkipVersionCheck *bool    `flag:"skip-version-check,default:true"`
+	CheckVersion     *bool    `flag:"check-version,default:false"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
 	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
@@ -301,8 +303,10 @@ type CopySyncCommonFlags struct {
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
-	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
+	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
+	FollowSymlinks          *bool                        `flag:"follow-symlinks"`
+	HardlinkType            *common.HardlinkHandlingType `flag:"hardlinks"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
@@ -433,6 +437,7 @@ type RemoveFlags struct {
 	TrailingDot     *common.TrailingDotOption     `flag:"trailing-dot"`
 	CPKByName       *string                       `flag:"cpk-by-name"`
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
+	ExcludePath     *string                       `flag:"exclude-path"`
 }
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {

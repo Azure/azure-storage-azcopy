@@ -120,7 +120,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		ScheduleTransfers: true,
 	}
 	jm.AddJobPart(args)
-
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
 		IsFinalPart:             order.IsFinalPart,
@@ -279,7 +278,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		common.EJobStatus.CompletedWithSkipped(),
 		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
-		common.EJobStatus.Paused():
+		common.EJobStatus.Paused(),
+		common.EJobStatus.Failed():
 		// go func() {
 		// Navigate through transfers and schedule them independently
 		// This is done to avoid FE to get blocked until all the transfers have been scheduled
