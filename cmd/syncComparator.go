@@ -349,13 +349,8 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return true, true
 	}
 
-<<<<<<< HEAD
 	// Compare last write times with precision tolerance
 	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, common.IsNFSCopy()) {
-=======
-	// Compare last write times
-	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
->>>>>>> 69aff3d4 (Remove destination LMT check)
 		return true, true
 	}
 
@@ -389,11 +384,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		}
 	}
 
-<<<<<<< HEAD
 	if common.IsNFSCopy() {
-=======
-	if isNFSCopy {
->>>>>>> 69aff3d4 (Remove destination LMT check)
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.
