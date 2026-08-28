@@ -206,6 +206,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		if !t.opts.dryrun {
 			common.GetLifecycleMgr().Info("Scanning...")
 			mgr.InitiateProgressReporting(ctx, t.tpt)
+			common.GetLifecycleMgr().E2EAwaitEnumerationStart(ctx)
 		}
 		err = enumerator.Enumerate()
 		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)

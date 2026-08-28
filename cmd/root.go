@@ -58,6 +58,7 @@ var SkipVersionCheck bool
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
+var azcopyAwaitEnumerationStart bool
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
@@ -108,6 +109,7 @@ var rootCmd = &cobra.Command{
 		ste.RetryStatusCodes = rsc
 
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
+		glcm.E2EEnableAwaitEnumerationStart(azcopyAwaitEnumerationStart)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
 		}
@@ -334,12 +336,18 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
 		"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
 			"\n Assists with testing cases around file modifications between scanning and usage")
+	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitEnumerationStart, "await-enumeration", false,
+		"Used by E2E tests to pause immediately before enumeration until the command is cancelled.")
 	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
 		"Used when debugging, to tell AzCopy to cancel the job midway."+
 			"\n List of relative paths to skip in the STE.")
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-enumeration")
+	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 
 	// special flags to be used in case of unexpected service errors.
 	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
