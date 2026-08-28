@@ -153,6 +153,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	if file2FileCopy == "true" && fromTo.From() == common.ELocation.File() && fromTo.To() == common.ELocation.File() {
 		if sp := common.GetOrCreateSharePacer(info.Source, 1); sp != nil {
 			scopedPacer = newShareScopedPacer(pacer, sp)
+			common.LogToJobLogWithPrefix("Created share-scoped pacer.", common.LogInfo)
 		}
 	}
 
