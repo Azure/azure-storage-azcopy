@@ -78,6 +78,10 @@ func NewClient(opts ClientOptions) (Client, error) {
 	}
 	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles)
+	// Initialize the process-wide HTTP client using the concurrency-derived idle-conn limit so
+	// the transport honors AZCOPY_CONCURRENCY_VALUE / auto-tuning, and so subsequent callers
+	// (JobMgr, traverser.CreateClientOptions, etc.) reuse the same configured client.
+	common.InitGlobalHTTPClient(concurrencySettings.MaxIdleConnections)
 	err = jobsAdmin.MainSTE(concurrencySettings, opts.CapMbps)
 	if err != nil {
 		return c, err

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# this script provides a quick way to validate whether a change causes a performance gain versus regression
+# This script provides a quick way to validate whether a change causes a performance gain versus regression.
+# This script may look like dead code, but we're keeping it for local use.
 
 RunCurrent () {
   ./azcopy_current cp 'src' 'dst' --recursive --log-level=WARNING --check-length=false

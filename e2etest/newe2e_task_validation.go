@@ -94,9 +94,11 @@ type ValidateResourceOptions struct {
 	fromTo                common.FromTo
 	preservePermissions   bool
 	preserveInfo          bool
+	hardlinkHandling      common.HardlinkHandlingType
 }
 
-func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T], validateOptions ValidateResourceOptions) {
+func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T],
+	validateOptions ValidateResourceOptions) {
 	a.AssertNow("Target resource and definition must not be null", Not{IsNil{}}, a, target, definition)
 	a.AssertNow("Target resource must be at a equal level to the resource definition", Equal{}, target.Level(), definition.DefinitionTarget())
 
@@ -145,8 +147,13 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties
 
-			if validateOptions.validateObjectContent && (objMan.EntityType() == common.EEntityType.File() ||
-				objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
+			if validateOptions.validateObjectContent &&
+				(objMan.EntityType() == common.EEntityType.File() ||
+					// Only validate hardlink content when hardlinks aren't followed.
+					// When we follow a hardlink, we are essentially treating it as a copy, so the content should be the same as the source. However,
+					// if we preserve hardlinks, we are treating it as a link.
+					(objMan.EntityType() == common.EEntityType.Hardlink() && validateOptions.hardlinkHandling != common.PreserveHardlinkHandlingType)) &&
+				objDef.Body != nil {
 
 				objBody := objMan.Download(a)
 				validationBody := objDef.Body.Reader()
@@ -271,6 +278,45 @@ func ValidateHardlinksConvertedCount(a Asserter, stdOut AzCopyStdout, expected u
 	hardlinksConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
 	if hardlinksConvertedCount != expected {
 		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinksConvertedCount))
+	}
+	return
+}
+
+func ValidateHardlinksTransferCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	hardlinksTransferredCount := parsedStdout.FinalStatus.HardlinksTransferCount
+	if hardlinksTransferredCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink transferred count (%d) received count (%d)", expected, hardlinksTransferredCount))
+	}
+	return
+}
+
+func ValidateHardlinksSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	hardlinksSkippedCount := parsedStdout.FinalStatus.SkippedHardlinkCount
+	if hardlinksSkippedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink skipped count (%d) received count (%d)", expected, hardlinksSkippedCount))
+	}
+	return
+}
+
+func ValidateSymlinksTransferCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	symlinksTransferredCount := parsedStdout.FinalStatus.SymlinkTransfers
+	if symlinksTransferredCount != expected {
+		a.Error(fmt.Sprintf("expected symlink transferred count (%d) received count (%d)", expected, symlinksTransferredCount))
 	}
 	return
 }
