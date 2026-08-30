@@ -134,7 +134,8 @@ func newSyncDestinationComparator(
 
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
 		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
-		 orchestratorOptions.fromTo.From() == common.ELocation.File())
+			orchestratorOptions.fromTo.From() == common.ELocation.File() ||
+			orchestratorOptions.fromTo.From() == common.ELocation.FileNFS())
 
 	return comp
 }
