@@ -297,7 +297,7 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 		err = validateBlobRoot(path)
 	case common.ELocation.BlobFS():
 		err = validateBlobFSRoot(path)
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		err = validateFileShareRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
