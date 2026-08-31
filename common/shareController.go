@@ -339,6 +339,13 @@ func ShareURLFromRawURL(raw string) string {
 	if len(seg) == 0 || seg[0] == "" {
 		return ""
 	}
-	shareURL := url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/" + seg[0], RawQuery: u.RawQuery}
+	// GetShareStats rejects sharesnapshot; throttling limits belong to the live share.
+	// Left untouched otherwise, so a SAS is never re-encoded.
+	rawQuery := u.RawQuery
+	if q := u.Query(); q.Has("sharesnapshot") {
+		q.Del("sharesnapshot")
+		rawQuery = q.Encode()
+	}
+	shareURL := url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/" + seg[0], RawQuery: rawQuery}
 	return shareURL.String()
 }
