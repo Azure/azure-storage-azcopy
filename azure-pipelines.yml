@@ -154,7 +154,9 @@ jobs:
   - job: Unit_and_Python_Tests
     variables:
       isMutexSet: 'false'
-      coverageDir: 'coverage'
+      nonFederatedUnitTestDirectories: 'azcopy, cmd, common, common/parallel, jobsAdmin, mock_server, sddl, traverser'
+      federatedUnitTestDirectories: 'ste'
+      pythonCoverageDirectory: 'coverage'
       pythonCoverageReportName: 'smoke_coverage'
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
@@ -196,71 +198,37 @@ jobs:
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         displayName: 'Acquire the Distributed Mutex'
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'azcopy'
-          coverage_name: 'azcopy'
-          isMutexSet: variables['isMutexSet']
+      - ${{ each directory in split(variables.nonFederatedUnitTestDirectories, ', ') }}:
+        - template: azurePipelineTemplates/run-ut.yml
+          parameters:
+            directory: ${{ directory }}
+            coverage_name: ${{ replace(directory, '/', '.') }} # Replace all forward slashes with periods, to avoid creating directories.
+            isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'cmd'
-          coverage_name: 'cmd'
-          isMutexSet: variables['isMutexSet']
-
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common'
-          coverage_name: 'common'
-          isMutexSet: variables['isMutexSet']
-
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common/parallel'
-          coverage_name: 'parallel'
-          isMutexSet: variables['isMutexSet']
-
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'mock_server'
-          coverage_name: 'mock_server'
-          isMutexSet: variables['isMutexSet']
-
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'sddl'
-          coverage_name: 'sddl'
-          isMutexSet: variables['isMutexSet']
-
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'ste'
-          coverage_name: 'ste'
-          with_federated_credential: true
-          isMutexSet: variables['isMutexSet']
-
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'traverser'
-          coverage_name: 'traverser'
-          isMutexSet: variables['isMutexSet']
+      - ${{ each directory in split(variables.federatedUnitTestDirectories, ', ') }}:
+        - template: azurePipelineTemplates/run-ut.yml
+          parameters:
+            directory: ${{ directory }}
+            coverage_name: ${{ replace(directory, '/', '.') }} # Replace all forward slashes with periods, to avoid creating directories.
+            with_federated_credential: true
+            isMutexSet: variables['isMutexSet']
 
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
           go build -tags "netgo" -o test-validator ./testSuite/
           mkdir test-temp
-          mkdir "$(coverageDir)"
+          mkdir "$(pythonCoverageDirectory)"
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
           # Run tests and write coverage data to a directory
-          echo "Running tests. Writing coverage data to \"$(coverageDir)\" directory."
+          echo "Running tests. Writing coverage data to \"$(pythonCoverageDirectory)\" directory."
           keyctl session test python ./testSuite/scripts/run.py
           
           # Convert coverage data to text format
           echo "Generating plain-text coverage report $(pythonCoverageReportName).txt"
-          go tool covdata textfmt -i="$(coverageDir)" -o "$(pythonCoverageReportName).txt"
+          go tool covdata textfmt -i="$(pythonCoverageDirectory)" -o "$(pythonCoverageReportName).txt"
 
           # Convert coverage data to JSON format
           echo "Generating JSON coverage report $(pythonCoverageReportName).json"
@@ -292,7 +260,7 @@ jobs:
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
-          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/$(coverageDir)'
+          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/$(pythonCoverageDirectory)'
         displayName: 'Run Python Tests'
         # Don't let a unit-test failure prevent the Python tests from running,
         # but don't run if job is canceled or mutex wasn't acquired
