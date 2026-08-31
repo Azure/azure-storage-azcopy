@@ -46,14 +46,9 @@ const (
 	telemetrySchemaVersion = "3"
 )
 
-// telemetryConnectionString is injected into official binaries at build time.
-// It remains empty for local builds, which fail closed with telemetry disabled.
-// It may be set at build time, e.g.:
-//
-//	-ldflags "-X github.com/Azure/azure-storage-azcopy/v10/azcopy.telemetryConnectionString=<conn>"
-//
-// or overridden at runtime via AZCOPY_TELEMETRY_CONNECTION_STRING.
-var telemetryConnectionString string
+// telemetryConnectionString defaults to the test Application Insights component.
+// AZCOPY_TELEMETRY_CONNECTION_STRING overrides it at runtime.
+var telemetryConnectionString = "InstrumentationKey=09115a66-cd5e-4f48-b9b6-f71c883eed46;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=e43bbaa9-f24c-4613-b098-9e80a2a8216a"
 
 // telemetryDisabledByFlag is set from the --disable-telemetry CLI flag (wired
 // through ClientOptions.DisableTelemetry). When true, telemetry is disabled
@@ -61,7 +56,7 @@ var telemetryConnectionString string
 var telemetryDisabledByFlag bool
 
 const (
-	// envTelemetryConnectionString overrides the build-time connection string.
+	// envTelemetryConnectionString overrides the embedded connection string.
 	envTelemetryConnectionString = "AZCOPY_TELEMETRY_CONNECTION_STRING"
 	// envDisableTelemetry, when set to "true", disables telemetry entirely.
 	envDisableTelemetry = "AZCOPY_DISABLE_TELEMETRY"

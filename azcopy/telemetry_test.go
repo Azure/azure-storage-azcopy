@@ -671,6 +671,16 @@ func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
 func TestConfiguredTelemetryConnectionString(t *testing.T) {
 	original := telemetryConnectionString
 	t.Cleanup(func() { telemetryConnectionString = original })
+	assert.Contains(t, original, "InstrumentationKey=09115a66-cd5e-4f48-b9b6-f71c883eed46")
+	assert.Contains(t, original, "IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/")
+	assert.Equal(t, original, configuredTelemetryConnectionString(func(string) string { return "" }))
+	assert.Equal(t, original, configuredTelemetryConnectionString(func(string) string { return " \t " }))
+	assert.Empty(t, configuredTelemetryConnectionString(func(string) string {
+		return "InstrumentationKey=00000000-0000-0000-0000-000000000000"
+	}))
+	assert.Equal(t, "InstrumentationKey=override;IngestionEndpoint=https://example.test/", configuredTelemetryConnectionString(func(string) string {
+		return " InstrumentationKey=override;IngestionEndpoint=https://example.test/ "
+	}))
 
 	telemetryConnectionString = ""
 	assert.Empty(t, configuredTelemetryConnectionString(func(string) string { return "" }))
@@ -686,6 +696,40 @@ func TestConfiguredTelemetryConnectionString(t *testing.T) {
 		}
 		return ""
 	}))
+}
+
+func TestTelemetryEmbeddedDefaultHonorsOptOut(t *testing.T) {
+	originalFlag := telemetryDisabledByFlag
+	t.Cleanup(func() { telemetryDisabledByFlag = originalFlag })
+	t.Setenv(envTelemetryConnectionString, "")
+	t.Setenv(envDisableTelemetry, "true")
+	telemetryDisabledByFlag = false
+	agent := newTelemetryAgent()
+	assert.False(t, agent.enabled)
+	assert.Nil(t, agent.reporter)
+	assert.Empty(t, agent.resource.InstallationID)
+
+	t.Setenv(envDisableTelemetry, "false")
+	telemetryDisabledByFlag = true
+	agent = newTelemetryAgent()
+	assert.False(t, agent.enabled)
+	assert.Nil(t, agent.reporter)
+	assert.Empty(t, agent.resource.InstallationID)
+}
+
+func TestTelemetryBuildsUseEmbeddedDefault(t *testing.T) {
+	for _, path := range []string{
+		"../azurePipelineTemplates/build_linux.yml",
+		"../azurePipelineTemplates/build_windows.yml",
+		"../azurePipelineTemplates/build_macos.yml",
+		"../.github/workflows/build_m1.yml",
+	} {
+		contents, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(contents), "go build", path)
+		assert.NotContains(t, string(contents), "azcopy.telemetryConnectionString", path)
+		assert.NotContains(t, string(contents), "AZCOPY_TELEMETRY_CONNECTION_STRING_PROD", path)
+	}
 }
 
 func TestTerminalAttemptStatus(t *testing.T) {

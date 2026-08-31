@@ -28,7 +28,8 @@ AzCopy V10 presents easy-to-use commands that are optimized for high performance
 
 ## Usage telemetry
 
-When an Application Insights connection string is configured, AzCopy can send
+This feature branch embeds the `azcopy-telemetry-test-ai` Application Insights
+connection string as its default, including in local builds. AzCopy can send
 best-effort usage and performance telemetry, including Azure Storage account
 names and pseudonymous installation, invocation, and job identifiers. Telemetry
 also includes host characteristics, transfer categories, selected option values,
@@ -43,8 +44,11 @@ not included in these properties. Account names are linkable identifiers, so
 this telemetry should not be treated as anonymous.
 
 Disable telemetry with `--disable-telemetry` or by setting
-`AZCOPY_DISABLE_TELEMETRY=true`. Builds without a configured connection string
-do not send telemetry.
+`AZCOPY_DISABLE_TELEMETRY=true`. Override the destination by setting
+`AZCOPY_TELEMETRY_CONNECTION_STRING` to another connection string before starting
+AzCopy. An unset or blank override uses the embedded test destination. The agent
+caches its configuration for the process lifetime. This test default is temporary
+and must be replaced with the approved production destination before release.
 
 ## Download AzCopy
 The latest binary for AzCopy along with installation instructions may be found
