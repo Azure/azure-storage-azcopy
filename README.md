@@ -26,6 +26,26 @@ AzCopy V10 presents easy-to-use commands that are optimized for high performance
 
 :white_check_mark: Recover from failures by restarting previous jobs.
 
+## Usage telemetry
+
+When an Application Insights connection string is configured, AzCopy can send
+best-effort usage and performance telemetry, including Azure Storage account
+names and pseudonymous installation, invocation, and job identifiers. Telemetry
+also includes host characteristics, transfer categories, selected option values,
+and aggregate workload, performance, and error measurements.
+
+`SourceStorageAccount` and `DestStorageAccount` are properties of job-started
+and job-finished events for copy, sync, resume, and benchmark transfers. They
+contain only the lowercase account-name label from recognized Azure Storage
+endpoint hosts. Non-Azure endpoints, custom hosts, and local paths produce empty
+account values. Full URLs, SAS tokens, credentials, paths, and object names are
+not included in these properties. Account names are linkable identifiers, so
+this telemetry should not be treated as anonymous.
+
+Disable telemetry with `--disable-telemetry` or by setting
+`AZCOPY_DISABLE_TELEMETRY=true`. Builds without a configured connection string
+do not send telemetry.
+
 ## Download AzCopy
 The latest binary for AzCopy along with installation instructions may be found
 [here](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10).
