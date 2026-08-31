@@ -38,20 +38,20 @@ jobs:
           echo 'Running GO Vet'
           go vet 
         workingDirectory: $(System.DefaultWorkingDirectory)
-        displayName: 'Golang Vet - Linux'
+        displayName: 'Golang Vet'
 
       - script: |
           sudo apt-get update
           sudo apt-get install -y libsecret-1-dev libglib2.0-dev
         displayName: 'Install dependencies'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'linux'))
 
       - script: |
           go run "common/manifest/main.go"
         displayName: 'Create resource.syso files'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'windows'))
         
       - script: |
           go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
@@ -59,8 +59,8 @@ jobs:
           GOARCH: amd64
           GOOS: linux
         displayName: 'Generate Linux AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'linux'))
 
       - script: |
           go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
@@ -68,8 +68,8 @@ jobs:
           GOARCH: amd64
           GOOS: linux
         displayName: 'Generate Linux AMD64 SE Integration'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'linux'))
 
       - script: |
           go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
@@ -77,8 +77,8 @@ jobs:
           GOARCH: arm64
           GOOS: linux
         displayName: 'Generate Linux ARM64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'linux'))
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
@@ -87,8 +87,8 @@ jobs:
           GOOS: windows
           CGO_ENABLED: 0
         displayName: 'Generate Windows AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'windows'))
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
@@ -97,29 +97,29 @@ jobs:
           GOOS: windows
           CGO_ENABLED: 0
         displayName: 'Generate Windows i386'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'windows'))
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Copy NOTICE.txt'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'linux'))
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         env:
           CGO_ENABLED: 1
         displayName: 'Generate MacOS Build with AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'mac-os'))
 
       # uncomment below when manually releasing for m1
       # - script: |
       #     curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
       #   displayName: 'Generate MacOS Build with ARM64'
-      #   # Don't run if job is canceled
-      #   condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
+      #   # Don't run if job is canceled or fails
+      #   condition: and(succeeded(), eq(variables.type, 'mac-os'))
 
       # cross compile to make sure nothing broke
       - script: |
@@ -128,8 +128,8 @@ jobs:
           GOARCH: arm64
           CGO_ENABLED: 1
         displayName: 'Test Cross-compiled MacOS Build with ARM64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.type, 'mac-os'))
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish Artifacts'
@@ -348,8 +348,8 @@ jobs:
           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
           az --version
         displayName: 'Install Azure CLI - Linux'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.GOOS, 'linux'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.GOOS, 'linux'))
 
       - task: PowerShell@2
         inputs:
@@ -358,8 +358,8 @@ jobs:
             choco install azure-cli -y
             az --version
         displayName: 'Install Azure CLI - Windows'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.GOOS, 'windows'))
+        # Don't run if job is canceled or fails
+        condition: and(succeeded(), eq(variables.GOOS, 'windows'))
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
