@@ -179,12 +179,14 @@ func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 }
 
 var RunAzCopyDefaultInheritEnvironment = map[string]bool{
-	"path":             true,
-	"home":             true,
-	"userprofile":      true,
-	"homepath":         true,
-	"homedrive":        true,
-	"azure_config_dir": true,
+	"path":                               true,
+	"home":                               true,
+	"userprofile":                        true,
+	"homepath":                           true,
+	"homedrive":                          true,
+	"azure_config_dir":                   true,
+	"azcopy_telemetry_connection_string": true,
+	"azcopy_e2e_telemetry_run_id":        true,
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
@@ -502,12 +504,13 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	stderr := &bytes.Buffer{}
+	jobIDCapture := newAzCopyJobIDCapture(out)
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
 		Args: args,
 		Env:  env,
 
-		Stdout: out, // todo
+		Stdout: jobIDCapture,
 		Stderr: stderr,
 	}
 	in, err := command.StdinPipe()
@@ -540,5 +543,50 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		Stderr: stderr.String(),
 	})
 
+	validationDecision := decideAppInsightsJobValidation(
+		commandSpec.Verb,
+		flagMap,
+		commandSpec.ShouldFail,
+		jobIDCapture.JobID())
+	if AppInsightsTelemetryValidationEnabled() && validationDecision.missingJobID {
+		a.NoError("capture AzCopy job ID for Application Insights validation",
+			fmt.Errorf("AzCopy %s output did not contain a valid job ID", commandSpec.Verb))
+	}
+	RegisterExpectedAppInsightsJob(validationDecision.jobID)
+
 	return out, &AzCopyJobPlan{}
+}
+
+func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
+	switch verb {
+	case AzCopyVerbCopy, AzCopyVerbSync, AzCopyVerbJobsResume:
+		return true
+	default:
+		return false
+	}
+}
+
+func azCopyCommandProducesJobFinishedTelemetry(verb AzCopyVerb, flags map[string]string) bool {
+	return azCopyVerbProducesJobFinishedTelemetry(verb) &&
+		!strings.EqualFold(flags["dry-run"], "true")
+}
+
+type appInsightsJobValidationDecision struct {
+	missingJobID bool
+	jobID        string
+}
+
+func decideAppInsightsJobValidation(
+	verb AzCopyVerb,
+	flags map[string]string,
+	shouldFail bool,
+	jobID string,
+) appInsightsJobValidationDecision {
+	if !azCopyCommandProducesJobFinishedTelemetry(verb, flags) {
+		return appInsightsJobValidationDecision{}
+	}
+	if jobID != "" {
+		return appInsightsJobValidationDecision{jobID: jobID}
+	}
+	return appInsightsJobValidationDecision{missingJobID: !shouldFail}
 }
