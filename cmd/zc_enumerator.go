@@ -420,8 +420,9 @@ type InitResourceTraverserOptions struct {
 
 	IncrementNotTransferred enumerationCounterFunc
 
-	// IsSyncDestination indicates this traverser is enumerating the destination side of a sync job.
-	// Used to return specific not-found errors that the sync orchestrator handles gracefully.
+	// IsSyncDestination indicates this traverser targets the destination side of a job.
+	// Used to return specific not-found errors that the sync orchestrator handles gracefully,
+	// and to keep per-share throttling stats polling on the source share only.
 	IsSyncDestination bool
 
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations

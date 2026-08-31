@@ -25,6 +25,22 @@ import (
 	"testing"
 )
 
+func TestDualPacer_IopsBurstCapacity(t *testing.T) {
+	const target int64 = 5000
+
+	azureFilesPacer := newRateLimitTokenBucketPacer(0, target, azureFilesIopsBurstSeconds)
+	defer func() { _ = azureFilesPacer.Close() }()
+	if got := azureFilesPacer.iopsBucket.maxTokenCapacity(target); got != target {
+		t.Fatalf("Azure Files IOPS capacity: want %d, got %d", target, got)
+	}
+
+	defaultPacer := NewRateLimitTokenBucketPacer(0, target)
+	defer func() { _ = defaultPacer.Close() }()
+	if got, want := defaultPacer.iopsBucket.maxTokenCapacity(target), int64(float32(target)*maxSecondsToOverpopulateBucket); got != want {
+		t.Fatalf("default IOPS capacity: want %d, got %d", want, got)
+	}
+}
+
 // TestDualPacer_AcquireIO_RollsBackIopsOnBandwidthFailure verifies the
 // "reserve both or reserve none" guarantee: when the IOPS reservation succeeds
 // but the bandwidth reservation fails, the IOP token is returned so the two

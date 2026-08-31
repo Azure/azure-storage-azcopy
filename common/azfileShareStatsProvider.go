@@ -28,9 +28,10 @@ type ShareStatsProvider struct {
 
 // NewShareStatsProvider creates a provider that can fetch throttling stats for the given share.
 // shareURL should be the full share URL as returned by share.Client.URL() (includes SAS if present).
+// Diagnostics go through LogToJobLogWithPrefix rather than logger, because the
+// injected logger is nil when this is constructed from MainSTE.
 func NewShareStatsProvider(shareURL string, httpClient *http.Client, logger ILogger) *ShareStatsProvider {
-	// Add trace logging for initialization.
-	logger.Log(LogInfo, fmt.Sprintf("Initializing ShareStatsProvider for %s", shareURL))
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] initializing provider for %s", shareURL), LogInfo)
 	return &ShareStatsProvider{
 		shareURL:   shareURL,
 		httpClient: httpClient,
@@ -42,13 +43,13 @@ func NewShareStatsProvider(shareURL string, httpClient *http.Client, logger ILog
 func (p *ShareStatsProvider) FetchStats(ctx context.Context) (*ShareStatsResponse, error) {
 	reqURL, err := p.buildRequestURL()
 	if err != nil {
-		p.logger.Log(LogError, fmt.Sprintf("building GetShareStats URL: %v", err))
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] building GetShareStats URL: %v", err), LogError)
 		return nil, fmt.Errorf("building GetShareStats URL: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		p.logger.Log(LogError, fmt.Sprintf("creating GetShareStats request: %v", err))
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] creating GetShareStats request: %v", err), LogError)
 		return nil, fmt.Errorf("creating GetShareStats request: %w", err)
 	}
 
@@ -59,26 +60,26 @@ func (p *ShareStatsProvider) FetchStats(ctx context.Context) (*ShareStatsRespons
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		p.logger.Log(LogError, fmt.Sprintf("Error executing GetShareStats request %v",  err))
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] executing GetShareStats request: %v", err), LogError)
 		return nil, fmt.Errorf("executing GetShareStats request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		p.logger.Log(LogError, fmt.Sprintf("GetShareStats returned status %d: %s", resp.StatusCode, string(body)))
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] GetShareStats returned status %d: %s", resp.StatusCode, string(body)), LogError)
 		return nil, fmt.Errorf("GetShareStats returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		p.logger.Log(LogError, fmt.Sprintf("Error reading GetShareStats response body: %v", err))
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] reading GetShareStats response body: %v", err), LogError)
 		return nil, fmt.Errorf("reading GetShareStats response body: %w", err)
 	}
 
 	var stats ShareStatsResponse
 	if err := xml.Unmarshal(bodyBytes, &stats); err != nil {
-		p.logger.Log(LogError, fmt.Sprintf("Error parsing GetShareStats XML response: %v", err))
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] parsing GetShareStats XML response: %v", err), LogError)
 		return nil, fmt.Errorf("parsing GetShareStats XML response: %w", err)
 	}
 

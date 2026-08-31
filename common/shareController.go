@@ -82,17 +82,19 @@ func RegisterSharePacerFactory(f func() SharePacer) {
 }
 
 // shareStatsSourceFactory builds the poll-based stats adapter for a share key.
+// shareURL carries the scheme, host, share name and any SAS, since the stats
+// poller issues a raw HTTP request and has no credential of its own.
 // Until the real SDK-backed source is injected via RegisterResourceStatsSourceFactory
 // it returns a stub reporting no limits (unlimited) and no throttles, keeping
 // every per-share controller inert (no behavior change).
-var shareStatsSourceFactory func(shareKey string) ResourceStatsSource = func(string) ResourceStatsSource {
+var shareStatsSourceFactory func(shareKey, shareURL string) ResourceStatsSource = func(string, string) ResourceStatsSource {
 	return stubResourceStatsSource{}
 }
 
 // RegisterResourceStatsSourceFactory injects the real poll-based stats adapter
 // (e.g. Azure Files GetShareStats mapped onto ResourceStats). Passing nil is
 // ignored.
-func RegisterResourceStatsSourceFactory(f func(shareKey string) ResourceStatsSource) {
+func RegisterResourceStatsSourceFactory(f func(shareKey, shareURL string) ResourceStatsSource) {
 	if f != nil {
 		shareStatsSourceFactory = f
 		statsSourceFactoryRegistered = true
@@ -142,11 +144,15 @@ var (
 	shareControlsWg sync.WaitGroup
 )
 
-// getOrCreateShareControl returns the per-share control for shareKey, lazily
-// creating it (and starting its GetShareStats poll loop) on first use. workers
-// is the equal-share denominator used in proactive mode.
-func getOrCreateShareControl(shareKey string, workers int64) *shareControl {
+// getOrCreateShareControl returns the per-share control for rawURL, lazily
+// creating it (and starting its GetShareStats poll loop) on first use. Both the
+// share key and the SAS-bearing share URL are derived from rawURL. workers is
+// the equal-share denominator used in proactive mode. Returns nil for non-Files
+// URLs so callers can fall back to their default pacer unchanged.
+func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
+	shareKey := ShareKeyFromRawURL(rawURL)
 	if shareKey == "" {
+		traceShare(LogDebug, "no share control: %q is not an Azure Files share URL", rawURL)
 		return nil
 	}
 	shareControlsMu.Lock()
@@ -161,12 +167,21 @@ func getOrCreateShareControl(shareKey string, workers int64) *shareControl {
 		workers = 1
 	}
 	pacer := sharePacerFactory()
-	statsSource := shareStatsSourceFactory(shareKey)
+	statsSource := shareStatsSourceFactory(shareKey, ShareURLFromRawURL(rawURL))
 	ctrl := controllerFactory(pacer, statsSource, workers)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := &shareControl{pacer: pacer, ctrl: ctrl, stop: cancel}
 	shareControls[shareKey] = sc
+	shareControlsMu.Unlock()
+
+	// Primed before the poller starts, otherwise the pacer sits at its unlimited
+	// (0,0) target until the first tick and the job's opening window is unpaced.
+	if _, err := ctrl.Refresh(); err != nil {
+		traceShare(LogError, "priming poll failed for %s: %v", shareKey, err)
+	}
+	iops, bw := controllerRates(ctrl)
+	traceShare(LogDebug, "control ready for %s: mode=%s primedRates(iops=%d bw=%d)", shareKey, ctrl.Mode(), iops, bw)
 
 	go startShareStatsPoller(ctx, shareKey, ctrl)
 	return sc
@@ -254,7 +269,7 @@ func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceControlle
 // share's dual-resource controller if needed), or nil for non-Files URLs so
 // callers can fall back to their default pacer unchanged.
 func GetOrCreateSharePacer(shareURL string, workers int64) SharePacer {
-	sc := getOrCreateShareControl(ShareKeyFromRawURL(shareURL), workers)
+	sc := getOrCreateShareControl(shareURL, workers)
 	if sc == nil {
 		return nil
 	}
@@ -267,12 +282,7 @@ func GetOrCreateSharePacer(shareURL string, workers int64) SharePacer {
 // per-share budget as the data plane. Returns nil for non-Files URLs so
 // enumeration there stays unmetered.
 func GetShareScanPacer(shareURL string) IOPSPacer {
-	shareKey := ShareKeyFromRawURL(shareURL)
-	if shareKey == "" {
-		traceShare(LogDebug, "no scan pacer: %q is not an Azure Files share URL", shareURL)
-		return nil
-	}
-	sc := getOrCreateShareControl(shareKey, 1)
+	sc := getOrCreateShareControl(shareURL, 1)
 	if sc == nil {
 		return nil
 	}
@@ -311,4 +321,24 @@ func ShareKeyFromRawURL(raw string) string {
 		return ""
 	}
 	return strings.ToLower(u.Host) + "/" + seg[0]
+}
+
+// ShareURLFromRawURL returns the share-scoped URL (scheme, host, share name and
+// any SAS) for an Azure Files URL. The stats poller issues a raw HTTP request
+// with no credential of its own, so the SAS must be preserved here. Returns ""
+// for non-Files URLs.
+func ShareURLFromRawURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if !strings.Contains(strings.ToLower(u.Host), ".file.") {
+		return ""
+	}
+	seg := strings.SplitN(strings.TrimPrefix(u.Path, "/"), "/", 2)
+	if len(seg) == 0 || seg[0] == "" {
+		return ""
+	}
+	shareURL := url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/" + seg[0], RawQuery: u.RawQuery}
+	return shareURL.String()
 }

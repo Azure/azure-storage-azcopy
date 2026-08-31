@@ -32,7 +32,7 @@ import (
 // The pacer starts fully unlimited (0,0); the controller drives it thereafter.
 func init() {
 	common.RegisterSharePacerFactory(func() common.SharePacer {
-		return NewRateLimitTokenBucketPacer(0, 0)
+		return newRateLimitTokenBucketPacer(0, 0, azureFilesIopsBurstSeconds)
 	})
 }
 

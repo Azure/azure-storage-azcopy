@@ -77,6 +77,8 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 		burstIosLimit:             ts.BurstIosLimit,
 		throttlingAvailable:       true,
 	}
+	// Log the newly created sample for debugging purposes.
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] new sample %s", sample), LogDebug)	
 
 	if s.prevSample == nil {
 		// First poll only establishes the baseline; the controller's own `primed`
@@ -104,12 +106,12 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 	}
 	samplingPeriodInSecs := sample.endTime.Sub(s.prevSample.endTime).Seconds()
 	
-	if (samplingPeriodInSecs >= 150)  {
-		LogToJobLogWithPrefix(fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs), LogError)
+	if samplingPeriodInSecs >= 150 {
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] unexpected poll interval: %.1f seconds", samplingPeriodInSecs), LogError)
 	}
-	LogToJobLogWithPrefix(fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs), LogDebug)
-	LogToJobLogWithPrefix(fmt.Sprintf("Current Stats: %+v", ts), LogDebug)
-	LogToJobLogWithPrefix(fmt.Sprintf("Previous Stats: %+v", s.prevSample), LogDebug)
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] poll interval %.1fs", samplingPeriodInSecs), LogDebug)
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] current  %s", sample), LogDebug)
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] previous %s", s.prevSample), LogDebug)
 
 	s.prevSample = sample
 
@@ -123,16 +125,17 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 }
 
 // ShareStatsSourceFactory returns a factory function suitable for registration
-// via RegisterResourceStatsSourceFactory. It constructs an
-// azfileShareStatsSource per share key using the provided HTTP client and logger.
+// via RegisterResourceStatsSourceFactory. shareURL carries the SAS needed to
+// authenticate the raw GetShareStats request; when it is empty the URL is
+// rebuilt from the key, which only works for anonymously readable shares.
 //
 // Registered from jobsAdmin.MainSTE when Azure Files proactive stats are enabled.
-func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey string) ResourceStatsSource {
+func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey, shareURL string) ResourceStatsSource {
 	LogToJobLogWithPrefix("Initializing ShareStatsSourceFactory", LogInfo)
-	return func(shareKey string) ResourceStatsSource {
-		// shareKey is "account.file.core.windows.net/sharename" (no scheme).
-		// Reconstruct a full HTTPS URL for the raw HTTP call.
-		shareURL := "https://" + shareKey
+	return func(shareKey, shareURL string) ResourceStatsSource {
+		if shareURL == "" {
+			shareURL = "https://" + shareKey
+		}
 		return NewAzfileShareStatsSource(shareURL, httpClient, logger)
 	}
 }
