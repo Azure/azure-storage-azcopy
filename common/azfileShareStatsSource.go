@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // azfileShareStatsSource implements ResourceStatsSource by polling the Azure
@@ -28,9 +30,15 @@ type azfileShareStatsSource struct {
 // shareURL must include any SAS token required for auth. httpClient should be
 // the global AzCopy HTTP client.
 func NewAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger ILogger) ResourceStatsSource {
+	return newAzfileShareStatsSource(shareURL, httpClient, logger, nil)
+}
+
+// newAzfileShareStatsSource additionally takes the credential to use when shareURL
+// carries no SAS.
+func newAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger ILogger, tokenCred azcore.TokenCredential) ResourceStatsSource {
 	LogToJobLogWithPrefix(fmt.Sprintf("Initializing azfileShareStatsSource for %s", shareURL), LogInfo)
 	return &azfileShareStatsSource{
-		provider: NewShareStatsProvider(shareURL, httpClient, logger),
+		provider: NewShareStatsProvider(shareURL, httpClient, logger, tokenCred),
 	}
 }
 
@@ -128,14 +136,15 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 // via RegisterResourceStatsSourceFactory. shareURL carries the SAS needed to
 // authenticate the raw GetShareStats request; when it is empty the URL is
 // rebuilt from the key, which only works for anonymously readable shares.
+// tokenCred is used instead when the job authenticates with OAuth.
 //
 // Registered from jobsAdmin.MainSTE when Azure Files proactive stats are enabled.
-func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey, shareURL string) ResourceStatsSource {
-	LogToJobLogWithPrefix("Initializing ShareStatsSourceFactory", LogInfo)
-	return func(shareKey, shareURL string) ResourceStatsSource {
+func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource {		
+	return func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource {
+		LogToJobLogWithPrefix(fmt.Sprintf("Initializing ShareStatsSourceFactory"), LogInfo)
 		if shareURL == "" {
 			shareURL = "https://" + shareKey
 		}
-		return NewAzfileShareStatsSource(shareURL, httpClient, logger)
+		return newAzfileShareStatsSource(shareURL, httpClient, logger, tokenCred)
 	}
 }
