@@ -193,9 +193,15 @@ func (p *tokenBucketPacer) pacerBody() {
 		}
 
 		/*check if we have to update target rate */
-		if newTarget != p.targetBytesPerSecond() && time.Since(lastTargetUpdateTime) >= deadBandDuration {
-			p.setTargetBytesPerSecond(newTarget)
-			lastTargetUpdateTime = time.Now()
+		if current := p.targetBytesPerSecond(); newTarget != current {
+			// A tightening target is an authoritative "slow down now" signal (a 503, or
+			// the GetShareStats controller's multiplicative decrease), so it skips the
+			// dead band that exists to damp increases. 0 means unlimited.
+			tightening := newTarget != 0 && (current == 0 || newTarget < current)
+			if tightening || time.Since(lastTargetUpdateTime) >= deadBandDuration {
+				p.setTargetBytesPerSecond(newTarget)
+				lastTargetUpdateTime = time.Now()
+			}
 		}
 
 		currentTarget := atomic.LoadInt64(&p.atomicTargetBytesPerSecond)

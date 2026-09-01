@@ -67,7 +67,6 @@ func pacerAcquire(ctx context.Context, p pacer, bytes, ops int64) error {
 func sourceSharePacer(sourceURL string) common.IOPSPacer {
 	if enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() != "true" {
 		return nil
-	}
-	common.LogToJobLogWithPrefix(fmt.Sprintf("Initializing IOPS Pacer for the COPY operation FileShare URL: %s", sourceURL), common.LogInfo)
+	}	
 	return common.GetShareScanPacer(sourceURL)
 }
