@@ -22,8 +22,6 @@ package ste
 
 import (
 	"context"
-	"fmt"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
