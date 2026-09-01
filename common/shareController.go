@@ -167,15 +167,26 @@ var (
 // and the first registration for an account wins.
 func RegisterShareStatsCredential(host string, tokenCred azcore.TokenCredential) {
 	if host == "" || tokenCred == nil {
-		traceShare(LogDebug, "Registering share stats credential for host: %q but input is nil or empty", host)
+		return
+	}
+	host = strings.ToLower(host)
+
+	// Service clients are rebuilt per traverser, so skip the write lock on the
+	// overwhelmingly common repeat registration.
+	shareStatsCredsMu.RLock()
+	_, exists := shareStatsCreds[host]
+	shareStatsCredsMu.RUnlock()
+	if exists {
 		return
 	}
 
 	shareStatsCredsMu.Lock()
-	if _, exists = shareStatsCreds[host]; !exists {
+	_, exists = shareStatsCreds[host]
+	if !exists {
 		shareStatsCreds[host] = tokenCred
 	}
 	shareStatsCredsMu.Unlock()
+
 	if !exists {
 		traceShare(LogDebug, "registered share stats credential for host %q", host)
 	}
