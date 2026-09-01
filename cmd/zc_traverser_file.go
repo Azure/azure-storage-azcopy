@@ -617,7 +617,8 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	// Stats polling only for the source fileshare.
 	if !opts.IsSyncDestination && t.scanPacer == nil &&
 		(enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
-		common.LogToJobLogWithPrefix(fmt.Sprintf("[newFileTraverser] Initializing IOPS Pacer for the Enumeration for FileShare: %s", rawURL), common.LogInfo)
+		// Not logged here: a traverser is built per directory, and the share controller
+		// already traces whether the control was created or reused.
 		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 

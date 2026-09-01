@@ -163,17 +163,22 @@ var (
 )
 
 // RegisterShareStatsCredential records the credential to poll host with when a
-// share control is created without an explicit one. Nil/empty input is ignored.
+// share control is created without an explicit one. Nil/empty input is ignored,
+// and the first registration for an account wins.
 func RegisterShareStatsCredential(host string, tokenCred azcore.TokenCredential) {
-	
 	if host == "" || tokenCred == nil {
 		traceShare(LogDebug, "Registering share stats credential for host: %q but input is nil or empty", host)
 		return
 	}
-	traceShare(LogDebug, "Registering share stats credential for host: %q", host)
+
 	shareStatsCredsMu.Lock()
-	shareStatsCreds[strings.ToLower(host)] = tokenCred
+	if _, exists = shareStatsCreds[host]; !exists {
+		shareStatsCreds[host] = tokenCred
+	}
 	shareStatsCredsMu.Unlock()
+	if !exists {
+		traceShare(LogDebug, "registered share stats credential for host %q", host)
+	}
 }
 
 // GetShareCredential returns the credential registered for shareKey's account,
