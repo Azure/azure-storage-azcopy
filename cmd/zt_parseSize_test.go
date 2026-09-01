@@ -22,8 +22,11 @@ package cmd
 
 import (
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	chk "gopkg.in/check.v1"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 type parseSizeSuite struct{}
@@ -58,4 +61,30 @@ func TestParseSize(t *testing.T) {
 	_, err = ParseSizeString("abcK", "foo-bar") //codespell:ignore
 	a.Equal(expectedError, err.Error())
 
+}
+
+func TestBenchmarkCookAttachesCopyOptionsAndPreservesCleanup(t *testing.T) {
+	base := rawBenchmarkCmdArgs{
+		target:         "https://account.blob.core.windows.net/container",
+		sizePerFile:    "1M",
+		fileCount:      2,
+		deleteTestData: true,
+		numOfFolders:   1,
+		blobType:       "Detect",
+		checkLength:    true,
+	}
+
+	upload := base
+	upload.mode = "upload"
+	uploadCooked, err := upload.cook(&cobra.Command{})
+	require.NoError(t, err)
+	assert.NotNil(t, uploadCooked.benchmarkCopyOptions)
+	assert.True(t, uploadCooked.hasFollowup())
+
+	download := base
+	download.mode = "download"
+	downloadCooked, err := download.cook(&cobra.Command{})
+	require.NoError(t, err)
+	assert.NotNil(t, downloadCooked.benchmarkCopyOptions)
+	assert.False(t, downloadCooked.hasFollowup())
 }
