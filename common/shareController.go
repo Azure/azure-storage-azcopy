@@ -215,8 +215,7 @@ func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
 	shareControlsMu.Lock()
 
 	if sc, ok := shareControls[shareKey]; ok {
-		shareControlsMu.Unlock()
-		traceShare(LogDebug, "reusing existing control for %s", shareKey)
+		shareControlsMu.Unlock()		
 		return sc
 	}
 
@@ -238,7 +237,7 @@ func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
 		traceShare(LogError, "priming poll failed for %s: %v", shareKey, err)
 	}
 	iops, bw := controllerRates(ctrl)
-	traceShare(LogDebug, "control ready for %s: mode=%s primedRates(iops=%d bw=%d)", shareKey, ctrl.Mode(), iops, bw)
+	traceShare(LogDebug, "ShareController initialized  for %s: mode=%s primedRates(iops=%d bw=%d)", shareKey, ctrl.Mode(), iops, bw)
 
 	go startShareStatsPoller(ctx, shareKey, ctrl)
 	return sc

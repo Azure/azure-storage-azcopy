@@ -85,9 +85,7 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 		burstIosLimit:             ts.BurstIosLimit,
 		throttlingAvailable:       true,
 	}
-	// Log the newly created sample for debugging purposes.
-	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] new sample %s", sample), LogDebug)	
-
+	
 	if s.prevSample == nil {
 		// First poll only establishes the baseline; the controller's own `primed`
 		// flag discards this interval's delta.
@@ -117,7 +115,6 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 	if samplingPeriodInSecs >= 150 {
 		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] unexpected poll interval: %.1f seconds", samplingPeriodInSecs), LogError)
 	}
-	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] poll interval %.1fs", samplingPeriodInSecs), LogDebug)
 	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] current  %s", sample), LogDebug)
 	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] previous %s", s.prevSample), LogDebug)
 
