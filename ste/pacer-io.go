@@ -65,6 +65,6 @@ func pacerAcquire(ctx context.Context, p pacer, bytes, ops int64) error {
 func sourceSharePacer(sourceURL string) common.IOPSPacer {
 	if enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() != "true" {
 		return nil
-	}
+	}	
 	return common.GetShareScanPacer(sourceURL)
 }

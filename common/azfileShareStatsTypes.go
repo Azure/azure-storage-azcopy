@@ -2,8 +2,9 @@ package common
 
 import (
 	"encoding/xml"
+	"fmt"
 	"time"
-)
+) 
 
 // ShareThrottlingStats represents the throttling statistics block returned
 // by the GetShareStats API when x-ms-file-return-throttling-stats: true is sent.
@@ -77,4 +78,18 @@ type shareStatsSample struct {
 	burstIosAvailable         int64
 	burstIosLimit             int64
 	throttlingAvailable       bool
+}
+
+// String renders the sample for diagnostics. Needed because %+v on this struct
+// dumps time.Time internals (wall/ext/loc) rather than readable timestamps.
+func (s *shareStatsSample) String() string {
+	if s == nil {
+		return "<none>"
+	}
+	return fmt.Sprintf("window=[%s..%s] limits(iops=%d bw=%dMiB/s) counters(totalEgress=%d egressThrottled=%d iopsThrottled=%d) burst(avail=%d limit=%d)",
+		s.startTime.UTC().Format(time.RFC3339),
+		s.endTime.UTC().Format(time.RFC3339),
+		s.iopsLimit, s.bandwidthLimitMiBps,
+		s.totalEgressBytes, s.egressThrottledBytes, s.iopsThrottledRequestCount,
+		s.burstIosAvailable, s.burstIosLimit)
 }

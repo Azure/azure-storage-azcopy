@@ -22,10 +22,13 @@ package common
 
 import (
 	"context"
-	"net/url"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 )
 
 // GetShareStatsPollInterval is how often each per-share controller polls the
@@ -58,29 +61,53 @@ func (nullSharePacer) Close() error                                  { return ni
 // RegisterSharePacerFactory with one that returns a real dual token-bucket pacer.
 var sharePacerFactory func() SharePacer = func() SharePacer { return nullSharePacer{} }
 
+// traceShare emits a share-controller diagnostic to the job log. Nil-safe, so
+// calls made before the job logger exists are simply dropped. The level check
+// comes first because this runs on the per-share-control hot path.
+func traceShare(level LogLevel, format string, a ...any) {
+	if AzcopyCurrentJobLogger == nil || !AzcopyCurrentJobLogger.ShouldLog(level) {
+		return
+	}
+	LogToJobLogWithPrefix("[sharecontroller] "+fmt.Sprintf(format, a...), level)
+}
+
+// Records whether the concrete implementations were injected, so a share that
+// silently ends up inert can be told apart from one that is genuinely unlimited.
+var (
+	sharePacerFactoryRegistered  bool
+	statsSourceFactoryRegistered bool
+)
+
 // RegisterSharePacerFactory injects the concrete per-share pacer constructor
 // (called once from ste's init). Passing nil is ignored.
 func RegisterSharePacerFactory(f func() SharePacer) {
 	if f != nil {
 		sharePacerFactory = f
+		sharePacerFactoryRegistered = true
 	}
 }
 
 // shareStatsSourceFactory builds the poll-based stats adapter for a share key.
+// shareURL carries the scheme, host, share name and any SAS; tokenCred supplies
+// OAuth instead, since the stats poller issues a raw HTTP request.
 // Until the real SDK-backed source is injected via RegisterResourceStatsSourceFactory
 // it returns a stub reporting no limits (unlimited) and no throttles, keeping
 // every per-share controller inert (no behavior change).
-var shareStatsSourceFactory func(shareKey string) ResourceStatsSource = func(string) ResourceStatsSource {
+var shareStatsSourceFactory func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource = func(string, string, azcore.TokenCredential) ResourceStatsSource {
 	return stubResourceStatsSource{}
 }
 
 // RegisterResourceStatsSourceFactory injects the real poll-based stats adapter
 // (e.g. Azure Files GetShareStats mapped onto ResourceStats). Passing nil is
 // ignored.
-func RegisterResourceStatsSourceFactory(f func(shareKey string) ResourceStatsSource) {
-	if f != nil {
-		shareStatsSourceFactory = f
+func RegisterResourceStatsSourceFactory(f func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource) {
+	if f == nil {
+		traceShare(LogDebug, "resource stats source factory not registered: factory is nil, shares stay unlimited")
+		return
 	}
+	shareStatsSourceFactory = f
+	statsSourceFactoryRegistered = true
+	traceShare(LogDebug, "registered resource stats source factory")
 }
 
 // stubResourceStatsSource is the placeholder stats adapter. Zero limits mean
@@ -123,19 +150,72 @@ func RegisterControllerFactory(f ControllerFactory) {
 var (
 	shareControlsMu sync.Mutex
 	shareControls   = map[string]*shareControl{}
+	shareControlsWg sync.WaitGroup
 )
 
-// getOrCreateShareControl returns the per-share control for shareKey, lazily
-// creating it (and starting its GetShareStats poll loop) on first use. workers
-// is the equal-share denominator used in proactive mode.
-func getOrCreateShareControl(shareKey string, workers int64) *shareControl {
+// Fallback OAuth credentials for the GetShareStats poll, keyed by account host.
+// Needed because the transfer-side callers (the Azure Files sender, the source
+// info provider) have no credential to hand down: it is consumed when the
+// service clients are built and never stored on the job part manager.
+var (
+	shareStatsCredsMu sync.RWMutex
+	shareStatsCreds   = map[string]azcore.TokenCredential{}
+)
+
+// RegisterShareStatsCredential records the credential to poll host with when a
+// share control is created without an explicit one. Nil/empty input is ignored,
+// and the first registration for an account wins.
+func RegisterShareStatsCredential(host string, tokenCred azcore.TokenCredential) {
+	if host == "" || tokenCred == nil {
+		return
+	}
+	host = strings.ToLower(host)
+
+	// Service clients are rebuilt per traverser, so skip the write lock on the
+	// overwhelmingly common repeat registration.
+	shareStatsCredsMu.RLock()
+	_, exists := shareStatsCreds[host]
+	shareStatsCredsMu.RUnlock()
+	if exists {
+		return
+	}
+
+	shareStatsCredsMu.Lock()
+	_, exists = shareStatsCreds[host]
+	if !exists {
+		shareStatsCreds[host] = tokenCred
+	}
+	shareStatsCredsMu.Unlock()
+
+	if !exists {
+		traceShare(LogDebug, "registered share stats credential for host %q", host)
+	}
+}
+
+// GetShareCredential returns the credential registered for shareKey's account,
+// or nil when none was (e.g. a SAS-authenticated job).
+func GetShareCredential(shareKey string) azcore.TokenCredential {
+	host, _, _ := strings.Cut(shareKey, "/")
+	shareStatsCredsMu.RLock()
+	defer shareStatsCredsMu.RUnlock()
+	return shareStatsCreds[strings.ToLower(host)]
+}
+
+// getOrCreateShareControl returns the per-share control for rawURL, lazily
+// creating it (and starting its GetShareStats poll loop) on first use. Both the
+// share key and the SAS-bearing share URL are derived from rawURL. workers is
+// the equal-share denominator used in proactive mode. Returns nil for non-Files
+// URLs so callers can fall back to their default pacer unchanged.
+func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
+	shareKey := ShareKeyFromRawURL(rawURL)
 	if shareKey == "" {
+		traceShare(LogDebug, "no share control: %q is not an Azure Files share URL", rawURL)
 		return nil
 	}
 	shareControlsMu.Lock()
-	defer shareControlsMu.Unlock()
 
 	if sc, ok := shareControls[shareKey]; ok {
+		shareControlsMu.Unlock()		
 		return sc
 	}
 
@@ -143,30 +223,94 @@ func getOrCreateShareControl(shareKey string, workers int64) *shareControl {
 		workers = 1
 	}
 	pacer := sharePacerFactory()
-	ctrl := controllerFactory(pacer, shareStatsSourceFactory(shareKey), workers)
+	statsSource := shareStatsSourceFactory(shareKey, ShareURLFromRawURL(rawURL), GetShareCredential(shareKey))
+	ctrl := controllerFactory(pacer, statsSource, workers)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := &shareControl{pacer: pacer, ctrl: ctrl, stop: cancel}
 	shareControls[shareKey] = sc
+	shareControlsMu.Unlock()
 
-	// Prime the baseline and start the authoritative ~30s poll loop.
-	_, _ = ctrl.Refresh()
-	go pollShareStats(ctx, ctrl)
+	// Primed before the poller starts, otherwise the pacer sits at its unlimited
+	// (0,0) target until the first tick and the job's opening window is unpaced.
+	if _, err := ctrl.Refresh(); err != nil {
+		traceShare(LogError, "priming poll failed for %s: %v", shareKey, err)
+	}
+	iops, bw := controllerRates(ctrl)
+	traceShare(LogDebug, "ShareController initialized  for %s: mode=%s primedRates(iops=%d bw=%d)", shareKey, ctrl.Mode(), iops, bw)
 
+	go startShareStatsPoller(ctx, shareKey, ctrl)
 	return sc
+}
+
+// startShareStatsPoller runs the share's poll loop on a tracked goroutine. A
+// panic is contained to this share rather than taking down the process.
+func startShareStatsPoller(ctx context.Context, shareKey string, ctrl ResourceController) {
+	shareControlsWg.Add(1)
+	go func() {
+		defer shareControlsWg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				LogToJobLogWithPrefix(fmt.Sprintf("share stats poll loop for %s stopped after panic: %v", shareKey, r), LogError)
+			}
+		}()
+		pollShareStats(ctx, shareKey, ctrl)
+	}()
+}
+
+// StopShareControls cancels every share's poll loop, releases its pacer, and
+// waits for the goroutines to exit. Idempotent.
+func StopShareControls() {
+	shareControlsMu.Lock()
+	stopped := len(shareControls)
+	for key, sc := range shareControls {
+		sc.stop()
+		_ = sc.pacer.Close()
+		delete(shareControls, key)
+	}
+	shareControlsMu.Unlock()
+
+	shareControlsWg.Wait()
+	if stopped > 0 {
+		traceShare(LogInfo, "stopped %d share control(s)", stopped)
+	}
+}
+
+// controllerRates reads the currently enforced targets when the controller
+// exposes them. 0 means unlimited, i.e. nothing is actually being paced.
+func controllerRates(ctrl ResourceController) (iops, bw int64) {
+	if r, ok := ctrl.(interface {
+		IopsRate() int64
+		BandwidthRate() int64
+	}); ok {
+		return r.IopsRate(), r.BandwidthRate()
+	}
+	return 0, 0
 }
 
 // pollShareStats drives the authoritative stats refresh on a ticker,
 // sleeping any backoff the controller requests.
-func pollShareStats(ctx context.Context, ctrl ResourceController) {
+func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceController) {
+	traceShare(LogDebug, "poll loop started for %s (interval=%s)", shareKey, GetShareStatsPollInterval)
 	ticker := time.NewTicker(GetShareStatsPollInterval)
 	defer ticker.Stop()
+	tick := 0
 	for {
 		select {
 		case <-ctx.Done():
+			traceShare(LogDebug, "poll loop stopped for %s after %d tick(s)", shareKey, tick)
 			return
 		case <-ticker.C:
-			if backoff, err := ctrl.Refresh(); err == nil && backoff > 0 {
+			tick++
+			backoff, err := ctrl.Refresh()
+			if err != nil {
+				traceShare(LogError, "poll #%d failed for %s: %v", tick, shareKey, err)
+				continue
+			}
+			iops, bw := controllerRates(ctrl)
+			traceShare(LogDebug, "poll #%d for %s: mode=%s rates(iops=%d bw=%d) backoff=%s",
+				tick, shareKey, ctrl.Mode(), iops, bw, backoff)
+			if backoff > 0 {
 				select {
 				case <-ctx.Done():
 					return
@@ -181,7 +325,7 @@ func pollShareStats(ctx context.Context, ctrl ResourceController) {
 // share's dual-resource controller if needed), or nil for non-Files URLs so
 // callers can fall back to their default pacer unchanged.
 func GetOrCreateSharePacer(shareURL string, workers int64) SharePacer {
-	sc := getOrCreateShareControl(ShareKeyFromRawURL(shareURL), workers)
+	sc := getOrCreateShareControl(shareURL, workers)
 	if sc == nil {
 		return nil
 	}
@@ -194,7 +338,7 @@ func GetOrCreateSharePacer(shareURL string, workers int64) SharePacer {
 // per-share budget as the data plane. Returns nil for non-Files URLs so
 // enumeration there stays unmetered.
 func GetShareScanPacer(shareURL string) IOPSPacer {
-	sc := getOrCreateShareControl(ShareKeyFromRawURL(shareURL), 1)
+	sc := getOrCreateShareControl(shareURL, 1)
 	if sc == nil {
 		return nil
 	}
@@ -221,16 +365,30 @@ func HandleShareResponse(shareKey string, kind ThrottleKind, retryAfterSec float
 // name) from an Azure Files URL, ignoring SAS/query and path beyond the share.
 // It returns "" for non-Files URLs so callers can cheaply skip them.
 func ShareKeyFromRawURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
+	parts, err := file.ParseURL(raw)
+	if err != nil || parts.ShareName == "" {
 		return ""
 	}
-	if !strings.Contains(strings.ToLower(u.Host), ".file.") {
+	if !strings.Contains(strings.ToLower(parts.Host), ".file.") {
 		return "" // only Azure Files endpoints carry share-level IOPS/bandwidth limits
 	}
-	seg := strings.SplitN(strings.TrimPrefix(u.Path, "/"), "/", 2)
-	if len(seg) == 0 || seg[0] == "" {
+	return strings.ToLower(parts.Host) + "/" + parts.ShareName
+}
+
+// ShareURLFromRawURL returns the share-scoped URL (scheme, host, share name and
+// any SAS) for an Azure Files URL. The stats poller issues a raw HTTP request
+// with no credential of its own, so the SAS must be preserved here. Returns ""
+// for non-Files URLs.
+func ShareURLFromRawURL(raw string) string {
+	parts, err := file.ParseURL(raw)
+	if err != nil || parts.ShareName == "" {
 		return ""
 	}
-	return strings.ToLower(u.Host) + "/" + seg[0]
+	if !strings.Contains(strings.ToLower(parts.Host), ".file.") {
+		return ""
+	}
+	// GetShareStats rejects sharesnapshot; throttling limits belong to the live share.
+	parts.ShareSnapshot = ""
+	parts.DirectoryOrFilePath = ""
+	return parts.String()
 }

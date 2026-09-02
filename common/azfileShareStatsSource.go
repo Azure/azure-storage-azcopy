@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // azfileShareStatsSource implements ResourceStatsSource by polling the Azure
@@ -28,9 +30,15 @@ type azfileShareStatsSource struct {
 // shareURL must include any SAS token required for auth. httpClient should be
 // the global AzCopy HTTP client.
 func NewAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger ILogger) ResourceStatsSource {
-	logger.Log(LogInfo, fmt.Sprintf("Initializing azfileShareStatsSource for %s", shareURL))
+	return newAzfileShareStatsSource(shareURL, httpClient, logger, nil)
+}
+
+// newAzfileShareStatsSource additionally takes the credential to use when shareURL
+// carries no SAS.
+func newAzfileShareStatsSource(shareURL string, httpClient *http.Client, logger ILogger, tokenCred azcore.TokenCredential) ResourceStatsSource {
+	LogToJobLogWithPrefix(fmt.Sprintf("Initializing azfileShareStatsSource for %s", shareURL), LogInfo)
 	return &azfileShareStatsSource{
-		provider: NewShareStatsProvider(shareURL, httpClient, logger),
+		provider: NewShareStatsProvider(shareURL, httpClient, logger, tokenCred),
 	}
 }
 
@@ -76,10 +84,8 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 		burstIosAvailable:         ts.BurstIosAvailable,
 		burstIosLimit:             ts.BurstIosLimit,
 		throttlingAvailable:       true,
-	}	
-
-
-
+	}
+	
 	if s.prevSample == nil {
 		// First poll only establishes the baseline; the controller's own `primed`
 		// flag discards this interval's delta.
@@ -104,17 +110,14 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 			BandwidthThrottleCount:    0,
 		}, nil
 	}
-
 	samplingPeriodInSecs := sample.endTime.Sub(s.prevSample.endTime).Seconds()
-
-	if l := s.provider.logger; l != nil && l.ShouldLog(LogDebug) {
-		if (samplingPeriodInSecs <= 10 || samplingPeriodInSecs >= 50)  {
-			l.Log(LogError, fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs))
-		}
-		l.Log(LogDebug, fmt.Sprintf("GetShareStats poll interval: %.1f seconds", samplingPeriodInSecs))
-		l.Log(LogDebug, fmt.Sprintf("Current Stats: %+v", ts))
-		l.Log(LogDebug, fmt.Sprintf("Previous Stats: %+v", s.prevSample))		
+	
+	if samplingPeriodInSecs >= 150 {
+		LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] unexpected poll interval: %.1f seconds", samplingPeriodInSecs), LogError)
 	}
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] current  %s", sample), LogDebug)
+	LogToJobLogWithPrefix(fmt.Sprintf("[sharestats] previous %s", s.prevSample), LogDebug)
+
 	s.prevSample = sample
 
 	// Counters stay cumulative here; RateLimitController.Refresh computes the deltas.
@@ -127,16 +130,18 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 }
 
 // ShareStatsSourceFactory returns a factory function suitable for registration
-// via RegisterResourceStatsSourceFactory. It constructs an
-// azfileShareStatsSource per share key using the provided HTTP client and logger.
+// via RegisterResourceStatsSourceFactory. shareURL carries the SAS needed to
+// authenticate the raw GetShareStats request; when it is empty the URL is
+// rebuilt from the key, which only works for anonymously readable shares.
+// tokenCred is used instead when the job authenticates with OAuth.
 //
 // Registered from jobsAdmin.MainSTE when Azure Files proactive stats are enabled.
-func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey string) ResourceStatsSource {
-	logger.Log(LogInfo, fmt.Sprintf("Initializing ShareStatsSourceFactory"))
-	return func(shareKey string) ResourceStatsSource {
-		// shareKey is "account.file.core.windows.net/sharename" (no scheme).
-		// Reconstruct a full HTTPS URL for the raw HTTP call.
-		shareURL := "https://" + shareKey
-		return NewAzfileShareStatsSource(shareURL, httpClient, logger)
+func ShareStatsSourceFactory(httpClient *http.Client, logger ILogger) func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource {		
+	return func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource {
+		LogToJobLogWithPrefix(fmt.Sprintf("Initializing ShareStatsSourceFactory"), LogInfo)
+		if shareURL == "" {
+			shareURL = "https://" + shareKey
+		}
+		return newAzfileShareStatsSource(shareURL, httpClient, logger, tokenCred)
 	}
 }

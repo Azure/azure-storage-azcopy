@@ -262,7 +262,7 @@ func TestShareStatsSourceFactory_CreatesSource(t *testing.T) {
 	key := server.URL[len("http://"):] + "/myshare"
 	factory := ShareStatsSourceFactory(server.Client(), sourceTestLogger{})
 
-	src := factory(key)
+	src := factory(key, server.URL+"/myshare")
 	require.NotNil(t, src)
 
 	// Since the test server uses http://, but the factory prepends https://,
