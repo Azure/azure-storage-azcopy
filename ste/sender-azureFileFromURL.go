@@ -125,7 +125,7 @@ func (s *urlToAzureFileCopier) GenerateCopyMetadata(id common.ChunkID) chunkFunc
 		info := s.jptm.Info()
 		var err error
 
-		if info.IsNFSCopy {
+		if common.IsNFSCopy() {
 			_, err = s.addNFSPermissionsToHeaders(info, s.getFileClient().URL())
 			if err != nil {
 				s.jptm.FailActiveSend("Setting file permissions", err)
@@ -160,7 +160,7 @@ func (s *urlToAzureFileCopier) GenerateCopyMetadata(id common.ChunkID) chunkFunc
 				if err != nil {
 					return nil, err
 				}
-				if s.jptm.Info().IsNFSCopy {
+				if common.IsNFSCopy() {
 					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
 						HTTPHeaders: &s.headersToApply,
 						NFSProperties: &file.NFSProperties{
