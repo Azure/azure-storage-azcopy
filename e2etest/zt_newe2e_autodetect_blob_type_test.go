@@ -3,6 +3,7 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func init() {
@@ -38,7 +39,7 @@ func (s *AutoDetectBlobTypeTestSuite) Scenario_AutoInferDetectBlobTypeVHD(svm *S
 		Body: body,
 		ObjectProperties: ObjectProperties{
 			BlobProperties: BlobProperties{
-				Type: common.Iff(srcObj.Location() == common.ELocation.Blob(), pointerTo(blob.BlobTypeBlockBlob), pointerTo(blob.BlobTypePageBlob)),
+				Type: ternary.Iff(srcObj.Location() == common.ELocation.Blob(), pointerTo(blob.BlobTypeBlockBlob), pointerTo(blob.BlobTypePageBlob)),
 			},
 		},
 	}, true)

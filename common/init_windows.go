@@ -23,11 +23,13 @@ package common
 import (
 	"path"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // getAzCopyAppPath returns the path of Azcopy in local appdata.
 func getAzCopyAppPath() string {
-	userProfile := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
+	userProfile := enum.EEnvironmentVariable.UserDir().Get()
 	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 
 	return azcopyAppDataFolder

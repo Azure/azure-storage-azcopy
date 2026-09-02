@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 type ProxyLookupFunc func(req *http.Request) (*url.URL, error) // signature of normal Transport.Proxy lookup
@@ -43,7 +45,7 @@ func init() {
 		lookupMethod:    GetProxyFunc(),
 	}
 
-	ev := GetEnvironmentVariable(EEnvironmentVariable.CacheProxyLookup())
+	ev := enum.EEnvironmentVariable.CacheProxyLookup().Get()
 	if strings.ToLower(ev) == "true" {
 		GlobalProxyLookup = c.getProxy
 	} else {

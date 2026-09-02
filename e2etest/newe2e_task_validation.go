@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
@@ -469,7 +470,7 @@ func ValidateDryRunOutput(a Asserter, output AzCopyStdout, rootSrc ResourceManag
 
 		for _, v := range stdout.Transfers {
 			// Determine the op.
-			op := common.Iff(v.FromTo.IsDelete(), DryrunOpDelete, common.Iff(v.FromTo.IsSetProperties(), DryrunOpProperties, DryrunOpCopy))
+			op := ternary.Iff(v.FromTo.IsDelete(), DryrunOpDelete, ternary.Iff(v.FromTo.IsSetProperties(), DryrunOpProperties, DryrunOpCopy))
 
 			// Try to find the item in expected.
 			relPath := strings.TrimPrefix( // Ensure we start with the rel path, not a separator

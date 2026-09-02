@@ -24,7 +24,7 @@ import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"strings"
 )
 
@@ -51,8 +51,7 @@ func withNoRetryForBlob(ctx context.Context) context.Context {
 func (p *pageRangeOptimizer) fetchPages() {
 	// don't fetch page blob list if optimizations are not desired,
 	// the lack of page list indicates that there's data everywhere
-	if !strings.EqualFold(common.GetEnvironmentVariable(
-		common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers()), "true") {
+	if !strings.EqualFold(enum.EEnvironmentVariable.OptimizeSparsePageBlobTransfers().Get(), "true") {
 		return
 	}
 
