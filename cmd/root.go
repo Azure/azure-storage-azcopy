@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -50,6 +51,7 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
+var displayDeveloperOptions bool
 var OutputFormat common.OutputFormat
 var OutputLevel common.OutputVerbosity
 var LogLevel common.LogLevel
@@ -215,8 +217,8 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
-		envVar := common.EEnvironmentVariable.ConcurrencyValue()
-		userValue := common.GetEnvironmentVariable(envVar)
+		envVar := enum.EEnvironmentVariable.ConcurrencyValue()
+		userValue := envVar.Get()
 		if userValue == "" || userValue == "auto" {
 			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 		} else {
@@ -285,6 +287,7 @@ func StartSystemStatsMonitorForJob() {
 	glcm.RegisterCloseFunc(func() {
 		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
 		common.GlobalSystemStatsMonitor.Stop()
+		common.StopShareControls()
 	})
 }
 
@@ -363,30 +366,40 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
 
-	// Note: this is due to Windows not supporting signals properly
-	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
-		"Used by partner teams to send in `cancel` through stdin to stop a job.")
+	{ // Hidden flags placed into a closure to help identify them
+		// Note: this is due to Windows not supporting signals properly
+		rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
+			"Used by partner teams to send in `cancel` through stdin to stop a job.")
 
-	// special E2E testing flags
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
-		"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
-			"\n Assists with debugging AzCopy via attach-to-process")
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
-		"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
-			"\n Assists with testing cases around file modifications between scanning and usage")
-	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
-		"Used when debugging, to tell AzCopy to cancel the job midway."+
-			"\n List of relative paths to skip in the STE.")
+		// special E2E testing flags
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
+			"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
+				"\n Assists with debugging AzCopy via attach-to-process")
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
+			"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
+				"\n Assists with testing cases around file modifications between scanning and usage")
+		rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
+			"Used when debugging, to tell AzCopy to cancel the job midway."+
+				"\n List of relative paths to skip in the STE.")
 
-	// reserved for partner teams
-	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+		// special flags to be used in case of unexpected service errors.
+		rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
+			"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
+		rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 
-	// special flags to be used in case of unexpected service errors.
-	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
-		"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
-	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
-	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
-	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+		rootCmd.PersistentFlags().BoolVar(&displayDeveloperOptions, "display-dev", false, "display development flags")
+		if !displayDeveloperOptions {
+			_ = rootCmd.PersistentFlags().MarkHidden("display-dev")
+
+			_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
+			_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+
+			_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-open")
+			_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+		}
+	}
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+
 	"net"
 	"net/url"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -109,7 +109,7 @@ type FileClientOptions struct {
 // are required currently only for files.
 func GetServiceClientForLocation(loc Location,
 	resource ResourceString,
-	credType CredentialType,
+	credType enum.CredentialType,
 	cred azcore.TokenCredential,
 	policyOptions *azcore.ClientOptions,
 	locationSpecificOptions any,
@@ -211,6 +211,12 @@ func GetServiceClientForLocation(loc Location,
 		if cred != nil {
 			o.FileRequestIntent = to.Ptr(fileservice.ShareTokenIntentBackup)
 			fsc, err = fileservice.NewClient(resourceURL, cred, o)
+			
+			if (enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
+				// Recorded so the GetShareStats poller can authenticate against this
+				// account when its caller has no credential to pass down.
+				RegisterShareStatsCredential(fileURLParts.Host, cred)								
+			}			
 		} else {
 			fsc, err = fileservice.NewClientWithNoCredential(resourceURL, o)
 		}
@@ -227,40 +233,7 @@ func GetServiceClientForLocation(loc Location,
 	}
 }
 
-// NewScopedCredential takes in a credInfo object and returns ScopedCredential
-// if credentialType is either MDOAuth or oAuth. For anything else,
-// nil is returned
-func NewScopedCredential[T azcore.TokenCredential](cred T, credType CredentialType) *ScopedCredential[T] {
-	var scope string
-	if !credType.IsAzureOAuth() {
-		return nil
-	} else if credType == ECredentialType.MDOAuthToken() {
-		scope = ManagedDiskScope
-	} else if credType == ECredentialType.OAuthToken() {
-		scope = StorageScope
-	}
-	return &ScopedCredential[T]{cred: cred, scopes: []string{scope}}
-}
-
-type ScopedCredential[T azcore.TokenCredential] struct {
-	cred   T
-	scopes []string
-}
-
-func (s *ScopedCredential[T]) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
-}
-
-type ScopedToken = ScopedCredential[azcore.TokenCredential]
-type ScopedAuthenticator ScopedCredential[AuthenticateToken]
-
-func (s *ScopedAuthenticator) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
-}
-
-func (s *ScopedAuthenticator) Authenticate(ctx context.Context, _ *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error) {
-	return s.cred.Authenticate(ctx, &policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
-}
+// =========================
 
 type ServiceClient struct {
 	fsc *fileservice.Client

@@ -32,6 +32,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -118,13 +120,9 @@ func GetChannelSizeConfig() ChannelSizeConfig {
 
 // InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
 // Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
-// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
-// This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
-	CredentialInfo common.CredentialInfo
 	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
-	S2SSourceCredentialType common.CredentialType
+	S2SSourceCredentialType enum.CredentialType
 	Provider                credentials.Provider
 }
 
@@ -614,7 +612,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
-		credInfo:         order.CredentialInfo,
 		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
@@ -647,7 +644,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 }
 
 func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
-	newVal := int32(common.Iff(isFinalPart, 1, 0))
+	newVal := int32(ternary.Iff(isFinalPart, 1, 0))
 	oldVal := atomic.SwapInt32(&jm.atomicFinalPartOrderedIndicator, newVal)
 	if newVal == 0 && oldVal == 1 {
 		// we just cleared the flag. Sanity check that.
@@ -1294,7 +1291,7 @@ func (jm *jobMgr) SuccessfulBytesInActiveFiles() uint64 {
 }
 
 func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
-	verb := common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
+	verb := ternary.Iff(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
 	jobID := jm.jobID
 
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
@@ -1342,7 +1339,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
-			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
+			ternary.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
 		if jm.ShouldLog(common.LogInfo) {
 			jm.Log(common.LogInfo, msg)

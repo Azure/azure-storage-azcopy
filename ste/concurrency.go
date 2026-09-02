@@ -26,7 +26,7 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ConfiguredInt is an integer which may be optionally configured by user through an environment variable
@@ -46,8 +46,8 @@ func (i *ConfiguredInt) GetDescription() string {
 }
 
 // tryNewConfiguredInt populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
-func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
-	override := common.GetEnvironmentVariable(envVar)
+func tryNewConfiguredInt(envVar enum.EnvironmentVariable) *ConfiguredInt {
+	override := envVar.Get()
 	if override != "" {
 		val, err := strconv.ParseInt(override, 10, 32)
 		if err != nil {
@@ -76,8 +76,8 @@ func (b *ConfiguredBool) GetDescription() string {
 }
 
 // tryNewConfiguredBool populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
-func tryNewConfiguredBool(envVar common.EnvironmentVariable) *ConfiguredBool {
-	override := common.GetEnvironmentVariable(envVar)
+func tryNewConfiguredBool(envVar enum.EnvironmentVariable) *ConfiguredBool {
+	override := envVar.Get()
 	if override != "" {
 		val, err := strconv.ParseBool(override)
 		if err != nil {
@@ -176,9 +176,9 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 
 	autoTune := false
-	envVar := common.EEnvironmentVariable.ConcurrencyValue()
+	envVar := enum.EEnvironmentVariable.ConcurrencyValue()
 
-	if common.GetEnvironmentVariable(envVar) == "AUTO" {
+	if envVar.Get() == "AUTO" {
 		// Allow user to force auto-tuning from the env var, even when not in benchmark mode
 		// Might be handy in some S2S cases, where we know that release 10.2.1 was using too few goroutines
 		// This feature will probably remain undocumented for at least one release cycle, while we consider
@@ -217,7 +217,7 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 }
 
 func getTransferInitiationPoolSize() *ConfiguredInt {
-	envVar := common.EEnvironmentVariable.TransferInitiationPoolSize()
+	envVar := enum.EEnvironmentVariable.TransferInitiationPoolSize()
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
 		return c
@@ -227,7 +227,7 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 }
 
 func GetEnumerationPoolSize() *ConfiguredInt {
-	envVar := common.EEnvironmentVariable.EnumerationPoolSize()
+	envVar := enum.EEnvironmentVariable.EnumerationPoolSize()
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
 		return c
@@ -238,7 +238,7 @@ func GetEnumerationPoolSize() *ConfiguredInt {
 }
 
 func GetParallelStatFiles() *ConfiguredBool {
-	envVar := common.EEnvironmentVariable.ParallelStatFiles()
+	envVar := enum.EEnvironmentVariable.ParallelStatFiles()
 	if c := tryNewConfiguredBool(envVar); c != nil {
 		return c
 	}
@@ -247,7 +247,7 @@ func GetParallelStatFiles() *ConfiguredBool {
 }
 
 func getCheckCpuUsageWhenTuning() *ConfiguredBool {
-	envVar := common.EEnvironmentVariable.AutoTuneToCpu()
+	envVar := enum.EEnvironmentVariable.AutoTuneToCpu()
 	if c := tryNewConfiguredBool(envVar); c != nil {
 		return c
 	}

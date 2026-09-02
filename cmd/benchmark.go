@@ -54,6 +54,9 @@ type rawBenchmarkCmdArgs struct {
 	blobType      string
 	output        string
 	mode          string
+
+	// named credentials (bound to --cred flag)
+	CredName string
 }
 
 const (
@@ -322,6 +325,8 @@ func init() {
 			glcm.Info("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.SrcCredName = raw.CredName
+			cooked.DstCredName = raw.CredName
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform benchmark command due to error: " + err.Error())
@@ -361,4 +366,6 @@ func init() {
 	benchCmd.PersistentFlags().StringVar(&raw.mode, "mode", "upload",
 		"Defines if AzCopy should test uploads or downloads from this target. "+
 			"\n Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
+
+	AddTargetCredFlags(benchCmd, &raw.CredName)
 }

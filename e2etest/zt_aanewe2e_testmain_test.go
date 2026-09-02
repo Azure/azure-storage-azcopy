@@ -3,18 +3,11 @@
 package e2etest
 
 import (
+	"flag"
 	"testing"
 )
 
-//var InitHooks = map[string]func() TieredError{
-//	"ARM OAuth spinup": nil,
-//	"Account Registry Init": AccountRegistryInitHook,
-//}
-//
-//var CleanupHooks = map[string]func() TieredError{
-//	"Account Registry Teardown": AccountRegistryCleanupHook,
-//	"ARM Oauth spindown":
-//}
+var runInteractiveTest = flag.Bool("run-interactive-test", false, "Whether or not to run interactive tests (e.g. browser, device code). These must be run manually due to interactive nature.")
 
 var FrameworkHooks = []TestFrameworkHook{
 	{HookName: "Config", SetupHook: LoadConfigHook},

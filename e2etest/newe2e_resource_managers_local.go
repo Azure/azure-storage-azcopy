@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 )
@@ -120,9 +121,9 @@ func (l *LocalContainerResourceManager) ListObjects(a Asserter, prefixOrDirector
 			return err
 		}
 
-		out[relPath] = root.getChildObject(relPath, common.Iff(d.IsDir(), common.EEntityType.Folder(), common.EEntityType.File())).GetProperties(a)
+		out[relPath] = root.getChildObject(relPath, ternary.Iff(d.IsDir(), common.EEntityType.Folder(), common.EEntityType.File())).GetProperties(a)
 
-		return common.Iff(d.IsDir() && !recursive, filepath.SkipDir, nil)
+		return ternary.Iff(d.IsDir() && !recursive, filepath.SkipDir, nil)
 	})
 	a.NoError("failed to walk", err)
 
@@ -347,9 +348,9 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 			return err
 		}
 
-		out[relPath] = l.getChildObject(relPath, common.Iff(d.IsDir(), common.EEntityType.Folder(), common.EEntityType.File())).GetProperties(a)
+		out[relPath] = l.getChildObject(relPath, ternary.Iff(d.IsDir(), common.EEntityType.Folder(), common.EEntityType.File())).GetProperties(a)
 
-		return common.Iff(d.IsDir() && !recursive, filepath.SkipDir, nil)
+		return ternary.Iff(d.IsDir() && !recursive, filepath.SkipDir, nil)
 	})
 	a.NoError("failed to walk", err)
 
@@ -363,7 +364,7 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 		a.NoError("failed to get stat", err)
 		return ObjectProperties{}
 	}
-	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
+	lmt := ternary.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
 	}
@@ -384,7 +385,7 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 			out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
 			out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
 		}
-		out.FileProperties.FilePermissions = common.Iff(perms == "", nil, &perms)
+		out.FileProperties.FilePermissions = ternary.Iff(perms == "", nil, &perms)
 		if nfsProps != nil {
 			out.FileNFSProperties = &FileNFSProperties{
 				FileCreationTime:  PtrOf(nfsProps.FileCreationTime()),

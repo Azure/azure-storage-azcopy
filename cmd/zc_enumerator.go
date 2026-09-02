@@ -36,6 +36,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -43,6 +45,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -386,7 +389,7 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential                  *common.CredentialInfo // Required for most remote traversers
+	Credential           *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
 	IncrementEnumerationFailure enumerationCounterFunc
 
@@ -417,9 +420,16 @@ type InitResourceTraverserOptions struct {
 
 	IncrementNotTransferred enumerationCounterFunc
 
-	// IsSyncDestination indicates this traverser is enumerating the destination side of a sync job.
-	// Used to return specific not-found errors that the sync orchestrator handles gracefully.
+	// IsSyncDestination indicates this traverser targets the destination side of a job.
+	// Used to return specific not-found errors that the sync orchestrator handles gracefully,
+	// and to keep per-share throttling stats polling on the source share only.
 	IsSyncDestination bool
+
+	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
+	// (List, GetProperties) issued during enumeration, so scanning respects the
+	// same storage IOPS budget as the transfer phase. Currently wired for Azure
+	// Files; nil means uncapped scanning (unchanged behavior).
+	ScanPacer common.IOPSPacer
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers
@@ -455,6 +465,13 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return nil, err
 	}
 
+	
+	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
+	file2FilesEnum := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
+	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
+		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
+	}
+
 	var (
 		output ResourceTraverser
 	)
@@ -469,7 +486,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		if resourceLocation.IsLocal() {
 			// First, ignore all escaped stars. Stars can be valid characters on many platforms (out of the 3 we support though, Windows is the only that cannot support it).
 			// In the future, should we end up supporting another OS that does not treat * as a valid character, we should turn these checks into a map-check against runtime.GOOS.
-			tmpResource := common.Iff(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
+			tmpResource := ternary.Iff(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
 			// check for remaining stars. We can't combine list traversers, and wildcarded list traversal occurs below.
 			if strings.Contains(tmpResource, "*") {
 				return nil, errors.New("cannot combine local wildcards with include-path or list-of-files")
@@ -480,15 +497,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return output, nil
 	}
 
-	var reauthTok *common.ScopedAuthenticator
-	if opts.Credential != nil {
-		if at, ok := opts.Credential.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-		}
-	}
-
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := createClientOptions(azcopyScanningLogger, nil, opts.Credential.TokenCredential)
 
 	switch resourceLocation {
 	case common.ELocation.Local():
@@ -553,7 +562,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -606,7 +615,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -649,7 +658,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"google.golang.org/api/iterator"
 	"net/url"
 	"strings"
@@ -97,7 +98,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 }
 
 func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
-	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
+	projectID = enum.EEnvironmentVariable.GoogleCloudProject().Get()
 	t := &gcpServiceTraverser{
 		opts: opts,
 		ctx:  ctx,

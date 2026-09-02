@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -126,8 +127,8 @@ func verifyBlobType(resourceURL string, ctx context.Context, intendedBlobType st
 		return false, err
 	}
 
-	if string(common.IffNotNil(pResp.BlobType, "")) != intendedBlobType {
-		return false, fmt.Errorf("blob URL is not intended blob type %s, but instead %s", intendedBlobType, common.IffNotNil(pResp.BlobType, ""))
+	if string(ternary.IffNotNil(pResp.BlobType, "")) != intendedBlobType {
+		return false, fmt.Errorf("blob URL is not intended blob type %s, but instead %s", intendedBlobType, ternary.IffNotNil(pResp.BlobType, ""))
 	}
 
 	return true, nil
@@ -323,8 +324,8 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 			os.Exit(1)
 		}
 		// If the blob tier does not match the expected blob tier.
-		if !strings.EqualFold(common.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier) {
-			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", common.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier)
+		if !strings.EqualFold(ternary.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier) {
+			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", ternary.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier)
 			os.Exit(1)
 		}
 	}
@@ -375,11 +376,11 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	}
 
 	// verify the content-type
-	if testBlobCmd.CheckContentType && !validateString(expectedContentType, common.IffNotNil(get.ContentType, "")) {
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, ternary.IffNotNil(get.ContentType, "")) {
 		fmt.Printf(
 			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
 			expectedContentType,
-			common.IffNotNil(get.ContentType, ""))
+			ternary.IffNotNil(get.ContentType, ""))
 		os.Exit(1)
 	}
 
@@ -390,22 +391,22 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	}
 
 	//verify the content-encoding
-	if !validateString(testBlobCmd.ContentEncoding, common.IffNotNil(get.ContentEncoding, "")) {
+	if !validateString(testBlobCmd.ContentEncoding, ternary.IffNotNil(get.ContentEncoding, "")) {
 		fmt.Println("mismatch ContentEncoding between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.CacheControl, common.IffNotNil(get.CacheControl, "")) {
+	if !validateString(testBlobCmd.CacheControl, ternary.IffNotNil(get.CacheControl, "")) {
 		fmt.Println("mismatch CacheControl between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentDisposition, common.IffNotNil(get.ContentDisposition, "")) {
+	if !validateString(testBlobCmd.ContentDisposition, ternary.IffNotNil(get.ContentDisposition, "")) {
 		fmt.Println("mismatch ContentDisposition between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentLanguage, common.IffNotNil(get.ContentLanguage, "")) {
+	if !validateString(testBlobCmd.ContentLanguage, ternary.IffNotNil(get.ContentLanguage, "")) {
 		fmt.Println("mismatch ContentLanguage between actual and user given blob")
 		os.Exit(1)
 	}
@@ -488,8 +489,8 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			os.Exit(1)
 		}
 		// Match the Access Tier Type with Expected Tier Type.
-		if !strings.EqualFold(common.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier) {
-			fmt.Printf("block blob access tier %s does not matches the expected tier %s\n", common.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier)
+		if !strings.EqualFold(ternary.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier) {
+			fmt.Printf("block blob access tier %s does not matches the expected tier %s\n", ternary.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier)
 			os.Exit(1)
 		}
 		// If the access tier type of blob is set to Archive, then the blob is offline and reading the blob is not allowed,
@@ -553,22 +554,22 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	} else {
 		expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 	}
-	if testBlobCmd.CheckContentType && !validateString(expectedContentType, common.IffNotNil(get.ContentType, "")) {
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, ternary.IffNotNil(get.ContentType, "")) {
 		fmt.Printf(
 			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
 			expectedContentType,
-			common.IffNotNil(get.ContentType, ""))
+			ternary.IffNotNil(get.ContentType, ""))
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testBlobCmd.ContentEncoding, common.IffNotNil(get.ContentEncoding, "")) {
+	if !validateString(testBlobCmd.ContentEncoding, ternary.IffNotNil(get.ContentEncoding, "")) {
 		fmt.Println("mismatch content encoding between actual and user given blob content encoding")
 		os.Exit(1)
 	}
 
 	if testBlobCmd.PreserveLastModifiedTime {
-		if fileInfo.ModTime().Unix() != (common.IffNotNil(get.LastModified, time.Time{})).Unix() {
+		if fileInfo.ModTime().Unix() != (ternary.IffNotNil(get.LastModified, time.Time{})).Unix() {
 			fmt.Println("modified time of downloaded and actual blob does not match")
 			os.Exit(1)
 		}
@@ -643,8 +644,8 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 			os.Exit(1)
 		}
 		// If the blob tier does not match the expected blob tier.
-		if !strings.EqualFold(common.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier) {
-			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", common.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier)
+		if !strings.EqualFold(ternary.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier) {
+			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", ternary.IffNotNil(blobProperties.AccessTier, ""), testBlobCmd.BlobTier)
 			os.Exit(1)
 		}
 	}
@@ -701,31 +702,31 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 
-	if testBlobCmd.CheckContentType && !validateString(expectedContentType, common.IffNotNil(get.ContentType, "")) {
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, ternary.IffNotNil(get.ContentType, "")) {
 		fmt.Printf(
 			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
 			expectedContentType,
-			common.IffNotNil(get.ContentType, ""))
+			ternary.IffNotNil(get.ContentType, ""))
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testBlobCmd.ContentEncoding, common.IffNotNil(get.ContentEncoding, "")) {
+	if !validateString(testBlobCmd.ContentEncoding, ternary.IffNotNil(get.ContentEncoding, "")) {
 		fmt.Println("mismatch ContentEncoding between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.CacheControl, common.IffNotNil(get.CacheControl, "")) {
+	if !validateString(testBlobCmd.CacheControl, ternary.IffNotNil(get.CacheControl, "")) {
 		fmt.Println("mismatch CacheControl between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentDisposition, common.IffNotNil(get.ContentDisposition, "")) {
+	if !validateString(testBlobCmd.ContentDisposition, ternary.IffNotNil(get.ContentDisposition, "")) {
 		fmt.Println("mismatch ContentDisposition between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentLanguage, common.IffNotNil(get.ContentLanguage, "")) {
+	if !validateString(testBlobCmd.ContentLanguage, ternary.IffNotNil(get.ContentLanguage, "")) {
 		fmt.Println("mismatch ContentLanguage between actual and user given blob")
 		os.Exit(1)
 	}
