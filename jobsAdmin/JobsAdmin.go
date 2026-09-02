@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // sortPlanFiles is struct that implements len, swap and less than functions
@@ -120,8 +121,10 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
-	unusedExpectedCoarseRequestByteCount := int64(0)
-	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+	// Use a dual-dimension pacer so the AzureFiles -> AzureFiles data plane can
+	// meter IOPS alongside bandwidth. A zero IOPS rate leaves the IOPS dimension
+	// unlimited, so every non-Files job behaves exactly as before (bandwidth-only).
+	pacer := ste.NewRateLimitTokenBucketPacer(targetRateInBytesPerSec, 0 /* unlimited IOPS by default */)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	ja := &jobsAdmin{
@@ -163,8 +166,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 func getMaxRamForChunks() int64 {
 
 	// return the user-specified override value, if any
-	envVar := common.EEnvironmentVariable.BufferGB()
-	overrideString := common.GetEnvironmentVariable(envVar)
+	envVar := enum.EEnvironmentVariable.BufferGB()
+	overrideString := envVar.Get()
 	if overrideString != "" {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
@@ -393,7 +396,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
 	// Setting initial pool size to 4 and max pool size to 3,000
 	ja.concurrency.InitialMainPoolSize = 4
-	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: common.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
+	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: enum.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
 
 	// recreate the concurrency tuner.
 	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.

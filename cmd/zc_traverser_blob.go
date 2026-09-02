@@ -32,6 +32,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
@@ -163,7 +165,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 			if bloberror.HasCode(err, bloberror.AuthorizationPermissionMismatch) {
 				// Maybe we don't have the ability to list? Can we get container properties as a fallback?
 				_, propErr := containerClient.GetProperties(t.ctx, nil)
-				err = common.Iff(propErr == nil, nil, err)
+				err = ternary.Iff(propErr == nil, nil, err)
 			}
 		}
 
@@ -673,11 +675,11 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	)
 	object.tryUpdateTimestampsFromMetadata(blobInfo.Metadata)
 
-	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
+	object.blobDeleted = ternary.IffNotNil(blobInfo.Deleted, false)
 	if t.include.Deleted() && t.include.Snapshots() {
-		object.blobSnapshotID = common.IffNotNil(blobInfo.Snapshot, "")
+		object.blobSnapshotID = ternary.IffNotNil(blobInfo.Snapshot, "")
 	} else if t.include.Versions() && blobInfo.VersionID != nil {
-		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
+		object.blobVersionID = ternary.IffNotNil(blobInfo.VersionID, "")
 	}
 	return object
 }
@@ -762,7 +764,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		s2sPreserveSourceTags:       opts.PreserveBlobTags,
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
-		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
+		isDFS:                       ternary.DerefOrZero(ternary.FirstOrZero(blobOpts).isDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:          opts.IsSyncDestination,
@@ -770,7 +772,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
 
-	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
+	disableHierarchicalScanning := strings.ToLower(enum.EEnvironmentVariable.DisableHierarchicalScanning().Get())
 
 	// disableHierarchicalScanning should be true for permanent delete
 	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && t.include.Deleted() && (t.include.Snapshots() || t.include.Versions()) {

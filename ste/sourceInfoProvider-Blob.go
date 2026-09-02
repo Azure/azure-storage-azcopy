@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 // Source info provider for Azure blob
@@ -170,7 +171,7 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 	if err != nil {
 		return time.Time{}, err
 	}
-	return common.IffNotNil(properties.LastModified, time.Time{}), nil
+	return ternary.IffNotNil(properties.LastModified, time.Time{}), nil
 }
 
 func (p *blobSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {

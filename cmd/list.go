@@ -33,6 +33,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/spf13/cobra"
 
@@ -50,6 +52,9 @@ type rawListCmdArgs struct {
 	RunningTally    bool
 	MegaUnits       bool
 	trailingDot     string
+
+	// named credentials (bound to --cred flag)
+	CredName string
 }
 
 type validProperty string
@@ -146,6 +151,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 		return cooked, err
 	}
 	cooked.properties = raw.parseProperties()
+	cooked.CredName = raw.CredName
 
 	return cooked, nil
 }
@@ -159,6 +165,9 @@ type cookedListCmdArgs struct {
 	RunningTally    bool
 	MegaUnits       bool
 	trailingDot     common.TrailingDotOption
+
+	// named credentials (resolved from --cred flag)
+	CredName string
 }
 
 var raw rawListCmdArgs
@@ -216,13 +225,15 @@ func init() {
 		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	rootCmd.AddCommand(listContainerCmd)
+
+	AddTargetCredFlags(listContainerCmd, &raw.CredName)
 }
 
 // handleListContainerCommand handles the list container command
 func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	var credentialInfo common.CredentialInfo
+	var credentialInfo cred.CredentialInfo
 
 	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
@@ -238,16 +249,16 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return err
 	}
 
-	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
-		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
-	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
+	credentialInfo, err = GetTargetCredInfo(source, cooked.location, GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: cooked.CredName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
+		return err
 	}
 
 	// check if user wants to get version id
@@ -503,5 +514,5 @@ func getPath(containerName, relativePath string, level LocationLevel, entityType
 }
 
 func sizeToString(size int64, machineReadable bool) string {
-	return common.Iff(machineReadable, strconv.Itoa(int(size)), ByteSizeToString(size))
+	return ternary.Iff(machineReadable, strconv.Itoa(int(size)), ByteSizeToString(size))
 }

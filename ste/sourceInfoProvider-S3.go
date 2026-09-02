@@ -31,6 +31,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	minio "github.com/minio/minio-go/v7"
 )
 
@@ -43,7 +45,7 @@ type s3SourceInfoProvider struct {
 
 	s3Client  *minio.Client
 	s3URLPart common.S3URLParts
-	credType  common.CredentialType
+	credType  enum.CredentialType
 }
 
 // By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
@@ -67,17 +69,17 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	}
 
 	if p.transferInfo.Provider != nil { //add check for if we want to use provider case
-		p.credType = common.ECredentialType.S3AccessKey()
+		p.credType = enum.ECredentialType.S3AccessKey()
 	} else if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
-		p.credType = common.ECredentialType.S3PublicBucket()
+		p.credType = enum.ECredentialType.S3PublicBucket()
 	} else {
-		p.credType = common.ECredentialType.S3AccessKey()
+		p.credType = enum.ECredentialType.S3AccessKey()
 	}
 	ctx := jptm.Context()
 	ctx = withPipelineNetworkStats(ctx, nil)
 	p.s3Client, err = s3ClientFactory.GetS3Client(ctx, common.CredentialInfo{
 		CredentialType: p.credType,
-		S3CredentialInfo: common.S3CredentialInfo{
+		S3CredentialInfo: cred.S3CredentialInfo{
 			Endpoint:   p.s3URLPart.Endpoint,
 			Region:     p.s3URLPart.Region,
 			BucketName: p.s3URLPart.BucketName,
@@ -96,7 +98,7 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 }
 
 func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
-	if p.credType == common.ECredentialType.S3PublicBucket() {
+	if p.credType == enum.ECredentialType.S3PublicBucket() {
 		return p.rawSourceURL.String(), nil
 	}
 

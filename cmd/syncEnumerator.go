@@ -31,7 +31,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -68,6 +67,26 @@ func NewSyncEnumeratorOptions(errorChannelSize int, options *SyncOrchestratorOpt
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
 func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOptions *SyncEnumeratorOptions) (enumerator *syncEnumerator, err error) {
+	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
+		return nil, fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
+		return nil, fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
+	if cca.fromTo.IsUpload() || cca.fromTo.IsS2S() {
+		// Solve for the destination, and potentially, the source as an auxiliary token.
+	} else if cca.fromTo.IsDownload() {
+		// it's a download, so,
+	} else {
+		panic("auth resolution scheme not defined for transfer fromto " + cca.fromTo.String())
+	}
+
+	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
+	if err != nil {
+		return nil, err
+	}
 
 	if enumeratorOptions == nil {
 		enumeratorOptions = NewSyncDefaultEnumeratorOptions()
@@ -77,22 +96,16 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		enumeratorOptions.SyncOrchOptions.fromTo = cca.fromTo
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
-
+	srcCredInfo, err := GetTargetCredInfo(cca.source, cca.fromTo.From(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: cca.SrcCredName,
+		CpkOptions:         cca.cpkOptions,
+		TokenManager:       GetCredentialManager(),
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous() {
-		if srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To().CanForwardOAuthTokens() {
-			// no-op, this is OK
-		} else if srcCredInfo.CredentialType == common.ECredentialType.GoogleAppCredentials() || srcCredInfo.CredentialType == common.ECredentialType.S3AccessKey() || srcCredInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
-			// this too, is OK
-		} else if srcCredInfo.CredentialType == common.ECredentialType.Anonymous() {
-			// this is OK
-		} else {
-			return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cca.fromTo.From(), cca.fromTo.To())
-		}
 	}
 
 	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
@@ -178,11 +191,21 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
+	dstCredInfo, err := GetTargetCredInfo(cca.destination, cca.fromTo.To(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: cca.DstCredName,
+		CpkOptions:         common.CpkOptions{}, // unnecessary for destination
+		TokenManager:       GetCredentialManager(),
+	})
 
 	if err != nil {
 		return nil, err
 	}
+
+	glcm.Info(fmt.Sprintf("Authorizing source with %s", srcCredInfo.CredentialType.String()))
+	glcm.Info(fmt.Sprintf("Authorizing destination with %s", dstCredInfo.CredentialType.String()))
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -308,7 +331,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		SymlinkHandlingType: cca.symlinkHandling,
 		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
 		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
@@ -333,8 +355,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+		S2SSourceCredentialType:        srcCredInfo.CredentialType,
 
-		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
@@ -347,13 +369,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		copyJobTemplate.Provider = credProvider
 	}
 
-	var srcReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
+	srcOptions := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
@@ -367,8 +383,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.fromTo.From(),
 		cca.source,
 		srcCredInfo.CredentialType,
-		srcCredInfo.OAuthTokenInfo.TokenCredential,
-		&options,
+		srcCredInfo.TokenCredential,
+		&srcOptions,
 		azureFileSpecificOptions,
 	)
 	if err != nil {
@@ -383,24 +399,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		}
 	}
 
-	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	var srcTokenCred *common.ScopedToken
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
-	}
-
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
+	dstOptions := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, dstCredInfo.TokenCredential)
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
 		cca.destination,
 		dstCredInfo.CredentialType,
-		dstCredInfo.OAuthTokenInfo.TokenCredential,
-		&options,
+		dstCredInfo.TokenCredential,
+		&dstOptions,
 		azureFileSpecificOptions,
 	)
 
@@ -516,7 +521,7 @@ func GetSyncEnumeratorWithDestComparator(
 	}
 	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
-	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobFSBlob()) {
+	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobFSBlob() || cca.fromTo == common.EFromTo.FileFile()) {
 		// newFpoAwareProcessor sets the destCleanerFunc to nil for a non folder aware source destination pair like S3->Blob.
 		// But in case of SyncOrchestrator, S3->Blob sync does recursive deletion for a prefix.
 		// This requires a valid deletion processor to be passed to the comparator.

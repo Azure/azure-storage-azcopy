@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"os"
 	"path/filepath"
 	"reflect"
@@ -202,8 +206,7 @@ type GlobalFlags struct {
 	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
 	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
-	// TODO: reconsider/reengineer this flag; WI#26475473
-	// DebugSkipFiles []string `flag:"debug-skip-files"`
+	DebugSkipFiles []string `flag:"debug-skip-files,serializer:SerializeDebugSkipFiles"`
 
 	// TODO: handle prompting and input; WI#26475441
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
@@ -216,7 +219,11 @@ type GlobalFlags struct {
 }
 
 func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter, ctx context.Context) string {
-	return common.Iff(isLaunchedByDebugger, "true", "false")
+	return ternary.Iff(isLaunchedByDebugger, "true", "false")
+}
+
+func (GlobalFlags) SerializeDebugSkipFiles(list any, a ScenarioAsserter, ctx context.Context) string {
+	return strings.Join(GetTypeOrAssert[[]string](a, list), ";")
 }
 
 func (GlobalFlags) DefaultMemoryProfile(a ScenarioAsserter, ctx context.Context) string {
@@ -303,6 +310,8 @@ type CopySyncCommonFlags struct {
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
 	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
+	SrcCred                 *string                      `flag:"src-cred"`
+	DstCred                 *string                      `flag:"dst-cred"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
@@ -423,6 +432,7 @@ type RemoveFlags struct {
 	GlobalFlags
 	CommonFilterFlags
 
+	Cred            *string                       `flag:"cred"`
 	Recursive       *bool                         `flag:"recursive"`
 	ForceIfReadOnly *bool                         `flag:"force-if-read-only"`
 	ListOfFiles     []string                      `flag:"list-of-files"`
@@ -435,6 +445,26 @@ type RemoveFlags struct {
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
 }
 
+type SetPropertiesFlags struct {
+	GlobalFlags
+
+	Cred          *string                   `flag:"cred"`
+	Recursive     *bool                     `flag:"recursive"`
+	FromTo        *common.FromTo            `flag:"from-to"`
+	Metadata      *string                   `flag:"metadata"`
+	BlobTags      *string                   `flag:"blob-tags"`
+	BlockBlobTier *common.BlockBlobTier     `flag:"block-blob-tier"`
+	DryRun        *bool                     `flag:"dry-run"`
+	TrailingDot   *common.TrailingDotOption `flag:"trailing-dot"`
+}
+
+type MakeFlags struct {
+	GlobalFlags
+
+	Cred    *string `flag:"cred"`
+	QuotaGB *uint32 `flag:"quota-gb"`
+}
+
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
 	CopyFlags{}.SerializeListingFile(in, scenarioAsserter, ctx)
 }
@@ -442,6 +472,7 @@ func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsser
 type ListFlags struct {
 	GlobalFlags
 
+	Cred            *string                   `flag:"cred"`
 	MachineReadable *bool                     `flag:"machine-readable"`
 	RunningTally    *bool                     `flag:"running-tally"`
 	MegaUnits       *bool                     `flag:"mega-units"`
@@ -453,9 +484,9 @@ type LoginFlags struct {
 	GlobalFlags
 
 	// Generic flags
-	TenantID    *string               `flag:"tenant-id"`
-	AADEndpoint *string               `flag:"aad-endpoint"`
-	LoginType   *common.AutoLoginType `flag:"login-type"`
+	TenantID    *string             `flag:"tenant-id"`
+	AADEndpoint *string             `flag:"aad-endpoint"`
+	LoginType   *enum.AutoLoginType `flag:"login-type"`
 
 	// Managed identity
 	IdentityClientID   *string `flag:"identity-client-id"`
@@ -464,14 +495,24 @@ type LoginFlags struct {
 	// SPN
 	ApplicationID *string `flag:"application-id"`
 	CertPath      *string `flag:"certificate-path"`
+
+	// Identity
+	Nickname *string `flag:"nickname"`
 }
 
 type LoginStatusFlags struct {
 	GlobalFlags
 
-	Tenant   *bool `flag:"tenant"`
-	Endpoint *bool `flag:"endpoint"`
-	Method   *bool `flag:"method"`
+	Tenant   *bool   `flag:"tenant"`
+	Endpoint *bool   `flag:"endpoint"`
+	Method   *bool   `flag:"method"`
+	Nickname *string `flag:"nickname"`
+}
+
+type LogoutFlags struct {
+	GlobalFlags
+
+	Nickname *string `flag:"nickname"`
 }
 
 type JobsCleanFlags struct {
@@ -492,6 +533,17 @@ type JobsListFlags struct {
 type JobsShowFlags struct {
 	GlobalFlags
 	WithStatus *common.TransferStatus `flag:"with-status"`
+}
+
+type ResumeFlags struct {
+	GlobalFlags
+
+	Include        *string `flag:"include"`
+	Exclude        *string `flag:"exclude"`
+	SourceSAS      *string `flag:"source-sas"`
+	DestinationSAS *string `flag:"destination-sas"`
+	SourceCred     *string `flag:"src-cred"`
+	DestCred       *string `flag:"dst-cred"`
 }
 
 type WindowsAttribute uint32

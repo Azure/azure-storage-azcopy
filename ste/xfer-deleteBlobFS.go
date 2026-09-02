@@ -6,6 +6,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"net/http"
 	"strings"
@@ -106,7 +107,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		return
 	}
 
-	resourceType := common.IffNotNil(props.ResourceType, "")
+	resourceType := ternary.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
 		fileClient := c.NewFileClient(info.SrcFilePath)
 

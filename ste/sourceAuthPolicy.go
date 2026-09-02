@@ -21,12 +21,14 @@
 package ste
 
 import (
+	"errors"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 )
 
 // sourceAuthPolicy should be used as a per-retry policy
@@ -35,6 +37,14 @@ type sourceAuthPolicy struct {
 	cred  azcore.TokenCredential
 	token *azcore.AccessToken
 	lock  sync.RWMutex
+}
+
+type sourceAuthenticationRequiredError struct {
+	err *azidentity.AuthenticationRequiredError
+}
+
+func (s *sourceAuthenticationRequiredError) Error() string {
+	return s.err.Error()
 }
 
 const copySourceAuthHeader = "x-ms-copy-source-authorization"
@@ -62,6 +72,14 @@ func (s *sourceAuthPolicy) Do(req *policy.Request) (*http.Response, error) {
 			tk, err := s.cred.GetToken(req.Raw().Context(), options)
 			if err != nil {
 				s.lock.Unlock()
+
+				var authReqErr *azidentity.AuthenticationRequiredError
+				if errors.As(err, &authReqErr) {
+					err = &sourceAuthenticationRequiredError{
+						err: authReqErr,
+					}
+				}
+
 				return nil, err
 			}
 			s.token = &tk

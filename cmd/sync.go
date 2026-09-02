@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -46,6 +47,10 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	fromTo    string
+
+	// named credentials (bound to --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
 
 	// options from flags
 	blockSizeMB           float64
@@ -147,6 +152,9 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
 		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
+
+		SrcCredName: raw.SrcCredName,
+		DstCredName: raw.DstCredName,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -255,7 +263,10 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		return cooked, err
 	}
 
-	if err = cooked.blobType.Parse(raw.blobType); err != nil {
+	if raw.blobType == "" {
+		// Detect _is_ the 0 value, but to be explicit with our defaulting behavior, we'll set it anyway.
+		cooked.blobType = common.EBlobType.Detect()
+	} else if err = cooked.blobType.Parse(raw.blobType); err != nil {
 		return cooked, err
 	}
 
@@ -462,11 +473,13 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
-	fromTo                  common.FromTo
-	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType common.CredentialType
+	source      common.ResourceString
+	destination common.ResourceString
+	fromTo      common.FromTo
+
+	// named credentials (resolved from --src-cred / --dst-cred flags)
+	SrcCredName string
+	DstCredName string
 
 	// filters
 	recursive             bool
@@ -784,7 +797,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-		throughput = common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
+		throughput = ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
 		// reset the interval timer and byte count
 		cca.intervalStartTime = time.Now()
@@ -856,73 +869,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	return
 }
-
-func (cca *cookedSyncCmdArgs) setCredentialInfo(ctx context.Context) error {
-
-	err := common.SetBackupMode(cca.backupMode, cca.fromTo)
-	if err != nil {
-		return err
-	}
-
-	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
-		return fmt.Errorf("failed to resolve source: %w", err)
-	}
-
-	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
-		return fmt.Errorf("failed to resolve destination: %w", err)
-	}
-
-	// Verifies credential type and initializes credential info.
-	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
-	// Download is the only time our primary credential type will be based on source
-	if cca.fromTo.IsDownload() {
-		cca.credentialInfo = srcCredInfo
-	} else if cca.fromTo.IsS2S() {
-		cca.s2sSourceCredentialType = srcCredInfo.CredentialType // Assign the source credential type in S2S
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
-			return err
-		}
-	}
-
-	// Check if destination is system container
-	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
-		if err != nil {
-			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
-		}
-		if common.IsSystemContainer(dstContainerName) {
-			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
-		}
-	}
-	return nil
-}
-
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	err = cca.setCredentialInfo(ctx)
-	if err != nil {
-		return err
-	}
 
 	enumerator, err := cca.InitEnumerator(ctx, NewSyncDefaultEnumeratorOptions())
 	if err != nil {
@@ -1156,28 +1104,7 @@ func init() {
 
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false,
-		"False by default. "+
-			"\n Preserves SMB ACLs between aware resources (Azure Files). "+
-			"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"),
-		"Preserves SMB property info (last write time, creation time, attribute bits)"+
-			" between SMB-aware resources (Windows and Azure Files SMB). "+
-			"On windows, this flag will be set to true by default. \n If the source or destination is a "+
-			"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true."+
-			"\n  Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. "+
-			"\n This flag applies to both files and folders, unless a file-only filter is specified "+
-			"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, "+
-			"except for Last Write Time which is never preserved for folders.")
-
-	//Marking this flag as hidden as we might not support it in the future
-	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
-		"Specify this flag if you want to preserve properties during the transfer operation."+
-			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info "+
-			"flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB"+
-			"share and for Linux when copying to Azure Files NFS share. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
@@ -1281,33 +1208,21 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. "+
 		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
 
-	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None",
-		"Inform sync to rely on hashes as an alternative to LMT. "+
-			"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
+	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. "+
+		"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 
-	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "",
-		"When using `--local-hash-storage-mode=HiddenFiles` "+
-			"\n you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
+	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` "+
+		"\n you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
 
-	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode",
-		common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; "+
-			"\n valid options are: HiddenFiles (OS Agnostic), "+
-			"\n XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), "+
-			"\n AlternateDataStreams (Windows only; requires named streams on target volume)")
-
-	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
-	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
-	syncCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	_ = syncCmd.PersistentFlags().MarkHidden("include")
-	_ = syncCmd.PersistentFlags().MarkHidden("exclude")
+	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode", common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; "+
+		"\n valid options are: HiddenFiles (OS Agnostic), "+
+		"\n XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), \n AlternateDataStreams (Windows only; requires named streams on target volume)")
 
 	// TODO follow sym link is not implemented, clarify behavior first
 	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
-	// Deprecate the old persist-smb-permissions flag
-	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB or Data Lake Storage to Data Lake Storage)"+
 		"and permissions between aware resources(Linux to Azure Files NFS). "+
@@ -1316,12 +1231,36 @@ func init() {
 		"\nFor downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
 		"\nThis flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
-	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
-	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
-	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
+	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. "+
+		"\n This flag is only applicable when the source is NFS file share or the destination is NFS file share. "+
+		"\n Available options: skip, preserve, follow (default 'follow').")
 
-	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
-		"Follow by default. Preserve hardlinks for NFS resources. "+
-			"\n This flag is only applicable when the source is Azure NFS file share or the destination is NFS file share. "+
-			"\n Available options: skip, preserve, follow (default 'follow').")
+	{ // Separate out hidden flags to improve readability
+		// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+		syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+		syncCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+
+		syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. "+
+			"\n Preserves SMB ACLs between aware resources (Azure Files). "+
+			"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+		syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
+			" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. \n If the source or destination is a "+
+			"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true.\n  Only the attribute bits supported by Azure Files "+
+			"will be transferred; any others will be ignored. "+
+			"\n This flag applies to both files and folders, unless a file-only filter is specified "+
+			"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+
+		// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+		syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+
+		if !displayDeveloperOptions {
+			_ = syncCmd.PersistentFlags().MarkHidden("include")
+			_ = syncCmd.PersistentFlags().MarkHidden("exclude")
+			_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+			_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+			_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
+		}
+	}
+
+	AddSourceDestCredFlags(syncCmd, &raw.SrcCredName, &raw.DstCredName)
 }
