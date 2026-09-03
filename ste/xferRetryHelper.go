@@ -54,6 +54,14 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
 				errorCodes := getErrorCodes(resp)
+				// Intermediaries such as Azure Front Door can generate transient 502 or 504
+				// HTML responses without Azure Storage error-code headers. In that case,
+				// apply the wildcard policy configured for the HTTP status itself. Do not
+				// return false when the wildcard is disabled because the copy-source status
+				// header below may still identify a retryable condition.
+				if len(errorCodes) == 0 && storageErrorCodes[StorageErrorCodesWildcard] {
+					return true
+				}
 				for _, errorCode := range errorCodes {
 					if policy, ok := storageErrorCodes[errorCode]; ok {
 						if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
