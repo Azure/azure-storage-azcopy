@@ -323,6 +323,21 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
+	// NOTE: S2SGetPropertiesInBackend has no effect for Blob->Blob transfers: sourceInfoProvider-Blob.go
+	// has no code path that consults it (only S3/GCP/Azure Files source providers check this flag to
+	// decide whether to do a per-object backend property fetch). So it is left at its original,
+	// unconditional value (true) here regardless of build mode/profile -- there is no redundant round
+	// trip to skip for Blob->Blob in the first place.
+	//
+	// S2SSourceChangeValidation is likewise left at its normal (true) value: it signals "source-change
+	// validation is wanted", and useSourceChangeAccessCondition() (in xfer-anyToRemote-file.go) decides
+	// HOW that validation is enforced for mover-high-perf Blob->Blob transfers -- via the cheaper
+	// source access-condition (412 on StageBlockFromURL/UploadBlobFromURL) instead of a separate
+	// pre/post-transfer GetProperties call. If S2SSourceChangeValidation were forced to false here,
+	// useSourceChangeAccessCondition() would never activate (it requires S2SSourceChangeValidation ==
+	// true) and the GetProperties fallback would also be skipped, silently disabling source-change
+	// detection entirely for that path.
+
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,

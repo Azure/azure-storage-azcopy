@@ -427,6 +427,12 @@ func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryRespo
 	if pipeStats != nil {
 		js.AverageIOPS = pipeStats.OperationsPerSecond()
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
+		js.AverageWireMs = pipeStats.AverageWireMs()
+		js.AverageDNSMs = pipeStats.AverageDNSMs()
+		js.AverageTLSMs = pipeStats.AverageTLSMs()
+		js.ConnNewCount = pipeStats.ConnNewCount()
+		js.ConnReusedCount = pipeStats.ConnReusedCount()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
@@ -583,6 +589,12 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	if pipeStats != nil {
 		js.AverageIOPS = pipeStats.OperationsPerSecond()
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
+		js.AverageWireMs = pipeStats.AverageWireMs()
+		js.AverageDNSMs = pipeStats.AverageDNSMs()
+		js.AverageTLSMs = pipeStats.AverageTLSMs()
+		js.ConnNewCount = pipeStats.ConnNewCount()
+		js.ConnReusedCount = pipeStats.ConnReusedCount()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}

@@ -34,7 +34,20 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
+
+// maxActiveGoRoutines caps total process goroutines before the sync throttler pauses source
+// enumeration. In high-throughput transfers the goroutine count is dominated by the HTTP
+// connection pool (~2 goroutines per live connection), NOT scanner activity, so the static 50k
+// default can false-trip and stall enumeration. Only the high-perf mover profile raises the cap
+// (buildmode.SyncMaxGoroutines(): 300000); every other build keeps 50k.
+var maxActiveGoRoutines int64 = func() int64 {
+	if buildmode.HighPerf() {
+		return int64(buildmode.SyncMaxGoroutines())
+	}
+	return 50_000
+}()
 
 // --- BEGIN Throttling and Concurrency Configuration ---
 const (
@@ -42,8 +55,7 @@ const (
 
 	// These are static limits as of now. This can be dynamically adjusted later
 	// by the StatsMonitor based on available system resources.
-	maxActiveGoRoutines      int64   = 50_000 // Max active goroutines, used for dynamic limits
-	maxMemoryUsageMultiplier float64 = 0.7    // Max memory usage percentage, used for dynamic limits
+	maxMemoryUsageMultiplier float64 = 0.7 // Max memory usage percentage, used for dynamic limits
 
 	throttleLogIntervalSecs       int           = 60 * 60                               // How often to log during throttling
 	semaphoreThrottleWaitInterval time.Duration = time.Duration(time.Millisecond * 100) // How often to check semaphore after throttle limit is hit
@@ -585,6 +597,8 @@ func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
 		{Key: "SrcEnum", Value: fmt.Sprintf("%d", srcDirEnumerating.Load())},
 		{Key: "DstEnum", Value: fmt.Sprintf("%d", dstDirEnumerating.Load())},
 		{Key: "Done", Value: fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
+		{Key: "ChanFull", Value: fmt.Sprintf("%d", mergeJoinChanFullEvents.Load())},
+		{Key: "ChanDry", Value: fmt.Sprintf("%d", mergeJoinChanDryEvents.Load())},
 	}
 
 	waitingSource := ds.waitingForSourceSemaphore.Load()

@@ -39,6 +39,12 @@ type urlToBlockBlobCopier struct {
 
 	srcURL               string
 	addFileRequestIntent bool // Necessary for FileBlob Oauth copies
+
+	// srcChangeAC, when non-nil, carries a source access-condition (SourceIfUnmodifiedSince set to the
+	// enumerated source LMT) that is attached to every StageBlockFromURL/UploadBlobFromURL request, so
+	// Azure Storage atomically fails the copy with 412 if the source changed since enumeration. Set
+	// only in the mover high-perf profile for Blob->Blob, replacing the pre/post-transfer GetProperties change checks.
+	srcChangeAC *blob.SourceModifiedAccessConditions
 }
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -67,10 +73,22 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvi
 		sUrl, _ := file.ParseURL(srcURL)
 		intentBool = sUrl.SAS.Signature() == "" // No SAS means using OAuth
 	}
+
+	// In the mover high-perf profile for Blob->Blob transfers, enforce source-change detection via a
+	// source access-condition on the copy request itself (the enumerated LMT), instead of separate
+	// GetProperties calls. The service returns 412 if the source changed since enumeration, which
+	// fails the transfer before commit.
+	var srcChangeAC *blob.SourceModifiedAccessConditions
+	if useSourceChangeAccessCondition(jptm) {
+		lmt := jptm.LastModifiedTime()
+		srcChangeAC = &blob.SourceModifiedAccessConditions{SourceIfUnmodifiedSince: &lmt}
+	}
+
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase:  *senderBase,
 		srcURL:               srcURL,
-		addFileRequestIntent: intentBool}, nil
+		addFileRequestIntent: intentBool,
+		srcChangeAC:          srcChangeAC}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -125,10 +143,11 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			return
 		}
 		options := &blockblob.StageBlockFromURLOptions{
-			Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
-			CPKInfo:                 c.jptm.CpkInfo(),
-			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-			CopySourceAuthorization: token,
+			Range:                          blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
+			CPKInfo:                        c.jptm.CpkInfo(),
+			CPKScopeInfo:                   c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization:        token,
+			SourceModifiedAccessConditions: c.srcChangeAC,
 		}
 
 		// Informs SDK to add xms-file-request-intent header
@@ -180,13 +199,14 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		}
 
 		options := &blockblob.UploadBlobFromURLOptions{
-			HTTPHeaders:             &c.headersToApply,
-			Metadata:                c.metadataToApply,
-			Tier:                    destBlobTier,
-			Tags:                    blobTags,
-			CPKInfo:                 c.jptm.CpkInfo(),
-			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-			CopySourceAuthorization: token,
+			HTTPHeaders:                    &c.headersToApply,
+			Metadata:                       c.metadataToApply,
+			Tier:                           destBlobTier,
+			Tags:                           blobTags,
+			CPKInfo:                        c.jptm.CpkInfo(),
+			CPKScopeInfo:                   c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization:        token,
+			SourceModifiedAccessConditions: c.srcChangeAC,
 		}
 		// Informs SDK to add xms-file-request-intent header
 		if c.addFileRequestIntent {
