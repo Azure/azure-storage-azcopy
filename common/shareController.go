@@ -135,11 +135,13 @@ var shareStatsSourceFactory func(shareKey, shareURL string, tokenCred azcore.Tok
 // ignored.
 func RegisterResourceStatsSourceFactory(f func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource) {
 	if f == nil {
+		GetLifecycleMgr().Info("resource stats source factory not registered: factory is nil, shares stay unlimited")
 		traceShare(LogDebug, "resource stats source factory not registered: factory is nil, shares stay unlimited")
 		return
 	}
 	shareStatsSourceFactory = f
 	statsSourceFactoryRegistered = true
+	GetLifecycleMgr().Info("registered resource stats source factory")
 	traceShare(LogDebug, "registered resource stats source factory")
 }
 
@@ -330,7 +332,7 @@ func StopShareControls() {
 
 	shareControlsWg.Wait()
 	if stopped > 0 {
-		traceShare(LogInfo, "stopped %d share control(s)", stopped)
+		traceShare(LogInfo , "stopped %d share control(s)", stopped)
 	}
 	logTraceOnceSummary()
 }
