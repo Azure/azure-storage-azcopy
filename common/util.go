@@ -211,6 +211,12 @@ func GetServiceClientForLocation(loc Location,
 		if cred != nil {
 			o.FileRequestIntent = to.Ptr(fileservice.ShareTokenIntentBackup)
 			fsc, err = fileservice.NewClient(resourceURL, cred, o)
+			
+			if (enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
+				// Recorded so the GetShareStats poller can authenticate against this
+				// account when its caller has no credential to pass down.
+				RegisterShareStatsCredential(fileURLParts.Host, cred)								
+			}			
 		} else {
 			fsc, err = fileservice.NewClientWithNoCredential(resourceURL, o)
 		}
