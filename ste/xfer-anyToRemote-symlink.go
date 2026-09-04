@@ -17,6 +17,7 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -26,7 +27,9 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 	}
 	symSIP, ok := srcInfoProvider.(ISymlinkBearingSourceInfoProvider)
 	if !ok {
-		jptm.LogSendError(info.Source, info.Destination, "source info provider implementation does not support symlinks", 0)
+		err_msg := "source info provider implementation does not support symlinks"
+		jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -43,6 +46,7 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -50,7 +54,9 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 
 	s, ok := baseSender.(symlinkSender) // todo: symlinkSender
 	if !ok {
-		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support symlinks", 0)
+		err_msg := "sender implementation does not support symlinks"
+		jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return

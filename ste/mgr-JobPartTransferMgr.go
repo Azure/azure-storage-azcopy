@@ -18,7 +18,7 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"	
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -50,6 +50,7 @@ type IJobPartTransferMgr interface {
 	TransferStatusIgnoringCancellation() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
+	SetErrorMessage(errorMessage string)
 	SetNumberOfChunks(numChunks uint32)
 	SetActionAfterLastChunk(f func())
 	ReportTransferDone() uint32

@@ -451,6 +451,9 @@ func (jppt *JobPartPlanTransfer) ErrorMessage() string {
 // overWrite flags if set to true overWrites the errorMessage.
 // If overWrite flag is set to false, then errorMessage won't be overwritten.
 func (jppt *JobPartPlanTransfer) SetErrorMessage(errorMessage string, overwrite bool) {
+	// redact any sensitive information from the error message before saving it to the job part plan transfer; RedactSecretQueryParamForLogging and SanitizeLogMessage don't cover the exact same set of cases, so we use both to be safe.
+	errorMessage = common.GetLifecycleMgr().SanitizeLogMessage(common.URLStringExtension(errorMessage).RedactSecretQueryParamForLogging())
+
 	savedErrorMessageLength := atomic.LoadInt32(&jppt.errorMessageLength)
 	currentErrorMessageLength := int32(len(errorMessage))
 
