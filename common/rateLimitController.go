@@ -121,7 +121,7 @@ func DefaultRateLimitConfig() RateLimitConfig {
 		MinBandwidth:            1 * 1024 * 1024,
 		IopsStep:                100,
 		BandwidthStep:           1 * 1024 * 1024,
-		IncreaseFraction:        0.10,
+		IncreaseFraction:        0.05,
 		QuietForProactiveReturn: 60 * time.Second,
 		BaseBackoff:             250 * time.Millisecond,
 		MaxBackoff:              10 * time.Second,
