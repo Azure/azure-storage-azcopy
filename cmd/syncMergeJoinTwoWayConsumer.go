@@ -26,7 +26,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +33,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ============================================================================
@@ -409,23 +409,30 @@ func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
 // set (and GC pressure) bounded.
 const mergeJoinDefaultParallelTraversers int32 = 32
 
-// mergeJoinParallelTraversers is the directory-crawl parallelism for streaming merge-join jobs.
-// Override with SYNC_MJ_PARALLEL_TRAVERSERS (positive integer). The indexMap sync path is
-// unaffected and keeps its own parallelism (orchestratorOptions.parallelTraversers).
-var mergeJoinParallelTraversers = func() int32 {
-	if v := strings.TrimSpace(os.Getenv("SYNC_MJ_PARALLEL_TRAVERSERS")); v != "" {
+// resolveMergeJoinParallelTraversers returns the directory-crawl parallelism for streaming
+// merge-join jobs. Override with MOVER_SYNC_MJ_TRAV as a positive integer. The indexMap sync path
+// is unaffected and keeps its own parallelism (orchestratorOptions.parallelTraversers).
+//
+// Resolved per call (per job) rather than at package init so a per-job env override applied after
+// process start (e.g. the mover's featureConfig runtime tuning, which os.Setenv's MOVER_SYNC_MJ_TRAV
+// when a job is picked up) is honored instead of being frozen to the startup value.
+func resolveMergeJoinParallelTraversers() int32 {
+	if v := strings.TrimSpace(enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Get()); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return int32(n)
 		}
 	}
 	return mergeJoinDefaultParallelTraversers
-}()
+}
 
 // useStreamingMergeJoin reports whether the streaming merge-join should be used for
 // this transfer. Enablement is decided entirely in the mover and passed to azcopy as the single
 // per-job flag cca.useStreamingMergeJoin, which the mover sets when EITHER:
 //   - the job's subscription is allowlisted for the feature via featureConfig, OR
-//   - the USE_STREAMING_MERGE_JOIN env var is set (blanket / testing).
+//   - the MOVER_SYNC_MJ env var is set (blanket / testing). MOVER_SYNC_MJ represents the
+//     streaming merge-join way of comparing source and target LMTs, which leverages the
+//     lexicographically sorted listing of source-target pairs to do a single-pass, two-pointer
+//     merge instead of building an in-memory index map.
 //
 // azcopy no longer reads any enablement env var itself. When the flag is set, the merge-join is
 // still restricted to the source/destination pairs whose listing order is proven lexicographically
