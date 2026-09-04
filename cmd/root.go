@@ -287,6 +287,7 @@ func StartSystemStatsMonitorForJob() {
 	glcm.RegisterCloseFunc(func() {
 		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
 		common.GlobalSystemStatsMonitor.Stop()
+		common.StopShareControls()
 	})
 }
 
