@@ -95,6 +95,33 @@ func mirrorSyncArgs() *cookedSyncCmdArgs {
 	}
 }
 
+func TestUseStreamingMergeJoinSupportedPairs(t *testing.T) {
+	tests := []struct {
+		name      string
+		fromTo    common.FromTo
+		requested bool
+		expected  bool
+	}{
+		{name: "files to files", fromTo: common.EFromTo.FileFile(), requested: true, expected: true},
+		{name: "S3 to blob", fromTo: common.EFromTo.S3Blob(), requested: true, expected: true},
+		{name: "blob to BlobFS", fromTo: common.EFromTo.BlobBlobFS(), requested: true, expected: true},
+		{name: "files to blob", fromTo: common.EFromTo.FileBlob(), requested: true, expected: false},
+		{name: "blob to files", fromTo: common.EFromTo.BlobFile(), requested: true, expected: false},
+		{name: "files to files not requested", fromTo: common.EFromTo.FileFile(), requested: false, expected: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cca := &cookedSyncCmdArgs{
+				fromTo:                test.fromTo,
+				useStreamingMergeJoin: test.requested,
+			}
+
+			assert.Equal(t, test.expected, useStreamingMergeJoin(cca))
+		})
+	}
+}
+
 // mjTestFolder builds a minimal folder StoredObject (relativePath has NO trailing slash, matching
 // what the blob traverser emits for a sub-directory).
 func mjTestFolder(relPath string) StoredObject {
@@ -385,4 +412,3 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 		a.Fail("two-way merge did not complete — possible deadlock")
 	}
 }
-
