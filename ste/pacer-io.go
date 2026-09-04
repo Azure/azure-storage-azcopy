@@ -52,6 +52,10 @@ func pacerAcquire(ctx context.Context, p pacer, bytes, ops int64) error {
 		return iop.AcquireIO(ctx, bytes, ops)
 	}
 	// Legacy / bandwidth-only pacer: meter bytes, ignore IOPS.
+	if ops > 0 {
+		common.TraceShareOnce("pacer:nobwiops", common.LogInfo,
+			"IOPS metering dropped: pacer %T does not implement ioPacer, only bandwidth is charged", p)
+	}
 	if bytes > 0 {
 		return p.RequestTrafficAllocation(ctx, bytes)
 	}

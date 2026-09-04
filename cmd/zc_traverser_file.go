@@ -615,8 +615,18 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	// rate-limit budget, unless a caller supplied an explicit ScanPacer.
 	// GetShareScanPacer returns nil for non-Files URLs, leaving scanning unmetered.
 	// Stats polling only for the source fileshare.
-	if !opts.IsSyncDestination && t.scanPacer == nil &&
-		(enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
+	statsPoll := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
+	switch {
+	case statsPoll != "true":
+		common.TraceShareOnce("scan:envoff", common.LogInfo,
+			"enumeration not metered: AZCOPY_AZFILES_STATS_POLL=%q (exact string \"true\" required)", statsPoll)
+	case opts.IsSyncDestination:
+		common.TraceShareOnce("scan:syncdest", common.LogInfo,
+			"enumeration not metered: resource is the sync destination (polling is source-only by design)")
+	case t.scanPacer != nil:
+		common.TraceShareOnce("scan:explicit", common.LogInfo,
+			"enumeration not metered: caller supplied an explicit ScanPacer")
+	default:
 		// Not logged here: a traverser is built per directory, and the share controller
 		// already traces whether the control was created or reused.
 		t.scanPacer = common.GetShareScanPacer(rawURL)

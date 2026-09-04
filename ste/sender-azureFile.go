@@ -152,8 +152,15 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	fromTo := jptm.FromTo()
 	if file2FileCopy == "true" && fromTo.From() == common.ELocation.File() && fromTo.To() == common.ELocation.File() {
 		if sp := common.GetOrCreateSharePacer(info.Source, 1); sp != nil {
-			scopedPacer = newShareScopedPacer(pacer, sp)			
+			scopedPacer = newShareScopedPacer(pacer, sp)
+		} else {
+			common.TraceShareOnce("send:nopacer", common.LogInfo,
+				"transfer falling back to the global pacer: no share control for the source URL")
 		}
+	} else {
+		// FileNFS is a distinct ELocation, so NFS File->File does not match above.
+		common.TraceShareOnce("send:"+fromTo.String(), common.LogInfo,
+			"transfer pacing not share-scoped: fromTo=%s AZCOPY_AZFILES_STATS_POLL=%q", fromTo, file2FileCopy)
 	}
 
 	return &azureFileSenderBase{
