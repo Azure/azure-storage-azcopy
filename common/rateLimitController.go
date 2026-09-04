@@ -89,10 +89,17 @@ type RateLimitSink interface {
 
 // RateLimitConfig tunes the dual-bucket (IOPS + bandwidth) controller.
 type RateLimitConfig struct {
-	MinIops                 int64
-	MinBandwidth            int64
-	IopsStep                int64
-	BandwidthStep           int64
+	MinIops      int64
+	MinBandwidth int64
+	// IopsStep/BandwidthStep are the additive-increase fallback, used only when the
+	// service reports no limit for that dimension (limit == 0, i.e. unlimited) and
+	// IncreaseFraction therefore has nothing to take a percentage of.
+	IopsStep      int64
+	BandwidthStep int64
+	// IncreaseFraction is the additive-increase step as a fraction of the reported
+	// limit. A fixed step is meaningless across the range of share sizes: 100 ops
+	// is 20% of a 500 IOPS share but 0.5% of a 20,000 IOPS one.
+	IncreaseFraction        float64
 	QuietForProactiveReturn time.Duration
 	BaseBackoff             time.Duration
 	MaxBackoff              time.Duration
@@ -114,6 +121,7 @@ func DefaultRateLimitConfig() RateLimitConfig {
 		MinBandwidth:            1 * 1024 * 1024,
 		IopsStep:                100,
 		BandwidthStep:           1 * 1024 * 1024,
+		IncreaseFraction:        0.10,
 		QuietForProactiveReturn: 60 * time.Second,
 		BaseBackoff:             250 * time.Millisecond,
 		MaxBackoff:              10 * time.Second,
@@ -137,6 +145,9 @@ func normalizeRateLimitConfig(cfg RateLimitConfig) RateLimitConfig {
 	}
 	if cfg.BandwidthStep <= 0 {
 		cfg.BandwidthStep = d.BandwidthStep
+	}
+	if cfg.IncreaseFraction <= 0 || cfg.IncreaseFraction > 1 {
+		cfg.IncreaseFraction = d.IncreaseFraction
 	}
 	if cfg.QuietForProactiveReturn <= 0 {
 		cfg.QuietForProactiveReturn = d.QuietForProactiveReturn
@@ -470,9 +481,72 @@ func (d *RateLimitController) maybeReturnToProactiveLocked(stats ResourceStats, 
 		return
 	}
 	if d.detector.quiet(resourceIops, now) && d.detector.quiet(resourceBandwidth, now) {
+
 		d.applyProactiveLocked(stats)
+		return
 	}
-	// Otherwise remain reactive: one or both signals not yet quiet.
+	// Not yet quiet, but nothing is throttling right now either. This is the AI
+	// half of AIMD: without it the targets stay pinned at the last decrease for
+	// the whole quiet window, then jump straight to full equal-share.
+	d.increaseIopsLocked(stats.IopsLimit)
+	d.increaseBandwidthLocked(stats.BandwidthLimitBytesPerSec)
+}
+
+// additiveStep returns one increase step: IncreaseFraction of the reported
+// limit, or fallback when the dimension is unlimited (limit == 0) and there is
+// no limit to take a fraction of. The result is at least 1 so recovery always
+// makes forward progress.
+func additiveStep(limit int64, fraction float64, fallback int64) int64 {
+	if limit <= 0 {
+		return fallback
+	}
+	step := int64(float64(limit) * fraction)
+	if step < 1 {
+		step = 1
+	}
+	return step
+}
+
+// increaseIopsLocked additively steps the IOPS target toward limit. It is a
+// no-op until a multiplicative decrease has seeded a target. A zero limit means
+// unlimited, so it is not treated as a ceiling.
+func (d *RateLimitController) increaseIopsLocked(limit int64) {
+	if d.targetIops <= 0 {
+		return
+	}
+	step := additiveStep(limit, d.cfg.IncreaseFraction, d.cfg.IopsStep)
+	prev := d.targetIops
+	next := prev + step
+	if limit > 0 && next > limit {
+		next = limit
+	}
+	if next == prev {
+		return
+	}
+	d.targetIops = next
+	d.iopsStreak = 0
+	d.trace(LogInfo, "iops additive increase %d -> %d (step=%d limit=%d)", prev, next, step, limit)
+	d.setIopsRateLocked(d.targetIops)
+}
+
+// increaseBandwidthLocked mirrors increaseIopsLocked for the bandwidth target.
+func (d *RateLimitController) increaseBandwidthLocked(limit int64) {
+	if d.targetBw <= 0 {
+		return
+	}
+	step := additiveStep(limit, d.cfg.IncreaseFraction, d.cfg.BandwidthStep)
+	prev := d.targetBw
+	next := prev + step
+	if limit > 0 && next > limit {
+		next = limit
+	}
+	if next == prev {
+		return
+	}
+	d.targetBw = next
+	d.bwStreak = 0
+	d.trace(LogInfo, "bandwidth additive increase %d -> %d (step=%d limit=%d)", prev, next, step, limit)
+	d.setBandwidthRateLocked(d.targetBw)
 }
 
 // applyReactiveLocked drives per-resource AIMD from the combined throttle
@@ -493,21 +567,15 @@ func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrot
 	// IOPS resource.
 	if iopsThrottled {
 		d.decreaseIopsLocked(now, stats.IopsLimit)
-	} else if allowIncrease && d.targetIops > 0 {
-		d.targetIops = min(d.targetIops+d.cfg.IopsStep, stats.IopsLimit)
-		d.iopsStreak = 0
-		d.trace(LogWarning, "iops additive increase -> %d", d.targetIops)
-		d.setIopsRateLocked(d.targetIops)
+	} else if allowIncrease {
+		d.increaseIopsLocked(stats.IopsLimit)
 	}
 
 	// Bandwidth resource.
 	if bwThrottled {
 		d.decreaseBandwidthLocked(now, limitBw)
-	} else if allowIncrease && d.targetBw > 0 {
-		d.targetBw = min(d.targetBw+d.cfg.BandwidthStep, limitBw)
-		d.bwStreak = 0
-		d.trace(LogWarning, "bandwidth additive increase -> %d", d.targetBw)
-		d.setBandwidthRateLocked(d.targetBw)
+	} else if allowIncrease {
+		d.increaseBandwidthLocked(limitBw)
 	}
 
 	if retryAfterSec > 0 {
