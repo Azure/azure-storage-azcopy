@@ -504,6 +504,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	stderr := &bytes.Buffer{}
+	processRunID := ""
+	if AppInsightsTelemetryValidationEnabled() {
+		env, processRunID = telemetryProcessEnvironment(env, snapshotAppInsightsValidation().runID)
+	}
 	jobIDCapture := newAzCopyJobIDCapture(out)
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
@@ -548,11 +552,26 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		flagMap,
 		commandSpec.ShouldFail,
 		jobIDCapture.JobID())
+	noTelemetryExpected := telemetryExpectsNoEvents(commandSpec.Verb, flagMap, env)
+	if noTelemetryExpected {
+		validationDecision = appInsightsJobValidationDecision{}
+	}
 	if AppInsightsTelemetryValidationEnabled() && validationDecision.missingJobID {
 		a.NoError("capture AzCopy job ID for Application Insights validation",
 			fmt.Errorf("AzCopy %s output did not contain a valid job ID", commandSpec.Verb))
 	}
 	RegisterExpectedAppInsightsJob(validationDecision.jobID)
+	if AppInsightsTelemetryValidationEnabled() {
+		sourceType, destType := "", ""
+		if len(commandSpec.Targets) == 2 {
+			sourceType, destType = commandSpec.Targets[0].Location().String(), commandSpec.Targets[1].Location().String()
+		}
+		if noTelemetryExpected {
+			registerNoTelemetryExpectation(processRunID)
+		} else {
+			registerTelemetryExpectation(processRunID, validationDecision.jobID, commandSpec.Verb, jobIDCapture.FinalSummary(), sourceType, destType)
+		}
+	}
 
 	return out, &AzCopyJobPlan{}
 }
@@ -568,7 +587,7 @@ func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
 
 func azCopyCommandProducesJobFinishedTelemetry(verb AzCopyVerb, flags map[string]string) bool {
 	return azCopyVerbProducesJobFinishedTelemetry(verb) &&
-		!strings.EqualFold(flags["dry-run"], "true")
+		!telemetryExpectsNoEvents(verb, flags, nil)
 }
 
 type appInsightsJobValidationDecision struct {

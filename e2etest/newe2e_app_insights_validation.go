@@ -25,12 +25,13 @@ const (
 )
 
 type appInsightsValidationState struct {
-	mu           sync.RWMutex
-	enabled      bool
-	workspaceID  string
-	runID        string
-	startedAt    time.Time
-	expectedJobs map[string]int
+	mu               sync.RWMutex
+	enabled          bool
+	workspaceID      string
+	runID            string
+	startedAt        time.Time
+	expectedJobs     map[string]int
+	expectedAttempts []telemetryExpectation
 }
 
 var globalAppInsightsValidation appInsightsValidationState
@@ -59,6 +60,7 @@ func SetupAppInsightsTelemetryValidation(a Asserter) {
 	globalAppInsightsValidation.runID = config.RunID
 	globalAppInsightsValidation.startedAt = time.Now().UTC()
 	globalAppInsightsValidation.expectedJobs = make(map[string]int)
+	globalAppInsightsValidation.expectedAttempts = nil
 	globalAppInsightsValidation.mu.Unlock()
 
 	a.Log("Application Insights validation enabled for run %q.", config.RunID)
@@ -78,6 +80,9 @@ func validateAppInsightsValidationConfig(config AppInsightsValidationConfig) (bo
 		return false, errors.New(
 			"AZCOPY_TELEMETRY_CONNECTION_STRING, NEW_E2E_APP_INSIGHTS_WORKSPACE_ID, and AZCOPY_E2E_TELEMETRY_RUN_ID must all be set")
 	}
+	if len(config.RunID) > 80 {
+		return false, errors.New("E2E telemetry run ID must be at most 80 bytes to leave room for process correlation")
+	}
 	if !strings.Contains(strings.ToLower(config.ConnectionString), "instrumentationkey=") {
 		return false, errors.New(
 			"AZCOPY_TELEMETRY_CONNECTION_STRING is not a valid Application Insights connection string")
@@ -92,6 +97,7 @@ func resetAppInsightsValidation() {
 	globalAppInsightsValidation.runID = ""
 	globalAppInsightsValidation.startedAt = time.Time{}
 	globalAppInsightsValidation.expectedJobs = nil
+	globalAppInsightsValidation.expectedAttempts = nil
 	globalAppInsightsValidation.mu.Unlock()
 }
 
@@ -119,13 +125,13 @@ func VerifyAppInsightsTelemetry(a Asserter) {
 	if !snapshot.enabled {
 		return
 	}
-	if len(snapshot.expectedJobs) == 0 {
+	if len(snapshot.expectedAttempts) == 0 {
 		a.NoError("verify Application Insights telemetry", errors.New(
-			"no AzCopy job IDs were collected during the E2E run"))
+			"no telemetry expectations were collected during the E2E run"))
 		return
 	}
 
-	verifier := appInsightsVerifier{
+	verifier := telemetryManifestVerifier{
 		queryClient: &logAnalyticsQueryClient{
 			tokens: PrimaryOAuthCache,
 			client: &http.Client{Timeout: appInsightsQueryRequestTimeout},
@@ -138,7 +144,7 @@ func VerifyAppInsightsTelemetry(a Asserter) {
 		snapshot.workspaceID,
 		snapshot.runID,
 		snapshot.startedAt,
-		snapshot.expectedJobs,
+		snapshot.expectedAttempts,
 	)
 	a.NoError("verify Application Insights telemetry", err)
 }
@@ -152,11 +158,12 @@ func snapshotAppInsightsValidation() appInsightsValidationState {
 		expectedJobs[jobID] = count
 	}
 	return appInsightsValidationState{
-		enabled:      globalAppInsightsValidation.enabled,
-		workspaceID:  globalAppInsightsValidation.workspaceID,
-		runID:        globalAppInsightsValidation.runID,
-		startedAt:    globalAppInsightsValidation.startedAt,
-		expectedJobs: expectedJobs,
+		enabled:          globalAppInsightsValidation.enabled,
+		workspaceID:      globalAppInsightsValidation.workspaceID,
+		runID:            globalAppInsightsValidation.runID,
+		startedAt:        globalAppInsightsValidation.startedAt,
+		expectedJobs:     expectedJobs,
+		expectedAttempts: append([]telemetryExpectation(nil), globalAppInsightsValidation.expectedAttempts...),
 	}
 }
 
@@ -247,7 +254,8 @@ func buildFinishedEventQuery(runID string, startedAt time.Time) string {
 }
 
 func escapeKQLString(value string) string {
-	return strings.ReplaceAll(value, `"`, `\"`)
+	encoded, _ := json.Marshal(value)
+	return string(encoded[1 : len(encoded)-1])
 }
 
 func missingExpectedEvents(expected, received map[string]int) map[string]int {
@@ -295,6 +303,7 @@ type logAnalyticsQueryRequest struct {
 }
 
 type logAnalyticsQueryResponse struct {
+	Error  json.RawMessage `json:"error"`
 	Tables []struct {
 		Columns []struct {
 			Name string `json:"name"`
@@ -308,57 +317,69 @@ func (c *logAnalyticsQueryClient) QueryFinishedEventCounts(
 	workspaceID string,
 	query string,
 ) (map[string]int, error) {
+	result, err := c.queryResults(ctx, workspaceID, query)
+	if err != nil {
+		return nil, err
+	}
+	return parseFinishedEventCounts(result)
+}
+
+func (c *logAnalyticsQueryClient) queryResults(ctx context.Context, workspaceID, query string) (logAnalyticsQueryResponse, error) {
+	failure := logAnalyticsQueryResponse{}
 	if c.tokens == nil {
-		return nil, errors.New("OAuth token provider is nil")
+		return failure, errors.New("OAuth token provider is nil")
 	}
 	if c.client == nil {
-		return nil, errors.New("HTTP client is nil")
+		return failure, errors.New("HTTP client is nil")
 	}
 
 	token, err := c.tokens.GetAccessToken(LogAnalyticsResource)
 	if err != nil {
-		return nil, fmt.Errorf("get Log Analytics access token: %w", err)
+		return failure, fmt.Errorf("get Log Analytics access token: %w", err)
 	}
 	tokenValue, err := token.FreshToken()
 	if err != nil {
-		return nil, fmt.Errorf("refresh Log Analytics access token: %w", err)
+		return failure, fmt.Errorf("refresh Log Analytics access token: %w", err)
 	}
 
 	payload, err := json.Marshal(logAnalyticsQueryRequest{Query: query})
 	if err != nil {
-		return nil, fmt.Errorf("serialize Log Analytics query: %w", err)
+		return failure, fmt.Errorf("serialize Log Analytics query: %w", err)
 	}
 	endpoint := fmt.Sprintf("%s/%s/query", appInsightsQueryEndpoint, url.PathEscape(workspaceID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("create Log Analytics query request: %w", err)
+		return failure, fmt.Errorf("create Log Analytics query request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+tokenValue)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, retryableQueryError{err: fmt.Errorf("send Log Analytics query: %w", err)}
+		return failure, retryableQueryError{err: fmt.Errorf("send Log Analytics query: %w", err)}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxQueryErrorBodyBytes))
 		if readErr != nil {
-			return nil, fmt.Errorf("read Log Analytics error response: %w", readErr)
+			return failure, fmt.Errorf("read Log Analytics error response: %w", readErr)
 		}
 		statusErr := fmt.Errorf("Log Analytics query returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 		if isRetryableHTTPStatus(resp.StatusCode) {
-			return nil, retryableQueryError{err: statusErr}
+			return failure, retryableQueryError{err: statusErr}
 		}
-		return nil, statusErr
+		return failure, statusErr
 	}
 
 	var result logAnalyticsQueryResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode Log Analytics query response: %w", err)
+		return failure, fmt.Errorf("decode Log Analytics query response: %w", err)
 	}
-	return parseFinishedEventCounts(result)
+	if len(result.Error) > 0 && string(result.Error) != "null" {
+		return failure, errors.New("Log Analytics returned a partial query error")
+	}
+	return result, nil
 }
 
 func parseFinishedEventCounts(result logAnalyticsQueryResponse) (map[string]int, error) {
