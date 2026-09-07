@@ -95,7 +95,7 @@ var (
 // getTelemetryAgent lazily builds the process-wide telemetry agent.
 func getTelemetryAgent() *telemetryAgent {
 	telemetryOnce.Do(func() {
-		agent := newTelemetryAgent()
+		agent := initializeTelemetryAgent(newTelemetryAgent)
 		telemetryInstMu.Lock()
 		telemetryInst = agent
 		telemetryInstMu.Unlock()
@@ -103,6 +103,16 @@ func getTelemetryAgent() *telemetryAgent {
 	telemetryInstMu.RLock()
 	defer telemetryInstMu.RUnlock()
 	return telemetryInst
+}
+
+func initializeTelemetryAgent(create func() *telemetryAgent) (agent *telemetryAgent) {
+	agent = &telemetryAgent{}
+	defer func() {
+		if recover() != nil {
+			agent = &telemetryAgent{}
+		}
+	}()
+	return create()
 }
 
 // FlushTelemetry gives outstanding best-effort telemetry one bounded chance to
@@ -227,6 +237,24 @@ func (f *attemptTelemetryFinalizer) startEvent() {
 	f.agent.reportStarted(f.dimensions, f.runID, f.invocationID, f.start)
 }
 
+func (a *telemetryAgent) reportInitializationFailure(dimensions func() telemetry.JobDimensions, jobID, invocationID string, start time.Time, attemptErr error) {
+	finalizer := a.newAttempt(dimensions, jobID, invocationID, start)
+	finalizer.startEvent()
+	finalizer.finish(attemptErr)
+}
+
+func (a *telemetryAgent) newAttempt(dimensions func() telemetry.JobDimensions, jobID, invocationID string, start time.Time) (finalizer *attemptTelemetryFinalizer) {
+	finalizer = newAttemptTelemetryFinalizer(nil, telemetry.JobDimensions{}, jobID, invocationID, start)
+	if a == nil || !a.enabled {
+		return finalizer
+	}
+	defer func() { _ = recover() }()
+	collected := dimensions()
+	finalizer.dimensions = collected
+	finalizer.agent = a
+	return finalizer
+}
+
 func (f *attemptTelemetryFinalizer) setStage(stage string) {
 	if f != nil {
 		f.stage = stage
@@ -245,6 +273,14 @@ func (f *attemptTelemetryFinalizer) finish(attemptErr error) {
 		return
 	}
 	f.finished = true
+	if f.agent == nil || !f.agent.enabled {
+		return
+	}
+	defer func() {
+		if recover() != nil {
+			common.LogToJobLogWithPrefix("telemetry: dropped event after collection panic", common.LogWarning)
+		}
+	}()
 
 	summary := common.ListJobSummaryResponse{}
 	if f.finalSummary != nil {
@@ -466,8 +502,8 @@ func (a *telemetryAgent) flush(timeout time.Duration) {
 
 func (a *telemetryAgent) sendSafely(evt telemetry.MetricEvent) {
 	defer func() {
-		if r := recover(); r != nil {
-			common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: recovered from panic while sending %s: %v", evt.EventName(), r), common.LogError)
+		if recover() != nil {
+			common.LogToJobLogWithPrefix("telemetry: dropped event after send panic", common.LogWarning)
 		}
 	}()
 	timeout := a.sendTimeout

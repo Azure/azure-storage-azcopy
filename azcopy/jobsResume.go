@@ -131,7 +131,11 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 		c.GetUserOAuthTokenManagerInstance(),
 	)
 	if err != nil {
-		return ResumeJobResult{}, fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
+		err = fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
+		getTelemetryAgent().reportInitializationFailure(func() telemetry.JobDimensions {
+			return resumeJobDimensions(jobDetails, srcResourceString, dstResourceString, srcCredType, dstCredType, opts.telemetryOptions)
+		}, jobID.String(), telemetryInvocationID, timeAtPrestart, err)
+		return ResumeJobResult{}, err
 	}
 
 	// AzCopy CLI sets this globally before calling ResumeJob.
@@ -154,8 +158,9 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	}()
 
 	telemetryAgent := getTelemetryAgent()
-	telemetryDims := resumeJobDimensions(jobDetails, srcResourceString, dstResourceString, srcCredType, dstCredType, opts.telemetryOptions)
-	telemetryFinalizer := newAttemptTelemetryFinalizer(telemetryAgent, telemetryDims, jobID.String(), telemetryInvocationID, timeAtPrestart)
+	telemetryFinalizer := telemetryAgent.newAttempt(func() telemetry.JobDimensions {
+		return resumeJobDimensions(jobDetails, srcResourceString, dstResourceString, srcCredType, dstCredType, opts.telemetryOptions)
+	}, jobID.String(), telemetryInvocationID, timeAtPrestart)
 	summaryAvailable := false
 	telemetryFinalizer.summaryFn = func() (common.ListJobSummaryResponse, bool) {
 		if !summaryAvailable {

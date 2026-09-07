@@ -115,7 +115,7 @@ func (r *Reporter) endpointAndKey() (endpoint, ikey string, err error) {
 		return "", "", fmt.Errorf("connection string must contain InstrumentationKey")
 	}
 	if authorization := parts["authorization"]; authorization != "" && !strings.EqualFold(authorization, "ikey") {
-		return "", "", fmt.Errorf("unsupported Application Insights authorization %q", authorization)
+		return "", "", errors.New("unsupported Application Insights authorization")
 	}
 
 	endpoint = parts["ingestionendpoint"]
@@ -125,12 +125,12 @@ func (r *Reporter) endpointAndKey() (endpoint, ikey string, err error) {
 			return "", "", fmt.Errorf("connection string must contain IngestionEndpoint or EndpointSuffix")
 		}
 		if strings.ContainsAny(suffix, "/:@?#") {
-			return "", "", fmt.Errorf("invalid Application Insights EndpointSuffix %q", suffix)
+			return "", "", errors.New("invalid Application Insights EndpointSuffix")
 		}
 		locationPrefix := ""
 		if location := parts["location"]; location != "" {
 			if strings.ContainsAny(location, "/.:@?#") {
-				return "", "", fmt.Errorf("invalid Application Insights Location %q", location)
+				return "", "", errors.New("invalid Application Insights Location")
 			}
 			locationPrefix = location + "."
 		}
@@ -142,7 +142,7 @@ func (r *Reporter) endpointAndKey() (endpoint, ikey string, err error) {
 	if parseErr != nil || parsedEndpoint.Host == "" ||
 		(parsedEndpoint.Scheme != "http" && parsedEndpoint.Scheme != "https") ||
 		parsedEndpoint.User != nil || parsedEndpoint.RawQuery != "" || parsedEndpoint.Fragment != "" {
-		return "", "", fmt.Errorf("invalid Application Insights ingestion endpoint %q", endpoint)
+		return "", "", errors.New("invalid Application Insights ingestion endpoint")
 	}
 	return endpoint, ikey, nil
 }
@@ -383,19 +383,22 @@ type appInsightsEventData struct {
 func postEnvelopes(ctx context.Context, client httpDoer, endpoint string, envelopes []appInsightsEnvelope) (int, error) {
 	body, err := json.Marshal(envelopes)
 	if err != nil {
-		return 0, fmt.Errorf("marshal envelopes: %w", err)
+		return 0, errors.New("marshal envelopes: invalid telemetry payload")
 	}
 
 	url := endpoint + "/v2.1/track"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return 0, fmt.Errorf("create request: %w", err)
+		return 0, errors.New("create request: invalid telemetry endpoint")
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("send metrics: %w", err)
+		if ctx.Err() != nil {
+			return 0, fmt.Errorf("send metrics: %w", ctx.Err())
+		}
+		return 0, errors.New("send metrics: transport failure")
 	}
 	defer resp.Body.Close()
 
@@ -405,8 +408,7 @@ func postEnvelopes(ctx context.Context, client httpDoer, endpoint string, envelo
 		}
 	}
 	if resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, fmt.Errorf("app insights returned %d: %s", resp.StatusCode, string(respBody))
+		return resp.StatusCode, fmt.Errorf("app insights returned HTTP %d", resp.StatusCode)
 	}
 	return resp.StatusCode, nil
 }
@@ -427,7 +429,7 @@ func validatePartialIngestionResponse(body io.Reader) error {
 	var result partialIngestionResponse
 	decoder := json.NewDecoder(io.LimitReader(body, 64*1024))
 	if err := decoder.Decode(&result); err != nil {
-		return fmt.Errorf("app insights returned 206 with an invalid response: %w", err)
+		return errors.New("app insights returned 206 with an invalid response")
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return errors.New("app insights returned 206 with an invalid response: trailing content")
@@ -469,11 +471,10 @@ func validatePartialIngestionResponse(body io.Reader) error {
 
 	first := result.Errors[0]
 	return fmt.Errorf(
-		"app insights partially accepted telemetry (received=%d accepted=%d rejected=%d; first rejection index=%d status=%d: %s)",
+		"app insights partially accepted telemetry (received=%d accepted=%d rejected=%d; first rejection index=%d status=%d)",
 		result.ItemsReceived,
 		result.ItemsAccepted,
 		rejected,
 		first.Index,
-		first.StatusCode,
-		strings.TrimSpace(first.Message))
+		first.StatusCode)
 }

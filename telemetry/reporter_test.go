@@ -723,7 +723,8 @@ func TestReportEventTransportError(t *testing.T) {
 	})
 	err := r.ReportEvent(context.Background(), sampleStarted())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "network down")
+	assert.Contains(t, err.Error(), "transport failure")
+	assert.NotContains(t, err.Error(), "network down")
 }
 
 func TestReportEventOTel(t *testing.T) {

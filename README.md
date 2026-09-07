@@ -50,6 +50,16 @@ AzCopy. An unset or blank override uses the embedded test destination. The agent
 caches its configuration for the process lifetime. This test default is temporary
 and must be replaced with the approved production destination before release.
 
+Telemetry send failures drop the affected event without retrying or disabling
+later events. A failed start-event send therefore does not suppress the finish
+event. Telemetry initialization panics disable telemetry for that process;
+dimension-collection panics drop that attempt's telemetry, and finalization
+panics drop its finish event. Telemetry-generated failure diagnostics omit
+response bodies, transport error details, and panic values.
+
+See [telemetry regression tests](telemetry/TESTING.md) for lifecycle boundaries,
+per-process E2E verification, and aggregate replay checks.
+
 ## Download AzCopy
 The latest binary for AzCopy along with installation instructions may be found
 [here](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10).

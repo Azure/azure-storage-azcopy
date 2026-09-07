@@ -183,25 +183,17 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 
 	mgr := NewJobLifecycleManager(syncHandler)
 
-	enumerator, err := s.initEnumerator(ctx, c.GetLogLevel(), mgr)
-	if err != nil {
-		return SyncResult{}, err
-	}
-
 	telemetryAgent := getTelemetryAgent()
-	telemetryDims := syncJobDimensions(s.opts, s.srp.srcCredType, s.srp.dstCredType)
 	defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 	var telemetryFinalizer *attemptTelemetryFinalizer
 	if !s.opts.dryrun {
-		telemetryFinalizer = newAttemptTelemetryFinalizer(telemetryAgent, telemetryDims, jobID.String(), telemetryInvocationID, timeAtPrestart)
-		telemetryFinalizer.summaryFn = func() (common.ListJobSummaryResponse, bool) {
-			return jobsAdmin.GetJobSummary(s.spt.jobID), true
-		}
+		telemetryFinalizer = telemetryAgent.newAttempt(func() telemetry.JobDimensions {
+			return syncJobDimensions(s.opts, s.srp.srcCredType, s.srp.dstCredType)
+		}, jobID.String(), telemetryInvocationID, timeAtPrestart)
 		telemetryFinalizer.enumerationElapsedFn = s.spt.GetEnumerationElapsedTime
 		telemetryFinalizer.transferElapsedFn = s.spt.GetTransferElapsedTime
 		telemetryFinalizer.shapeFn = s.spt.GetSourceShapeSummary
 		telemetryFinalizer.startEvent()
-		telemetryFinalizer.setStage("enumeration")
 		defer func() {
 			attemptErr := err
 			if errors.Is(ctx.Err(), context.Canceled) {
@@ -209,6 +201,16 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 			}
 			telemetryFinalizer.finish(attemptErr)
 		}()
+	}
+	enumerator, err := s.initEnumerator(ctx, c.GetLogLevel(), mgr)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	if telemetryFinalizer != nil {
+		telemetryFinalizer.summaryFn = func() (common.ListJobSummaryResponse, bool) {
+			return jobsAdmin.GetJobSummary(s.spt.jobID), true
+		}
+		telemetryFinalizer.setStage("enumeration")
 		mgr.InitiateProgressReporting(ctx, s.spt)
 	}
 	err = enumerator.Enumerate()

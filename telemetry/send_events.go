@@ -48,7 +48,7 @@ func (r *Reporter) ReportEvent(ctx context.Context, evt MetricEvent) error {
 	case BackendAppInsights:
 		return r.sendEventAppInsights(ctx, evt)
 	default:
-		return fmt.Errorf("unknown telemetry backend: %q", r.cfg.Backend)
+		return fmt.Errorf("unknown telemetry backend")
 	}
 }
 
