@@ -28,7 +28,7 @@ The E2E pipeline still resolves its test component and sets the runtime override
 
 Each agent admits at most four events (including sends waiting for a matching start). Admission is nonblocking; excess events are dropped. Sends have a one-second deadline; a finish waiting for its start gets up to one additional second for ordering, but is suppressed if that start has a delivery failure. Flush still drains admitted work within its existing budget after the stop state is set and cancels admitted requests on timeout. A custom HTTP client that ignores cancellation can occupy at most those four slots; Go cannot forcibly stop such a client. The runtime tests exercise that case with 1,000 additional sends and flushes.
 
-Source-shape tracking retains at most 128 names per scanned/touched set and 256 bytes per name, cloning admitted names so a substring cannot retain a larger path buffer. Once a set exceeds either limit, its container/bucket count is `-1` (unavailable), not a partial count. Object, byte, depth, and histogram measurements continue. Consumers must not sum unavailable scope counts as ordinary counts. Representative serialized envelopes have 4 KiB started and 8 KiB finished regression budgets; these are fixture gates, not a universal cap for arbitrary custom reporter callers.
+Source-shape tracking retains at most 128 names per scanned/touched set and 256 bytes per name, cloning admitted names so a substring cannot retain a larger path buffer. Once a set exceeds either limit, its internal count is `-1`; the wire measurement is omitted and status metadata marks it unavailable. Object, byte, depth, and histogram measurements continue. Consumers must also exclude historical negative sentinels from totals. Representative serialized envelopes have 4 KiB started and 8 KiB finished regression budgets; these are fixture gates, not a universal cap for arbitrary custom reporter callers.
 
 Metadata and identity probing remain synchronous and use their existing per-probe deadlines/retry bounds. These limits do not establish an end-to-end 100 KiB heap or 1% CPU/throughput guarantee; the separate manual performance suite measures that budget for documented workloads.
 
@@ -47,6 +47,10 @@ These are offline unit checks. They do not launch the credential-dependent cloud
 ## Delivery Failure Tests
 
 Unit-level integration tests use the real reporter/dispatcher with local `httptest` endpoints for rejection, partial acceptance, 429/503 throttling, and concurrent-request cancellation. DNS, TLS, and offline failures are injected through the HTTP transport; a blocked client exercises deadline expiry. Tests verify a queued finish never reaches the endpoint after a failed start, later events remain disabled even if the endpoint would recover, existing collectors stop, and healthy ingestion still reports failed transfers. Reporter tests verify typed classification through both backends and preserve safe diagnostics. No Application Insights resource, credentials, or ingestion polling is required for these policy tests.
+
+## Manual Performance Gate
+
+The separate [performance pipeline](../telemetry-performance.yml) has no push, PR, or scheduled triggers and is not referenced by the E2E pipeline. See [measurement methodology and gates](PERFORMANCE.md) for isolated paired runs, statistical classification, artifact contents, and known limitations. Measurement tests require both the `telemetryperf` build tag and an explicit opt-in environment setting.
 
 ## E2E Manifest
 
@@ -67,10 +71,16 @@ The replay script requires an existing Azure CLI login and Kusto query access. I
 
 ExecutionTime is excluded from idempotence comparisons. Resumes attribute cumulative usage to the latest attempt's day, not incremental bytes to each attempt day. A late resume can move a job out of an earlier reporting window. History older than the 30-day attempt lookback cannot restore its original command or attempt count.
 
-The deployment test is entirely offline. Ten mocked cases check successful publication, invalid/empty/missing validation data, lost reporting days, stage/query failures, partial query failures, and a failed publication request. Earlier failures must not attempt replacement; simulated publication failure preserves the prior rows. Staging cleanup is attempted after every staging request. This is not a live destructive fault-injection test or proof of the outcome of a lost response after a server-side commit. The existing day-preservation guard also does not detect every possible partial loss within a retained day.
+The deployment test is entirely offline. Fourteen mocked cases also include partial same-day loss, resume date migration, and explicit reconciliation. Historical aggregate keys are compared at their full persisted dimensional grain; missing or reduced counts block publication even if their reporting day survives. Legitimate date/status/enrichment changes can also reduce keys, so operators must reconcile those changes before explicitly using `-AllowHistoricalReductions`. Approval cannot bypass empty, non-finite, negative, or malformed data. Because the persisted table is aggregated, equal or greater totals can still conceal compensating job-level changes; this guard is not durable job-level retention. This is not a live destructive fault-injection test or proof of the outcome of a lost response after a server-side commit.
 
 ## Installation Identity Lock
 
 `installation_id.lock` serializes first-time creation or repair of `installation_id` across processes sharing an AzCopy application-data directory. Without it, simultaneous processes can generate different random IDs and emit telemetry with an ID that loses the persistence race. The winning writer rechecks the file and publishes a complete ID through a temporary file and rename; readers reuse a valid existing ID without taking the lock.
 
-The lock is an exclusively-created file, not a transfer or credential lock. Contenders retry up to 100 times at 10 ms intervals. A killed writer can leave a stale lock; if no valid identity exists, callers eventually return an empty ID. Crash recovery for that case is not changed by these tests.
+The file remains on disk; ownership uses a nonblocking OS file lock (`LockFileEx` on Windows, `flock` on Unix), released when the handle closes or the process dies. Contenders retry up to 100 times at 10 ms intervals. A process-kill test leaves a malformed identity, then verifies eight concurrent processes recover one stable ID. The lock is not a transfer or credential lock. Older binaries using existence-based locking do not participate in this protocol; mixed-version concurrent first-time identity creation is not supported.
+
+## Review Corrections
+
+CLI categorical values use per-option allowlists before event construction. Invalid free-form strings, URLs, and secrets cannot become category properties; numeric capture rejects NaN and infinity. Resumed job-cumulative summaries retain byte/object counters but omit attempt throughput, with `ThroughputStatus=unavailable-cumulative-summary`. Scope overflow omits unavailable numeric counts and sets `SourceScopeCountsStatus=incomplete`; inventory dashboards exclude historical negative sentinels and report unavailable-attempt counts alongside known totals.
+
+The E2E manifest explicitly records zero-event expectations for opted-out commands and dry-run transfers, including the child environment override. Negative expectations observe the full configured polling window and require successful queries; an initially empty response is not enough to pass. This remains a bounded observation, not proof that a much later event cannot arrive.

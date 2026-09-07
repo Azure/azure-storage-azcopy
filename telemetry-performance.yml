@@ -1,0 +1,60 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: poolName
+    type: string
+    default: AzCopyPerfTestUbuntu
+  - name: imageName
+    type: string
+    default: azcopyPerfTestUbuntu22.04
+  - name: baselineRef
+    type: string
+    default: 35dc27add1e640506b1221172f6c0f3d317dff65
+  - name: samples
+    type: number
+    default: 9
+  - name: secondsPerSample
+    type: number
+    default: 5
+  - name: reportOnly
+    type: boolean
+    default: false
+
+jobs:
+  - job: TelemetryPerformance
+    timeoutInMinutes: 60
+    pool:
+      name: ${{ parameters.poolName }}
+      demands:
+        - ImageOverride -equals ${{ parameters.imageName }}
+    steps:
+      - checkout: self
+        fetchDepth: 0
+      - task: GoTool@0
+        inputs:
+          version: '1.25.11'
+        displayName: Install Go
+      - pwsh: |
+          $parameters = @{
+            Samples = [int]$env:PERF_SAMPLES
+            Seconds = [double]::Parse($env:PERF_SECONDS, [cultureinfo]::InvariantCulture)
+            BaselineRef = $env:PERF_BASELINE
+            OutputDirectory = $env:PERF_OUTPUT
+            ReportOnly = [bool]::Parse($env:PERF_REPORT_ONLY)
+          }
+          & ./testSuite/telemetry-performance.ps1 @parameters
+        displayName: Measure telemetry budgets without E2E or cloud ingestion
+        env:
+          PERF_SAMPLES: ${{ parameters.samples }}
+          PERF_SECONDS: ${{ parameters.secondsPerSample }}
+          PERF_BASELINE: ${{ parameters.baselineRef }}
+          PERF_REPORT_ONLY: ${{ parameters.reportOnly }}
+          PERF_OUTPUT: $(Build.ArtifactStagingDirectory)/telemetry-performance
+          CGO_ENABLED: '0'
+      - task: PublishPipelineArtifact@1
+        condition: always()
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/telemetry-performance
+          artifact: telemetry-performance
+        displayName: Publish raw measurements and gate results
