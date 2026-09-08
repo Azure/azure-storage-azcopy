@@ -160,8 +160,7 @@ func (*mockedLifecycleManager) MsgHandlerChannel() <-chan *common.LCMMsg {
 }
 
 func (*mockedLifecycleManager) SanitizeLogMessage(msg string) string {
-	// not implemented in mocked version
-	return msg
+	return common.NewAzCopyLogSanitizer().SanitizeLogMessage(msg)
 }
 
 type dummyProcessor struct {
