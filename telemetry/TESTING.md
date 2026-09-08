@@ -48,6 +48,14 @@ These are offline unit checks. They do not launch the credential-dependent cloud
 
 Unit-level integration tests use the real reporter/dispatcher with local `httptest` endpoints for rejection, partial acceptance, 429/503 throttling, and concurrent-request cancellation. DNS, TLS, and offline failures are injected through the HTTP transport; a blocked client exercises deadline expiry. Tests verify a queued finish never reaches the endpoint after a failed start, later events remain disabled even if the endpoint would recover, existing collectors stop, and healthy ingestion still reports failed transfers. Reporter tests verify typed classification through both backends and preserve safe diagnostics. No Application Insights resource, credentials, or ingestion polling is required for these policy tests.
 
+## Manual Real-Endpoint Fault Tests
+
+See [manual live testing](LIVE_TESTING.md) for real Application Insights quota and
+emergency-shutdown tests. These use separate low-cap components/workspaces, never
+mock HTTP responses, and require both the `telemetrylive` build tag and explicit
+manual opt-in. The separate infrastructure pipeline provisions targets only; the
+normal E2E matrix and shared telemetry destination are unchanged.
+
 ## Manual Performance Gate
 
 The separate [performance pipeline](../telemetry-performance.yml) has no push, PR, or scheduled triggers and is not referenced by the E2E pipeline. See [measurement methodology and gates](PERFORMANCE.md) for isolated paired runs, statistical classification, artifact contents, and known limitations. Measurement tests require both the `telemetryperf` build tag and an explicit opt-in environment setting.
