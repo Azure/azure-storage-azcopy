@@ -1,0 +1,1027 @@
+{
+  "id": null,
+  "uid": "azcopy-data-metrics",
+  "title": "AzCopy Data Metrics",
+  "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+  "version": 1,
+  "schemaVersion": 42,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 3,
+  "editable": true,
+  "refresh": "",
+  "tags": [
+    "azcopy",
+    "telemetry",
+    "saved-queries"
+  ],
+  "links": [
+    {
+      "keepTime": true,
+      "title": "AzCopy Data Metrics",
+      "url": "/d/azcopy-data-metrics",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customer Drilldown",
+      "url": "/d/azcopy-customer-drilldown",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Recurring Customer Trends",
+      "url": "/d/azcopy-recurring-trends",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customers with No Observed Success",
+      "url": "/d/azcopy-no-observed-success",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    }
+  ],
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-Customer",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "Customer",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "Customer",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SubscriptionId",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SubscriptionId",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SubscriptionId",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SourceType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SourceType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SourceType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-TargetType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "TargetType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "TargetType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 24,
+      "title": "Metrics",
+      "type": "row",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 0,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 27,
+      "title": "Data transferred through successful jobs",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 0,
+        "y": 1,
+        "h": 10
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project SuccessfulBytes",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 26,
+      "title": "Data transferred (selected range)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 6,
+        "y": 1,
+        "h": 5
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 29,
+      "title": "Data transferred (current semester)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 12,
+        "y": 1,
+        "h": 5
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary(AzCopy_CurrentSemesterStart(), now(), dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 31,
+      "title": "Data transferred (previous semester)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 18,
+        "y": 1,
+        "h": 5
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary(AzCopy_PreviousSemesterStart(), AzCopy_CurrentSemesterStart(), dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 37,
+      "title": "Data transferred (last 7 calendar days)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 6,
+        "y": 6,
+        "h": 5
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary(startofday(ago(6d)), now(), dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 30,
+      "title": "Data transferred (current month)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 12,
+        "y": 6,
+        "h": 5
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary(startofmonth(now()), now(), dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "title": "Data transferred (previous month)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 18,
+        "y": 6,
+        "h": 5
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary(startofmonth(now(), -1), startofmonth(now()), dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 36,
+      "title": "Monthly data transferred",
+      "type": "barchart",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 11,
+        "h": 12
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Activity($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'month') | project Period, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 25,
+      "title": "Data transferred by source-target pair",
+      "type": "barchart",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 23,
+        "h": 12
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Breakdown($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'topology') | project Category, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 41,
+      "title": "Completed objects by source-target pair",
+      "type": "barchart",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 35,
+        "h": 12
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Breakdown($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'topology') | project Category, ObjectsCompleted",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 40,
+      "title": "Data transferred by target service",
+      "type": "barchart",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 47,
+        "h": 10
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Breakdown($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'target') | project Category, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 39,
+      "title": "Data transferred by source service",
+      "type": "barchart",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 57,
+        "h": 10
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Breakdown($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'source') | project Category, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 38,
+      "title": "Data transferred by customer mapping coverage",
+      "type": "barchart",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 67,
+        "h": 10
+      },
+      "description": "Storage Mover Data layout adapted to daily AzCopy terminal telemetry. Bytes are logical payload, not wire traffic. Account SKU/region/private-network metadata is not available in the persisted source.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Breakdown($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'mapping') | project Category, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

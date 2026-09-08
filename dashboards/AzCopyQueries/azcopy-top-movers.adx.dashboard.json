@@ -1,0 +1,521 @@
+{
+  "$schema": "https://dataexplorer.azure.com/static/d/schema/84/dashboard.json",
+  "title": "AzCopy Top Movers",
+  "schema_version": 84,
+  "tiles": [
+    {
+      "id": "a2c00000-0000-4000-8000-000000000300",
+      "title": "Top data movers (All time) (Filters: None)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000200"
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "bar",
+      "visualOptions": {
+        "xColumn": "Customer",
+        "yColumns": [
+          "DataTransferredGB"
+        ],
+        "xColumnTitle": "Customer",
+        "yColumnTitle": "Data transferred (GB)",
+        "hideLegend": true,
+        "yAxisMinimumValue": 0,
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000301",
+      "title": "Top AzCopy movers (Current month) (Filters: Source, Target)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000201"
+      },
+      "layout": {
+        "x": 4,
+        "y": 0,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "bar",
+      "visualOptions": {
+        "xColumn": "Customer",
+        "yColumns": [
+          "DataTransferredGB"
+        ],
+        "xColumnTitle": "Customer",
+        "yColumnTitle": "Data transferred (GB)",
+        "hideLegend": true,
+        "yAxisMinimumValue": 0,
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000302",
+      "title": "Top AzCopy movers (Previous month) (Filters: Source, Target)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000202"
+      },
+      "layout": {
+        "x": 8,
+        "y": 0,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "bar",
+      "visualOptions": {
+        "xColumn": "Customer",
+        "yColumns": [
+          "DataTransferredGB"
+        ],
+        "xColumnTitle": "Customer",
+        "yColumnTitle": "Data transferred (GB)",
+        "hideLegend": true,
+        "yAxisMinimumValue": 0,
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000303",
+      "title": "Top AzCopy movers (Previous semester) (Filters: None)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000203"
+      },
+      "layout": {
+        "x": 0,
+        "y": 6,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "bar",
+      "visualOptions": {
+        "xColumn": "Customer",
+        "yColumns": [
+          "DataTransferredGB"
+        ],
+        "xColumnTitle": "Customer",
+        "yColumnTitle": "Data transferred (GB)",
+        "hideLegend": true,
+        "yAxisMinimumValue": 0,
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000304",
+      "title": "Top AzCopy movers (Current semester) (Filters: Source, Target)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000204"
+      },
+      "layout": {
+        "x": 4,
+        "y": 6,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "bar",
+      "visualOptions": {
+        "xColumn": "Customer",
+        "yColumns": [
+          "DataTransferredGB"
+        ],
+        "xColumnTitle": "Customer",
+        "yColumnTitle": "Data transferred (GB)",
+        "hideLegend": true,
+        "yAxisMinimumValue": 0,
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000305",
+      "title": "Top AzCopy movers (selected range) (Filters: All)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000205"
+      },
+      "layout": {
+        "x": 8,
+        "y": 6,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "bar",
+      "visualOptions": {
+        "xColumn": "Customer",
+        "yColumns": [
+          "DataTransferredGB"
+        ],
+        "xColumnTitle": "Customer",
+        "yColumnTitle": "Data transferred (GB)",
+        "hideLegend": true,
+        "yAxisMinimumValue": 0,
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000306",
+      "title": "Top 100 AzCopy movers (selected range) (Filters: All)",
+      "pageId": "a2c00000-0000-4000-8000-000000000002",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c00000-0000-4000-8000-000000000206"
+      },
+      "layout": {
+        "x": 0,
+        "y": 12,
+        "width": 12,
+        "height": 8
+      },
+      "visualType": "table",
+      "visualOptions": {
+        "selectedDataOnLoad": {
+          "limit": 100,
+          "all": true
+        }
+      }
+    }
+  ],
+  "baseQueries": [],
+  "parameters": [
+    {
+      "kind": "duration",
+      "id": "a2c00000-0000-4000-8000-000000000003",
+      "displayName": "Time range",
+      "description": "",
+      "beginVariableName": "_startTime",
+      "endVariableName": "_endTime",
+      "defaultValue": {
+        "kind": "dynamic",
+        "count": 90,
+        "unit": "days"
+      },
+      "showOnPages": {
+        "kind": "all"
+      }
+    },
+    {
+      "kind": "long",
+      "id": "a2c00000-0000-4000-8000-000000000004",
+      "displayName": "Top N",
+      "description": "",
+      "variableName": "_topN",
+      "selectionType": "scalar",
+      "includeAllOption": false,
+      "defaultValue": {
+        "kind": "value",
+        "value": 10
+      },
+      "showOnPages": {
+        "kind": "all"
+      },
+      "dataSource": {
+        "kind": "static",
+        "values": [
+          {
+            "displayText": "10",
+            "value": 10
+          },
+          {
+            "displayText": "25",
+            "value": 25
+          },
+          {
+            "displayText": "50",
+            "value": 50
+          },
+          {
+            "displayText": "100",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "kind": "string",
+      "id": "a2c00000-0000-4000-8000-000000000010",
+      "displayName": "Customer",
+      "description": "",
+      "variableName": "_customer",
+      "selectionType": "array",
+      "includeAllOption": true,
+      "allIsNull": false,
+      "defaultValue": {
+        "kind": "all"
+      },
+      "showOnPages": {
+        "kind": "all"
+      },
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c00000-0000-4000-8000-000000000100"
+        },
+        "columns": {
+          "label": "FilterLabel",
+          "value": "FilterValue"
+        }
+      }
+    },
+    {
+      "kind": "string",
+      "id": "a2c00000-0000-4000-8000-000000000011",
+      "displayName": "Command",
+      "description": "",
+      "variableName": "_command",
+      "selectionType": "array",
+      "includeAllOption": true,
+      "allIsNull": false,
+      "defaultValue": {
+        "kind": "all"
+      },
+      "showOnPages": {
+        "kind": "all"
+      },
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c00000-0000-4000-8000-000000000101"
+        },
+        "columns": {
+          "label": "FilterLabel",
+          "value": "FilterValue"
+        }
+      }
+    },
+    {
+      "kind": "string",
+      "id": "a2c00000-0000-4000-8000-000000000012",
+      "displayName": "SourceType",
+      "description": "",
+      "variableName": "_source",
+      "selectionType": "array",
+      "includeAllOption": true,
+      "allIsNull": false,
+      "defaultValue": {
+        "kind": "all"
+      },
+      "showOnPages": {
+        "kind": "all"
+      },
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c00000-0000-4000-8000-000000000102"
+        },
+        "columns": {
+          "label": "FilterLabel",
+          "value": "FilterValue"
+        }
+      }
+    },
+    {
+      "kind": "string",
+      "id": "a2c00000-0000-4000-8000-000000000013",
+      "displayName": "TargetType",
+      "description": "",
+      "variableName": "_target",
+      "selectionType": "array",
+      "includeAllOption": true,
+      "allIsNull": false,
+      "defaultValue": {
+        "kind": "all"
+      },
+      "showOnPages": {
+        "kind": "all"
+      },
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c00000-0000-4000-8000-000000000103"
+        },
+        "columns": {
+          "label": "FilterLabel",
+          "value": "FilterValue"
+        }
+      }
+    }
+  ],
+  "dataSources": [
+    {
+      "database": "usage-analytics",
+      "kind": "manual-kusto",
+      "name": "AzCopy Usage Analytics",
+      "clusterUri": "https://sm-prd-westeurope.westeurope.kusto.windows.net",
+      "id": "a2c00000-0000-4000-8000-000000000001"
+    }
+  ],
+  "pages": [
+    {
+      "name": "Top Movers",
+      "id": "a2c00000-0000-4000-8000-000000000002"
+    }
+  ],
+  "queries": [
+    {
+      "id": "a2c00000-0000-4000-8000-000000000100",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_FilterValues() | where FilterName == 'Customer' | project FilterValue, FilterLabel | order by FilterLabel asc"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000101",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_FilterValues() | where FilterName == 'Command' | project FilterValue, FilterLabel | order by FilterLabel asc"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000102",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_FilterValues() | where FilterName == 'SourceType' | project FilterValue, FilterLabel | order by FilterLabel asc"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000103",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_FilterValues() | where FilterName == 'TargetType' | project FilterValue, FilterLabel | order by FilterLabel asc"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000200",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_topN"
+      ],
+      "text": "AzCopy_TopMovers(datetime(1970-01-01), now() + 1m, _topN, dynamic(['$__all']), dynamic(['$__all']), dynamic(['$__all']), dynamic(['$__all'])) | project Customer, DataTransferredGB = DataTransferred / 1e9"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000201",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_topN",
+        "_source",
+        "_target"
+      ],
+      "text": "AzCopy_TopMovers(startofmonth(now()), now() + 1m, _topN, dynamic(['$__all']), dynamic(['$__all']), _source, _target) | project Customer, DataTransferredGB = DataTransferred / 1e9"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000202",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_topN",
+        "_source",
+        "_target"
+      ],
+      "text": "AzCopy_TopMovers(startofmonth(datetime_add('month', -1, now())), startofmonth(now()), _topN, dynamic(['$__all']), dynamic(['$__all']), _source, _target) | project Customer, DataTransferredGB = DataTransferred / 1e9"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000203",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_topN"
+      ],
+      "text": "AzCopy_TopMovers(AzCopy_PreviousSemesterStart(), AzCopy_CurrentSemesterStart(), _topN, dynamic(['$__all']), dynamic(['$__all']), dynamic(['$__all']), dynamic(['$__all'])) | project Customer, DataTransferredGB = DataTransferred / 1e9"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000204",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_topN",
+        "_source",
+        "_target"
+      ],
+      "text": "AzCopy_TopMovers(AzCopy_CurrentSemesterStart(), now() + 1m, _topN, dynamic(['$__all']), dynamic(['$__all']), _source, _target) | project Customer, DataTransferredGB = DataTransferred / 1e9"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000205",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_topN",
+        "_customer",
+        "_command",
+        "_source",
+        "_target"
+      ],
+      "text": "AzCopy_TopMovers(_startTime, _endTime, _topN, _customer, _command, _source, _target) | project Customer, DataTransferredGB = DataTransferred / 1e9"
+    },
+    {
+      "id": "a2c00000-0000-4000-8000-000000000206",
+      "dataSource": {
+        "dataSourceId": "a2c00000-0000-4000-8000-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_customer",
+        "_command",
+        "_source",
+        "_target"
+      ],
+      "text": "AzCopy_TopMovers(_startTime, _endTime, 100, _customer, _command, _source, _target)"
+    }
+  ],
+  "embeddedApps": []
+}

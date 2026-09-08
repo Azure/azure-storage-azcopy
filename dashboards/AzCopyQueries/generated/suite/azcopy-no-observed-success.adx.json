@@ -1,0 +1,420 @@
+{
+  "$schema": "https://dataexplorer.azure.com/static/d/schema/84/dashboard.json",
+  "schema_version": 84,
+  "title": "AzCopy Customers with No Observed Success",
+  "tiles": [
+    {
+      "pageId": "a2c10000-0000-4000-8004-000000000002",
+      "title": "Customers with no observed successful job",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c10000-0000-4000-8004-000000000207"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "small",
+        "selectedDataOnLoad": {
+          "limit": 500,
+          "all": true
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000307",
+      "layout": {
+        "x": 0.0,
+        "y": 1,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "card"
+    },
+    {
+      "pageId": "a2c10000-0000-4000-8004-000000000002",
+      "title": "Failed logical jobs in cohort",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c10000-0000-4000-8004-000000000208"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "small",
+        "selectedDataOnLoad": {
+          "limit": 500,
+          "all": true
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000308",
+      "layout": {
+        "x": 4.0,
+        "y": 1,
+        "width": 4,
+        "height": 6
+      },
+      "visualType": "card"
+    },
+    {
+      "pageId": "a2c10000-0000-4000-8004-000000000002",
+      "title": "Terminal failure statuses",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c10000-0000-4000-8004-000000000203"
+      },
+      "visualOptions": {
+        "selectedDataOnLoad": {
+          "limit": 500,
+          "all": true
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000303",
+      "layout": {
+        "x": 0.0,
+        "y": 7,
+        "width": 12,
+        "height": 10
+      },
+      "visualType": "table"
+    },
+    {
+      "pageId": "a2c10000-0000-4000-8004-000000000002",
+      "title": "Customers with failed jobs and no success (all statuses)",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c10000-0000-4000-8004-000000000211"
+      },
+      "visualOptions": {
+        "selectedDataOnLoad": {
+          "limit": 500,
+          "all": true
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000311",
+      "layout": {
+        "x": 0.0,
+        "y": 17,
+        "width": 12,
+        "height": 12
+      },
+      "visualType": "table"
+    },
+    {
+      "pageId": "a2c10000-0000-4000-8004-000000000002",
+      "title": "Failed daily job activity in cohort",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a2c10000-0000-4000-8004-000000000213"
+      },
+      "visualOptions": {
+        "selectedDataOnLoad": {
+          "limit": 500,
+          "all": true
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000313",
+      "layout": {
+        "x": 0.0,
+        "y": 30,
+        "width": 12,
+        "height": 14
+      },
+      "visualType": "table"
+    }
+  ],
+  "parameters": [
+    {
+      "beginVariableName": "_startTime",
+      "id": "a2c10000-0000-4000-8004-000000000003",
+      "defaultValue": {
+        "kind": "dynamic",
+        "count": 90,
+        "unit": "days"
+      },
+      "displayName": "Time range",
+      "showOnPages": {
+        "kind": "all"
+      },
+      "endVariableName": "_endTime",
+      "kind": "duration",
+      "description": ""
+    },
+    {
+      "includeAllOption": true,
+      "variableName": "_customer",
+      "displayName": "Customer",
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c10000-0000-4000-8004-000000000101"
+        },
+        "columns": {
+          "label": "text",
+          "value": "value"
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000011",
+      "selectionType": "array",
+      "allIsNull": true,
+      "kind": "string",
+      "showOnPages": {
+        "kind": "all"
+      },
+      "defaultValue": {
+        "kind": "all"
+      },
+      "description": ""
+    },
+    {
+      "includeAllOption": true,
+      "variableName": "_subscription",
+      "displayName": "SubscriptionId",
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c10000-0000-4000-8004-000000000102"
+        },
+        "columns": {
+          "label": "text",
+          "value": "value"
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000012",
+      "selectionType": "array",
+      "allIsNull": true,
+      "kind": "string",
+      "showOnPages": {
+        "kind": "all"
+      },
+      "defaultValue": {
+        "kind": "all"
+      },
+      "description": ""
+    },
+    {
+      "includeAllOption": true,
+      "variableName": "_source",
+      "displayName": "SourceType",
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c10000-0000-4000-8004-000000000103"
+        },
+        "columns": {
+          "label": "text",
+          "value": "value"
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000013",
+      "selectionType": "array",
+      "allIsNull": true,
+      "kind": "string",
+      "showOnPages": {
+        "kind": "all"
+      },
+      "defaultValue": {
+        "kind": "all"
+      },
+      "description": ""
+    },
+    {
+      "includeAllOption": true,
+      "variableName": "_target",
+      "displayName": "TargetType",
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c10000-0000-4000-8004-000000000104"
+        },
+        "columns": {
+          "label": "text",
+          "value": "value"
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000014",
+      "selectionType": "array",
+      "allIsNull": true,
+      "kind": "string",
+      "showOnPages": {
+        "kind": "all"
+      },
+      "defaultValue": {
+        "kind": "all"
+      },
+      "description": ""
+    },
+    {
+      "includeAllOption": true,
+      "variableName": "_status",
+      "displayName": "JobStatus",
+      "dataSource": {
+        "kind": "query",
+        "queryRef": {
+          "kind": "query",
+          "queryId": "a2c10000-0000-4000-8004-000000000105"
+        },
+        "columns": {
+          "label": "text",
+          "value": "value"
+        }
+      },
+      "id": "a2c10000-0000-4000-8004-000000000015",
+      "selectionType": "array",
+      "allIsNull": true,
+      "kind": "string",
+      "showOnPages": {
+        "kind": "all"
+      },
+      "defaultValue": {
+        "kind": "all"
+      },
+      "description": ""
+    }
+  ],
+  "queries": [
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue",
+      "id": "a2c10000-0000-4000-8004-000000000101"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue",
+      "id": "a2c10000-0000-4000-8004-000000000102"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+      "id": "a2c10000-0000-4000-8004-000000000103"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+      "id": "a2c10000-0000-4000-8004-000000000104"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [],
+      "text": "AzCopy_DashboardFilters() | where FilterName == 'JobStatus' | project text=FilterLabel, value=FilterValue",
+      "id": "a2c10000-0000-4000-8004-000000000105"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_customer",
+        "_subscription",
+        "_source",
+        "_target",
+        "_status"
+      ],
+      "text": "AzCopy_NoSuccessSummary(_startTime, _endTime, _customer, _subscription, _source, _target, _status) | where JobStatus == 'All' | project Customers",
+      "id": "a2c10000-0000-4000-8004-000000000207"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_customer",
+        "_subscription",
+        "_source",
+        "_target",
+        "_status"
+      ],
+      "text": "AzCopy_NoSuccessSummary(_startTime, _endTime, _customer, _subscription, _source, _target, _status) | where JobStatus == 'All' | project FailedJobs",
+      "id": "a2c10000-0000-4000-8004-000000000208"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_customer",
+        "_subscription",
+        "_source",
+        "_target",
+        "_status"
+      ],
+      "text": "AzCopy_NoSuccessSummary(_startTime, _endTime, _customer, _subscription, _source, _target, _status) | where JobStatus != 'All' | project JobStatus, Customers, FailedJobs, BytesTransferred",
+      "id": "a2c10000-0000-4000-8004-000000000203"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_customer",
+        "_subscription",
+        "_source",
+        "_target"
+      ],
+      "text": "AzCopy_NoSuccessCustomers(_startTime, _endTime, _customer, _subscription, _source, _target)",
+      "id": "a2c10000-0000-4000-8004-000000000211"
+    },
+    {
+      "dataSource": {
+        "dataSourceId": "a2c10000-0000-4000-8004-000000000001",
+        "kind": "inline"
+      },
+      "usedVariables": [
+        "_startTime",
+        "_endTime",
+        "_customer",
+        "_subscription",
+        "_source",
+        "_target",
+        "_status"
+      ],
+      "text": "AzCopy_NoSuccessDetails(_startTime, _endTime, _customer, _subscription, _source, _target, _status)",
+      "id": "a2c10000-0000-4000-8004-000000000213"
+    }
+  ],
+  "baseQueries": [],
+  "embeddedApps": [],
+  "pages": [
+    {
+      "name": "Customers with No Observed Success",
+      "id": "a2c10000-0000-4000-8004-000000000002"
+    }
+  ],
+  "dataSources": [
+    {
+      "database": "usage-analytics",
+      "kind": "manual-kusto",
+      "name": "AzCopy Usage Analytics",
+      "clusterUri": "https://sm-prd-westeurope.westeurope.kusto.windows.net",
+      "id": "a2c10000-0000-4000-8004-000000000001"
+    }
+  ]
+}

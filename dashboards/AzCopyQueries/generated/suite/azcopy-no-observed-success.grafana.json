@@ -1,0 +1,753 @@
+{
+  "id": null,
+  "uid": "azcopy-no-observed-success",
+  "title": "AzCopy Customers with No Observed Success",
+  "description": "Mapped customers with failed logical jobs and no observed successful job in the selected time/source/target scope. Status is filtered only after cohort classification. No lifetime claim, incident join, or support-case join is made.",
+  "version": 1,
+  "schemaVersion": 42,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 3,
+  "editable": true,
+  "refresh": "",
+  "tags": [
+    "azcopy",
+    "telemetry",
+    "saved-queries"
+  ],
+  "links": [
+    {
+      "keepTime": true,
+      "title": "AzCopy Data Metrics",
+      "url": "/d/azcopy-data-metrics",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customer Drilldown",
+      "url": "/d/azcopy-customer-drilldown",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Recurring Customer Trends",
+      "url": "/d/azcopy-recurring-trends",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customers with No Observed Success",
+      "url": "/d/azcopy-no-observed-success",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    }
+  ],
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-Customer",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "Customer",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "Customer",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SubscriptionId",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SubscriptionId",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SubscriptionId",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SourceType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SourceType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SourceType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-TargetType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "TargetType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "TargetType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-JobStatus",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'JobStatus' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "JobStatus",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'JobStatus' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "JobStatus",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 10,
+      "title": "Summary",
+      "type": "row",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 0,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 7,
+      "title": "Customers with no observed successful job",
+      "type": "stat",
+      "gridPos": {
+        "w": 8,
+        "x": 0,
+        "y": 1,
+        "h": 6
+      },
+      "description": "Mapped customers with failed logical jobs and no observed successful job in the selected time/source/target scope. Status is filtered only after cohort classification. No lifetime claim, incident join, or support-case join is made.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_NoSuccessSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), dynamic(${JobStatus:json})) | where JobStatus == 'All' | project Customers",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Failed logical jobs in cohort",
+      "type": "stat",
+      "gridPos": {
+        "w": 8,
+        "x": 8,
+        "y": 1,
+        "h": 6
+      },
+      "description": "Mapped customers with failed logical jobs and no observed successful job in the selected time/source/target scope. Status is filtered only after cohort classification. No lifetime claim, incident join, or support-case join is made.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_NoSuccessSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), dynamic(${JobStatus:json})) | where JobStatus == 'All' | project FailedJobs",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Terminal failure statuses",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 7,
+        "h": 10
+      },
+      "description": "Mapped customers with failed logical jobs and no observed successful job in the selected time/source/target scope. Status is filtered only after cohort classification. No lifetime claim, incident join, or support-case join is made.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_NoSuccessSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), dynamic(${JobStatus:json})) | where JobStatus != 'All' | project JobStatus, Customers, FailedJobs, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "Customers with failed jobs and no success (all statuses)",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 17,
+        "h": 12
+      },
+      "description": "Mapped customers with failed logical jobs and no observed successful job in the selected time/source/target scope. Status is filtered only after cohort classification. No lifetime claim, incident join, or support-case join is made.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_NoSuccessCustomers($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}))",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "title": "Drilldown",
+      "type": "row",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 29,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 13,
+      "title": "Failed daily job activity in cohort",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 30,
+        "h": 14
+      },
+      "description": "Mapped customers with failed logical jobs and no observed successful job in the selected time/source/target scope. Status is filtered only after cohort classification. No lifetime claim, incident join, or support-case join is made.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_NoSuccessDetails($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), dynamic(${JobStatus:json}))",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

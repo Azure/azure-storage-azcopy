@@ -1,0 +1,505 @@
+{
+  "id": null,
+  "uid": "azcopy-recurring-trends",
+  "title": "AzCopy Recurring Customer Trends",
+  "description": "Storage Mover Trends layout. Recurring means a mapped customer has terminal activity in at least two calendar months inside the selected range; not lifetime retention. Unmapped ownership is excluded.",
+  "version": 1,
+  "schemaVersion": 42,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 3,
+  "editable": true,
+  "refresh": "",
+  "tags": [
+    "azcopy",
+    "telemetry",
+    "saved-queries"
+  ],
+  "links": [
+    {
+      "keepTime": true,
+      "title": "AzCopy Data Metrics",
+      "url": "/d/azcopy-data-metrics",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customer Drilldown",
+      "url": "/d/azcopy-customer-drilldown",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Recurring Customer Trends",
+      "url": "/d/azcopy-recurring-trends",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customers with No Observed Success",
+      "url": "/d/azcopy-no-observed-success",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    }
+  ],
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-Customer",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "Customer",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "Customer",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SubscriptionId",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SubscriptionId",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SubscriptionId",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SourceType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SourceType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SourceType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-TargetType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "TargetType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "TargetType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 3,
+      "title": "Recurring customers",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 0,
+        "y": 0,
+        "h": 7
+      },
+      "description": "Storage Mover Trends layout. Recurring means a mapped customer has terminal activity in at least two calendar months inside the selected range; not lifetime retention. Unmapped ownership is excluded.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_RecurringSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project RecurringCustomers",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 1,
+      "title": "Total data by recurring customers",
+      "type": "stat",
+      "gridPos": {
+        "w": 10,
+        "x": 6,
+        "y": 0,
+        "h": 7
+      },
+      "description": "Storage Mover Trends layout. Recurring means a mapped customer has terminal activity in at least two calendar months inside the selected range; not lifetime retention. Unmapped ownership is excluded.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_RecurringSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Average active months",
+      "type": "stat",
+      "gridPos": {
+        "w": 8,
+        "x": 16,
+        "y": 0,
+        "h": 7
+      },
+      "description": "Storage Mover Trends layout. Recurring means a mapped customer has terminal activity in at least two calendar months inside the selected range; not lifetime retention. Unmapped ownership is excluded.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_RecurringSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project AverageActiveMonths",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Recurring customers",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 7,
+        "h": 24
+      },
+      "description": "Storage Mover Trends layout. Recurring means a mapped customer has terminal activity in at least two calendar months inside the selected range; not lifetime retention. Unmapped ownership is excluded.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_RecurringCustomers($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}))",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
