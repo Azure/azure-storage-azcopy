@@ -156,9 +156,15 @@ jobs:
             Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
             $null = Get-AzAccessToken -AsSecureString
 
+            $testExecutionArgs = @()
+            if ($IsMacOS -and '${{ parameters.job_name }}' -eq 'New_E2E') {
+              $testExecutionArgs = @('-parallel=1')
+              Write-Output "Serializing New_E2E macOS scenarios to limit Azure CLI authentication subprocess contention."
+            }
+
             # Run tests, write coverage data to a directory, and pipe output to a file
             Write-Output "Running tests. Writing coverage data to `"$(coverageDir)`" directory and test results to $(testReportName).txt."
-            go test -timeout=3h -v ${{ parameters.test_cli_param }} ./e2etest | Tee-Object -FilePath "$(testReportName).txt"
+            go test -timeout=3h -v @testExecutionArgs ${{ parameters.test_cli_param }} ./e2etest | Tee-Object -FilePath "$(testReportName).txt"
 
             # Save the exit code from the previous command
             $exitCode = $LASTEXITCODE
