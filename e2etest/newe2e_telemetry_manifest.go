@@ -263,7 +263,9 @@ func (v telemetryManifestVerifier) Verify(ctx context.Context, workspaceID, runI
 	var missing []string
 	var lastErr error
 	for {
-		events, err := v.queryClient.QueryTelemetryEvents(ctx, workspaceID, query)
+		queryContext, queryCancel := context.WithTimeout(parentContext, appInsightsQueryRequestTimeout)
+		events, err := v.queryClient.QueryTelemetryEvents(queryContext, workspaceID, query)
+		queryCancel()
 		if err == nil {
 			queriedSuccessfully = true
 			missing, err = checkTelemetryManifest(expected, events)

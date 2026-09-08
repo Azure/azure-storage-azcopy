@@ -137,6 +137,69 @@ func TestTelemetryManifestPolling(t *testing.T) {
 	assert.ErrorContains(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected), "manifest incomplete")
 }
 
+type manifestQueryFunc func(context.Context, string, string) ([]observedTelemetryEvent, error)
+
+func (query manifestQueryFunc) QueryTelemetryEvents(ctx context.Context, workspaceID, text string) ([]observedTelemetryEvent, error) {
+	return query(ctx, workspaceID, text)
+}
+
+func TestTelemetryManifestQueryAcrossObservationDeadline(t *testing.T) {
+	started := manifestEvent("run/process", "invocation", "azcopy.job.started")
+	finished := manifestEvent("run/process", "invocation", "azcopy.job.finished")
+	complete := []observedTelemetryEvent{started, finished}
+	expected := []telemetryExpectation{
+		{ProcessRunID: "run/process", JobID: "job", Command: "copy"},
+		{ProcessRunID: "run/disabled", NoEvents: true},
+	}
+	for _, test := range []struct {
+		name         string
+		events       []observedTelemetryEvent
+		queryErr     error
+		cancelParent bool
+		wantError    string
+	}{
+		{name: "successful query completes after observation", events: complete},
+		{name: "missing finish still fails", events: []observedTelemetryEvent{started}, wantError: "incomplete"},
+		{name: "duplicate still fails", events: []observedTelemetryEvent{started, finished, finished}, wantError: "duplicate"},
+		{name: "late opt-out event still fails", events: append(append([]observedTelemetryEvent(nil), complete...), manifestEvent("run/disabled", "other", "azcopy.job.started")), wantError: "unexpected telemetry"},
+		{name: "query failure still fails", queryErr: retryableQueryError{errors.New("service unavailable")}, wantError: "service unavailable"},
+		{name: "parent cancellation still fails", cancelParent: true, wantError: "context canceled"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parent, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			calls := 0
+			client := manifestQueryFunc(func(ctx context.Context, _, _ string) ([]observedTelemetryEvent, error) {
+				calls++
+				if calls == 1 {
+					return complete, nil
+				}
+				_, bounded := ctx.Deadline()
+				require.True(t, bounded, "queries must retain their own timeout")
+				if test.cancelParent {
+					cancel()
+				}
+				timer := time.NewTimer(60 * time.Millisecond)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					return nil, retryableQueryError{ctx.Err()}
+				case <-timer.C:
+					return test.events, test.queryErr
+				}
+			})
+			verifier := telemetryManifestVerifier{queryClient: client, pollInterval: time.Millisecond, timeout: 30 * time.Millisecond}
+			err := verifier.Verify(parent, "workspace", "run", time.Now(), expected)
+			if test.wantError == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, test.wantError)
+			}
+			require.Equal(t, 2, calls)
+		})
+	}
+}
+
 func TestTelemetryManifestParsing(t *testing.T) {
 	var result logAnalyticsQueryResponse
 	require.NoError(t, json.Unmarshal([]byte(`{"tables":[{"columns":[{"name":"Measurements"},{"name":"Name"},{"name":"Properties"}],"rows":[[{"azcopy.job.started":1},"azcopy.job.started","{\"JobID\":\"job\"}"]]}]}`), &result))
