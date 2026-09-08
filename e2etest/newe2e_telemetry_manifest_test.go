@@ -61,6 +61,7 @@ func TestTelemetryManifest(t *testing.T) {
 		wrong.Properties["SchemaVersion"] = "future"
 		_, err := checkTelemetryManifest(expected, []observedTelemetryEvent{wrong})
 		assert.ErrorContains(t, err, "property SchemaVersion")
+		assert.ErrorContains(t, err, `expected "3", got "future"`)
 	})
 	t.Run("wrong counters", func(t *testing.T) {
 		wrong := manifestEvent("process", "invocation", "azcopy.job.finished")
@@ -127,6 +128,31 @@ func TestTelemetryManifestParsing(t *testing.T) {
 	result.Tables[0].Rows[0] = result.Tables[0].Rows[0][:1]
 	_, err = parseTelemetryEvents(result)
 	assert.ErrorContains(t, err, "short lifecycle")
+}
+
+func TestTelemetryManifestEndpointTypes(t *testing.T) {
+	for _, test := range []struct {
+		name, source, destination, fromTo, wantSource, wantDestination string
+	}{
+		{"files URL inference", "https://account.file.core.windows.net/nfs/source", "https://account.file.core.windows.net/nfs/destination", "", "File", "File"},
+		{"explicit NFS", "https://account.file.core.windows.net/nfs/source", "https://account.file.core.windows.net/nfs/destination", "FileNFSFileNFS", "FileNFS", "FileNFS"},
+		{"SMB alias", "https://account.file.core.windows.net/share/source", "https://account.blob.core.windows.net/container/destination", "FileSMBBlob", "File", "Blob"},
+		{"DFS endpoint", "https://account.dfs.core.windows.net/filesystem/source", "https://account.blob.core.windows.net/container/destination", "", "BlobFS", "Blob"},
+		{"local upload", "local-source", "https://account.blob.core.windows.net/container/destination", "", "Local", "Blob"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source, destination, err := telemetryEndpointTypes([]string{test.source, test.destination}, map[string]string{"from-to": test.fromTo})
+			require.NoError(t, err)
+			assert.Equal(t, test.wantSource, source)
+			assert.Equal(t, test.wantDestination, destination)
+		})
+	}
+	source, destination, err := telemetryEndpointTypes(nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, source)
+	assert.Empty(t, destination)
+	_, _, err = telemetryEndpointTypes([]string{"source", "destination"}, map[string]string{"from-to": "invalid"})
+	require.Error(t, err)
 }
 
 func TestTelemetryManifestRegistration(t *testing.T) {

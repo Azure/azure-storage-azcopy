@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -75,7 +76,7 @@ func checkTelemetryManifest(expected []telemetryExpectation, events []observedTe
 			invocationProcesses[invocation] = attempt.ProcessRunID
 			for key, value := range attempt.Properties {
 				if properties[key] != value {
-					return nil, fmt.Errorf("property %s mismatch for process %s", key, attempt.ProcessRunID)
+					return nil, fmt.Errorf("property %s mismatch for process %s: expected %q, got %q", key, attempt.ProcessRunID, value, properties[key])
 				}
 			}
 			if value, exists := event.Measurements[event.Name]; !exists || value != 1 {
@@ -105,6 +106,17 @@ func checkTelemetryManifest(expected []telemetryExpectation, events []observedTe
 		}
 	}
 	return missing, nil
+}
+
+func telemetryEndpointTypes(targets []string, flags map[string]string) (string, string, error) {
+	if len(targets) != 2 {
+		return "", "", nil
+	}
+	fromTo, err := azcopy.InferAndValidateFromTo(targets[0], targets[1], flags["from-to"])
+	if err != nil {
+		return "", "", err
+	}
+	return fromTo.From().String(), fromTo.To().String(), nil
 }
 
 func registerTelemetryExpectation(processRunID, jobID string, verb AzCopyVerb, summary *common.ListJobSummaryResponse, sourceType, destType string) {

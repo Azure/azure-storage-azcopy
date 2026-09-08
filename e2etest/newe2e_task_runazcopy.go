@@ -333,6 +333,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.HelperMarker().Helper()
 	var flagMap map[string]string
 	var envMap map[string]string
+	var targetArgs []string
 
 	// we have no need to update our context manager, Fetch should do it for us.
 	envCtx := FetchAzCopyEnvironmentContext(a)
@@ -364,7 +365,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		for _, v := range commandSpec.Targets {
-			out = append(out, commandSpec.applyTargetAuth(a, v))
+			target := commandSpec.applyTargetAuth(a, v)
+			targetArgs = append(targetArgs, target)
+			out = append(out, target)
 		}
 
 		if commandSpec.Flags == nil {
@@ -562,13 +565,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 	RegisterExpectedAppInsightsJob(validationDecision.jobID)
 	if AppInsightsTelemetryValidationEnabled() {
-		sourceType, destType := "", ""
-		if len(commandSpec.Targets) == 2 {
-			sourceType, destType = commandSpec.Targets[0].Location().String(), commandSpec.Targets[1].Location().String()
-		}
 		if noTelemetryExpected {
 			registerNoTelemetryExpectation(processRunID)
-		} else {
+		} else if validationDecision.jobID != "" {
+			sourceType, destType, endpointErr := telemetryEndpointTypes(targetArgs, flagMap)
+			a.NoError("derive telemetry endpoint types from CLI inputs", endpointErr)
 			registerTelemetryExpectation(processRunID, validationDecision.jobID, commandSpec.Verb, jobIDCapture.FinalSummary(), sourceType, destType)
 		}
 	}
