@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"os"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -545,8 +546,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		})
 		dstHLink := dstContainer.GetObject(svm, rootDir+"/hardlinked.txt", common.EEntityType.Hardlink())
 		dstHLink.Create(svm, nil, ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
 			HardLinkedFileName: rootDir + "/horiginal.txt",
 		})
+		if !svm.Dryrun() {
+			originalInfo, err := os.Stat(dstHOrig.URI())
+			svm.NoError("stat destination hardlink original", err, true)
+			linkedInfo, err := os.Stat(dstHLink.URI())
+			svm.NoError("stat destination hardlink", err, true)
+			svm.AssertNow("destination fixture must share an inode", Equal{}, os.SameFile(originalInfo, linkedInfo), true)
+		}
 
 		dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	} else {
