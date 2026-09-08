@@ -10,6 +10,7 @@ param(
     [string]$StorageAccountName,
     [switch]$GrantStoragePermission,
     [ValidateRange(3, 15)][int]$PerformancePairs = 8,
+    [switch]$Profile,
     [string]$OutputDirectory = (Join-Path ([IO.Path]::GetTempPath()) "azcopy-telemetry-live-$([guid]::NewGuid().ToString('N'))")
 )
 
@@ -88,6 +89,9 @@ try {
         if ($Scenario -eq 'cli-performance' -and -not $IsWindows) {
             throw 'Full CLI performance measurement currently requires Windows process memory counters.'
         }
+        if ($Profile -and $Scenario -ne 'cli-performance') {
+            throw '-Profile requires -Scenario cli-performance.'
+        }
         if ($GrantStoragePermission -and $Scenario -notin @('cli-shutdown', 'cli-performance')) {
             throw '-GrantStoragePermission is only supported with a full CLI scenario.'
         }
@@ -125,6 +129,7 @@ try {
             AZCOPY_LIVE_TELEMETRY_OUTPUT = $OutputDirectory
             AZCOPY_RUN_CLI_TELEMETRY_PERF = $(if ($Scenario -eq 'cli-performance') { '1' } else { '0' })
             AZCOPY_CLI_TELEMETRY_PERF_PAIRS = [string]$PerformancePairs
+            AZCOPY_CLI_TELEMETRY_PROFILE = $(if ($Profile) { '1' } else { '0' })
         }
         $previous = @{}
         foreach ($name in $settings.Keys) {

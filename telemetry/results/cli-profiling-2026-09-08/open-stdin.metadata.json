@@ -1,0 +1,21 @@
+{
+  "Architecture": "amd64",
+  "BandwidthCap": "none",
+  "BinarySHA256": "2a695b1561cbb0cf3957748c9adcde5e668a3bc4013e6bea62ee5673cc4fd2a1",
+  "CPUScope": "AzCopy process user+kernel time; excludes Azure CLI authentication subprocesses",
+  "GOMAXPROCS": 8,
+  "GoVersion": "go1.26.5",
+  "Identity": "precreated installation ID for both modes; fresh isolated user directory per process",
+  "LogicalCPUs": 32,
+  "MemoryScope": "Windows peak working set and peak process commit, sampled every 10ms; not Go heap",
+  "OS": "windows",
+  "Order": "alternating AB/BA",
+  "PairsPerWorkload": 3,
+  "Profiling": true,
+  "StartedUTC": "2026-09-08T06:44:30.9547165Z",
+  "Stdin": "open idle pipe; avoids the existing CLI EOF retry loop triggered by null stdin",
+  "TelemetryFailures": "retain and label configured-enabled failures; report healthy-pair subset separately without retrying samples",
+  "TransferConcurrency": 16,
+  "WallTimeScope": "CLI launch through process exit, including authentication, enumeration, transfers and telemetry flush",
+  "Warmups": "one discarded enabled and disabled transfer per workload"
+}

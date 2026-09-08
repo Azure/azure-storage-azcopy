@@ -28,6 +28,11 @@ build tags plus explicit environment opt-ins, set by the runner. The runner buil
 one binary with `-trimpath -buildvcs=false -ldflags='-s -w'`, and every condition uses
 that same binary. Performance pairs can range from 3 to 15; eight is the default.
 
+Add `-Profile` for CPU and post-GC heap profiles from the CLI's existing profiling
+hooks, plus Windows resident-page classification. This mode adds diagnostic overhead
+and must not be treated as an unprofiled performance acceptance run. See the
+[profiling investigation](results/cli-profiling-2026-09-08/README.md).
+
 ## Method
 
 - Workloads: one 64 MiB blob; 128 blobs of 16 KiB each (2 MiB total). The test seeds
@@ -45,6 +50,9 @@ that same binary. Performance pairs can range from 3 to 15; eight is the default
 - The command is an actual recursive `azcopy copy --from-to=BlobLocal`, with
   `GOMAXPROCS=8`, `AZCOPY_CONCURRENCY_VALUE=16`, and a 4 MiB block size. No bandwidth
   cap is used. Logging and authentication configuration are equal in both modes.
+- Stdin is an open idle pipe for both modes. A null/closed stdin triggers an existing
+  EOF retry loop in `cmd.(*lifecycleMgr).watchInputs`, consuming CPU throughout the
+  process lifetime. Historical results below used null stdin; current runs do not.
 - Elapsed time runs from process launch through exit, including CLI startup, Azure
   CLI authentication, enumeration, transfers, output, and telemetry flush. Fixture
   setup, post-exit hashing, and cleanup are outside this measurement.
@@ -81,10 +89,18 @@ cleanup; the log records the IDs needed to remove those test resources.
 
 ## Results: 2026-09-08
 
+**Historical, CPU-confounded run:** subsequent profiling identified a preexisting
+stdin EOF busy loop in this harness configuration. The CPU values below are real
+process measurements but do not isolate telemetry CPU cost. They are preserved for
+provenance, not as the current CPU-overhead conclusion. The
+[controlled profiling runs](results/cli-profiling-2026-09-08/README.md) remove that
+confound and identify the resident-image contribution to the memory difference.
+
 These recorded measurements used the one-second telemetry send deadline and
 two-second process-exit flush limit. The current code subsequently increased them
-to five seconds and four seconds, respectively. These results have not been rerun with the
-new deadline; do not treat them as measurements of that change.
+to five seconds and four seconds, respectively. Later diagnostic runs use those
+new limits, but this eight-pair unprofiled experiment has not been repeated with
+both the new limits and corrected stdin.
 
 Environment: Windows amd64, 32 logical CPUs, Go 1.26.5, East US Blob Storage and
 Application Insights. The production checkout was `d0f4b02c`; this change only adds
@@ -127,16 +143,18 @@ unchanged because every enabled sample was healthy.
 
 ### Interpretation
 
-This host/run shows a material end-to-end time and CPU increase with telemetry,
-roughly 1.6 seconds per short CLI invocation. It does not support a claim of less
+This host/run shows a material end-to-end time increase with telemetry,
+roughly 1.6 seconds per short CLI invocation. The EOF loop turns additional waiting
+time into CPU consumption; this is not evidence of 1.6 seconds of telemetry collector
+work. Controlled runs still show an elapsed-time increase. They do not support less
 than 1% overhead for these workloads. This is not a measurement of steady-state
 large-job throughput: startup/authentication/flush occupy a substantial part of
 these short runs, and only Blob-to-local downloads were tested.
 
 The large working-set increase is not equivalent to 55 MiB of new telemetry heap:
-peak commit changed by only about 0.34 MiB. The different memory trends in the two
-workloads require profiling before attributing the result to particular allocations,
-resident image pages, GC behavior, or the transfer engine. The negative small-file
+peak commit changed by only about 0.34 MiB. Subsequent Windows page classification
+attributes the gap primarily to shareable pages of the existing executable image,
+with similar private memory in both modes. The negative small-file
 memory deltas are observations, not evidence that telemetry saves memory in general.
 
 These are eight pairs on one development host with real network services, not an
@@ -159,7 +177,7 @@ Machine-readable evidence is retained under [results/cli-2026-09-08](results/cli
 ## Local Validation
 
 ```powershell
-go test -tags 'telemetrylive telemetryperf' ./azcopy -run '^Test(TelemetryCLIProcessMeasurement|TelemetryCLIPerformanceAnalysis|LiveTelemetryCLIContract)$' -count=1
+go test -tags 'telemetrylive telemetryperf' ./azcopy -run '^Test(TelemetryCLIResidentBreakdown|TelemetryCLIProcessMeasurement|TelemetryCLIPerformanceAnalysis|LiveTelemetryCLIContract)$' -count=1
 ```
 
 The process counter check launches a real allocation/CPU subprocess without Azure
@@ -174,14 +192,16 @@ it can be resident, paged out, or not yet touched. It is not simply pagefile spa
 in use. The harness records the separate lifetime peaks of these values, not a
 simultaneous private-versus-shared memory breakdown.
 
-The large-blob results show approximately +55 MiB working set but only +0.34 MiB
-private commit. That does not establish a 55 MiB telemetry heap allocation. More
-resident image/mapped pages, a different fraction of existing private transfer
-buffers being touched or trimmed, and changes to allocation/GC/concurrency timing
-are possible explanations. These are hypotheses, not findings from a memory map.
-Subtracting the two independent peaks does not identify the shared-page contribution.
-VMMap or working-set/page-fault tracing plus Go heap/CPU profiling would be needed
-to attribute the difference.
+The historical large-blob results show approximately +55 MiB working set but only
++0.34 MiB private commit. Subtracting those independent peaks cannot identify shared
+memory. The subsequent diagnostic run instead uses `K32QueryWorkingSet`,
+`VirtualQueryEx`, and `K32GetMappedFileNameW`: the representative large transfer had
+18.68 MiB of the AzCopy executable resident when disabled versus 76.24 MiB enabled.
+The extra image pages were almost entirely shareable; private resident memory was
+107.14 versus 108.55 MiB. Both small-file modes had 76.24 MiB of executable image
+resident. Heap profiles were dominated by the common transfer slice pool, not a
+55 MiB telemetry allocation. The trigger for the broader image residency remains
+unproven; image classification alone does not show who faulted/prefetched the pages.
 
 The current implementation adds synchronous per-process host/OS/NIC/identity
 collection and a best-effort IMDS request with its own one-second timeout. Windows
@@ -191,9 +211,13 @@ and finish send two packed custom events through the direct Application Insights
 backend: property/measurement maps, JSON serialization, and HTTP/TLS processing.
 It does not instantiate the alternative OTel metrics backend for CLI telemetry.
 Requests are asynchronous, but startup probes are synchronous and final flush can
-hold process exit for up to four seconds. A network wait can add elapsed time, not
-1.6 seconds of CPU by itself. The measured CPU increase has not been attributed
-to individual functions.
+hold process exit for up to four seconds. A network wait does not itself consume
+1.6 seconds of CPU, but the unrelated EOF loop runs during that wait. With stdin
+held open, two diagnostic runs measured about 0.4-1.2 seconds of process CPU rather
+than 10-12 seconds; enabled/disabled CPU deltas were small and noisy. Windows Go CPU
+profiles counted blocked syscall time even in that corrected run, so OS process
+counters are authoritative for CPU totals here. The remaining elapsed-time increase
+has not been separated into startup, remote I/O, and exit-flush contributions.
 
 Transferred/enumerated/expected bytes, wire bytes, completed/failed/skipped counts,
 average storage HTTP attempt latency, attempt/error/503 counts, IOPS, and durations

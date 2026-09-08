@@ -1,0 +1,202 @@
+{
+  "large-blob": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 9.3106776,
+      "EnabledMedian": 10.956501,
+      "PairedDeltaMedian": 1.6242406000000003,
+      "DeltaLower95": 1.6217993999999987,
+      "DeltaUpper95": 1.7598456999999996,
+      "PairedPercentMedian": 17.46468170391722,
+      "PercentLower95": 17.373875132762674,
+      "PercentUpper95": 18.90137083041088
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 0.71875,
+      "EnabledMedian": 0.609375,
+      "PairedDeltaMedian": -0.125,
+      "DeltaLower95": -0.125,
+      "DeltaUpper95": 0.140625,
+      "PairedPercentMedian": -17.021276595744684,
+      "PercentLower95": -17.391304347826086,
+      "PercentUpper95": 22.500000000000007
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 144.12109375,
+      "EnabledMedian": 199.859375,
+      "PairedDeltaMedian": 55.75390625,
+      "DeltaLower95": 55.61328125,
+      "DeltaUpper95": 65.64453125,
+      "PairedPercentMedian": 38.68545873424583,
+      "PercentLower95": 38.554445256858116,
+      "PercentUpper95": 48.92142877936596
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 143.01171875,
+      "EnabledMedian": 143.546875,
+      "PairedDeltaMedian": 0.7421875,
+      "DeltaLower95": 0.15234375,
+      "DeltaUpper95": 0.8359375,
+      "PairedPercentMedian": 0.5189697085575373,
+      "PercentLower95": 0.10624097632732088,
+      "PercentUpper95": 0.5859963306771743
+    }
+  ],
+  "large-blob/healthy-only": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 9.3106776,
+      "EnabledMedian": 10.956501,
+      "PairedDeltaMedian": 1.6242406000000003,
+      "DeltaLower95": 1.6217993999999987,
+      "DeltaUpper95": 1.7598456999999996,
+      "PairedPercentMedian": 17.46468170391722,
+      "PercentLower95": 17.373875132762674,
+      "PercentUpper95": 18.90137083041088
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 0.71875,
+      "EnabledMedian": 0.609375,
+      "PairedDeltaMedian": -0.125,
+      "DeltaLower95": -0.125,
+      "DeltaUpper95": 0.140625,
+      "PairedPercentMedian": -17.021276595744684,
+      "PercentLower95": -17.391304347826086,
+      "PercentUpper95": 22.500000000000007
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 144.12109375,
+      "EnabledMedian": 199.859375,
+      "PairedDeltaMedian": 55.75390625,
+      "DeltaLower95": 55.61328125,
+      "DeltaUpper95": 65.64453125,
+      "PairedPercentMedian": 38.68545873424583,
+      "PercentLower95": 38.554445256858116,
+      "PercentUpper95": 48.92142877936596
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 143.01171875,
+      "EnabledMedian": 143.546875,
+      "PairedDeltaMedian": 0.7421875,
+      "DeltaLower95": 0.15234375,
+      "DeltaUpper95": 0.8359375,
+      "PairedPercentMedian": 0.5189697085575373,
+      "PercentLower95": 0.10624097632732088,
+      "PercentUpper95": 0.5859963306771743
+    }
+  ],
+  "small-blobs": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 9.3032827,
+      "EnabledMedian": 10.9596303,
+      "PairedDeltaMedian": 1.6563476000000001,
+      "DeltaLower95": 0.18415650000000028,
+      "DeltaUpper95": 1.7211596,
+      "PairedPercentMedian": 17.803904851778828,
+      "PercentLower95": 1.973141388113997,
+      "PercentUpper95": 18.55375096724423
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 0.921875,
+      "EnabledMedian": 1.09375,
+      "PairedDeltaMedian": -0.0625,
+      "DeltaLower95": -0.078125,
+      "DeltaUpper95": 0.3125,
+      "PairedPercentMedian": -6.666666666666665,
+      "PercentLower95": -6.779661016949157,
+      "PercentUpper95": 39.2156862745098
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 144.02734375,
+      "EnabledMedian": 141.9453125,
+      "PairedDeltaMedian": -2.3046875,
+      "DeltaLower95": -2.53515625,
+      "DeltaUpper95": -2.08203125,
+      "PairedPercentMedian": -1.5956727518593672,
+      "PercentLower95": -1.761385224990497,
+      "PercentUpper95": -1.4455805375498398
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 89.6796875,
+      "EnabledMedian": 86.66015625,
+      "PairedDeltaMedian": -3.01953125,
+      "DeltaLower95": -3.0859375,
+      "DeltaUpper95": -2.9921875,
+      "PairedPercentMedian": -3.367018032929703,
+      "PercentLower95": -3.4464706395602507,
+      "PercentUpper95": -3.329566200121703
+    }
+  ],
+  "small-blobs/healthy-only": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 9.3032827,
+      "EnabledMedian": 10.9596303,
+      "PairedDeltaMedian": 1.6563476000000001,
+      "DeltaLower95": 0.18415650000000028,
+      "DeltaUpper95": 1.7211596,
+      "PairedPercentMedian": 17.803904851778828,
+      "PercentLower95": 1.973141388113997,
+      "PercentUpper95": 18.55375096724423
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 0.921875,
+      "EnabledMedian": 1.09375,
+      "PairedDeltaMedian": -0.0625,
+      "DeltaLower95": -0.078125,
+      "DeltaUpper95": 0.3125,
+      "PairedPercentMedian": -6.666666666666665,
+      "PercentLower95": -6.779661016949157,
+      "PercentUpper95": 39.2156862745098
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 144.02734375,
+      "EnabledMedian": 141.9453125,
+      "PairedDeltaMedian": -2.3046875,
+      "DeltaLower95": -2.53515625,
+      "DeltaUpper95": -2.08203125,
+      "PairedPercentMedian": -1.5956727518593672,
+      "PercentLower95": -1.761385224990497,
+      "PercentUpper95": -1.4455805375498398
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 89.6796875,
+      "EnabledMedian": 86.66015625,
+      "PairedDeltaMedian": -3.01953125,
+      "DeltaLower95": -3.0859375,
+      "DeltaUpper95": -2.9921875,
+      "PairedPercentMedian": -3.367018032929703,
+      "PercentLower95": -3.4464706395602507,
+      "PercentUpper95": -3.329566200121703
+    }
+  ]
+}

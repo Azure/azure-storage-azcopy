@@ -90,6 +90,7 @@ func TestTelemetryCLIPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, pairs, 3)
 	require.LessOrEqual(t, pairs, 15)
+	profiling := os.Getenv("AZCOPY_CLI_TELEMETRY_PROFILE") == "1"
 	executable, err := filepath.Abs(os.Getenv("AZCOPY_LIVE_TELEMETRY_EXECUTABLE"))
 	require.NoError(t, err)
 	info, err := os.Stat(executable)
@@ -116,6 +117,8 @@ func TestTelemetryCLIPerformance(t *testing.T) {
 		"Identity":      "precreated installation ID for both modes; fresh isolated user directory per process",
 		"Warmups":       "one discarded enabled and disabled transfer per workload", "BandwidthCap": "none",
 		"TelemetryFailures": "retain and label configured-enabled failures; report healthy-pair subset separately without retrying samples",
+		"Profiling":         profiling,
+		"Stdin":             "open idle pipe; avoids the existing CLI EOF retry loop triggered by null stdin",
 	}
 	writeJSON := func(name string, value any) {
 		encoded, err := json.MarshalIndent(value, "", "  ")
@@ -184,13 +187,34 @@ func TestTelemetryCLIPerformance(t *testing.T) {
 				"AZCOPY_E2E_TELEMETRY_RUN_ID":              "cli-performance/" + uuid.NewString(),
 				common.EEnvironmentVariable.UserDir().Name: userDir,
 			})
+			if profiling {
+				command.Env = append(command.Env, "AZCOPY_PROFILE_CPU="+filepath.Join(trialDir, "cpu.pprof"))
+				command.Args = append(command.Args, "--memory-profile="+filepath.Join(trialDir, "heap.pprof"))
+			}
 			command.Stdout, command.Stderr = stdout, stderr
+			stdin, err := command.StdinPipe()
+			require.NoError(t, err)
 			metrics, runErr := measureTelemetryCLIProcess(command)
+			_ = stdin.Close()
 			require.NoError(t, stdout.Close())
 			require.NoError(t, stderr.Close())
 			require.NoError(t, runErr, "invalid performance sample; inspect %s", trialDir)
 			outputBytes, err := os.ReadFile(stdout.Name())
 			require.NoError(t, err)
+			if profiling {
+				var jsonLines []string
+				for _, line := range strings.Split(string(outputBytes), "\n") {
+					if !strings.HasPrefix(line, "INFO: pprof start CPU profiling") {
+						jsonLines = append(jsonLines, line)
+					}
+				}
+				outputBytes = []byte(strings.Join(jsonLines, "\n"))
+				for _, name := range []string{"cpu.pprof", "heap.pprof"} {
+					info, err := os.Stat(filepath.Join(trialDir, name))
+					require.NoError(t, err)
+					require.Positive(t, info.Size(), "missing profile: %s", name)
+				}
+			}
 			summary, err := liveCLISummary(outputBytes)
 			require.NoError(t, err)
 			require.Equal(t, common.EJobStatus.Completed(), summary.JobStatus)
