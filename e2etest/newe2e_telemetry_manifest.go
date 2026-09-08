@@ -1,11 +1,14 @@
 package e2etest
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +31,56 @@ type observedTelemetryEvent struct {
 	Name         string
 	Properties   map[string]string
 	Measurements map[string]float64
+}
+
+type telemetryDeliveryEvidence struct {
+	StartedSends   int
+	FinishedSends  int
+	StopMessages   int
+	DeadlineErrors int
+	OtherErrors    int
+	JobLogReadable bool
+}
+
+func collectTelemetryDeliveryEvidence(stderr string, jobLog io.Reader) telemetryDeliveryEvidence {
+	evidence := telemetryDeliveryEvidence{
+		StartedSends:  strings.Count(stderr, "telemetry: sent packed azcopy.job.started event to App Insights"),
+		FinishedSends: strings.Count(stderr, "telemetry: sent packed azcopy.job.finished event to App Insights"),
+	}
+	if jobLog == nil {
+		return evidence
+	}
+	scanner := bufio.NewScanner(jobLog)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		_, diagnostic, present := strings.Cut(scanner.Text(), "telemetry: ")
+		if !present {
+			continue
+		}
+		if strings.HasPrefix(diagnostic, "disabled for this process after delivery failure sending ") {
+			evidence.StopMessages++
+		}
+		if strings.Contains(diagnostic, "context deadline exceeded") {
+			evidence.DeadlineErrors++
+		} else if strings.HasPrefix(diagnostic, "disabled for this process ") ||
+			strings.HasPrefix(diagnostic, "failed to send ") || strings.HasPrefix(diagnostic, "dropped event ") {
+			evidence.OtherErrors++
+		}
+	}
+	evidence.JobLogReadable = scanner.Err() == nil
+	return evidence
+}
+
+func logTelemetryDeliveryEvidence(a Asserter, processRunID, jobID, jobLogPath, stderr string) {
+	var reader io.Reader
+	if file, err := os.Open(jobLogPath); err == nil {
+		defer file.Close()
+		reader = file
+	}
+	evidence := collectTelemetryDeliveryEvidence(stderr, reader)
+	a.Log("Telemetry delivery process=%s job=%s startedSends=%d finishedSends=%d stops=%d deadlines=%d otherErrors=%d jobLogReadable=%t",
+		processRunID, jobID, evidence.StartedSends, evidence.FinishedSends, evidence.StopMessages,
+		evidence.DeadlineErrors, evidence.OtherErrors, evidence.JobLogReadable)
 }
 
 func checkTelemetryManifest(expected []telemetryExpectation, events []observedTelemetryEvent) ([]string, error) {

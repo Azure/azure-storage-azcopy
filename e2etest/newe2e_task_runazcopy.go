@@ -571,6 +571,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			sourceType, destType, endpointErr := telemetryEndpointTypes(targetArgs, flagMap)
 			a.NoError("derive telemetry endpoint types from CLI inputs", endpointErr)
 			registerTelemetryExpectation(processRunID, validationDecision.jobID, commandSpec.Verb, jobIDCapture.FinalSummary(), sourceType, destType)
+			logTelemetryDeliveryEvidence(a, processRunID, validationDecision.jobID,
+				filepath.Join(*commandSpec.Environment.LogLocation, validationDecision.jobID+".log"), stderr.String())
 		}
 	}
 

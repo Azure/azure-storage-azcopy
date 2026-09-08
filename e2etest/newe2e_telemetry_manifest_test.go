@@ -27,6 +27,26 @@ func manifestEvent(process, invocation, name string) observedTelemetryEvent {
 	}
 }
 
+func TestTelemetryDeliveryEvidence(t *testing.T) {
+	const started = "telemetry: sent packed azcopy.job.started event to App Insights\n"
+	const finished = "telemetry: sent packed azcopy.job.finished event to App Insights\n"
+	healthy := collectTelemetryDeliveryEvidence(started+finished, strings.NewReader("transfer completed\n"))
+	assert.Equal(t, telemetryDeliveryEvidence{StartedSends: 1, FinishedSends: 1, JobLogReadable: true}, healthy)
+	stopped := collectTelemetryDeliveryEvidence(started, strings.NewReader(
+		"WARN: telemetry: disabled for this process after delivery failure sending azcopy.job.finished: send metrics: context deadline exceeded\n"))
+	assert.Equal(t, telemetryDeliveryEvidence{StartedSends: 1, StopMessages: 1, DeadlineErrors: 1, JobLogReadable: true}, stopped)
+	duplicate := collectTelemetryDeliveryEvidence(started+started+finished, nil)
+	assert.Equal(t, 2, duplicate.StartedSends)
+	assert.False(t, duplicate.JobLogReadable)
+	other := collectTelemetryDeliveryEvidence("", strings.NewReader("WARN: telemetry: dropped event after send panic\nprivate-path-token-canary\n"))
+	assert.Equal(t, 1, other.OtherErrors)
+	encoded, err := json.Marshal(other)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "canary")
+	unreadable := collectTelemetryDeliveryEvidence("", strings.NewReader(strings.Repeat("x", 1024*1024+1)))
+	assert.False(t, unreadable.JobLogReadable)
+}
+
 func TestTelemetryManifest(t *testing.T) {
 	expected := []telemetryExpectation{{ProcessRunID: "process", JobID: "job", Command: "copy", Properties: map[string]string{"SchemaVersion": "3"}, Measurements: map[string]float64{"azcopy.bytes_transferred": 100}}}
 	started := manifestEvent("process", "invocation", "azcopy.job.started")
