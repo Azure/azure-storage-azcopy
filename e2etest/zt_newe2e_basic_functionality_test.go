@@ -50,6 +50,14 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 		return
 	}
 
+	if azCopyVerb == AzCopyVerbSync {
+		if dstObj.Location() == common.ELocation.Local() {
+			setLocalFixtureTimeRelativeTo(svm, dstObj, srcObj, -time.Minute)
+		} else if srcObj.Location() == common.ELocation.Local() {
+			setLocalFixtureTimeRelativeTo(svm, srcObj, dstObj, time.Minute)
+		}
+	}
+
 	sasOpts := GenericAccountSignatureValues{}
 
 	stdOut, _ := RunAzCopy(

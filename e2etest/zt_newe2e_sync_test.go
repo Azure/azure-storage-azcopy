@@ -330,6 +330,12 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeSourceHash(svm *ScenarioVariati
 
 	// Re-create nohashsrcdest so the src LMT is before dest LMT
 	dest.GetObject(svm, "nohashsrcdest", common.EEntityType.File()).Create(svm, noHashSrcDest, ObjectProperties{})
+	if dest.Location() == common.ELocation.Local() {
+		for name, offset := range map[string]time.Duration{"nohashsrcdest": time.Minute, "nohashdestsrc": -time.Minute} {
+			setLocalFixtureTimeRelativeTo(svm, dest.GetObject(svm, name, common.EEntityType.File()),
+				src.GetObject(svm, name, common.EEntityType.File()), offset)
+		}
+	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
