@@ -130,6 +130,12 @@ that no collection occurs before the first rejected telemetry request.
 
 ## Assertions And Evidence
 
+For elapsed time, Windows process peak memory, and CPU comparison using the actual
+CLI with telemetry configured on/off, use `-Scenario cli-performance`. It requires
+`-StorageAccountName`, supports the same explicit `-GrantStoragePermission` option,
+and is excluded from `all`. See [CLI_PERFORMANCE.md](CLI_PERFORMANCE.md) for commands,
+methodology, raw evidence, and results. It does not change server authentication.
+
 - Quota: require a healthy HTTP 200 baseline with one accepted item; fill using
   production serialized started events with synthetic padding; observe HTTP 439
   (or a 206 containing only 439 item rejections); verify the corresponding ARM

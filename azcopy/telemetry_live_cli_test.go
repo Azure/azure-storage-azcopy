@@ -116,25 +116,8 @@ func TestLiveTelemetryCLIContract(t *testing.T) {
 	}
 }
 
-func TestLiveTelemetryCLIEmergencyShutdown(t *testing.T) {
-	if os.Getenv("AZCOPY_RUN_LIVE_TELEMETRY") != "1" {
-		t.Skip("manual full CLI test; use testSuite/telemetry-live.ps1 -Scenario cli-shutdown")
-	}
-	executable, err := filepath.Abs(os.Getenv("AZCOPY_LIVE_TELEMETRY_EXECUTABLE"))
-	require.NoError(t, err)
-	info, err := os.Stat(executable)
-	require.NoError(t, err, "supply a built AzCopy executable through the manual runner")
-	require.False(t, info.IsDir())
-	account := os.Getenv("AZCOPY_LIVE_TELEMETRY_STORAGE_ACCOUNT")
-	require.Regexp(t, `^[a-z0-9]{3,24}$`, account, "specify a dedicated test storage account")
-	evidence := os.Getenv("AZCOPY_LIVE_TELEMETRY_OUTPUT")
-	require.NotEmpty(t, evidence)
-	evidence = filepath.Join(evidence, "cli-"+uuid.NewString())
-	require.NoError(t, os.MkdirAll(evidence, 0700))
-	t.Logf("full CLI evidence: %s", evidence)
-	target := loadLiveTelemetryTarget(t, "shutdown")
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
+func newLiveCLIContainer(t *testing.T, ctx context.Context, target *liveTelemetryTarget, account string) (*azblob.Client, string) {
+	t.Helper()
 	storage, err := azblob.NewClient("https://"+account+".blob.core.windows.net/", target.credential, nil)
 	require.NoError(t, err)
 	container := "telemetry-cli-" + uuid.NewString()
@@ -180,6 +163,29 @@ func TestLiveTelemetryCLIEmergencyShutdown(t *testing.T) {
 			waitLiveTelemetry(t, permissionCtx, 15*time.Second)
 		}
 	}
+	return storage, container
+}
+
+func TestLiveTelemetryCLIEmergencyShutdown(t *testing.T) {
+	if os.Getenv("AZCOPY_RUN_LIVE_TELEMETRY") != "1" {
+		t.Skip("manual full CLI test; use testSuite/telemetry-live.ps1 -Scenario cli-shutdown")
+	}
+	executable, err := filepath.Abs(os.Getenv("AZCOPY_LIVE_TELEMETRY_EXECUTABLE"))
+	require.NoError(t, err)
+	info, err := os.Stat(executable)
+	require.NoError(t, err, "supply a built AzCopy executable through the manual runner")
+	require.False(t, info.IsDir())
+	account := os.Getenv("AZCOPY_LIVE_TELEMETRY_STORAGE_ACCOUNT")
+	require.Regexp(t, `^[a-z0-9]{3,24}$`, account, "specify a dedicated test storage account")
+	evidence := os.Getenv("AZCOPY_LIVE_TELEMETRY_OUTPUT")
+	require.NotEmpty(t, evidence)
+	evidence = filepath.Join(evidence, "cli-"+uuid.NewString())
+	require.NoError(t, os.MkdirAll(evidence, 0700))
+	t.Logf("full CLI evidence: %s", evidence)
+	target := loadLiveTelemetryTarget(t, "shutdown")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	storage, container := newLiveCLIContainer(t, ctx, target, account)
 	large := make([]byte, 16*1024*1024)
 	_, err = rand.Read(large)
 	require.NoError(t, err)

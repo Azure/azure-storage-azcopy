@@ -1,5 +1,10 @@
 # Manual Telemetry Performance Gate
 
+For a comparison using the **actual AzCopy executable and real Blob transfers**,
+see [CLI_PERFORMANCE.md](CLI_PERFORMANCE.md). It reports elapsed time, process peak
+memory, CPU time, and observed telemetry failures from paired on/off runs. The
+offline instrumentation benchmark below remains separate and unchanged.
+
 Create an Azure Pipelines definition pointing to [telemetry-performance.yml](../telemetry-performance.yml), then queue it manually. The default is the existing `AzCopyPerfTestUbuntu` pool and `azcopyPerfTestUbuntu22.04` image. The agent needs PowerShell 7, Git, sufficient local scratch space, and exclusive performance-test use. GoTool installs Go 1.25.11. No Azure login, storage credentials, E2E scenarios, or cloud ingestion are used. No definition is provisioned automatically by this change.
 
 ## Run Locally
@@ -39,7 +44,7 @@ Report-only mode still validates subprocesses and delivery but does not enforce 
 | Paired retained heap increase | 100 KiB |
 | Paired sampled peak live-heap increase | 100 KiB |
 | Paired production initialization increase | 2.25 seconds |
-| Failed-sink flush duration | 2 seconds + 250 ms scheduler allowance |
+| Failed-sink flush duration | 4 seconds + 250 ms scheduler allowance |
 | Stripped binary growth against baseline | 5 MiB |
 
 For each paired metric, the gate uses the median and a deterministic 2,000-resample bootstrap 95% interval. An upper bound at/below the limit passes; a lower bound above it fails; an interval crossing the limit is inconclusive and blocks an enforced run. Do not loosen limits to turn noise green. Repeat with longer samples on an idle host, inspect raw trials, and use more pairs when needed. The bootstrap is a practical noise check, not proof of a universal overhead guarantee.

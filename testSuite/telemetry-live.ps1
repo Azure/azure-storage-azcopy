@@ -6,9 +6,10 @@ param(
     [string]$Location = 'eastus',
     [switch]$Provision,
     [switch]$Run,
-    [ValidateSet('all', 'shutdown', 'cli-shutdown', 'workspace', 'application')][string]$Scenario = 'all',
+    [ValidateSet('all', 'shutdown', 'cli-shutdown', 'cli-performance', 'workspace', 'application')][string]$Scenario = 'all',
     [string]$StorageAccountName,
     [switch]$GrantStoragePermission,
+    [ValidateRange(3, 15)][int]$PerformancePairs = 8,
     [string]$OutputDirectory = (Join-Path ([IO.Path]::GetTempPath()) "azcopy-telemetry-live-$([guid]::NewGuid().ToString('N'))")
 )
 
@@ -84,12 +85,15 @@ try {
         $cliExecutable = ''
         $storagePrincipal = ''
         $storageResourceId = ''
-        if ($GrantStoragePermission -and $Scenario -ne 'cli-shutdown') {
-            throw '-GrantStoragePermission is only supported with -Scenario cli-shutdown.'
+        if ($Scenario -eq 'cli-performance' -and -not $IsWindows) {
+            throw 'Full CLI performance measurement currently requires Windows process memory counters.'
         }
-        if ($Scenario -eq 'cli-shutdown') {
+        if ($GrantStoragePermission -and $Scenario -notin @('cli-shutdown', 'cli-performance')) {
+            throw '-GrantStoragePermission is only supported with a full CLI scenario.'
+        }
+        if ($Scenario -in @('cli-shutdown', 'cli-performance')) {
             if ($StorageAccountName -notmatch '^[a-z0-9]{3,24}$') {
-                throw '-Scenario cli-shutdown requires -StorageAccountName for an Azure Blob test account accessible through your Azure CLI login.'
+                throw 'Full CLI scenarios require -StorageAccountName for an Azure Blob test account accessible through your Azure CLI login.'
             }
             if ($GrantStoragePermission) {
                 $storagePrincipal = Invoke-AzureJson @('ad', 'signed-in-user', 'show', '--query', 'id')
@@ -101,7 +105,11 @@ try {
             }
             $extension = if ($IsWindows) { '.exe' } else { '' }
             $cliExecutable = Join-Path $OutputDirectory "azcopy-live$extension"
-            & go build -o $cliExecutable .
+            if ($Scenario -eq 'cli-performance') {
+                & go build -trimpath -buildvcs=false '-ldflags=-s -w' -o $cliExecutable .
+            } else {
+                & go build -o $cliExecutable .
+            }
             if ($LASTEXITCODE -ne 0) { throw 'Failed to build the current AzCopy CLI for the live E2E test.' }
         }
         $settings = @{
@@ -115,6 +123,8 @@ try {
             AZCOPY_LIVE_TELEMETRY_STORAGE_PRINCIPAL = $storagePrincipal
             AZCOPY_LIVE_TELEMETRY_STORAGE_RESOURCE_ID = $storageResourceId
             AZCOPY_LIVE_TELEMETRY_OUTPUT = $OutputDirectory
+            AZCOPY_RUN_CLI_TELEMETRY_PERF = $(if ($Scenario -eq 'cli-performance') { '1' } else { '0' })
+            AZCOPY_CLI_TELEMETRY_PERF_PAIRS = [string]$PerformancePairs
         }
         $previous = @{}
         foreach ($name in $settings.Keys) {
@@ -128,14 +138,21 @@ try {
                 $filter = switch ($selected) {
                     'shutdown' { '^TestLiveTelemetryEmergencyShutdown$' }
                     'cli-shutdown' { '^TestLiveTelemetryCLIEmergencyShutdown$' }
+                    'cli-performance' { '^TestTelemetryCLIPerformance$' }
                     default { "^TestLiveTelemetryQuota$/^$selected`$" }
                 }
-                if ($selected -eq 'cli-shutdown') {
+                $tags = 'telemetrylive'
+                $timeout = '25m'
+                if ($selected -eq 'cli-performance') {
+                    $tags = 'telemetrylive,telemetryperf'
+                    $timeout = '40m'
+                    Write-Output "Running full CLI telemetry performance comparison: $PerformancePairs pairs per workload plus warm-ups; real Blob transfers and Application Insights."
+                } elseif ($selected -eq 'cli-shutdown') {
                     Write-Output 'Running full CLI shutdown E2E: real Blob downloads and Application Insights; no mock server or quota filling.'
                 } else {
                     Write-Output "Running real-endpoint scenario: $selected (maximum 64 MiB request bodies; no mock server)."
                 }
-                & go test -tags telemetrylive ./azcopy -run $filter -count=1 -timeout=25m -json |
+                & go test -tags $tags ./azcopy -run $filter -count=1 "-timeout=$timeout" -json |
                     Tee-Object -FilePath (Join-Path $OutputDirectory "$selected.jsonl") |
                     ForEach-Object {
                         $entry = $_ | ConvertFrom-Json

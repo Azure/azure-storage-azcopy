@@ -64,11 +64,10 @@ const (
 	// envE2ETelemetryRunID optionally correlates telemetry emitted by one E2E
 	// pipeline matrix leg. It is unset in normal AzCopy usage.
 	envE2ETelemetryRunID = "AZCOPY_E2E_TELEMETRY_RUN_ID"
-	// Individual sends are bounded so an ordered started/finished pair fits
-	// within the process-wide shutdown drain.
-	telemetrySendTimeout = time.Second
+	// The shorter shutdown drain can cancel an in-flight send before this deadline.
+	telemetrySendTimeout = 5 * time.Second
 	// telemetryFlushTimeout is the maximum telemetry may add to process exit.
-	telemetryFlushTimeout    = 2 * time.Second
+	telemetryFlushTimeout    = 4 * time.Second
 	telemetryMaxPendingSends = 4
 	// installationIDFileName stores the anonymous, per-install identifier.
 	installationIDFileName       = "installation_id"

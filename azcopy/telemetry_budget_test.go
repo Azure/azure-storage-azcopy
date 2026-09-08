@@ -2,9 +2,11 @@ package azcopy
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,7 +66,7 @@ func TestTelemetryBudgetBoundsBlockedSendsAndFlushes(t *testing.T) {
 
 func TestTelemetryBudgetFlushCancelsTransport(t *testing.T) {
 	client := &budgetBlockingClient{entered: make(chan struct{}, 1), release: make(chan struct{})}
-	agent := &telemetryAgent{enabled: true, sendTimeout: time.Minute, reporter: telemetry.NewReporter(telemetry.Config{
+	agent := &telemetryAgent{enabled: true, reporter: telemetry.NewReporter(telemetry.Config{
 		Backend: telemetry.BackendAppInsights, ConnectionString: "InstrumentationKey=test;IngestionEndpoint=https://example.test", HTTPClient: client,
 	})}
 	complete := agent.dispatch(telemetry.CommandInvokedEvent{}, nil)
@@ -82,6 +84,49 @@ func TestTelemetryBudgetFlushCancelsTransport(t *testing.T) {
 	agent.dispatchMu.Lock()
 	assert.Empty(t, agent.pending)
 	agent.dispatchMu.Unlock()
+}
+
+func TestTelemetryBudgetDefaultDeadlineAllowsSlowSuccess(t *testing.T) {
+	require.Equal(t, 5*time.Second, telemetrySendTimeout)
+	require.Equal(t, 4*time.Second, telemetryFlushTimeout)
+	deadlines := make(chan time.Duration, 2)
+	var requests atomic.Int64
+	client := &http.Client{Transport: telemetryFailureTransport(func(request *http.Request) (*http.Response, error) {
+		deadline, present := request.Context().Deadline()
+		if !present {
+			return nil, fmt.Errorf("telemetry request has no deadline")
+		}
+		deadlines <- time.Until(deadline)
+		if requests.Add(1) == 1 {
+			timer := time.NewTimer(2500 * time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-request.Context().Done():
+				return nil, request.Context().Err()
+			}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})}
+	agent := &telemetryAgent{enabled: true, reporter: telemetry.NewReporter(telemetry.Config{
+		Backend: telemetry.BackendAppInsights, ConnectionString: "InstrumentationKey=test;IngestionEndpoint=https://example.test", HTTPClient: client,
+	})}
+	started := agent.dispatch(telemetry.JobStartedEvent{}, nil)
+	finished := agent.dispatch(telemetry.JobFinishedEvent{}, started)
+	t.Cleanup(func() { agent.flush(time.Nanosecond) })
+	agent.flush(telemetryFlushTimeout)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("healthy ordered sends did not complete")
+	}
+	require.True(t, agent.isActive(), "a successful request exceeding two seconds must survive exit flush")
+	require.EqualValues(t, 2, requests.Load())
+	for index := 0; index < 2; index++ {
+		remaining := <-deadlines
+		assert.Greater(t, remaining, 4*time.Second)
+		assert.LessOrEqual(t, remaining, 5*time.Second)
+	}
 }
 
 func TestTelemetryBudgetTimedOutStartStopsFinish(t *testing.T) {
