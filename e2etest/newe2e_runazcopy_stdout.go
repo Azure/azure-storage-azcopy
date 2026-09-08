@@ -22,6 +22,7 @@ type azCopyJobIDCapture struct {
 	pending      string
 	jobID        string
 	finalSummary *common.ListJobSummaryResponse
+	onJobID      func()
 }
 
 func newAzCopyJobIDCapture(target AzCopyStdout) *azCopyJobIDCapture {
@@ -114,6 +115,9 @@ func (c *azCopyJobIDCapture) setJobID(candidate string) bool {
 	}
 
 	c.jobID = jobID.String()
+	if c.onJobID != nil {
+		c.onJobID()
+	}
 	return true
 }
 

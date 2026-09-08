@@ -169,6 +169,8 @@ func TestDecideAppInsightsJobValidation(t *testing.T) {
 func TestAzCopyJobIDCaptureForwardsAndCapturesJSONOutput(t *testing.T) {
 	var target bytes.Buffer
 	capture := newAzCopyJobIDCapture(&testAzCopyStdout{Buffer: &target})
+	ready := false
+	capture.onJobID = func() { ready = true }
 	jobID := common.NewJobID().String()
 	initMessage, err := json.Marshal(cmd.InitMsgJsonTemplate{JobID: jobID})
 	require.NoError(t, err)
@@ -183,6 +185,7 @@ func TestAzCopyJobIDCaptureForwardsAndCapturesJSONOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, len(output), n)
 	assert.Equal(t, output, target.Bytes())
+	assert.True(t, ready)
 	assert.Equal(t, jobID, capture.JobID())
 }
 

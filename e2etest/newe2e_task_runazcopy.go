@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -523,6 +525,17 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
 
+	var releaseStartup func()
+	if needsAzCLIStartupGate(runtime.GOOS, envMap["AZCOPY_AUTO_LOGIN_TYPE"], isLaunchedByDebugger) {
+		releaseStartup, err = acquireAzCLIStartup(a.Context(), azCLIStartupSlot, time.Minute)
+		a.NoError("acquire AzCLI startup slot", err, true)
+		if err != nil {
+			return out, &AzCopyJobPlan{}
+		}
+		defer releaseStartup()
+		jobIDCapture.onJobID = releaseStartup
+	}
+
 	err = command.Start()
 	a.Assert("run command", IsNil{}, err)
 
@@ -535,6 +548,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+	if releaseStartup != nil {
+		releaseStartup()
+	}
 
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
