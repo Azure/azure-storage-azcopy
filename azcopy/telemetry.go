@@ -35,6 +35,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -67,7 +68,8 @@ const (
 	// within the process-wide shutdown drain.
 	telemetrySendTimeout = time.Second
 	// telemetryFlushTimeout is the maximum telemetry may add to process exit.
-	telemetryFlushTimeout = 2 * time.Second
+	telemetryFlushTimeout    = 2 * time.Second
+	telemetryMaxPendingSends = 4
 	// installationIDFileName stores the anonymous, per-install identifier.
 	installationIDFileName       = "installation_id"
 	installationIDLockRetryDelay = 10 * time.Millisecond
@@ -79,10 +81,13 @@ const (
 // is nil or disabled, in which case they are no-ops.
 type telemetryAgent struct {
 	enabled      bool
+	stopped      atomic.Bool
 	reporter     *telemetry.Reporter
 	resource     telemetry.ResourceAttributes
 	startedSends sync.Map
-	pendingSends sync.WaitGroup
+	dispatchMu   sync.Mutex
+	pending      map[chan struct{}]context.CancelFunc
+	idle         chan struct{}
 	sendTimeout  time.Duration
 }
 
@@ -166,7 +171,7 @@ func ReportCommandInvoked(command, runID string, options telemetry.OptionAttribu
 // reportStarted emits a job.started event asynchronously (best-effort). It never
 // blocks the caller and never surfaces errors to the user.
 func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invocationID string, start time.Time) {
-	if a == nil || !a.enabled {
+	if !a.isActive() {
 		return
 	}
 	evt := telemetry.JobStartedEvent{
@@ -179,6 +184,9 @@ func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invo
 	}
 	key := startedSendKey(runID, invocationID)
 	sendComplete := a.dispatch(evt, nil)
+	if sendComplete == nil {
+		return
+	}
 	a.startedSends.Store(key, sendComplete)
 	go func() {
 		<-sendComplete
@@ -189,7 +197,7 @@ func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invo
 // reportFinished queues job.finished after its matching job.started send. The
 // process-wide flush provides the bounded delivery opportunity before exit.
 func (a *telemetryAgent) reportFinished(evt telemetry.JobFinishedEvent) {
-	if a == nil || !a.enabled {
+	if !a.isActive() {
 		return
 	}
 	var startedComplete <-chan struct{}
@@ -245,7 +253,7 @@ func (a *telemetryAgent) reportInitializationFailure(dimensions func() telemetry
 
 func (a *telemetryAgent) newAttempt(dimensions func() telemetry.JobDimensions, jobID, invocationID string, start time.Time) (finalizer *attemptTelemetryFinalizer) {
 	finalizer = newAttemptTelemetryFinalizer(nil, telemetry.JobDimensions{}, jobID, invocationID, start)
-	if a == nil || !a.enabled {
+	if !a.isActive() {
 		return finalizer
 	}
 	defer func() { _ = recover() }()
@@ -273,7 +281,7 @@ func (f *attemptTelemetryFinalizer) finish(attemptErr error) {
 		return
 	}
 	f.finished = true
-	if f.agent == nil || !f.agent.enabled {
+	if !f.agent.isActive() {
 		return
 	}
 	defer func() {
@@ -443,7 +451,7 @@ func sanitizeJobErrorCode(code string) string {
 // reportCommand queues a single command.invoked event without delaying command
 // execution. Best-effort; no-op when disabled.
 func (a *telemetryAgent) reportCommand(command, runID, invocationID string, options telemetry.OptionAttributes) {
-	if a == nil || !a.enabled {
+	if !a.isActive() {
 		return
 	}
 	a.dispatch(telemetry.CommandInvokedEvent{
@@ -466,19 +474,75 @@ func newTelemetryInvocationID() string {
 }
 
 func (a *telemetryAgent) shouldCollectSourceShape() bool {
-	return a != nil && a.enabled
+	return a.isActive()
+}
+
+func (a *telemetryAgent) isActive() bool {
+	return a != nil && a.enabled && !a.stopped.Load()
+}
+
+func (a *telemetryAgent) stopAfterDeliveryFailure() bool {
+	a.dispatchMu.Lock()
+	defer a.dispatchMu.Unlock()
+	if !a.stopped.CompareAndSwap(false, true) {
+		return false
+	}
+	for _, cancel := range a.pending {
+		cancel()
+	}
+	return true
 }
 
 func (a *telemetryAgent) dispatch(evt telemetry.MetricEvent, waitFor <-chan struct{}) chan struct{} {
+	if !a.isActive() {
+		return nil
+	}
+	a.dispatchMu.Lock()
+	if !a.isActive() || len(a.pending) >= telemetryMaxPendingSends {
+		a.dispatchMu.Unlock()
+		return nil
+	}
+	if a.pending == nil {
+		a.pending = make(map[chan struct{}]context.CancelFunc)
+	}
+	if len(a.pending) == 0 {
+		a.idle = make(chan struct{})
+	}
+	timeout := a.sendTimeout
+	if timeout <= 0 {
+		timeout = telemetrySendTimeout
+	}
+	dispatchTimeout := timeout
+	if waitFor != nil {
+		dispatchTimeout += timeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dispatchTimeout)
 	complete := make(chan struct{})
-	a.pendingSends.Add(1)
+	a.pending[complete] = cancel
+	a.dispatchMu.Unlock()
 	go func() {
-		defer a.pendingSends.Done()
-		defer close(complete)
+		defer func() {
+			cancel()
+			a.dispatchMu.Lock()
+			close(complete)
+			delete(a.pending, complete)
+			if len(a.pending) == 0 {
+				close(a.idle)
+			}
+			a.dispatchMu.Unlock()
+		}()
 		if waitFor != nil {
-			<-waitFor
+			select {
+			case <-waitFor:
+			case <-ctx.Done():
+				return
+			}
 		}
-		a.sendSafely(evt)
+		if ctx.Err() == nil {
+			sendContext, sendCancel := context.WithTimeout(ctx, timeout)
+			defer sendCancel()
+			a.sendSafely(sendContext, evt)
+		}
 	}()
 	return complete
 }
@@ -487,32 +551,42 @@ func (a *telemetryAgent) flush(timeout time.Duration) {
 	if a == nil || !a.enabled {
 		return
 	}
-	complete := make(chan struct{})
-	go func() {
-		a.pendingSends.Wait()
-		close(complete)
-	}()
+	a.dispatchMu.Lock()
+	if len(a.pending) == 0 {
+		a.dispatchMu.Unlock()
+		return
+	}
+	complete := a.idle
+	a.dispatchMu.Unlock()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case <-complete:
 	case <-timer.C:
+		a.dispatchMu.Lock()
+		for _, cancel := range a.pending {
+			cancel()
+		}
+		a.dispatchMu.Unlock()
 	}
 }
 
-func (a *telemetryAgent) sendSafely(evt telemetry.MetricEvent) {
+func (a *telemetryAgent) sendSafely(ctx context.Context, evt telemetry.MetricEvent) {
 	defer func() {
 		if recover() != nil {
 			common.LogToJobLogWithPrefix("telemetry: dropped event after send panic", common.LogWarning)
 		}
 	}()
-	timeout := a.sendTimeout
-	if timeout <= 0 {
-		timeout = telemetrySendTimeout
+	if !a.isActive() || ctx.Err() != nil {
+		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	if err := a.reporter.ReportEvent(ctx, evt); err != nil {
+		if telemetry.IsDeliveryFailure(err) {
+			if a.stopAfterDeliveryFailure() {
+				common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: disabled for this process after delivery failure sending %s: %v", evt.EventName(), err), common.LogWarning)
+			}
+			return
+		}
 		common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: failed to send %s: %v", evt.EventName(), err), common.LogWarning)
 	}
 }

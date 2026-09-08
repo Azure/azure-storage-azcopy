@@ -50,9 +50,13 @@ AzCopy. An unset or blank override uses the embedded test destination. The agent
 caches its configuration for the process lifetime. This test default is temporary
 and must be replaced with the approved production destination before release.
 
-Telemetry send failures drop the affected event without retrying or disabling
-later events. A failed start-event send therefore does not suppress the finish
-event. Telemetry initialization panics disable telemetry for that process;
+Telemetry transport failures, ingestion rejections (including partial acceptance),
+and throttling disable the entire telemetry pipeline for the rest of the process.
+Queued and future events are suppressed, active requests are cancelled, and
+source-shape collection stops. Already transmitted events cannot be recalled.
+There is no retry or automatic recovery within that process; transfers continue
+independently. Local serialization errors and send panics drop the affected event.
+Telemetry initialization panics disable telemetry for that process;
 dimension-collection panics drop that attempt's telemetry, and finalization
 panics drop its finish event. Telemetry-generated failure diagnostics omit
 response bodies, transport error details, and panic values.

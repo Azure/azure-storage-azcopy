@@ -307,6 +307,12 @@ func (e JobStartedEvent) attributes() map[string]string {
 
 func (e JobFinishedEvent) attributes() map[string]string {
 	attrs := mergeProps(e.Resource.props(), e.Dimensions.props())
+	if e.Dimensions.SummaryCounterScope == "job-cumulative" {
+		attrs["ThroughputStatus"] = "unavailable-cumulative-summary"
+	}
+	if e.ContainersScanned < 0 || e.ContainersTouched < 0 || e.BucketsScanned < 0 || e.BucketsTouched < 0 {
+		attrs["SourceScopeCountsStatus"] = "incomplete"
+	}
 	attrs["JobID"] = e.JobID
 	if e.InvocationID != "" {
 		attrs["InvocationID"] = e.InvocationID
@@ -338,7 +344,7 @@ func (e JobStartedEvent) measurements() []namedMetric {
 }
 
 func (e JobFinishedEvent) measurements() []namedMetric {
-	return []namedMetric{
+	metrics := []namedMetric{
 		{Name: "azcopy.job.finished", Value: float64(e.FinishedCount), Count: 1},
 		{Name: "azcopy.failure_error_other_count", Value: float64(e.FailureErrorOtherCount), Count: 1},
 		{Name: "azcopy.bytes_enumerated", Value: float64(e.BytesEnumerated), Count: 1},
@@ -390,6 +396,21 @@ func (e JobFinishedEvent) measurements() []namedMetric {
 		{Name: "azcopy.network_error_pct", Value: e.NetworkErrorPct, Count: 1},
 		{Name: "azcopy.percent_complete", Value: e.PercentComplete, Count: 1},
 	}
+	filtered := metrics[:0]
+	for _, metric := range metrics {
+		switch metric.Name {
+		case "azcopy.job_throughput_mbps", "azcopy.transfer_phase_throughput_mbps":
+			if e.Dimensions.SummaryCounterScope == "job-cumulative" {
+				continue
+			}
+		case "azcopy.containers_scanned", "azcopy.containers_touched", "azcopy.buckets_scanned", "azcopy.buckets_touched":
+			if metric.Value < 0 {
+				continue
+			}
+		}
+		filtered = append(filtered, metric)
+	}
+	return filtered
 }
 
 // ---------------------------------------------------------------------------

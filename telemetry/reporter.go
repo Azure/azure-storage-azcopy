@@ -377,6 +377,19 @@ type appInsightsEventData struct {
 	Measurements map[string]float64 `json:"measurements,omitempty"`
 }
 
+type deliveryFailure struct {
+	error
+}
+
+func (failure *deliveryFailure) Unwrap() error {
+	return failure.error
+}
+
+func IsDeliveryFailure(err error) bool {
+	var failure *deliveryFailure
+	return errors.As(err, &failure)
+}
+
 // postEnvelopes sends a batch of telemetry envelopes to the App Insights
 // /v2.1/track ingestion endpoint using the given client. It returns the HTTP
 // status code on success.
@@ -396,19 +409,19 @@ func postEnvelopes(ctx context.Context, client httpDoer, endpoint string, envelo
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return 0, fmt.Errorf("send metrics: %w", ctx.Err())
+			return 0, &deliveryFailure{fmt.Errorf("send metrics: %w", ctx.Err())}
 		}
-		return 0, errors.New("send metrics: transport failure")
+		return 0, &deliveryFailure{errors.New("send metrics: transport failure")}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusPartialContent {
 		if err := validatePartialIngestionResponse(resp.Body); err != nil {
-			return resp.StatusCode, err
+			return resp.StatusCode, &deliveryFailure{err}
 		}
 	}
 	if resp.StatusCode >= 300 {
-		return resp.StatusCode, fmt.Errorf("app insights returned HTTP %d", resp.StatusCode)
+		return resp.StatusCode, &deliveryFailure{fmt.Errorf("app insights returned HTTP %d", resp.StatusCode)}
 	}
 	return resp.StatusCode, nil
 }

@@ -55,31 +55,16 @@ func failureTestAgent(client *failurePolicyClient) *telemetryAgent {
 	})}
 }
 
-func TestTelemetryFailurePolicyDropsOnlyFailedEvent(t *testing.T) {
-	for _, status := range []int{400, 401, 403, 429, 500, 503} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
-			client := &failurePolicyClient{status: status}
-			agent := failureTestAgent(client)
-			agent.reportStarted(telemetry.JobDimensions{Command: "copy"}, "job", "attempt", time.Now())
-			agent.reportFinished(telemetry.JobFinishedEvent{JobID: "job", InvocationID: "attempt"})
-			agent.flush(time.Second)
-			client.mu.Lock()
-			defer client.mu.Unlock()
-			require.Len(t, client.bodies, 2)
-			assert.Contains(t, client.bodies[1], "azcopy.job.finished")
-			assert.True(t, agent.enabled)
-		})
-	}
-	for _, panicFirst := range []bool{false, true} {
-		client := &failurePolicyClient{panicFirst: panicFirst, failFirst: !panicFirst}
-		agent := failureTestAgent(client)
-		agent.reportStarted(telemetry.JobDimensions{}, "job", "attempt", time.Now())
-		agent.reportFinished(telemetry.JobFinishedEvent{JobID: "job", InvocationID: "attempt"})
-		agent.flush(time.Second)
-		client.mu.Lock()
-		assert.Len(t, client.bodies, 2)
-		client.mu.Unlock()
-	}
+func TestTelemetrySendPanicDropsOnlyAffectedEvent(t *testing.T) {
+	client := &failurePolicyClient{panicFirst: true}
+	agent := failureTestAgent(client)
+	agent.reportStarted(telemetry.JobDimensions{}, "job", "attempt", time.Now())
+	agent.reportFinished(telemetry.JobFinishedEvent{JobID: "job", InvocationID: "attempt"})
+	agent.flush(time.Second)
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	assert.Len(t, client.bodies, 2)
+	assert.True(t, agent.isActive())
 }
 
 func TestTelemetryInitializationFailureFinalization(t *testing.T) {
@@ -159,22 +144,30 @@ func TestTelemetryPrivacyCanariesInEnvelopesAndLogs(t *testing.T) {
 	common.AzcopyCurrentJobLogger = logger
 	t.Cleanup(func() { common.AzcopyCurrentJobLogger = previous })
 	for _, status := range []int{400, 503, 206} {
-		client := &failurePolicyClient{status: status, responseBody: `{"itemsReceived":1,"itemsAccepted":0,"errors":[{"index":0,"statusCode":400,"message":"` + canary + `"}]}`}
+		client := &failurePolicyClient{}
 		agent := failureTestAgent(client)
 		source := common.ResourceString{Value: "https://sourceaccount.blob.core.windows.net/" + canary, SAS: "sig=" + canary}
 		destination := common.ResourceString{Value: "https://destaccount.blob.core.windows.net/" + canary, SAS: "sig=" + canary}
 		dimensions := resumeJobDimensions(common.GetJobDetailsResponse{FromTo: common.EFromTo.BlobBlob()}, source, destination, common.ECredentialType.Anonymous(), common.ECredentialType.Anonymous(), telemetry.OptionAttributes{})
 		agent.reportInitializationFailure(func() telemetry.JobDimensions { return dimensions }, "job", "attempt", time.Now(), &os.PathError{Op: "open", Path: canary, Err: os.ErrNotExist})
-		agent.reportCommand("list", "command-job", "command-attempt", telemetry.OptionAttributes{})
 		agent.flush(time.Second)
 		client.mu.Lock()
-		require.Len(t, client.bodies, 3)
+		require.Len(t, client.bodies, 2)
 		bodies := strings.Join(client.bodies, "\n")
 		assert.NotContains(t, bodies, canary)
 		assert.Contains(t, bodies, "sourceaccount")
 		assert.Contains(t, bodies, "destaccount")
-		assert.Contains(t, bodies, "azcopy.command.invoked")
 		client.mu.Unlock()
+		rejectedClient := &failurePolicyClient{status: status, responseBody: `{"itemsReceived":1,"itemsAccepted":0,"errors":[{"index":0,"statusCode":400,"message":"` + canary + `"}]}`}
+		rejectedAgent := failureTestAgent(rejectedClient)
+		rejectedAgent.reportCommand("list", "command-job", "command-attempt", telemetry.OptionAttributes{})
+		rejectedAgent.flush(time.Second)
+		rejectedClient.mu.Lock()
+		require.Len(t, rejectedClient.bodies, 1)
+		assert.Contains(t, rejectedClient.bodies[0], "azcopy.command.invoked")
+		assert.NotContains(t, rejectedClient.bodies[0], canary)
+		rejectedClient.mu.Unlock()
+		assert.False(t, rejectedAgent.isActive())
 	}
 	panicClient := &failurePolicyClient{panicFirst: true}
 	agent := failureTestAgent(panicClient)
@@ -185,6 +178,7 @@ func TestTelemetryPrivacyCanariesInEnvelopesAndLogs(t *testing.T) {
 	require.NotEmpty(t, logger.messages)
 	assert.NotContains(t, strings.Join(logger.messages, "\n"), canary)
 	assert.NotContains(t, strings.Join(logger.messages, "\n"), "private-panic-canary")
+	assert.Contains(t, strings.Join(logger.messages, "\n"), "disabled for this process after delivery failure")
 }
 
 func TestTelemetryInvalidInputBoundary(t *testing.T) {

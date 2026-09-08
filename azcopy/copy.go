@@ -350,13 +350,17 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
 
+	agent := getTelemetryAgent()
 	progressTracker := newTransferProgressTracker(
 		jobID,
 		opts.Handler,
 		cookedOpts.fromTo,
 		cookedOpts.symlinks,
 		cookedOpts.hardlinks,
-		getTelemetryAgent().shouldCollectSourceShape())
+		agent.shouldCollectSourceShape())
+	if progressTracker.shapeTracker != nil {
+		progressTracker.shapeTracker.isActive = agent.isActive
+	}
 
 	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
 }

@@ -20,8 +20,17 @@ The E2E pipeline still resolves its test component and sets the runtime override
 - Resume service-client creation failures emit an initialization-failure pair once a valid plan and parsed endpoints exist. Invalid arguments, unsupported benchmark resumes, unavailable plans, endpoint parsing failures, and copy/sync executor-construction failures remain outside this boundary.
 - Dry runs, pipe redirection, and benchmark cleanup do not emit copy lifecycle events.
 - Initialization/host-metadata panics disable the process telemetry agent. Dimension-collection panics drop the attempt's telemetry. Summary, duration, shape, and event-construction panics are contained; an affected finish event can be lost.
-- Send failures, including HTTP rejections, throttling, transport errors, and panics, drop only the failed event. There is no retry or send-failure circuit breaker. A failed start does not prevent a later finish. This intentionally differs from a policy that disables the rest of the pipeline on any network failure.
+- Failure-mode cases 2, 3, and 4 now latch process telemetry off: transport errors (including DNS, TLS, offline, and request timeout/cancellation), ingestion rejection or partial acceptance (HTTP 206, 4xx/5xx), and throttling (429/503). The agent cancels active request contexts, suppresses queued and future lifecycle/command events, and stops existing source-shape trackers and subsequent telemetry collection. A failed start suppresses its finish. Already transmitted events cannot be recalled, and cancellation-ignoring custom clients cannot be forcibly terminated. There is no retry, cooldown, or automatic recovery; a new AzCopy process starts with fresh telemetry state. Transfer errors themselves do not disable telemetry.
+- Local configuration/serialization errors and recoverable send panics remain event-local; they are not typed delivery failures. The first delivery failure logs a safe `telemetry: disabled for this process after delivery failure sending ...` diagnostic. Cascading request cancellations do not repeatedly log the stop transition.
 - Diagnostics exclude response messages/bodies, raw transport errors, configuration values, and panic contents. Path/SAS canaries are checked in serialized lifecycle events and command events and in telemetry-generated job log messages. Recognized Azure Storage account names remain allowed.
+
+## Resource Budgets
+
+Each agent admits at most four events (including sends waiting for a matching start). Admission is nonblocking; excess events are dropped. Sends have a one-second deadline; a finish waiting for its start gets up to one additional second for ordering, but is suppressed if that start has a delivery failure. Flush still drains admitted work within its existing budget after the stop state is set and cancels admitted requests on timeout. A custom HTTP client that ignores cancellation can occupy at most those four slots; Go cannot forcibly stop such a client. The runtime tests exercise that case with 1,000 additional sends and flushes.
+
+Source-shape tracking retains at most 128 names per scanned/touched set and 256 bytes per name, cloning admitted names so a substring cannot retain a larger path buffer. Once a set exceeds either limit, its container/bucket count is `-1` (unavailable), not a partial count. Object, byte, depth, and histogram measurements continue. Consumers must not sum unavailable scope counts as ordinary counts. Representative serialized envelopes have 4 KiB started and 8 KiB finished regression budgets; these are fixture gates, not a universal cap for arbitrary custom reporter callers.
+
+Metadata and identity probing remain synchronous and use their existing per-probe deadlines/retry bounds. These limits do not establish an end-to-end 100 KiB heap or 1% CPU/throughput guarantee; the separate manual performance suite measures that budget for documented workloads.
 
 ## Focused Go Checks
 
@@ -34,6 +43,10 @@ go test ./e2etest -run 'Test(TelemetryManifest|AzCopyJobIDCapture|AppInsightsVer
 ```
 
 These are offline unit checks. They do not launch the credential-dependent cloud transfer E2E suite.
+
+## Delivery Failure Tests
+
+Unit-level integration tests use the real reporter/dispatcher with local `httptest` endpoints for rejection, partial acceptance, 429/503 throttling, and concurrent-request cancellation. DNS, TLS, and offline failures are injected through the HTTP transport; a blocked client exercises deadline expiry. Tests verify a queued finish never reaches the endpoint after a failed start, later events remain disabled even if the endpoint would recover, existing collectors stop, and healthy ingestion still reports failed transfers. Reporter tests verify typed classification through both backends and preserve safe diagnostics. No Application Insights resource, credentials, or ingestion polling is required for these policy tests.
 
 ## E2E Manifest
 

@@ -12,6 +12,8 @@ import (
 const (
 	smallSourceObjectThresholdBytes = int64(1024 * 1024)
 	directSourceScopeKey            = "\x00direct"
+	maxTrackedSourceScopes          = 128
+	maxTrackedSourceScopeBytes      = 256
 )
 
 var sourceObjectSizeBucketUpperBounds = [...]int64{
@@ -52,7 +54,8 @@ type sourceShapeSummary struct {
 }
 
 type sourceShapeTracker struct {
-	mu sync.Mutex
+	mu       sync.Mutex
+	isActive func() bool
 
 	scopeKind        sourceScopeKind
 	accountScope     bool
@@ -60,6 +63,8 @@ type sourceShapeTracker struct {
 	hardlinkHandling common.HardlinkHandlingType
 	scannedScope     map[string]struct{}
 	touchedScope     map[string]struct{}
+	scannedOverflow  bool
+	touchedOverflow  bool
 
 	objectCount   uint64
 	bytesScanned  uint64
@@ -89,7 +94,7 @@ func newSourceShapeTracker(location common.Location, symlinkHandling common.Syml
 }
 
 func (t *sourceShapeTracker) initializeScopes(resourceTraverser traverser.ResourceTraverser) error {
-	if t == nil || t.scopeKind == sourceScopeNone {
+	if !t.collectionEnabled() || t.scopeKind == sourceScopeNone {
 		return nil
 	}
 
@@ -106,7 +111,7 @@ func (t *sourceShapeTracker) initializeScopes(resourceTraverser traverser.Resour
 }
 
 func (t *sourceShapeTracker) recordScanned(object traverser.StoredObject) error {
-	if t == nil || !t.isShapePayloadObject(object.EntityType) {
+	if !t.collectionEnabled() || !t.isShapePayloadObject(object.EntityType) {
 		return nil
 	}
 
@@ -118,8 +123,11 @@ func (t *sourceShapeTracker) recordScanned(object traverser.StoredObject) error 
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if !t.collectionEnabled() {
+		return nil
+	}
 	if t.accountScope && object.ContainerName != "" {
-		t.scannedScope[object.ContainerName] = struct{}{}
+		recordSourceScope(t.scannedScope, &t.scannedOverflow, object.ContainerName)
 	}
 	t.objectCount++
 	t.bytesScanned += uint64(size)
@@ -142,11 +150,14 @@ func (t *sourceShapeTracker) recordScanned(object traverser.StoredObject) error 
 }
 
 func (t *sourceShapeTracker) recordScheduled(object traverser.StoredObject) {
-	if t == nil || !t.isShapePayloadObject(object.EntityType) || t.scopeKind == sourceScopeNone {
+	if !t.collectionEnabled() || !t.isShapePayloadObject(object.EntityType) || t.scopeKind == sourceScopeNone {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if !t.collectionEnabled() {
+		return
+	}
 	key := directSourceScopeKey
 	if t.accountScope {
 		key = object.ContainerName
@@ -154,20 +165,47 @@ func (t *sourceShapeTracker) recordScheduled(object traverser.StoredObject) {
 			return
 		}
 	}
-	t.touchedScope[key] = struct{}{}
+	recordSourceScope(t.touchedScope, &t.touchedOverflow, key)
 }
 
 func (t *sourceShapeTracker) addScannedScope(scope string) {
-	if t == nil || scope == "" {
+	if !t.collectionEnabled() || scope == "" {
 		return
 	}
 	t.mu.Lock()
-	t.scannedScope[scope] = struct{}{}
+	if t.collectionEnabled() {
+		recordSourceScope(t.scannedScope, &t.scannedOverflow, scope)
+	}
 	t.mu.Unlock()
 }
 
+func (t *sourceShapeTracker) collectionEnabled() bool {
+	return t != nil && (t.isActive == nil || t.isActive())
+}
+
+func recordSourceScope(scopes map[string]struct{}, overflow *bool, scope string) {
+	if *overflow {
+		return
+	}
+	if _, exists := scopes[scope]; exists {
+		return
+	}
+	if len(scopes) == maxTrackedSourceScopes || len(scope) > maxTrackedSourceScopeBytes {
+		*overflow = true
+		return
+	}
+	scopes[strings.Clone(scope)] = struct{}{}
+}
+
+func sourceScopeCount(scopes map[string]struct{}, overflow bool) int64 {
+	if overflow {
+		return -1
+	}
+	return int64(len(scopes))
+}
+
 func (t *sourceShapeTracker) snapshot() sourceShapeSummary {
-	if t == nil {
+	if !t.collectionEnabled() {
 		return sourceShapeSummary{}
 	}
 	t.mu.Lock()
@@ -188,11 +226,11 @@ func (t *sourceShapeTracker) snapshot() sourceShapeSummary {
 	}
 	switch t.scopeKind {
 	case sourceScopeContainer:
-		summary.ContainersScanned = int64(len(t.scannedScope))
-		summary.ContainersTouched = int64(len(t.touchedScope))
+		summary.ContainersScanned = sourceScopeCount(t.scannedScope, t.scannedOverflow)
+		summary.ContainersTouched = sourceScopeCount(t.touchedScope, t.touchedOverflow)
 	case sourceScopeBucket:
-		summary.BucketsScanned = int64(len(t.scannedScope))
-		summary.BucketsTouched = int64(len(t.touchedScope))
+		summary.BucketsScanned = sourceScopeCount(t.scannedScope, t.scannedOverflow)
+		summary.BucketsTouched = sourceScopeCount(t.touchedScope, t.touchedOverflow)
 	}
 	return summary
 }
