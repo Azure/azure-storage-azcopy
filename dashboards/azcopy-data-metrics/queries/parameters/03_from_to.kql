@@ -1,0 +1,9 @@
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend Value = tostring(customDimensions.FromTo)
+| extend Value = iif(isempty(Value), 'unknown', Value)
+| distinct Value
+| order by Value asc
+| project Label = Value, Value

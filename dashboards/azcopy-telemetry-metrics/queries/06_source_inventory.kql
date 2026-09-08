@@ -1,0 +1,24 @@
+// Visual: Multi stat
+customEvents
+| where name == 'azcopy.job.finished'
+| where timestamp between (_startTime .. _endTime)
+| extend ContainersScannedValue = todouble(customMeasurements['azcopy.containers_scanned']),
+    ContainersTouchedValue = todouble(customMeasurements['azcopy.containers_touched']),
+    BucketsScannedValue = todouble(customMeasurements['azcopy.buckets_scanned']),
+    BucketsTouchedValue = todouble(customMeasurements['azcopy.buckets_touched'])
+| summarize
+    SourceObjectsScanned = sum(todouble(customMeasurements['azcopy.source_objects_scanned'])),
+    SourceBytesScanned = sum(todouble(customMeasurements['azcopy.source_bytes_scanned'])),
+    ContainersScanned = sumif(ContainersScannedValue, ContainersScannedValue >= 0),
+    ContainersTouched = sumif(ContainersTouchedValue, ContainersTouchedValue >= 0),
+    BucketsScanned = sumif(BucketsScannedValue, BucketsScannedValue >= 0),
+    BucketsTouched = sumif(BucketsTouchedValue, BucketsTouchedValue >= 0),
+    UnknownContainersScanned = countif(isnull(ContainersScannedValue) or ContainersScannedValue < 0),
+    UnknownContainersTouched = countif(isnull(ContainersTouchedValue) or ContainersTouchedValue < 0),
+    UnknownBucketsScanned = countif(isnull(BucketsScannedValue) or BucketsScannedValue < 0),
+    UnknownBucketsTouched = countif(isnull(BucketsTouchedValue) or BucketsTouchedValue < 0)
+| project
+    Metrics = pack_array('Source objects scanned', 'Source bytes scanned', 'Known containers scanned', 'Known containers touched', 'Known buckets scanned', 'Known buckets touched', 'Attempts missing containers scanned', 'Attempts missing containers touched', 'Attempts missing buckets scanned', 'Attempts missing buckets touched'),
+    Values = pack_array(SourceObjectsScanned, SourceBytesScanned, ContainersScanned, ContainersTouched, BucketsScanned, BucketsTouched, UnknownContainersScanned, UnknownContainersTouched, UnknownBucketsScanned, UnknownBucketsTouched)
+| mv-expand Metric = Metrics to typeof(string), Value = Values to typeof(real)
+| project Metric, Value

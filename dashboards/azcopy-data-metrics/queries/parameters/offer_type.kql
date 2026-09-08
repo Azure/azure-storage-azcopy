@@ -1,0 +1,6 @@
+let QueryStart = _startTime;
+let QueryEnd = _endTime;
+{{ENRICHED_FINISHED_JOBS}}
+EnrichedFinishedJobs
+| distinct Value = OfferType, Label = OfferType
+| order by Label asc

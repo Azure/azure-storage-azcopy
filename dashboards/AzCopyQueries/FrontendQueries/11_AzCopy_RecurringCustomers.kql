@@ -1,0 +1,13 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Mapped customers with terminal activity in at least two calendar months within the selected range. Not lifetime retention.') AzCopy_RecurringCustomers(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | where IsMapped
+    | summarize Customer = take_any(CustomerName), ActiveMonths = make_set(startofmonth(SliceDate), 1200),
+        BytesTransferred = sum(BytesTransferred), Jobs = sum(Jobs), SuccessfulJobs = sumif(Jobs, IsSuccess),
+        Installations = dcount(InstallationID), SubscriptionIds = make_set(SubscriptionId, 1000),
+        FirstSeen = min(SliceDate), LastSeen = max(SliceDate) by CustomerKey
+    | extend MonthsActive = array_length(ActiveMonths), ActiveMonths = array_sort_asc(ActiveMonths)
+    | where MonthsActive >= 2
+    | project Customer, CustomerKey, MonthsActive, BytesTransferred, Jobs, SuccessfulJobs, Installations, SubscriptionIds, FirstSeen, LastSeen, ActiveMonths
+    | order by BytesTransferred desc, Customer asc
+}

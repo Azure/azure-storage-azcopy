@@ -1,0 +1,20 @@
+// Visual: Pie chart or stacked bar
+// Legend: JobStatus; Value: Attempts; Series/split: Command
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| where name == 'azcopy.job.finished'
+| extend
+    Command = tostring(customDimensions.Command),
+    JobStatus = tostring(customDimensions.JobStatus)
+| summarize Attempts = count() by Command, JobStatus
+| project
+    Command = iif(isempty(Command), 'unknown', Command),
+    JobStatus = iif(isempty(JobStatus), 'unknown', JobStatus),
+    Attempts
+| order by Command asc, Attempts desc

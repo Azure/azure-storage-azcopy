@@ -1,0 +1,26 @@
+// Visual: Bar chart
+// Source and destination roles are intentionally separate.
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    SourceType = tostring(customDimensions.SourceType),
+    DestType = tostring(customDimensions.DestType),
+    SourceProtocol = tostring(customDimensions.SourceProtocol),
+    DestProtocol = tostring(customDimensions.DestProtocol)
+| extend Endpoints = pack_array(
+        bag_pack('Role', 'source', 'Platform', SourceType, 'Protocol', SourceProtocol),
+        bag_pack('Role', 'destination', 'Platform', DestType, 'Protocol', DestProtocol))
+| mv-expand Endpoint = Endpoints
+| extend
+    Role = tostring(Endpoint.Role),
+    Platform = tostring(Endpoint.Platform),
+    Protocol = tostring(Endpoint.Protocol)
+| summarize Attempts = count() by Role, Platform, Protocol
+| project
+    Role,
+    Platform = iif(isempty(Platform), 'unknown', Platform),
+    Protocol = iif(isempty(Protocol), 'unknown', Protocol),
+    Attempts
+| order by Role asc, Attempts desc

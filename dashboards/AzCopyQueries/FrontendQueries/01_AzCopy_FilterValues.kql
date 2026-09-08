@@ -1,0 +1,23 @@
+.create-or-alter function with (
+    folder = 'AzCopyQueries',
+    docstring = 'Returns Customer, Source, Target, and Command filter values from persisted AzCopy usage aggregates.',
+    skipvalidation = 'true'
+) AzCopy_FilterValues()
+{
+    let Base = materialize(
+        AzCopyUsageAggregates1
+        | where Name == 'JobRunBytesTransferred'
+        | where isnotempty(CustomerName)
+            and CustomerName != 'Unmapped customer'
+            and not(CustomerName startswith 'Customer unavailable')
+    );
+    union
+        (Base | distinct FilterValue = SourceType | extend FilterName = 'SourceType'),
+        (Base | distinct FilterValue = TargetType | extend FilterName = 'TargetType'),
+        (Base | distinct FilterValue = Command | extend FilterName = 'Command'),
+        (Base | summarize FilterLabel = any(CustomerName) by FilterValue = CustomerKey | extend FilterName = 'Customer')
+    | where isnotempty(FilterValue)
+    | extend FilterLabel = iif(isempty(FilterLabel), FilterValue, FilterLabel)
+    | project FilterName, FilterValue, FilterLabel
+    | order by FilterName asc, FilterLabel asc
+}

@@ -1,0 +1,20 @@
+// Visual: Table
+// Complete inventory of observed metric names and received values.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| summarize
+    Samples = count(),
+    NonZeroSamples = countif(value != 0),
+    Minimum = min(value),
+    Average = avg(value),
+    P50 = percentile(value, 50),
+    P95 = percentile(value, 95),
+    Maximum = max(value)
+  by Metric = name
+| project Metric, Samples, NonZeroSamples, Minimum, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum
+| order by Metric asc

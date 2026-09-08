@@ -1,0 +1,10 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Recent daily terminal activity by customer/subscription/topology/status. These rows are aggregates, not individual job runs.') AzCopy_UsageDetails(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic, outcome:string)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | where outcome == 'all' or (outcome == 'success' and IsSuccess) or (outcome == 'failure' and IsFailure)
+    | summarize Jobs = sum(Jobs), BytesTransferred = sum(BytesTransferred), ObjectsCompleted = sum(ObjectsCompleted),
+        Attempts = sum(Attempts), Installations = dcount(InstallationID)
+      by SliceDate, CustomerKey, Customer = CustomerName, SubscriptionId, Command, FromTo, SourceType, TargetType, JobStatus
+    | order by SliceDate desc, Customer asc, SubscriptionId asc, FromTo asc, JobStatus asc
+    | take 500
+}

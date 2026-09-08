@@ -1,0 +1,71 @@
+// Visual: Multi stat
+// The optional _account parameter is an Azure Storage account proxy, not a customer identity.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    CommandValue = tostring(customDimensions.Command),
+    StatusValue = tostring(customDimensions.JobStatus),
+    VersionValue = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),
+    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
+    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    EndTime = max(timestamp),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    Command = take_any(CommandValue),
+    JobStatus = take_anyif(StatusValue, isnotempty(StatusValue)),
+    Version = take_any(VersionValue),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred'),
+    JobDurationSeconds = maxif(value, name == 'azcopy.job_duration_seconds'),
+    ThroughputMbps = maxif(value, name == 'azcopy.job_throughput_mbps')
+  by InvocationID, JobID
+| where FinishedRows > 0
+| where isempty(_account) or SourceAccount =~ _account or DestAccount =~ _account
+| extend CompletionHoursPerTB = iif(BytesTransferred > 0 and JobDurationSeconds > 0, JobDurationSeconds * 1000000000000.0 / BytesTransferred / 3600.0, real(null))
+| summarize
+    Attempts = count(),
+    BytesTransferred = sum(BytesTransferred),
+    AvgThroughputMbps = avg(ThroughputMbps),
+    MigrationP90HoursPerTB = percentile(CompletionHoursPerTB, 90),
+    MigrationP95HoursPerTB = percentile(CompletionHoursPerTB, 95),
+    Failures = countif(JobStatus in ('Failed', 'CompletedWithErrors')),
+    Cancellations = countif(JobStatus == 'Cancelled'),
+    ResumeAttempts = countif(Command == 'jobs.resume'),
+    LastObservedJob = max(EndTime),
+    LastObservedSuccessfulJob = maxif(EndTime, JobStatus in ('Completed', 'CompletedWithSkipped')),
+    Versions = make_set(Version, 10)
+| project
+    Attempts,
+    DataTB = round(BytesTransferred / 1000000000000.0, 3),
+    AvgThroughputMbps = round(AvgThroughputMbps, 2),
+    MigrationP90HoursPerTB = round(MigrationP90HoursPerTB, 2),
+    MigrationP95HoursPerTB = round(MigrationP95HoursPerTB, 2),
+    Failures,
+    Cancellations,
+    ResumeAttempts,
+    DaysSinceLastObservedJob = datetime_diff('day', _endTime, LastObservedJob),
+    DaysSinceLastObservedSuccessfulJob = datetime_diff('day', _endTime, LastObservedSuccessfulJob)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Attempts', 'Value', Attempts),
+    bag_pack('Metric', 'Data (TB)', 'Value', DataTB),
+    bag_pack('Metric', 'Average throughput (Mbps)', 'Value', AvgThroughputMbps),
+    bag_pack('Metric', 'P90 hours per TB', 'Value', MigrationP90HoursPerTB),
+    bag_pack('Metric', 'P95 hours per TB', 'Value', MigrationP95HoursPerTB),
+    bag_pack('Metric', 'Failures', 'Value', Failures),
+    bag_pack('Metric', 'Cancellations', 'Value', Cancellations),
+    bag_pack('Metric', 'Resume attempts', 'Value', ResumeAttempts),
+    bag_pack('Metric', 'Days since observed job', 'Value', DaysSinceLastObservedJob),
+    bag_pack('Metric', 'Days since observed success', 'Value', DaysSinceLastObservedSuccessfulJob))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

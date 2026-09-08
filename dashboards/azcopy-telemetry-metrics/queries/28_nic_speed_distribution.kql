@@ -1,0 +1,15 @@
+// Visual: Column chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend Value = tostring(customDimensions.HostNICSpeedBucket)
+| extend Value = iif(isempty(Value), 'unknown', Value)
+| extend SortValue = case(Value == 'unknown', 0, Value == '<1gbps', 1, Value == '1-<10gbps', 2, Value == '10-<40gbps', 3, Value == '>=40gbps', 4, 5)
+| summarize Attempts = count() by Value, SortValue
+| order by SortValue asc
+| project Value, Attempts

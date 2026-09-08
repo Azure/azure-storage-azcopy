@@ -1,0 +1,17 @@
+// Visual: Pie chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend NewValue = tostring(customDimensions.AzureVMDetected)
+| extend Value = case(
+    isnotempty(NewValue), NewValue,
+    tostring(customDimensions.HostVirtualization) == 'azure-vm' or tostring(customDimensions.NetworkRunContext) == 'azure-vm', 'true',
+    isnotempty(tostring(customDimensions.HostVirtualization)) or isnotempty(tostring(customDimensions.NetworkRunContext)), 'false',
+    'unknown')
+| summarize Attempts = count() by Value
+| order by Attempts desc

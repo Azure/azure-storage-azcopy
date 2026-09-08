@@ -1,0 +1,9 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Shared daily or calendar-month activity. Periods with no received terminal activity are absent.') AzCopy_Activity(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic, grain:string)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | extend Period = iff(grain == 'month', startofmonth(SliceDate), SliceDate)
+    | summarize BytesTransferred = sum(BytesTransferred), Jobs = sum(Jobs), ObjectsCompleted = sum(ObjectsCompleted),
+        SuccessfulJobs = sumif(Jobs, IsSuccess), FailedJobs = sumif(Jobs, IsFailure),
+        Installations = dcount(InstallationID), Customers = dcountif(CustomerKey, IsMapped) by Period
+    | order by Period asc
+}

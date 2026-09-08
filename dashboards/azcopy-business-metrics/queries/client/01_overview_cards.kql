@@ -1,0 +1,40 @@
+// Visual: Multi stat
+// Data source: sharankur_insights1 (Application Insights)
+// Dashboard parameters: _startTime, _endTime
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    JobStatusValue = tostring(customDimensions.JobStatus)
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    StartedRows = countif(name == 'azcopy.job.started'),
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')
+    by InvocationID, JobID
+| summarize
+    Attempts = countif(FinishedRows > 0),
+    BytesTransferred = sumif(BytesTransferred, FinishedRows > 0),
+    Completed = countif(FinishedRows > 0 and JobStatus in ('Completed', 'CompletedWithSkipped')),
+    UnmatchedStarts = countif(StartedRows > 0 and FinishedRows == 0)
+| project
+    Attempts,
+    DataTB = round(BytesTransferred / 1e12, 2),
+    CompletionRatePct = round(100.0 * Completed / iif(Attempts > 0, Attempts, 1), 2),
+    UnmatchedStarts
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Attempts', 'Value', Attempts),
+    bag_pack('Metric', 'Data (TB)', 'Value', DataTB),
+    bag_pack('Metric', 'Completion rate (%)', 'Value', CompletionRatePct),
+    bag_pack('Metric', 'Unmatched starts', 'Value', UnmatchedStarts))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

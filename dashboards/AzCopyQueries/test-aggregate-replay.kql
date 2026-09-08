@@ -1,0 +1,83 @@
+let Ownership = datatable(TimePeriod:datetime, AccountNameWithoutVersion:string, Subscription:string)
+[
+    datetime(2020-02-01), 'knownaccount', '11111111-1111-1111-1111-111111111111',
+    datetime(2020-02-01), 'noinventory', '22222222-2222-2222-2222-222222222222',
+    datetime(2020-02-01), 'friendlyaccount', '33333333-3333-3333-3333-333333333333',
+    datetime(2020-01-28), 'staleaccount', '11111111-1111-1111-1111-111111111111'
+];
+let Inventory = datatable(SubscriptionGuid:guid, TPID:string, TPName:string, FriendlySubscriptionName:string, AI_UpdatedAt:datetime)
+[
+    guid(11111111-1111-1111-1111-111111111111), '42', 'Old customer', 'Old subscription', datetime(2020-01-01),
+    guid(11111111-1111-1111-1111-111111111111), '42', 'Current customer', 'Current subscription', datetime(2020-02-01),
+    guid(33333333-3333-3333-3333-333333333333), '', '', 'Friendly fallback', datetime(2020-02-01)
+];
+let Aggregate = (InputEvents:(timestamp:datetime, name:string, customDimensions:dynamic, customMeasurements:dynamic), startTime:datetime, endTime:datetime)
+{
+__AGGREGATE_BODY__
+};
+let Fixtures = datatable(Scenario:string, timestamp:datetime, Job:string, Attempt:string, Command:string, Schema:string, AccountMode:string, Account:string, Bytes:real, Objects:real, Late:bool)
+[
+    'resume', datetime(2020-01-31T23:59:00Z), 'resume-job', 'initial', 'copy', '3', 'present', 'knownaccount', 80, 8, false,
+    'resume', datetime(2020-02-01T00:01:00Z), 'resume-job', 'resume-one', 'jobs.resume', '3', 'present', 'knownaccount', 120, 12, false,
+    'resume', datetime(2020-02-02T12:00:00Z), 'resume-job', 'resume-two', 'jobs.resume', '3', 'present', 'knownaccount', 150, 15, false,
+    'outside-lookback', datetime(2020-01-01T23:59:59Z), 'old-job', 'old-initial', 'copy', '3', 'absent', '', 900, 90, true,
+    'outside-lookback', datetime(2020-02-02), 'old-job', 'old-resume', 'jobs.resume', '3', 'absent', '', 40, 4, false,
+    'lookback-boundary', datetime(2020-01-02), 'boundary-job', 'boundary-initial', 'sync', '3', 'absent', '', 55, 5, false,
+    'lookback-boundary', datetime(2020-02-02), 'boundary-job', 'boundary-resume', 'jobs.resume', '3', 'absent', '', 40, 4, false,
+    'present', datetime(2020-02-02), 'present-job', 'present-attempt', 'copy', '3', 'present', 'knownaccount', 10, 1, false,
+    'absent', datetime(2020-02-02), 'absent-job', 'absent-attempt', 'copy', '3', 'absent', '', 20, 2, false,
+    'empty', datetime(2020-02-02), 'empty-job', 'empty-attempt', 'copy', '3', 'present', '', 30, 3, false,
+    'restored', datetime(2020-01-31), 'restored-job', 'restored-initial', 'copy', '3', 'absent', '', 5, 1, false,
+    'restored', datetime(2020-02-04), 'restored-job', 'restored-resume', 'jobs.resume', '3', 'present', 'knownaccount', 40, 4, false,
+    'no-ownership', datetime(2020-02-02), 'orphan-job', 'orphan-attempt', 'copy', '3', 'present', 'orphanaccount', 50, 5, false,
+    'stale-ownership', datetime(2020-02-02), 'stale-job', 'stale-attempt', 'copy', '3', 'present', 'staleaccount', 60, 6, false,
+    'no-inventory', datetime(2020-02-02), 'inventory-job', 'inventory-attempt', 'copy', '3', 'present', 'noinventory', 70, 7, false,
+    'friendly-name', datetime(2020-02-02), 'friendly-job', 'friendly-attempt', 'copy', '3', 'present', 'friendlyaccount', 80, 8, false,
+    'late-event', datetime(2020-02-03), 'late-job', 'late-attempt', 'sync', '3', 'absent', '', 90, 9, true,
+    'missing-identity', datetime(2020-02-02), 'missing-job', 'missing-attempt', 'copy', '3', 'absent', '', 999, 99, false,
+    'old-schema', datetime(2020-02-02), 'schema-job', 'schema-attempt', 'copy', '2', 'absent', '', 999, 99, false,
+    'moves-out', datetime(2020-02-28), 'moved-job', 'moved-initial', 'copy', '3', 'absent', '', 10, 1, false,
+    'moves-out', datetime(2020-03-01), 'moved-job', 'moved-resume', 'jobs.resume', '3', 'absent', '', 20, 2, false
+];
+let Events = materialize(Fixtures
+| extend customDimensions = bag_pack('InstallationID', iff(Scenario == 'missing-identity', '', Scenario),
+    'JobID', Job, 'InvocationID', Attempt, 'Command', Command, 'SchemaVersion', Schema,
+    'FromTo', 'LocalBlob', 'SourceType', 'Local', 'DestType', 'Blob', 'JobStatus', 'Completed')
+| extend customDimensions = iff(AccountMode == 'absent', customDimensions,
+    bag_merge(customDimensions, bag_pack('SourceStorageAccount', '', 'DestStorageAccount', Account)))
+| project timestamp, name = 'azcopy.job.finished', customDimensions,
+    customMeasurements = bag_pack('azcopy.bytes_transferred', Bytes, 'azcopy.objects_completed', Objects), Late);
+let InitialEvents = Events | where not(Late) | project-away Late;
+let AllEvents = Events | project-away Late;
+let DuplicatedEvents = union InitialEvents, InitialEvents;
+let Base = materialize(Aggregate(InitialEvents, datetime(2020-02-01), datetime(2020-03-01)) | project-away ExecutionTime);
+let Replay = materialize(Aggregate(DuplicatedEvents, datetime(2020-02-01), datetime(2020-03-01)) | project-away ExecutionTime);
+let Repeat = materialize(Aggregate(InitialEvents, datetime(2020-02-01), datetime(2020-03-01)) | project-away ExecutionTime);
+let LateResult = materialize(Aggregate(AllEvents, datetime(2020-02-01), datetime(2020-03-01)) | project-away ExecutionTime);
+let January = materialize(Aggregate(AllEvents, datetime(2020-01-01), datetime(2020-02-01)) | project-away ExecutionTime);
+let MissingOrChangedReplayRows = toscalar(union (Base | extend Side=1), (Replay | extend Side=-1)
+    | summarize Balance=sum(Side) by InstallationID, Command, FromTo, SourceType, TargetType, JobStatus, Count, Name, SliceDate, CustomerKey, CustomerName, SubscriptionId
+    | where Balance != 0 | count);
+let MissingOrChangedRepeatRows = toscalar(union (Base | extend Side=1), (Repeat | extend Side=-1)
+    | summarize Balance=sum(Side) by InstallationID, Command, FromTo, SourceType, TargetType, JobStatus, Count, Name, SliceDate, CustomerKey, CustomerName, SubscriptionId
+    | where Balance != 0 | count);
+union
+    (print Test='Duplicate delivery is idempotent', Pass=MissingOrChangedReplayRows == 0),
+    (print Test='Repeated refresh is idempotent', Pass=MissingOrChangedRepeatRows == 0),
+    (print Test='Cumulative resume bytes use maximum', Pass=toscalar(Base | where InstallationID == 'resume' and Name == 'JobRunBytesTransferred' | summarize sum(Count)) == 150),
+    (print Test='Cumulative resume objects use maximum', Pass=toscalar(Base | where InstallationID == 'resume' and Name == 'JobRunObjectsCompleted' | summarize sum(Count)) == 15),
+    (print Test='Resumes count as one job and three attempts', Pass=toscalar(Base | where InstallationID == 'resume' and Name == 'JobRunResourcesCreated' | summarize sum(Count)) == 1 and toscalar(Base | where InstallationID == 'resume' and Name == 'JobRunAttempts' | summarize sum(Count)) == 3),
+    (print Test='Original command and latest day retained', Pass=toscalar(Base | where InstallationID == 'resume' and Command == 'copy' and SliceDate == datetime(2020-02-02) | count) == 4),
+    (print Test='Resume moves job out of prior month', Pass=toscalar(January | count) == 0),
+    (print Test='Latest finish outside window removes job', Pass=toscalar(Base | where InstallationID == 'moves-out' | count) == 0),
+    (print Test='Lookback boundary is inclusive', Pass=toscalar(Base | where InstallationID == 'lookback-boundary' and Name == 'JobRunBytesTransferred' and Command == 'sync' | summarize sum(Count)) == 55),
+    (print Test='Outside lookback late attempt is excluded', Pass=toscalar(LateResult | where InstallationID == 'outside-lookback' and Name == 'JobRunBytesTransferred' and Command == 'jobs.resume' | summarize sum(Count)) == 40 and toscalar(LateResult | where InstallationID == 'outside-lookback' and Name == 'JobRunAttempts' | summarize sum(Count)) == 1),
+    (print Test='Late in-window event appears on refresh', Pass=toscalar(Base | where InstallationID == 'late-event' | count) == 0 and toscalar(LateResult | where InstallationID == 'late-event' and Name == 'JobRunBytesTransferred' | summarize sum(Count)) == 90),
+    (print Test='Schema 3 account names enrich customer', Pass=toscalar(Base | where InstallationID == 'present' and CustomerKey == '42' and CustomerName == 'Current customer' | count) == 4),
+    (print Test='Schema 3 absent and empty accounts remain unmapped', Pass=toscalar(Base | where InstallationID in ('absent','empty') and CustomerKey == 'unmapped' and Name == 'JobRunBytesTransferred' | summarize sum(Count)) == 50),
+    (print Test='Restored account names on resume enrich whole job', Pass=toscalar(Base | where InstallationID == 'restored' and CustomerKey == '42' and Name == 'JobRunBytesTransferred' | summarize sum(Count)) == 40),
+    (print Test='Missing or stale ownership remains unmapped', Pass=toscalar(Base | where InstallationID in ('no-ownership','stale-ownership') and CustomerKey == 'unmapped' and Name == 'JobRunBytesTransferred' | summarize sum(Count)) == 110),
+    (print Test='Missing customer inventory falls back to subscription', Pass=toscalar(Base | where InstallationID == 'no-inventory' and CustomerKey == '22222222-2222-2222-2222-222222222222' | count) == 4),
+    (print Test='Missing customer name uses friendly subscription', Pass=toscalar(Base | where InstallationID == 'friendly-name' and CustomerName == 'Friendly fallback' | count) == 4),
+    (print Test='Missing identity and incompatible schema are excluded', Pass=toscalar(Base | where InstallationID in ('missing-identity','old-schema','') | count) == 0)
+| order by Test asc

@@ -1,0 +1,10 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Customer and subscription detail from persisted AzCopy account-ownership enrichment; not subscription lifecycle or current account configuration.') AzCopy_CustomerSubscriptions(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | summarize BytesTransferred = sum(BytesTransferred), Jobs = sum(Jobs), SuccessfulJobs = sumif(Jobs, IsSuccess),
+        FailedJobs = sumif(Jobs, IsFailure), ObjectsCompleted = sum(ObjectsCompleted), Installations = dcount(InstallationID),
+        Sources = make_set(SourceType, 20), Targets = make_set(TargetType, 20), Scenarios = make_set(FromTo, 100),
+        FirstSeen = min(SliceDate), LastSeen = max(SliceDate), LastRefresh = max(LastRefresh)
+      by CustomerKey, Customer = CustomerName, SubscriptionId
+    | order by BytesTransferred desc, Customer asc, SubscriptionId asc
+}

@@ -1,0 +1,38 @@
+// Visual: Table
+let QueryStart = _startTime;
+let QueryEnd = _endTime;
+{{ENRICHED_FINISHED_JOBS}}
+{{ENRICHMENT_FILTERS}}
+FilteredFinishedJobs
+| top 200 by EndTime desc
+| project
+    EndTime,
+    InstallationID,
+    JobID,
+    Command = CommandValue,
+    JobStatus = JobStatusValue,
+    SourceType,
+    DestType,
+    SourceAccount,
+    DestinationAccount,
+    DestinationSubscription,
+    CustomerName,
+    OfferType,
+    SubscriptionScope,
+    StorageRegion,
+    StorageKind,
+    StorageSku,
+    StorageRedundancy,
+    StorageNamespace,
+    StorageAccessTier,
+    StorageAccountClass,
+    AccountInventoryStatus,
+    ResourceInventoryStatus,
+    SubscriptionInventoryStatus,
+    AipddSubscriptionInventoryStatus,
+    CustomerInventoryStatus,
+    AipddCurrentSubscriptionStatus,
+    AipddSubscriptionBusinessStatus,
+    AipddUpdatedAt,
+    DataGB = round(BytesTransferred / 1000000000.0, 3),
+    ObjectsCompleted

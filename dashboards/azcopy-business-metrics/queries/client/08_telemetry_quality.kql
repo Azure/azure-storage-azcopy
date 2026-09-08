@@ -1,0 +1,72 @@
+// Visual: Multi stat
+// Schema v2 and v3 are accepted. Other schemas are visible here but excluded
+// from the business-metric queries.
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.job.started', 'azcopy.job.finished')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    SchemaVersionValue = tostring(customDimensions.SchemaVersion),
+    CommandValue = tostring(customDimensions.Command),
+    FromToValue = tostring(customDimensions.FromTo),
+    SourceTypeValue = tostring(customDimensions.SourceType),
+    DestTypeValue = tostring(customDimensions.DestType),
+    ReportedDurationValue = todouble(customMeasurements['azcopy.job_duration_seconds']),
+    FinishMetricCountValue = array_length(bag_keys(customMeasurements))
+| extend AttemptKey = iif(
+    isnotempty(InvocationID) and isnotempty(JobID),
+    strcat(InvocationID, '/', JobID),
+    strcat('missing-id:', tostring(itemId)))
+| summarize
+    StartEvents = countif(name == 'azcopy.job.started'),
+    FinishEvents = countif(name == 'azcopy.job.finished'),
+    StartTime = minif(timestamp, name == 'azcopy.job.started'),
+    FinishTime = maxif(timestamp, name == 'azcopy.job.finished'),
+    SchemaVersionCount = dcount(SchemaVersionValue),
+    SchemaVersion = take_any(SchemaVersionValue),
+    ReportedDurationSeconds = max(ReportedDurationValue),
+    FinishMetricCount = maxif(FinishMetricCountValue, name == 'azcopy.job.finished'),
+    MissingRequiredDimensionRows = countif(
+        isempty(InvocationID) or isempty(JobID) or isempty(CommandValue) or
+        isempty(FromToValue) or isempty(SourceTypeValue) or isempty(DestTypeValue))
+  by AttemptKey
+| extend
+    ObservedDurationSeconds = iif(
+        StartEvents > 0 and FinishEvents > 0,
+        todouble(datetime_diff('millisecond', FinishTime, StartTime)) / 1000.0,
+        real(null)),
+    InvalidSchema = SchemaVersionCount != 1 or SchemaVersion !in ('2', '3'),
+    LifecycleAnomaly = StartEvents != 1 or FinishEvents != 1,
+    MissingRequiredFields = MissingRequiredDimensionRows > 0,
+    IncompleteFinishMetricSet = FinishEvents > 0 and FinishMetricCount < 50
+| extend
+    TimingAnomaly = StartEvents == 1 and FinishEvents == 1 and ObservedDurationSeconds < 0.0,
+    DurationMismatch = StartEvents == 1 and FinishEvents == 1 and
+        isnotnull(ReportedDurationSeconds) and ReportedDurationSeconds >= 0.0 and
+        abs(ObservedDurationSeconds - ReportedDurationSeconds) >
+            max_of(60.0, ReportedDurationSeconds * 0.2)
+| extend Accepted =
+    not(InvalidSchema) and not(LifecycleAnomaly) and not(MissingRequiredFields) and
+    not(IncompleteFinishMetricSet) and not(TimingAnomaly) and not(DurationMismatch)
+| summarize
+    ObservedAttempts = count(),
+    AcceptedAttempts = countif(Accepted),
+    InvalidSchemaAttempts = countif(InvalidSchema),
+    LifecycleSuspectAttempts = countif(LifecycleAnomaly),
+    TimingSuspectAttempts = countif(TimingAnomaly or DurationMismatch),
+    MissingRequiredFieldAttempts = countif(MissingRequiredFields),
+    IncompleteFinishMetricAttempts = countif(IncompleteFinishMetricSet)
+| extend AcceptedRatePercent = round(100.0 * AcceptedAttempts / iif(ObservedAttempts > 0, ObservedAttempts, 1), 2)
+| mv-expand MetricValue = pack_array(
+    bag_pack('Metric', 'Observed attempts', 'Value', ObservedAttempts),
+    bag_pack('Metric', 'Accepted attempts', 'Value', AcceptedAttempts),
+    bag_pack('Metric', 'Accepted rate (%)', 'Value', AcceptedRatePercent),
+    bag_pack('Metric', 'Invalid schema', 'Value', InvalidSchemaAttempts),
+    bag_pack('Metric', 'Lifecycle suspects', 'Value', LifecycleSuspectAttempts),
+    bag_pack('Metric', 'Timing suspects', 'Value', TimingSuspectAttempts),
+    bag_pack('Metric', 'Missing required fields', 'Value', MissingRequiredFieldAttempts),
+    bag_pack('Metric', 'Incomplete finish metrics', 'Value', IncompleteFinishMetricAttempts))
+| project
+    Metric = tostring(MetricValue.Metric),
+    Value = todouble(MetricValue.Value)

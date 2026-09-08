@@ -1,0 +1,38 @@
+// Visual: Table or bar chart
+// S2S jobs intentionally appear once per endpoint role; do not sum roles for global totals.
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| extend
+    InvocationID = tostring(customDimensions.InvocationID),
+    SourceAccountValue = iif(tostring(customDimensions.SourceType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.SourceStorageAccount), ''),
+    DestAccountValue = iif(tostring(customDimensions.DestType) in ('Blob', 'BlobFS', 'File', 'FileNFS'), tostring(customDimensions.DestStorageAccount), '')
+| where isnotempty(InvocationID) and name != 'azcopy.command.invoked'
+| summarize
+    FinishedRows = countif(name == 'azcopy.job.finished'),
+    SourceAccount = take_any(SourceAccountValue),
+    DestAccount = take_any(DestAccountValue),
+    BytesTransferred = maxif(value, name == 'azcopy.bytes_transferred')
+  by InvocationID
+| where FinishedRows > 0
+| extend Endpoints = pack_array(
+        bag_pack('Role', 'source', 'Account', SourceAccount),
+        bag_pack('Role', 'destination', 'Account', DestAccount))
+| mv-expand Endpoint = Endpoints
+| extend Role = tostring(Endpoint.Role), Account = tostring(Endpoint.Account)
+| where isnotempty(Account)
+| summarize
+    Attempts = count(),
+    BytesTransferred = sum(BytesTransferred)
+  by Role, Account
+| top 50 by BytesTransferred desc
+| project
+    Role,
+    Account,
+    Attempts,
+    DataTB = round(BytesTransferred / 1000000000000.0, 3)

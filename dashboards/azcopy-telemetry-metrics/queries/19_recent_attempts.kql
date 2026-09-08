@@ -1,0 +1,33 @@
+// Visual: Table
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| project
+    timestamp,
+    InvocationID = tostring(customDimensions.InvocationID),
+    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
+    Command = tostring(customDimensions.Command),
+    SummaryCounterScope = tostring(coalesce(customDimensions.SummaryCounterScope, iif(tostring(customDimensions.MeasurementScope) == 'job-cumulative', 'job-cumulative', ''))),
+    JobStatus = tostring(customDimensions.JobStatus),
+    TerminalStage = tostring(customDimensions.TerminalStage),
+    PerformanceConstraint = tostring(customDimensions.PerformanceConstraint),
+    SourceProtocol = tostring(customDimensions.SourceProtocol),
+    SourceMountType = tostring(customDimensions.SourceMountType),
+    SourceScope = tostring(customDimensions.SourceScope),
+    SourceCloud = tostring(customDimensions.SourceCloudType),
+    SourceAuth = tostring(customDimensions.SourceAuthMechanism),
+    DestProtocol = tostring(customDimensions.DestProtocol),
+    DestScope = tostring(customDimensions.DestScope),
+    DestEndpointKind = tostring(customDimensions.DestEndpointKind),
+    DestCloud = tostring(customDimensions.DestCloudType),
+    DestAuth = tostring(customDimensions.DestAuthMechanism),
+    FailureErrorCodes = tostring(customDimensions.FailureErrorCodes),
+    PerformanceAdviceCodes = tostring(customDimensions.PerformanceAdviceCodes),
+    FlagsSet = tostring(customDimensions.OptFlagsSet),
+    EnvVarsSet = tostring(customDimensions.OptEnvVarsSet)
+| top 200 by timestamp desc

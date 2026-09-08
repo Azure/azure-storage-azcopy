@@ -1,0 +1,19 @@
+// Visual: Time chart or table
+// X column: timestamp; Y columns: Attempts, WoWChangePct
+customEvents
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| summarize Attempts = count() by Week = startofweek(timestamp)
+| order by Week asc
+| serialize
+| extend PreviousWeekAttempts = prev(Attempts)
+| extend WoWChangePct = iif(
+    isnotnull(PreviousWeekAttempts) and PreviousWeekAttempts > 0,
+    100.0 * (Attempts - PreviousWeekAttempts) / PreviousWeekAttempts,
+    real(null))
+| project
+    timestamp = Week,
+    Attempts,
+    PreviousWeekAttempts,
+    WoWChangePct = round(WoWChangePct, 2)

@@ -1,0 +1,23 @@
+// Visual: Bar chart
+// Category axis: Error; Value: Attempts
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where tostring(customDimensions.SchemaVersion) in ('2', '3')
+| where name == 'azcopy.job.finished'
+| extend
+    ErrorCategory = tostring(customDimensions.JobErrorCategory),
+    ErrorCode = tostring(customDimensions.JobErrorCode),
+    FailureErrorCodes = tostring(customDimensions.FailureErrorCodes)
+| where isnotempty(ErrorCategory) or isnotempty(ErrorCode)
+| extend Error = strcat(iif(isempty(ErrorCategory), 'unknown', ErrorCategory), ' / ', iif(isempty(ErrorCode), 'unknown', ErrorCode))
+| summarize
+    Attempts = count(),
+    TransferCodeExamples = make_set_if(FailureErrorCodes, isnotempty(FailureErrorCodes), 5)
+  by Error
+| top 20 by Attempts desc
+| project Error, Attempts, TransferCodeExamples

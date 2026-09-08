@@ -1,0 +1,9 @@
+// Visual: Bar chart
+let QueryStart = _startTime;
+let QueryEnd = _endTime;
+{{ENRICHED_FINISHED_JOBS}}
+{{ENRICHMENT_FILTERS}}
+FilteredFinishedJobs
+| summarize BytesTransferred = sum(BytesTransferred) by StorageAccountClass
+| project DestinationAccountClass = StorageAccountClass, DataTB = round(BytesTransferred / 1000000000000.0, 3)
+| order by DataTB desc

@@ -1,0 +1,46 @@
+.create-or-alter function with (
+    folder = 'AzCopyQueries',
+    docstring = 'Returns top enriched AzCopy customers from persisted daily aggregates for Storage Mover-style Grafana panels.',
+    skipvalidation = 'true'
+) AzCopy_TopMovers(
+    startTime:datetime,
+    endTime:datetime,
+    topN:long,
+    customerFilter:dynamic,
+    commandFilter:dynamic,
+    sourceTypeFilter:dynamic,
+    targetTypeFilter:dynamic)
+{
+    let IsAll = (values:dynamic) {
+        array_length(values) == 0
+            or array_index_of(values, '$__all') >= 0
+            or array_index_of(values, '__all') >= 0
+    };
+    let EffectiveTopN = iif(topN in (10, 25, 50, 100), topN, 10);
+    AzCopyUsageAggregates1
+    | where SliceDate >= startofday(startTime) and SliceDate < endTime
+    | where Name == 'JobRunBytesTransferred'
+    | where isnotempty(CustomerName)
+        and CustomerName != 'Unmapped customer'
+        and not(CustomerName startswith 'Customer unavailable')
+    | where IsAll(customerFilter) or CustomerKey in (customerFilter)
+    | where IsAll(commandFilter) or Command in (commandFilter)
+    | where IsAll(sourceTypeFilter) or SourceType in (sourceTypeFilter)
+    | where IsAll(targetTypeFilter) or TargetType in (targetTypeFilter)
+    | summarize
+        DataTransferred = sum(Count),
+        Movers = dcount(InstallationID),
+        Subscriptions = dcountif(SubscriptionId, SubscriptionId != 'unmapped'),
+        Scenarios = make_set(FromTo, 100),
+        Commands = make_set(Command, 100),
+        Sources = make_set(SourceType, 100),
+        Targets = make_set(TargetType, 100),
+        FirstSeen = min(SliceDate),
+                LastSeen = max(SliceDate),
+                SubscriptionIds = make_set_if(SubscriptionId, SubscriptionId != 'unmapped', 100)
+            by CustomerKey, CustomerName
+        | sort by DataTransferred desc, CustomerName asc
+    | take EffectiveTopN
+    | serialize Rank = row_number()
+    | project Rank, Customer = CustomerName, CustomerKey, DataTransferred, Movers, Subscriptions, Scenarios, Commands, Sources, Targets, SubscriptionIds, FirstSeen, LastSeen
+}
