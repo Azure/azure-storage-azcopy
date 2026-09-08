@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -156,6 +157,10 @@ func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []stri
 
 func (*mockedLifecycleManager) MsgHandlerChannel() <-chan *common.LCMMsg {
 	return nil
+}
+
+func (*mockedLifecycleManager) SanitizeLogMessage(msg string) string {
+	return common.NewAzCopyLogSanitizer().SanitizeLogMessage(msg)
 }
 
 type dummyProcessor struct {
