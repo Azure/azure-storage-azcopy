@@ -71,6 +71,39 @@ func traceShare(level LogLevel, format string, a ...any) {
 	LogToJobLogWithPrefix("[sharecontroller] "+fmt.Sprintf(format, a...), level)
 }
 
+var (
+	traceOnceMu     sync.Mutex
+	traceOnceCounts = map[string]int64{}
+)
+
+// TraceShareOnce logs only the first occurrence of key, counting the rest for the
+// shutdown summary. Needed because the opt-out call sites run once per traverser
+// (i.e. per directory) and once per transfer.
+func TraceShareOnce(key string, level LogLevel, format string, a ...any) {
+	traceOnceMu.Lock()
+	n := traceOnceCounts[key] + 1
+	traceOnceCounts[key] = n
+	traceOnceMu.Unlock()
+
+	if n == 1 {
+		traceShare(level, format, a...)
+	}
+}
+
+// logTraceOnceSummary reports how often each suppressed reason actually fired.
+func logTraceOnceSummary() {
+	traceOnceMu.Lock()
+	counts := make(map[string]int64, len(traceOnceCounts))
+	for k, v := range traceOnceCounts {
+		counts[k] = v
+	}
+	traceOnceMu.Unlock()
+
+	for k, v := range counts {
+		traceShare(LogInfo, "opt-out summary: %s occurred %d time(s)", k, v)
+	}
+}
+
 // Records whether the concrete implementations were injected, so a share that
 // silently ends up inert can be told apart from one that is genuinely unlimited.
 var (
@@ -102,11 +135,13 @@ var shareStatsSourceFactory func(shareKey, shareURL string, tokenCred azcore.Tok
 // ignored.
 func RegisterResourceStatsSourceFactory(f func(shareKey, shareURL string, tokenCred azcore.TokenCredential) ResourceStatsSource) {
 	if f == nil {
+		GetLifecycleMgr().Info("resource stats source factory not registered: factory is nil, shares stay unlimited")
 		traceShare(LogDebug, "resource stats source factory not registered: factory is nil, shares stay unlimited")
 		return
 	}
 	shareStatsSourceFactory = f
 	statsSourceFactoryRegistered = true
+	GetLifecycleMgr().Info("registered resource stats source factory")
 	traceShare(LogDebug, "registered resource stats source factory")
 }
 
@@ -207,9 +242,11 @@ func GetShareCredential(shareKey string) azcore.TokenCredential {
 // the equal-share denominator used in proactive mode. Returns nil for non-Files
 // URLs so callers can fall back to their default pacer unchanged.
 func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
-	shareKey := ShareKeyFromRawURL(rawURL)
+	shareKey, reason := classifyShareKey(rawURL)
 	if shareKey == "" {
-		traceShare(LogDebug, "no share control: %q is not an Azure Files share URL", rawURL)
+		// The job logger redacts SAS, so rawURL is safe to include here.
+		TraceShareOnce("nokey:"+reason, LogInfo,
+			"no share control, per-share rate limiting disabled for this resource: %s (%s)", reason, rawURL)
 		return nil
 	}
 	shareControlsMu.Lock()
@@ -226,6 +263,8 @@ func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
 	statsSource := shareStatsSourceFactory(shareKey, ShareURLFromRawURL(rawURL), GetShareCredential(shareKey))
 	ctrl := controllerFactory(pacer, statsSource, workers)
 
+	traceWiringOnce(pacer, statsSource, shareKey)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := &shareControl{pacer: pacer, ctrl: ctrl, stop: cancel}
 	shareControls[shareKey] = sc
@@ -236,11 +275,32 @@ func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
 	if _, err := ctrl.Refresh(); err != nil {
 		traceShare(LogError, "priming poll failed for %s: %v", shareKey, err)
 	}
-	iops, bw := controllerRates(ctrl)
-	traceShare(LogDebug, "ShareController initialized  for %s: mode=%s primedRates(iops=%d bw=%d)", shareKey, ctrl.Mode(), iops, bw)
+	traceShare(LogInfo, "ShareController initialized for %s: mode=%s workers=%d primedRates(%s)",
+		shareKey, ctrl.Mode(), workers, describeRates(ctrl))
 
 	go startShareStatsPoller(ctx, shareKey, ctrl)
 	return sc
+}
+
+// traceWiringOnce reports whether the concrete pacer and stats source were
+// injected. Without this a share wired to the no-op stubs is indistinguishable
+// from one the service reports as genuinely unlimited.
+func traceWiringOnce(pacer SharePacer, statsSource ResourceStatsSource, shareKey string) {
+	_, pacerIsNull := pacer.(nullSharePacer)
+	_, sourceIsStub := statsSource.(stubResourceStatsSource)
+
+	TraceShareOnce(fmt.Sprintf("wiring:%t:%t", pacerIsNull, sourceIsStub), LogInfo,
+		"wiring for %s: sharePacer=%T (registered=%t) statsSource=%T (registered=%t)%s",
+		shareKey, pacer, sharePacerFactoryRegistered, statsSource, statsSourceFactoryRegistered,
+		ternaryStr(pacerIsNull || sourceIsStub,
+			" -- INERT: no-op stub in use, this share will never be paced", ""))
+}
+
+func ternaryStr(cond bool, yes, no string) string {
+	if cond {
+		return yes
+	}
+	return no
 }
 
 // startShareStatsPoller runs the share's poll loop on a tracked goroutine. A
@@ -251,7 +311,7 @@ func startShareStatsPoller(ctx context.Context, shareKey string, ctrl ResourceCo
 		defer shareControlsWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				LogToJobLogWithPrefix(fmt.Sprintf("share stats poll loop for %s stopped after panic: %v", shareKey, r), LogError)
+				traceShare(LogError, "poll loop for %s stopped after panic, this share will never update again: %v", shareKey, r)
 			}
 		}()
 		pollShareStats(ctx, shareKey, ctrl)
@@ -272,20 +332,34 @@ func StopShareControls() {
 
 	shareControlsWg.Wait()
 	if stopped > 0 {
-		traceShare(LogInfo, "stopped %d share control(s)", stopped)
+		traceShare(LogInfo , "stopped %d share control(s)", stopped)
 	}
+	logTraceOnceSummary()
 }
 
 // controllerRates reads the currently enforced targets when the controller
 // exposes them. 0 means unlimited, i.e. nothing is actually being paced.
-func controllerRates(ctrl ResourceController) (iops, bw int64) {
+func controllerRates(ctrl ResourceController) (iops, bw int64, ok bool) {
 	if r, ok := ctrl.(interface {
 		IopsRate() int64
 		BandwidthRate() int64
 	}); ok {
-		return r.IopsRate(), r.BandwidthRate()
+		return r.IopsRate(), r.BandwidthRate(), true
 	}
-	return 0, 0
+	return 0, 0, false
+}
+
+// describeRates renders the enforced targets, keeping "controller does not report
+// rates" distinct from "rates are genuinely 0 (unlimited)".
+func describeRates(ctrl ResourceController) string {
+	iops, bw, ok := controllerRates(ctrl)
+	if !ok {
+		return fmt.Sprintf("unknown: %T does not expose IopsRate/BandwidthRate", ctrl)
+	}
+	if iops == 0 && bw == 0 {
+		return "iops=0 bw=0 -- both UNLIMITED, nothing is being paced"
+	}
+	return fmt.Sprintf("iops=%d bw=%d", iops, bw)
 }
 
 // pollShareStats drives the authoritative stats refresh on a ticker,
@@ -295,6 +369,7 @@ func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceControlle
 	ticker := time.NewTicker(GetShareStatsPollInterval)
 	defer ticker.Stop()
 	tick := 0
+	consecutiveFailures := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -304,12 +379,21 @@ func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceControlle
 			tick++
 			backoff, err := ctrl.Refresh()
 			if err != nil {
-				traceShare(LogError, "poll #%d failed for %s: %v", tick, shareKey, err)
+				consecutiveFailures++
+				// Escalate on the first failure and on every 10th after that: a poll
+				// that always fails leaves the pacer frozen at its primed targets.
+				if consecutiveFailures == 1 || consecutiveFailures%10 == 0 {
+					traceShare(LogError, "poll #%d failed for %s (%d consecutive): %v",
+						tick, shareKey, consecutiveFailures, err)
+				}
 				continue
 			}
-			iops, bw := controllerRates(ctrl)
-			traceShare(LogDebug, "poll #%d for %s: mode=%s rates(iops=%d bw=%d) backoff=%s",
-				tick, shareKey, ctrl.Mode(), iops, bw, backoff)
+			if consecutiveFailures > 0 {
+				traceShare(LogInfo, "poll for %s recovered after %d consecutive failure(s)", shareKey, consecutiveFailures)
+				consecutiveFailures = 0
+			}
+			traceShare(LogDebug, "poll #%d for %s: mode=%s rates(%s) backoff=%s",
+				tick, shareKey, ctrl.Mode(), describeRates(ctrl), backoff)
 			if backoff > 0 {
 				select {
 				case <-ctx.Done():
@@ -365,14 +449,31 @@ func HandleShareResponse(shareKey string, kind ThrottleKind, retryAfterSec float
 // name) from an Azure Files URL, ignoring SAS/query and path beyond the share.
 // It returns "" for non-Files URLs so callers can cheaply skip them.
 func ShareKeyFromRawURL(raw string) string {
+	key, _ := classifyShareKey(raw)
+	return key
+}
+
+// Reasons a URL yields no share key. Reported so a job that silently opts out of
+// per-share rate limiting can be told apart from one that is genuinely not Files.
+const (
+	shareKeyParseFailed  = "URL is not parseable as an Azure Files URL"
+	shareKeyNoShareName  = "URL has no share segment (account- or service-level URL)"
+	shareKeyNotFilesHost = `host is not an Azure Files endpoint (no ".file." label)`
+)
+
+// classifyShareKey returns the share key, or "" plus the reason it was rejected.
+func classifyShareKey(raw string) (key, reason string) {
 	parts, err := file.ParseURL(raw)
-	if err != nil || parts.ShareName == "" {
-		return ""
+	if err != nil {
+		return "", shareKeyParseFailed
+	}
+	if parts.ShareName == "" {
+		return "", shareKeyNoShareName
 	}
 	if !strings.Contains(strings.ToLower(parts.Host), ".file.") {
-		return "" // only Azure Files endpoints carry share-level IOPS/bandwidth limits
+		return "", shareKeyNotFilesHost // only Azure Files endpoints carry share-level IOPS/bandwidth limits
 	}
-	return strings.ToLower(parts.Host) + "/" + parts.ShareName
+	return strings.ToLower(parts.Host) + "/" + parts.ShareName, ""
 }
 
 // ShareURLFromRawURL returns the share-scoped URL (scheme, host, share name and

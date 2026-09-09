@@ -478,7 +478,8 @@ func TestDualResource_ReactiveMultiplicativeDecrease(t *testing.T) {
 
 // Reactive AIMD must additively INCREASE a non-throttled resource by exactly one
 // step per poll while the controller is still reactive (held there by throttling
-// on the OTHER dimension), ramping it back toward its limit.
+// on the OTHER dimension), ramping it back toward its limit. One step is
+// IncreaseFraction of the reported limit.
 func TestDualResource_ReactiveAdditiveIncrease(t *testing.T) {
 	const iopsLimit = int64(1000)
 	const bwLimit = int64(100 * 1024 * 1024)
@@ -488,6 +489,9 @@ func TestDualResource_ReactiveAdditiveIncrease(t *testing.T) {
 	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
 	cfg := DefaultRateLimitConfig()
 	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+
+	wantIopsStep := additiveStep(iopsLimit, cfg.IncreaseFraction, cfg.IopsStep)
+	wantBwStep := additiveStep(bwLimit, cfg.IncreaseFraction, cfg.BandwidthStep)
 
 	if _, err := d.Refresh(); err != nil {
 		t.Fatalf("prime: %v", err)
@@ -519,7 +523,7 @@ func TestDualResource_ReactiveAdditiveIncrease(t *testing.T) {
 		if _, err := d.Refresh(); err != nil {
 			t.Fatalf("bw increase step %d: %v", step, err)
 		}
-		wantBw += cfg.BandwidthStep
+		wantBw += wantBwStep
 		t.Logf("bw step %d: mode=%s bwRate=%d", step, d.Mode(), d.BandwidthRate())
 		if got := d.BandwidthRate(); got != wantBw {
 			t.Fatalf("bw step %d: additive increase: want %d, got %d", step, wantBw, got)
@@ -535,7 +539,7 @@ func TestDualResource_ReactiveAdditiveIncrease(t *testing.T) {
 		if _, err := d.Refresh(); err != nil {
 			t.Fatalf("iops increase step %d: %v", step, err)
 		}
-		wantIops += cfg.IopsStep
+		wantIops += wantIopsStep
 		t.Logf("iops step %d: mode=%s iopsRate=%d", step, d.Mode(), d.IopsRate())
 		if got := d.IopsRate(); got != wantIops {
 			t.Fatalf("iops step %d: additive increase: want %d, got %d", step, wantIops, got)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // azfileShareStatsSource implements ResourceStatsSource by polling the Azure
@@ -64,6 +65,11 @@ func (s *azfileShareStatsSource) PollStats() (ResourceStats, error) {
 
 	if resp.ThrottlingStats == nil {
 		// Non-premium share or header not honored — return unlimited/no throttles.
+		TraceShareOnce("nothrottlingstats", LogError,
+			"GetShareStats returned no ShareThrottlingStats block: share reports UNLIMITED and will never be paced. "+
+				"Expected on a standard (non-provisioned) share, or when x-ms-version=%q is too old to honor "+
+				"x-ms-file-return-throttling-stats",
+			enum.EEnvironmentVariable.DefaultServiceApiVersion().Get())
 		return ResourceStats{}, nil
 	}
 
