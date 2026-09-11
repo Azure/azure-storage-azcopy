@@ -113,7 +113,9 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	targetAuth, _ := targetCred.(cred.ScopedAuthenticator)
 	srcAuth, _ := srcCred.(cred.ScopedAuthenticator)
 
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(),
+	// newAzureFilesThrottlePolicy feeds Azure Files 429/503 responses into the
+	// per-share dual-resource controller's fast reactive path (no-op otherwise).
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(), newAzureFilesThrottlePolicy(),
 		NewTokenReauthPolicy(targetAuth, NewTokenReauthPolicyOptions{srcAuth}), // these will resolve to nil
 		NewSourceAuthPolicy(srcCred)}
 

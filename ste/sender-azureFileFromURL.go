@@ -22,10 +22,11 @@ package ste
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"net/http"
 )
 
 type urlToAzureFileCopier struct {
@@ -60,9 +61,10 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		}
 
 		// upload the range (including application of global pacing. We don't have a separate wait reason for global pacing
-		// so just do it inside the S2SCopyOnWire state)
+		// so just do it inside the S2SCopyOnWire state). The service pulls the bytes from the source URL, so charge both
+		// bandwidth (adjustedChunkSize) and one IOP for the UploadRangeFromURL REST call.
 		u.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
+		if err := pacerAcquire(u.jptm.Context(), u.pacer, adjustedChunkSize, 1); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
 		// destination auth is OAuth, so we need to use the special policy to add the x-ms-file-request-intent header since the SDK has not yet implemented it.
@@ -116,4 +118,82 @@ func (r *fileUploadRangeFromURLFixPolicy) Do(req *policy.Request) (*http.Respons
 		req.Raw().Header["x-ms-file-request-intent"] = []string{"backup"}
 	}
 	return req.Next()
+}
+
+func (s *urlToAzureFileCopier) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, s.jptm, id, func() {
+		info := s.jptm.Info()
+		var err error
+
+		if common.IsNFSCopy() {
+			_, err = s.addNFSPermissionsToHeaders(info, s.getFileClient().URL())
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file permissions", err)
+				return
+			}
+
+			_, err = s.addNFSPropertiesToHeaders(info)
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file properties", err)
+				return
+			}
+
+		} else {
+			_, err = s.addPermissionsToHeaders(info, s.getFileClient().URL())
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file permissions", err)
+				return
+			}
+
+			_, err = s.addSMBPropertiesToHeaders(info)
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file properties", err)
+				return
+			}
+		}
+
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(s.ctx,
+			func() (interface{}, error) {
+				var resp interface{}
+				var err error
+				_, err = s.getFileClient().SetMetadata(s.ctx, &file.SetMetadataOptions{Metadata: s.metadataToApply})
+				if err != nil {
+					return nil, err
+				}
+				if common.IsNFSCopy() {
+					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
+						HTTPHeaders: &s.headersToApply,
+						NFSProperties: &file.NFSProperties{
+							CreationTime:  s.nfsPropertiesToApply.CreationTime,
+							LastWriteTime: s.nfsPropertiesToApply.LastWriteTime,
+							FileMode:      s.nfsPropertiesToApply.FileMode,
+							Owner:         s.nfsPropertiesToApply.Owner,
+							Group:         s.nfsPropertiesToApply.Group,
+						},
+					})
+					if err != nil {
+						s.jptm.FailActiveSend("Applying final attribute settings", err)
+						return nil, err
+					}
+				} else {
+					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
+						HTTPHeaders:   &s.headersToApply,
+						Permissions:   &s.permissionsToApply,
+						SMBProperties: &s.smbPropertiesToApply,
+					})
+					if err != nil {
+						s.jptm.FailActiveSend("Applying final attribute settings", err)
+						return nil, err
+					}
+				}
+				return resp, nil
+			},
+			s.fileOrDirClient,
+			s.jptm.GetForceIfReadOnly())
+
+		if err != nil {
+			s.jptm.FailActiveUpload("Applying final attribute settings", err)
+			return
+		}
+	})
 }
