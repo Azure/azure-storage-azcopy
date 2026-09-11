@@ -23,6 +23,7 @@ package azcopy
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -106,10 +107,23 @@ func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedOb
 	return s.scheduleTransfer(srcRelativePath, dstRelativePath, storedObject)
 }
 
+var skippedPathTraversalBlobLog = &sync.Once{}
+
 func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePath string,
 	storedObject traverser.StoredObject) (err error) {
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath,
 		s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
+
+	// If interfacing with a local filesystem, ensure that no path traversal exists where we expect this blob to land.
+	if s.CopyJobTemplate.FromTo.IsDownload() &&
+		(traverser.PathTraversalNameRegex.MatchString(storedObject.Name) || traverser.PathTraversalNameRegex.MatchString(storedObject.RelativePath)) {
+		skippedPathTraversalBlobLog.Do(func() {
+			traverser.WarnStdoutAndScanningLog(fmt.Sprintf("skipped one or more object(s) with a path segment or name comprising entirely of dots. It is not possible to name a folder or file this way, and will result in a path traversal if attempted."))
+		})
+
+		// skip this transfer
+		return nil
+	}
 
 	// set properties specific code
 	if s.CopyJobTemplate.FromTo.To() == common.ELocation.None() {
