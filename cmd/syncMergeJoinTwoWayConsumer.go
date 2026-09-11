@@ -439,8 +439,9 @@ func resolveMergeJoinParallelTraversers() int32 {
 // sorted and validated end-to-end:
 //   - S3 -> Blob (S3 source list-order fix + per-level merge)
 //   - Azure -> Azure, i.e. Blob/BlobFS (FNS or HNS) in any combination
+//   - Azure Files -> Azure Files
 //
-// Everything else (Azure Files, Local, GCP, etc.) always stays on the indexMap flow.
+// Everything else (Local, GCP, mixed Azure Files pairs, etc.) always stays on the indexMap flow.
 // Keep this allow-list conservative: any source whose listing is not guaranteed
 // globally sorted would silently break the two-pointer merge.
 func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
@@ -451,7 +452,8 @@ func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
 }
 
 // isStreamingMergeJoinSupportedPair reports whether the source/destination location pair is on the
-// streaming merge-join allow-list: S3 -> Blob, or Azure -> Azure (Blob/BlobFS in any combination).
+// streaming merge-join allow-list: S3 -> Blob, Azure -> Azure (Blob/BlobFS in any combination),
+// or Azure Files -> Azure Files.
 // Keep this conservative: any source whose listing is not guaranteed globally sorted would silently
 // break the two-pointer merge.
 func isStreamingMergeJoinSupportedPair(fromTo common.FromTo) bool {
@@ -464,6 +466,8 @@ func isStreamingMergeJoinSupportedPair(fromTo common.FromTo) bool {
 		return true // S3 -> Blob
 	case isAzure(from) && isAzure(to):
 		return true // Azure -> Azure (Blob/BlobFS)
+	case from == common.ELocation.File() && to == common.ELocation.File():
+		return true // Azure Files -> Azure Files
 	default:
 		return false
 	}
