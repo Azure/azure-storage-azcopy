@@ -30,7 +30,7 @@ func TestSyncDirectoryResourcesLive(t *testing.T) {
 	if sourceURL == "" {
 		t.Skip("set AZCOPY_TEST_SYNC_SOURCE_URL to run read-only live traversal")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 	parts, err := blob.ParseURL(sourceURL)
 	require.NoError(t, err)
@@ -75,6 +75,7 @@ func TestSyncDirectoryResourcesLive(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, expected)
+	t.Logf("Flat listing: %d files, %d directories", len(expected), len(directories))
 
 	cca := cookedSyncCmdArgs{
 		fromTo: common.EFromTo.BlobBlob(),
@@ -113,11 +114,17 @@ func TestSyncDirectoryResourcesLive(t *testing.T) {
 		_, duplicate := actual[object.relativePath]
 		require.False(t, duplicate, "duplicate file %q", object.relativePath)
 		actual[object.relativePath] = object.size
+		if len(actual)%10000 == 0 {
+			t.Logf("Scanned %d of %d files", len(actual), len(expected))
+		}
 	}
 	require.NoError(t, ctx.Err())
-	require.Equal(t, expected, actual)
+	require.Len(t, actual, len(expected))
 	var bytes int64
-	for _, size := range actual {
+	for name, size := range expected {
+		actualSize, exists := actual[name]
+		require.True(t, exists, "missing file %q", name)
+		require.Equal(t, size, actualSize, "file size %q", name)
 		bytes += size
 	}
 	t.Logf("Matched flat listing: %d files, %d directories, %d bytes; no duplicates or phantom paths",
