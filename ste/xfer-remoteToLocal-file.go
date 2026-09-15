@@ -29,16 +29,31 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 const azcopyTempDownloadPrefix string = ".azDownload-%s-"
 
+var skippedPathTraversalBlobLog = &sync.Once{}
+
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
 func remoteToLocal(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
+
+	if common.PathTraversalNameRegex.MatchString(info.Destination) {
+		skippedPathTraversalBlobLog.Do(func() {
+			common.GetLifecycleMgr().Warn("One or more object(s) contain names with a path traversal. These will be marked as skipped in the job plan file, as it is not possible to replicate the file structure locally, and insecure to allow the traversal.")
+		})
+
+		jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "Object has name that would cause path traversal (i.e. `../xyz`), skipping for security purposes.")
+		jptm.SetStatus(common.ETransferStatus.SkippedEntityHasInvalidName())
+		jptm.ReportTransferDone()
+		return
+	}
+
 	if info.IsFolderPropertiesTransfer() {
 		remoteToLocal_folder(jptm, pacer, df)
 	} else if info.EntityType == common.EEntityType.Symlink() {
