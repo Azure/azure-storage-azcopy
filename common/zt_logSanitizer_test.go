@@ -65,6 +65,12 @@ func TestLogSanitizer(t *testing.T) {
 
 		// word "sig" inside the signature
 		{"http://foo?sig=sigvalue BlahBlah", "http://foo?sig=-REDACTED- BlahBlah"},
+
+		// percent-encoded '?', '&' and '=' (e.g. a fully URL-encoded credential string)
+		{"http://foo?x=y&sig%3Dsomevalue&x=y", "http://foo?x=y&sig%3D-REDACTED-&x=y"},       // percent-encoded '=' (uppercase hex)
+		{"http://foo?x=y&sig%3dsomevalue&x=y", "http://foo?x=y&sig%3d-REDACTED-&x=y"},       // percent-encoded '=' (lowercase hex)
+		{"http://foo%3Fsig%3Dsomevalue&x=y", "http://foo%3Fsig%3D-REDACTED-&x=y"},           // percent-encoded '?' and '=', real '&' separator still terminates
+		{"http://foo?sig=some%26value&x=y", "http://foo?sig=-REDACTED-&x=y"},                 // percent-encoded '&' inside the value, real '&' separator still terminates
 	}
 
 	san := NewAzCopyLogSanitizer()
