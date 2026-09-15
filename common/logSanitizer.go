@@ -99,7 +99,10 @@ func init() {
 		// assumption, we'd have to redact query strings all the way to the end of the whole query string.)
 		// Regex has two groups: first gets key and delimiter.
 		// Second group gets as many chars as possible that do not terminate the value.
-		sensitiveRegexMap[key] = regexp.MustCompile("(?i)(?P<key>" + key + "[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)")
+		// The delimiter may be ':', '=', or a percent-encoded version of those ('%3A'/'%3a' for ':'
+		// and '%3D'/'%3d' for '='). This catches query strings where '?' , '&', or '=' have been
+		// percent-encoded (as can happen when a SAS/credential string is itself URL-encoded).
+		sensitiveRegexMap[key] = regexp.MustCompile("(?i)(?P<key>" + key + "[ \t]*(?:[:=]|%3d)[ \t]*)(?P<value>[^& ,;\t\n\r]+)")
 
 		// see comment below
 		if key == strings.ToLower(SigAzure) {
