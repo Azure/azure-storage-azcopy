@@ -38,6 +38,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	
 )
 
 type FileClientStub interface {
@@ -141,6 +143,19 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		client = shareClient.NewRootDirectoryClient().NewFileClient(directoryOrFilePath)
 	}
 
+	// Scope pacing to the source Azure Files share so the per-share dual-resource
+	// controller meters IOPS and dynamic bandwidth alongside the global --cap-mbps
+	// pacer, against the same share budget the enumeration scan pacer already uses.
+	// Non-Files/unresolvable shares fall back to the global pacer unchanged.
+	scopedPacer := pacer
+	file2FileCopy := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
+	fromTo := jptm.FromTo()
+	if file2FileCopy == "true" && fromTo.From() == common.ELocation.File() && fromTo.To() == common.ELocation.File() {
+		if sp := common.GetOrCreateSharePacer(info.Source, 1); sp != nil {
+			scopedPacer = newShareScopedPacer(pacer, sp)			
+		}
+	}
+
 	return &azureFileSenderBase{
 		jptm:                 jptm,
 		addFileRequestIntent: addFileRequestIntent,
@@ -148,7 +163,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		fileOrDirClient:      client,
 		chunkSize:            chunkSize,
 		numChunks:            numChunks,
-		pacer:                pacer,
+		pacer:                scopedPacer,
 		ctx:                  jptm.Context(),
 		headersToApply:       props.SrcHTTPHeaders.ToFileHTTPHeaders(),
 		smbPropertiesToApply: file.SMBProperties{},
@@ -300,7 +315,7 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 	if !info.PreserveInfo {
 		return "", nil
 	}
-	if nfsSIP, ok := u.sip.(INFSPropertyBearingSourceInfoProvider); ok {
+	if nfsSIP, ok := u.sip.(INFSPropertyBearingSourceInfoProvider); ok {		
 		nfsProps, err := nfsSIP.GetNFSProperties()
 		if err != nil {
 			return "Obtaining NFS properties", err
@@ -380,7 +395,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 		}
 
 		// If we didn't do the workaround, then let's get the SDDL and put it later.
-		if u.permissionsToApply.PermissionKey == nil || *u.permissionsToApply.PermissionKey == "" {
+		if u.permissionsToApply.PermissionKey == nil || *u.permissionsToApply.PermissionKey == "" {			
 			pString, err := sddlSIP.GetSDDL()
 
 			// Sending "" to the service is invalid, but the service will return it sometimes (e.g. on file shares)
@@ -396,7 +411,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 	}
 
 	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > FilesServiceMaxSDDLSize {
-		sipm := u.jptm.SecurityInfoPersistenceManager()
+		sipm := u.jptm.SecurityInfoPersistenceManager()		
 		pkey, err := sipm.PutSDDL(*u.permissionsToApply.Permission, u.shareClient)
 		u.permissionsToApply.PermissionKey = &pkey
 		if err != nil {
@@ -413,7 +428,7 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (sta
 	if !info.PreserveInfo {
 		return "", nil
 	}
-	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
+	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {		
 		smbProps, err := smbSIP.GetSMBProperties()
 
 		if err != nil {
