@@ -1,0 +1,5 @@
+{{ENRICHED_FINISHED_JOBS}}
+EnrichedFinishedJobs
+| where CustomerInventoryStatus == 'Mapped'
+| summarize Label = any(CustomerName) by Value = CustomerKey
+| order by Label asc

@@ -1,0 +1,9 @@
+// Visual: Column chart
+customEvents
+| where name startswith 'azcopy.'
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend Value = tostring(customDimensions.OptConcurrency)
+| extend Value = iif(isempty(Value), 'not set', Value)
+| summarize Attempts = count() by Value
+| order by Attempts desc
