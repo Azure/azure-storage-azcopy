@@ -1,9 +1,11 @@
 package e2etest
 
 import (
+	"os"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 func init() {
@@ -13,13 +15,40 @@ func init() {
 type JobsListSuite struct{}
 
 func (s *JobsListSuite) Scenario_JobsListNoJobs(svm *ScenarioVariationManager) {
-
+	modes := []string{"enabled"}
+	if AppInsightsTelemetryValidationEnabled() {
+		modes = append(modes, "cli-optout", "env-optout", "missing-key", "missing-endpoint")
+	}
+	mode := ResolveVariation(svm, modes)
+	flags := JobsListFlags{}
+	environment := &AzCopyEnvironment{}
+	expected := &telemetryExpectation{CommandOnly: true}
+	switch mode {
+	case "cli-optout":
+		flags.DisableTelemetry = pointerTo(true)
+	case "env-optout":
+		environment.DisableTelemetry = pointerTo(true)
+	case "missing-key":
+		for _, part := range strings.Split(GlobalConfig.AppInsightsValidationConfig.ConnectionString, ";") {
+			if strings.HasPrefix(strings.ToLower(part), "ingestionendpoint=") {
+				environment.TelemetryConnectionString = &part
+			}
+		}
+		svm.AssertNow("configured ingestion endpoint", Not{IsNil{}}, environment.TelemetryConnectionString)
+	case "missing-endpoint":
+		environment.TelemetryConnectionString = pointerTo("InstrumentationKey=11111111-2222-3333-4444-555555555555")
+	}
+	if mode != "enabled" {
+		expected = &telemetryExpectation{NoEvents: true}
+	}
 	jobsListOutput, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:   AzCopyVerbJobsList,
-			Stdout: &AzCopyParsedJobsListStdout{},
-			Flags:  JobsListFlags{},
+			Verb:        AzCopyVerbJobsList,
+			Stdout:      &AzCopyParsedJobsListStdout{},
+			Flags:       flags,
+			Environment: environment,
+			Telemetry:   expected,
 		})
 	ValidateJobsListOutput(svm, jobsListOutput, 0, []string{})
 }
@@ -96,9 +125,10 @@ func (s *JobsListSuite) Scenario_JobsListAll(svm *ScenarioVariationManager) {
 	jobsListOutput, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:   AzCopyVerbJobsList,
-			Stdout: &AzCopyParsedJobsListStdout{},
-			Flags:  JobsListFlags{},
+			Verb:      AzCopyVerbJobsList,
+			Telemetry: &telemetryExpectation{CommandOnly: true},
+			Stdout:    &AzCopyParsedJobsListStdout{},
+			Flags:     JobsListFlags{},
 			Environment: &AzCopyEnvironment{
 				LogLocation:     &logsDir,
 				JobPlanLocation: &jobPlanDir,

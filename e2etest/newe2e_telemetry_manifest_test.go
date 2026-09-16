@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"math"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func manifestEvent(process, invocation, name string) observedTelemetryEvent {
@@ -484,6 +487,114 @@ func TestTelemetryExistingWorkflowAssertions(t *testing.T) {
 	events[3].Measurements["azcopy.job_throughput_mbps"] = 99
 	_, err = checkTelemetryManifest(expected, events)
 	require.ErrorContains(t, err, "unexpected measurement")
+}
+
+func TestTelemetryUnreachableIngestionScenario(t *testing.T) {
+	resetAppInsightsValidation()
+	t.Cleanup(resetAppInsightsValidation)
+	source := &LocalContainerResourceManager{}
+	destination := &LocalContainerResourceManager{}
+	command := telemetryUnreachableIngestionCommand(source, destination)
+	require.Equal(t, AzCopyVerbCopy, command.Verb)
+	require.Same(t, source, command.Targets[0])
+	require.Same(t, destination, command.Targets[1])
+	require.False(t, command.ShouldFail)
+	require.Equal(t, 3*time.Minute, command.Timeout)
+	require.False(t, *command.Environment.DisableTelemetry)
+	require.Equal(t, "InstrumentationKey=11111111-2222-3333-4444-555555555555;IngestionEndpoint=http://192.0.2.1", *command.Environment.TelemetryConnectionString)
+	require.Equal(t, "192.0.2.1", *command.Environment.NoProxy)
+	require.Nil(t, command.Environment.AutoLoginMode)
+	require.Equal(t, 1.0, *command.Flags.(CopyFlags).CapMbps)
+	require.Equal(t, 0.0625, *command.Flags.(CopyFlags).BlockSizeMB)
+	require.True(t, command.Telemetry.NoEvents)
+	require.True(t, command.Telemetry.DeliveryFailureExpected)
+	require.False(t, telemetryExpectsNoEvents(command.Verb, nil, []string{"AZCOPY_DISABLE_TELEMETRY=false"}))
+	registerNoTelemetryExpectation("unreachable-ingestion")
+	expected := snapshotAppInsightsValidation().expectedAttempts
+	missing, err := checkTelemetryManifest(expected, nil)
+	require.NoError(t, err)
+	require.Empty(t, missing)
+	_, err = checkTelemetryManifest(expected, []observedTelemetryEvent{manifestEvent("unreachable-ingestion", "invocation", "azcopy.job.started")})
+	require.ErrorContains(t, err, "unexpected telemetry")
+	stopped := collectTelemetryDeliveryEvidence("", strings.NewReader("WARN: telemetry: disabled for this process after delivery failure sending azcopy.job.started: deadline exceeded\n"))
+	require.NoError(t, validateTelemetryDeliveryFailure(stopped))
+	for _, evidence := range []telemetryDeliveryEvidence{
+		{}, {JobLogReadable: true}, {JobLogReadable: true, StopMessages: 2},
+		{JobLogReadable: true, StopMessages: 1, StartedSends: 1},
+		{JobLogReadable: true, StopMessages: 1, FinishedSends: 1},
+		{JobLogReadable: true, StopMessages: 1, OtherErrors: 1},
+	} {
+		require.Error(t, validateTelemetryDeliveryFailure(evidence))
+	}
+}
+
+func TestTelemetryCancellationTerminalConstraints(t *testing.T) {
+	resetAppInsightsValidation()
+	t.Cleanup(resetAppInsightsValidation)
+	summary := common.ListJobSummaryResponse{JobID: common.NewJobID(), JobStatus: common.EJobStatus.Cancelled(), PercentComplete: 25}
+	constraints := cancelledTransferTelemetry("private-root")
+	registerTelemetryExpectation("cancel", summary.JobID.String(), AzCopyVerbCopy, &summary, "File", "Local", constraints)
+	expected := snapshotAppInsightsValidation().expectedAttempts
+	makeEvents := func(stage string) []observedTelemetryEvent {
+		events := []observedTelemetryEvent{
+			manifestEvent("cancel", "invocation", "azcopy.job.started"),
+			manifestEvent("cancel", "invocation", "azcopy.job.finished"),
+		}
+		for _, event := range events {
+			event.Properties["JobID"] = summary.JobID.String()
+			for key, value := range expected[0].Properties {
+				event.Properties[key] = value
+			}
+		}
+		for key, value := range expected[0].FinishedProperties {
+			events[1].Properties[key] = value
+		}
+		for key, value := range expected[0].Measurements {
+			events[1].Measurements[key] = value
+		}
+		events[1].Properties["TerminalStage"] = stage
+		return events
+	}
+	for _, stage := range []string{"enumeration", "transfer", "completion"} {
+		missing, err := checkTelemetryManifest(expected, makeEvents(stage))
+		require.NoError(t, err)
+		require.Empty(t, missing)
+	}
+	for _, stage := range []string{"", "initialization", "completed", "finalization"} {
+		_, err := checkTelemetryManifest(expected, makeEvents(stage))
+		require.ErrorContains(t, err, "unexpected terminal stage")
+	}
+	for _, key := range []string{"JobStatus", "JobErrorCategory", "JobErrorCode"} {
+		events := makeEvents("completion")
+		events[1].Properties[key] = "unexpected"
+		_, err := checkTelemetryManifest(expected, events)
+		require.ErrorContains(t, err, "terminal property "+key)
+	}
+	for _, percent := range []float64{-1, 100, 101, math.NaN(), math.Inf(1)} {
+		events := makeEvents("completion")
+		events[1].Measurements["azcopy.percent_complete"] = percent
+		_, err := checkTelemetryManifest(expected, events)
+		require.ErrorContains(t, err, "incomplete progress")
+	}
+	events := makeEvents("completion")
+	delete(events[1].Measurements, "azcopy.percent_complete")
+	_, err := checkTelemetryManifest(expected, events)
+	require.ErrorContains(t, err, "incomplete progress")
+	events = makeEvents("completion")
+	events[1].Properties["RawError"] = "private-root/file.bin"
+	_, err = checkTelemetryManifest(expected, events)
+	require.ErrorContains(t, err, "private value")
+	require.NoError(t, validateTelemetryTerminalSummary(constraints, &summary))
+	require.ErrorContains(t, validateTelemetryTerminalSummary(constraints, nil), "final summary")
+	withoutID := summary
+	withoutID.JobID = common.JobID{}
+	require.ErrorContains(t, validateTelemetryTerminalSummary(constraints, &withoutID), "job ID")
+	summary.JobStatus = common.EJobStatus.Failed()
+	require.ErrorContains(t, validateTelemetryTerminalSummary(constraints, &summary), "terminal status")
+	summary.JobStatus, summary.PercentComplete = common.EJobStatus.Cancelled(), 100
+	require.ErrorContains(t, validateTelemetryTerminalSummary(constraints, &summary), "incomplete progress")
+	require.NoError(t, validateTelemetryTerminalSummary(nil, nil))
+	require.NoError(t, validateTelemetryTerminalSummary(&telemetryExpectation{NoEvents: true}, nil))
 }
 
 func TestTelemetrySkipFailureTerminalConstraints(t *testing.T) {

@@ -24,10 +24,16 @@ func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryHNSAcct)
 	dstService := acct.GetService(svm, common.ELocation.BlobFS())
 	dstContainer := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
+	credential := ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()})
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{srcObj, dstContainer.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
+		Targets: []ResourceManager{srcObj, dstContainer.(RemoteResourceManager).WithSpecificAuthType(credential, svm, CreateAzCopyTargetOptions{})},
+		Telemetry: &telemetryExpectation{Properties: map[string]string{
+			"FromTo": "LocalBlobFS", "SourceAuthMechanism": "NotApplicable",
+			"DestAuthMechanism": common.Iff(credential == EExplicitCredentialType.SASToken(), "SAS", "OAuth"),
+			"SourceCloudType":   "", "DestCloudType": "public",
+		}},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),
@@ -60,6 +66,10 @@ func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariat
 	RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
 		Targets: []ResourceManager{srcObj, dstContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
+		Telemetry: &telemetryExpectation{Properties: map[string]string{
+			"FromTo": "LocalBlobFS", "SourceAuthMechanism": "NotApplicable", "DestAuthMechanism": "OAuth",
+			"SourceCloudType": "", "DestCloudType": "public",
+		}},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive:   pointerTo(true),

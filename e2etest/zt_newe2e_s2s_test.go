@@ -341,7 +341,19 @@ func (s *S2STestSuite) Scenario_NonOverwriteSingleFile(svm *ScenarioVariationMan
 	dstObj.Create(svm, dstBody, ObjectProperties{})
 
 	RunAzCopy(svm, AzCopyCommand{
-		Verb:    AzCopyVerbCopy,
+		Verb: AzCopyVerbCopy,
+		Telemetry: &telemetryExpectation{
+			FinishedProperties: map[string]string{
+				"JobStatus": "CompletedWithSkipped", "TerminalStage": "completed",
+				"JobErrorCategory": "", "JobErrorCode": "",
+			},
+			Measurements: map[string]float64{
+				"azcopy.transfers_total": 1, "azcopy.transfers_completed": 0,
+				"azcopy.transfers_failed": 0, "azcopy.transfers_skipped": 1,
+				"azcopy.bytes_transferred": 0,
+			},
+			ForbiddenValues: []string{srcFileName, dstFileName, "sig="},
+		},
 		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
@@ -372,6 +384,10 @@ func (s *S2STestSuite) Scenario_BlobBlobOAuth(svm *ScenarioVariationManager) {
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
+		Telemetry: &telemetryExpectation{Properties: map[string]string{
+			"FromTo": "BlobBlob", "SourceAuthMechanism": "SAS", "DestAuthMechanism": "OAuth",
+			"SourceCloudType": "public", "DestCloudType": "public",
+		}},
 		Targets: []ResourceManager{
 			srcObj,
 			dstObj.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
