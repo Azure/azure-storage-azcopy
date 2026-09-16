@@ -24,9 +24,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -37,6 +37,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 )
 
 const (
@@ -206,6 +210,243 @@ func startedSendKey(jobID, invocationID string) string {
 	return jobID + "\x00" + invocationID
 }
 
+type attemptTelemetryFinalizer struct {
+	agent        *telemetryAgent
+	dimensions   telemetry.JobDimensions
+	runID        string
+	invocationID string
+	start        time.Time
+	stage        string
+	finished     bool
+
+	summaryFn            func() (common.ListJobSummaryResponse, bool)
+	enumerationElapsedFn func() time.Duration
+	transferElapsedFn    func() time.Duration
+	shapeFn              func() sourceShapeSummary
+	finalSummary         *common.ListJobSummaryResponse
+}
+
+func newAttemptTelemetryFinalizer(agent *telemetryAgent, dimensions telemetry.JobDimensions, runID, invocationID string, start time.Time) *attemptTelemetryFinalizer {
+	return &attemptTelemetryFinalizer{
+		agent:        agent,
+		dimensions:   dimensions,
+		runID:        runID,
+		invocationID: invocationID,
+		start:        start,
+		stage:        "initialization",
+	}
+}
+
+func (f *attemptTelemetryFinalizer) startEvent() {
+	if f == nil {
+		return
+	}
+	f.agent.reportStarted(f.dimensions, f.runID, f.invocationID, f.start)
+}
+
+func (a *telemetryAgent) reportInitializationFailure(dimensions func() telemetry.JobDimensions, jobID, invocationID string, start time.Time, attemptErr error) {
+	finalizer := a.newAttempt(dimensions, jobID, invocationID, start)
+	finalizer.startEvent()
+	finalizer.finish(attemptErr)
+}
+
+func (a *telemetryAgent) newAttempt(dimensions func() telemetry.JobDimensions, jobID, invocationID string, start time.Time) (finalizer *attemptTelemetryFinalizer) {
+	finalizer = newAttemptTelemetryFinalizer(nil, telemetry.JobDimensions{}, jobID, invocationID, start)
+	if !a.isActive() {
+		return finalizer
+	}
+	defer func() { _ = recover() }()
+	collected := dimensions()
+	finalizer.dimensions = collected
+	finalizer.agent = a
+	return finalizer
+}
+
+func (f *attemptTelemetryFinalizer) setStage(stage string) {
+	if f != nil {
+		f.stage = stage
+	}
+}
+
+func (f *attemptTelemetryFinalizer) setFinalSummary(summary common.ListJobSummaryResponse) {
+	if f != nil {
+		copy := summary
+		f.finalSummary = &copy
+	}
+}
+
+func (f *attemptTelemetryFinalizer) finish(attemptErr error) {
+	if f == nil || f.finished {
+		return
+	}
+	f.finished = true
+	if !f.agent.isActive() {
+		return
+	}
+	defer func() {
+		if recover() != nil {
+			common.LogToJobLogWithPrefix("telemetry: dropped event after collection panic", common.LogWarning)
+		}
+	}()
+
+	summary := common.ListJobSummaryResponse{}
+	if f.finalSummary != nil {
+		summary = *f.finalSummary
+	} else if f.summaryFn != nil {
+		if liveSummary, ok := f.summaryFn(); ok {
+			summary = liveSummary
+		}
+	}
+	terminalStatus, terminalReason := terminalAttemptStatus(summary.JobStatus, attemptErr)
+	summary.JobStatus = terminalStatus
+	terminalStage := f.stage
+	if terminalReason == "completed" || terminalReason == "completed-with-errors" {
+		terminalStage = "completed"
+	}
+
+	enumerationElapsed := durationOrZero(f.enumerationElapsedFn)
+	transferElapsed := durationOrZero(f.transferElapsedFn)
+	shape := sourceShapeSummary{}
+	if f.shapeFn != nil {
+		shape = f.shapeFn()
+	}
+	resource := telemetry.ResourceAttributes{}
+	if f.agent != nil {
+		resource = f.agent.resource
+	}
+	event := buildFinishedEvent(resource, f.dimensions, f.runID, f.invocationID, f.start, time.Now(), summary, time.Since(f.start), enumerationElapsed, transferElapsed, shape)
+	event.TerminalStage = terminalStage
+	event.JobErrorCategory, event.JobErrorCode = jobErrorAttributes(attemptErr, terminalReason, terminalStage)
+	f.agent.reportFinished(event)
+}
+
+func durationOrZero(fn func() time.Duration) time.Duration {
+	if fn == nil {
+		return 0
+	}
+	return fn()
+}
+
+func terminalAttemptStatus(status common.JobStatus, attemptErr error) (common.JobStatus, string) {
+	if status == common.EJobStatus.Cancelled() || errors.Is(attemptErr, context.Canceled) {
+		return common.EJobStatus.Cancelled(), "cancelled"
+	}
+	if attemptErr != nil {
+		return common.EJobStatus.Failed(), "failed"
+	}
+	switch status {
+	case common.EJobStatus.CompletedWithErrors(), common.EJobStatus.CompletedWithErrorsAndSkipped():
+		return status, "completed-with-errors"
+	case common.EJobStatus.CompletedWithSkipped(), common.EJobStatus.Completed():
+		return status, "completed"
+	case common.EJobStatus.Failed():
+		return status, "failed"
+	default:
+		return common.EJobStatus.Completed(), "completed"
+	}
+}
+
+func jobErrorAttributes(attemptErr error, terminalReason, terminalStage string) (string, string) {
+	switch terminalReason {
+	case "completed", "cancelled":
+		return "", ""
+	case "completed-with-errors":
+		return "transfer", "transfer-failures"
+	}
+
+	var responseErr *azcore.ResponseError
+	if errors.As(attemptErr, &responseErr) {
+		code := sanitizeJobErrorCode(responseErr.ErrorCode)
+		if code == "" && responseErr.StatusCode > 0 {
+			code = "http-" + strconv.Itoa(responseErr.StatusCode)
+		}
+		if code == "" {
+			code = "storage-service-error"
+		}
+		return responseErrorCategory(responseErr.ErrorCode, responseErr.StatusCode), code
+	}
+
+	if errors.Is(attemptErr, context.DeadlineExceeded) {
+		return "timeout", "context-deadline-exceeded"
+	}
+	var pathErr *os.PathError
+	if errors.As(attemptErr, &pathErr) {
+		return "local-io", "local-path-error"
+	}
+	var urlErr *url.Error
+	if errors.As(attemptErr, &urlErr) {
+		if urlErr.Timeout() {
+			return "timeout", "network-timeout"
+		}
+		return "network", "network-error"
+	}
+	var networkErr net.Error
+	if errors.As(attemptErr, &networkErr) {
+		if networkErr.Timeout() {
+			return "timeout", "network-timeout"
+		}
+		return "network", "network-error"
+	}
+	var azErr common.AzError
+	if errors.As(attemptErr, &azErr) {
+		return "azcopy", "azcopy-" + strconv.FormatUint(azErr.ErrorCode(), 10)
+	}
+
+	switch terminalStage {
+	case "initialization", "enumeration", "transfer", "completion":
+		return terminalStage, terminalStage + "-error"
+	default:
+		return "unknown", "job-failed"
+	}
+}
+
+func responseErrorCategory(errorCode string, statusCode int) string {
+	switch strings.ToLower(errorCode) {
+	case "authenticationfailed", "invalidauthenticationinfo", "noauthenticationinformation":
+		return "authentication"
+	case "authorizationfailure", "authorizationpermissionmismatch":
+		return "authorization"
+	case "serverbusy":
+		return "throttling"
+	case "operationtimedout":
+		return "timeout"
+	}
+
+	switch statusCode {
+	case 401:
+		return "authentication"
+	case 403:
+		return "authorization"
+	case 404:
+		return "not-found"
+	case 408:
+		return "timeout"
+	case 409, 412:
+		return "conflict"
+	case 429, 503:
+		return "throttling"
+	}
+	if statusCode >= 500 {
+		return "service"
+	}
+	return "service"
+}
+
+func sanitizeJobErrorCode(code string) string {
+	code = strings.TrimSpace(code)
+	if code == "" || len(code) > 64 {
+		return ""
+	}
+	for _, char := range code {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return ""
+	}
+	return code
+}
+
 // reportCommand queues a single command.invoked event without delaying command
 // execution. Best-effort; no-op when disabled.
 func (a *telemetryAgent) reportCommand(command, runID, invocationID string, options telemetry.OptionAttributes) {
@@ -349,6 +590,10 @@ func (a *telemetryAgent) sendSafely(ctx context.Context, evt telemetry.MetricEve
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Resource attributes (host probe)
+// ---------------------------------------------------------------------------
+
 func buildResourceAttributes() telemetry.ResourceAttributes {
 	hw := probeHostHardware()
 
@@ -463,6 +708,10 @@ func detectInvocationContext(getenv func(string) string) string {
 	}
 	return "interactive"
 }
+
+// ---------------------------------------------------------------------------
+// Job dimensions
+// ---------------------------------------------------------------------------
 
 func baseJobDimensions(command string, fromTo common.FromTo, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
 	return telemetry.JobDimensions{
@@ -723,6 +972,10 @@ func syncJobDimensions(o *cookedSyncOptions, srcCredType, dstCredType common.Cre
 	d.Options = o.telemetryOptions.Clone()
 	return d
 }
+
+// ---------------------------------------------------------------------------
+// Finished event
+// ---------------------------------------------------------------------------
 
 func buildFinishedEvent(resource telemetry.ResourceAttributes, dims telemetry.JobDimensions, runID, invocationID string, start, end time.Time, summary common.ListJobSummaryResponse, elapsed, enumerationElapsed, transferElapsed time.Duration, shape sourceShapeSummary) telemetry.JobFinishedEvent {
 	jobDurationSeconds := elapsed.Seconds()
