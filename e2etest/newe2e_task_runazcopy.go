@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -129,7 +131,10 @@ type AzCopyCommand struct {
 	// If Stdout is nil, a sensible default is picked in place.
 	Stdout AzCopyStdout
 
-	ShouldFail bool
+	ShouldFail       bool
+	Timeout          time.Duration
+	WorkingDirectory string
+	Telemetry        *telemetryExpectation
 
 	// AfterStart, if non-nil, is called after the azcopy process has been
 	// started but before Wait.  The callback receives the process's stdin
@@ -152,7 +157,12 @@ type AzCopyEnvironment struct {
 	AzureTenantId           *string `env:"AZURE_TENANT_ID"`
 	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
-	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
+	LoginCacheName            *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
+	DisableTelemetry          *bool   `env:"AZCOPY_DISABLE_TELEMETRY"`
+	TelemetryConnectionString *string `env:"AZCOPY_TELEMETRY_CONNECTION_STRING"`
+	UserProfile               *string `env:"USERPROFILE"`
+	Home                      *string `env:"HOME"`
+	NoProxy                   *string `env:"NO_PROXY"`
 
 	// InheritEnvironment is a lowercase list of environment variables to always inherit.
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
@@ -180,12 +190,13 @@ func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 }
 
 var RunAzCopyDefaultInheritEnvironment = map[string]bool{
-	"path":             true,
-	"home":             true,
-	"userprofile":      true,
-	"homepath":         true,
-	"homedrive":        true,
-	"azure_config_dir": true,
+	"path":                               true,
+	"home":                               true,
+	"userprofile":                        true,
+	"homepath":                           true,
+	"homedrive":                          true,
+	"azure_config_dir":                   true,
+	"azcopy_telemetry_connection_string": true,
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
@@ -332,6 +343,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.HelperMarker().Helper()
 	var flagMap map[string]string
 	var envMap map[string]string
+	var targetArgs []string
 
 	// we have no need to update our context manager, Fetch should do it for us.
 	envCtx := FetchAzCopyEnvironmentContext(a)
@@ -363,7 +375,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		for _, v := range commandSpec.Targets {
-			out = append(out, commandSpec.applyTargetAuth(a, v))
+			target := commandSpec.applyTargetAuth(a, v)
+			targetArgs = append(targetArgs, target)
+			out = append(out, target)
 		}
 
 		if commandSpec.Flags == nil {
@@ -414,15 +428,14 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 		if commandSpec.Environment.InheritEnvironment != nil {
 			ieMap := commandSpec.Environment.InheritEnvironment
-			if ieMap["*"] {
-				out = append(out, os.Environ()...)
-			} else {
-				for _, v := range os.Environ() {
-					key := v[:strings.Index(v, "=")]
-
-					if ieMap[strings.ToLower(key)] {
-						out = append(out, v)
-					}
+			configured := make(map[string]bool, len(envMap))
+			for key := range envMap {
+				configured[strings.ToLower(key)] = true
+			}
+			for _, v := range os.Environ() {
+				key := strings.ToLower(v[:strings.Index(v, "=")])
+				if (ieMap["*"] || ieMap[key]) && !configured[key] {
+					out = append(out, v)
 				}
 			}
 		}
@@ -503,14 +516,37 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	stderr := &bytes.Buffer{}
-	command := exec.Cmd{
-		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
-		Args: args,
-		Env:  env,
-
-		Stdout: out, // todo
-		Stderr: stderr,
+	processRunID := ""
+	if AppInsightsTelemetryValidationEnabled() {
+		env, processRunID = telemetryProcessEnvironment(env, snapshotAppInsightsValidation().runID)
 	}
+	jobIDCapture := newAzCopyJobIDCapture(out)
+	jobIDCapture.firstJobOnly = commandSpec.Verb == AzCopyVerbBenchmark
+
+	var releaseStartup func()
+	if needsAzCLIStartupGate(runtime.GOOS, envMap["AZCOPY_AUTO_LOGIN_TYPE"], isLaunchedByDebugger) {
+		var gateErr error
+		if releaseStartup, gateErr = acquireAzCLIStartup(a.Context(), azCLIStartupSlot, time.Minute); gateErr != nil {
+			a.Log("starting AzCopy without the AzCLI startup slot: %v", gateErr)
+		} else {
+			defer releaseStartup()
+			jobIDCapture.onJobID = releaseStartup
+		}
+	}
+
+	processContext := a.Context()
+	if commandSpec.Timeout > 0 {
+		var cancel context.CancelFunc
+		processContext, cancel = context.WithTimeout(processContext, commandSpec.Timeout)
+		defer cancel()
+	}
+	// Absolute, so neither a PATH lookup nor command.Dir changes which binary runs.
+	executablePath, err := filepath.Abs(GlobalConfig.AzCopyExecutableConfig.ExecutablePath)
+	a.NoError("resolve AzCopy executable path", err, true)
+	command := exec.CommandContext(processContext, executablePath)
+	command.Args, command.Env = args, env
+	command.Dir = commandSpec.WorkingDirectory
+	command.Stdout, command.Stderr = jobIDCapture, stderr
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
 
@@ -526,6 +562,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+	if releaseStartup != nil {
+		releaseStartup()
+	}
+	a.NoError("CLI must exit before its harness deadline", processContext.Err())
 
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
@@ -540,6 +580,46 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		Stdout: out.String(),
 		Stderr: stderr.String(),
 	})
+
+	a.NoError("validate explicit terminal scenario summary", validateTelemetryTerminalSummary(commandSpec.Telemetry, jobIDCapture.FinalSummary()))
+	if commandSpec.Telemetry != nil && commandSpec.Telemetry.DeliveryFailureExpected {
+		jobID := jobIDCapture.JobID()
+		a.AssertNow("delivery-failure scenario must produce a job ID", Not{Empty{}}, jobID)
+		jobLog, logErr := os.Open(filepath.Join(*commandSpec.Environment.LogLocation, jobID+".log"))
+		a.NoError("read telemetry delivery-failure evidence", logErr, true)
+		if logErr == nil {
+			evidence := collectTelemetryDeliveryEvidence(jobLog)
+			_ = jobLog.Close()
+			a.NoError("telemetry must stop after unreachable ingestion", validateTelemetryDeliveryFailure(evidence))
+		}
+	}
+	validationDecision := decideAppInsightsJobValidation(
+		commandSpec.Verb,
+		flagMap,
+		commandSpec.ShouldFail,
+		jobIDCapture.JobID())
+	noTelemetryExpected := telemetryExpectsNoEvents(commandSpec.Verb, flagMap, env)
+	noTelemetryExpected = noTelemetryExpected || (commandSpec.Telemetry != nil && commandSpec.Telemetry.NoEvents)
+	if noTelemetryExpected {
+		validationDecision = appInsightsJobValidationDecision{}
+	}
+	if AppInsightsTelemetryValidationEnabled() && validationDecision.missingJobID {
+		a.NoError("capture AzCopy job ID for Application Insights validation",
+			fmt.Errorf("AzCopy %s output did not contain a valid job ID", commandSpec.Verb))
+	}
+	if AppInsightsTelemetryValidationEnabled() {
+		if noTelemetryExpected {
+			registerNoTelemetryExpectation(processRunID)
+		} else if commandSpec.Telemetry != nil && commandSpec.Telemetry.CommandOnly {
+			registerCommandTelemetryExpectation(processRunID, commandSpec.Verb, commandSpec.Telemetry)
+		} else if validationDecision.jobID != "" {
+			sourceType, destType, endpointErr := telemetryEndpointTypes(targetArgs, flagMap)
+			a.NoError("derive telemetry endpoint types from CLI inputs", endpointErr)
+			registerTelemetryExpectation(processRunID, validationDecision.jobID, commandSpec.Verb, jobIDCapture.FinalSummary(), sourceType, destType, commandSpec.Telemetry)
+			logTelemetryDeliveryEvidence(a, processRunID, validationDecision.jobID,
+				filepath.Join(*commandSpec.Environment.LogLocation, validationDecision.jobID+".log"))
+		}
+	}
 
 	return out, &AzCopyJobPlan{}
 }
