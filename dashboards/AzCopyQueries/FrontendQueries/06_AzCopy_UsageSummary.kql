@@ -1,0 +1,16 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Shared selected-range summary for Data and Customer Drilldown dashboards.') AzCopy_UsageSummary(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | summarize
+        BytesTransferred = sum(BytesTransferred),
+        SuccessfulBytes = sumif(BytesTransferred, IsSuccess),
+        Jobs = sum(Jobs), SuccessfulJobs = sumif(Jobs, IsSuccess), FailedJobs = sumif(Jobs, IsFailure),
+        CancelledJobs = sumif(Jobs, JobStatus == 'Cancelled'),
+        ObjectsCompleted = sum(ObjectsCompleted), Attempts = sum(Attempts),
+        Installations = dcount(InstallationID), Customers = dcountif(CustomerKey, IsMapped),
+        Subscriptions = dcountif(SubscriptionId, SubscriptionId != 'unmapped'),
+        SourceTypes = dcount(SourceType), TargetTypes = dcount(TargetType),
+        MappedBytes = sumif(BytesTransferred, IsMapped), UnmappedBytes = sumif(BytesTransferred, not(IsMapped)),
+        FirstSeen = min(SliceDate), LastSeen = max(SliceDate), LastRefresh = max(LastRefresh)
+    | extend MappingCoveragePct = iff(BytesTransferred > 0, 100.0 * MappedBytes / BytesTransferred, real(null))
+}

@@ -1,0 +1,16 @@
+// Visual: Time chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name in (
+    'azcopy.objects_scheduled',
+    'azcopy.regular_files_scheduled',
+    'azcopy.symlinks_scheduled',
+    'azcopy.hardlinks_converted_scheduled',
+    'azcopy.folder_properties_scheduled')
+| summarize Objects = sum(value) by bin(timestamp, 1h), Metric = name
+| order by timestamp asc

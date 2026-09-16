@@ -1,0 +1,8 @@
+// Visual: Time chart
+// Received telemetry values.
+customEvents
+| where name startswith 'azcopy.'
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.command.invoked', 'azcopy.job.started', 'azcopy.job.finished')
+| summarize Value = count() by bin(timestamp, 1h), Metric = name
+| order by timestamp asc

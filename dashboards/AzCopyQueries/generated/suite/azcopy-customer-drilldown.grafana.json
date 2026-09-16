@@ -1,0 +1,1896 @@
+{
+  "id": null,
+  "uid": "azcopy-customer-drilldown",
+  "title": "AzCopy Customer Drilldown",
+  "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+  "version": 1,
+  "schemaVersion": 42,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 3,
+  "editable": true,
+  "refresh": "",
+  "tags": [
+    "azcopy",
+    "telemetry",
+    "saved-queries"
+  ],
+  "links": [
+    {
+      "keepTime": true,
+      "title": "AzCopy Data Metrics",
+      "url": "/d/azcopy-data-metrics",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customer Drilldown",
+      "url": "/d/azcopy-customer-drilldown",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Recurring Customer Trends",
+      "url": "/d/azcopy-recurring-trends",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    },
+    {
+      "keepTime": true,
+      "title": "AzCopy Customers with No Observed Success",
+      "url": "/d/azcopy-no-observed-success",
+      "includeVars": true,
+      "targetBlank": false,
+      "type": "link"
+    }
+  ],
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-Customer",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "Customer",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'Customer' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "Customer",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1,
+        "description": ""
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SubscriptionId",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SubscriptionId",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SubscriptionId' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SubscriptionId",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1,
+        "description": ""
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-SourceType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "SourceType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "SourceType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1,
+        "description": "SourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types."
+      },
+      {
+        "hide": 0,
+        "query": {
+          "database": "usage-analytics",
+          "refId": "Variable-TargetType",
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue"
+        },
+        "options": [],
+        "multi": true,
+        "current": {
+          "selected": true,
+          "value": [
+            "$__all"
+          ],
+          "text": [
+            "All"
+          ]
+        },
+        "name": "TargetType",
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+        "refresh": 1,
+        "includeAll": true,
+        "type": "query",
+        "label": "TargetType",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "skipUrlSync": false,
+        "sort": 1,
+        "description": "TargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo."
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 33,
+      "title": "Customer and subscription details",
+      "type": "row",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 0,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1,
+      "title": "Customer names",
+      "type": "table",
+      "gridPos": {
+        "w": 14,
+        "x": 0,
+        "y": 1,
+        "h": 6
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_CustomerSubscriptions($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Customer, CustomerKey",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "title": "Observed properties",
+      "type": "table",
+      "gridPos": {
+        "w": 10,
+        "x": 14,
+        "y": 1,
+        "h": 21
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.\n\nTargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_CustomerSubscriptions($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Customer, CustomerKey, SubscriptionId, Sources, Targets, Scenarios, FirstSeen, LastSeen, LastRefresh",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "title": "Subscriptions",
+      "type": "table",
+      "gridPos": {
+        "w": 14,
+        "x": 0,
+        "y": 7,
+        "h": 15
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_CustomerSubscriptions($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Customer, CustomerKey, SubscriptionId, BytesTransferred, Jobs, Installations",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "title": "Customer activity",
+      "type": "row",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 22,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 26,
+      "title": "Total data transferred",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 0,
+        "y": 23,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 21,
+      "title": "Observed installations",
+      "type": "stat",
+      "gridPos": {
+        "w": 3,
+        "x": 6,
+        "y": 23,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Installations",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 22,
+      "title": "Logical jobs",
+      "type": "stat",
+      "gridPos": {
+        "w": 3,
+        "x": 9,
+        "y": 23,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Jobs",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 38,
+      "title": "Successful logical jobs",
+      "type": "stat",
+      "gridPos": {
+        "w": 3,
+        "x": 12,
+        "y": 23,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project SuccessfulJobs",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 25,
+      "title": "Failed logical jobs",
+      "type": "stat",
+      "gridPos": {
+        "w": 3,
+        "x": 15,
+        "y": 23,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project FailedJobs",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Subscriptions",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 18,
+        "y": 23,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Subscriptions",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 28,
+      "title": "Data transferred (last 7 calendar days)",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 0,
+        "y": 28,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary(startofday(ago(6d)), now(), dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "title": "Completed objects",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 6,
+        "y": 28,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project ObjectsCompleted",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "title": "Observed attempts",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 12,
+        "y": 28,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project Attempts",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "Cancelled logical jobs",
+      "type": "stat",
+      "gridPos": {
+        "w": 6,
+        "x": 18,
+        "y": 28,
+        "h": 5
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageSummary($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json})) | project CancelledJobs",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Activity (data transferred)",
+      "type": "barchart",
+      "gridPos": {
+        "w": 12,
+        "x": 0,
+        "y": 33,
+        "h": 10
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Activity($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'day') | project Period, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 35,
+      "title": "Activity by source-target pair",
+      "type": "barchart",
+      "gridPos": {
+        "w": 12,
+        "x": 12,
+        "y": 33,
+        "h": 10
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.\n\nTargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Breakdown($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'topology') | project Category, BytesTransferred",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Activity (completed objects)",
+      "type": "barchart",
+      "gridPos": {
+        "w": 12,
+        "x": 0,
+        "y": 43,
+        "h": 10
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Activity($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'day') | project Period, ObjectsCompleted",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Activity (logical jobs)",
+      "type": "barchart",
+      "gridPos": {
+        "w": 12,
+        "x": 12,
+        "y": 43,
+        "h": 10
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_Activity($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'day') | project Period, Jobs",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "showValue": "auto",
+        "xTickLabelRotation": -30,
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 34,
+      "title": "Engineering metrics",
+      "type": "row",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 53,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "title": "Failed daily job activity",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 54,
+        "h": 9
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.\n\nTargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageDetails($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'failure')",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "title": "Successful daily job activity",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 63,
+        "h": 9
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.\n\nTargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageDetails($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'success')",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "title": "Recent daily job activity",
+      "type": "table",
+      "gridPos": {
+        "w": 24,
+        "x": 0,
+        "y": 72,
+        "h": 11
+      },
+      "description": "Storage Mover customer/subscription sections adapted to enriched daily AzCopy activity. Installations are pseudonymous, not registered agents. Recent/outcome tables contain daily aggregates rather than individual job records.\n\nTargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.",
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "pluginVersion": "12.4.6",
+      "targets": [
+        {
+          "query": "AzCopy_UsageDetails($__timeFrom, $__timeTo, dynamic(${Customer:json}), dynamic(${SubscriptionId:json}), dynamic(${SourceType:json}), dynamic(${TargetType:json}), 'all')",
+          "refId": "A",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "resultFormat": "table"
+        }
+      ],
+      "options": {
+        "sortBy": [],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "enablePagination": true
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true,
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "align": "auto"
+          },
+          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": ""
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "value": "decbytes",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*Bytes.*",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": "dateTimeAsIso",
+                "id": "unit"
+              }
+            ],
+            "matcher": {
+              "options": ".*(Seen|Date|Refresh)$",
+              "id": "byRegexp"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "Customer",
+              "id": "byName"
+            }
+          },
+          {
+            "properties": [
+              {
+                "value": [
+                  {
+                    "title": "Subscription drilldown",
+                    "targetBlank": false,
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=$__all&var-SubscriptionId=${__data.fields.SubscriptionId:percentencode}&var-SourceType=$__all&var-TargetType=$__all"
+                  }
+                ],
+                "id": "links"
+              }
+            ],
+            "matcher": {
+              "options": "SubscriptionId",
+              "id": "byName"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 39,
+      "title": "Field definitions",
+      "description": "",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 83.0,
+        "w": 24,
+        "h": 18
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**SourceType**\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.\n\n**DestType**\n\nDestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\n**TargetType**\n\nTargetType is the aggregate alias of DestType; Targets lists the observed destination backend types. DestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo."
+      }
+    }
+  ]
+}
