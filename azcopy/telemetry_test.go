@@ -21,9 +21,12 @@
 package azcopy
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/stretchr/testify/assert"
@@ -752,6 +756,77 @@ func TestTelemetryBuildsUseEmbeddedDefault(t *testing.T) {
 		assert.NotContains(t, string(contents), "azcopy.telemetryConnectionString", path)
 		assert.NotContains(t, string(contents), "AZCOPY_TELEMETRY_CONNECTION_STRING_PROD", path)
 	}
+}
+
+func TestTerminalAttemptStatus(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      common.JobStatus
+		err         error
+		wantStatus  common.JobStatus
+		wantOutcome attemptOutcome
+	}{
+		{"completed", common.EJobStatus.Completed(), nil, common.EJobStatus.Completed(), outcomeCompleted},
+		{"completed with errors", common.EJobStatus.CompletedWithErrors(), nil, common.EJobStatus.CompletedWithErrors(), outcomeCompletedWithErrors},
+		{"failed error", common.EJobStatus.InProgress(), errors.New("failed"), common.EJobStatus.Failed(), outcomeFailed},
+		{"cancelled context", common.EJobStatus.InProgress(), context.Canceled, common.EJobStatus.Cancelled(), outcomeCancelled},
+		{"cancelled summary", common.EJobStatus.Cancelled(), nil, common.EJobStatus.Cancelled(), outcomeCancelled},
+		{"missing success summary", common.EJobStatus.InProgress(), nil, common.EJobStatus.Completed(), outcomeCompleted},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			status, outcome := terminalAttemptStatus(test.status, test.err)
+			assert.Equal(t, test.wantStatus, status)
+			assert.Equal(t, test.wantOutcome, outcome)
+		})
+	}
+}
+
+func TestJobErrorAttributes(t *testing.T) {
+	tests := []struct {
+		name         string
+		err          error
+		outcome      attemptOutcome
+		stage        attemptStage
+		wantCategory string
+		wantCode     string
+	}{
+		{"success", nil, outcomeCompleted, attemptStageCompleted, "", ""},
+		{"cancelled", context.Canceled, outcomeCancelled, attemptStageEnumeration, "", ""},
+		{"partial success", nil, outcomeCompletedWithErrors, attemptStageCompleted, "transfer", "transfer-failures"},
+		{"authentication", &azcore.ResponseError{ErrorCode: "AuthenticationFailed", StatusCode: 403}, outcomeFailed, attemptStageEnumeration, "authentication", "AuthenticationFailed"},
+		{"authorization", &azcore.ResponseError{ErrorCode: "AuthorizationPermissionMismatch", StatusCode: 403}, outcomeFailed, attemptStageTransfer, "authorization", "AuthorizationPermissionMismatch"},
+		{"throttling", &azcore.ResponseError{ErrorCode: "ServerBusy", StatusCode: 503}, outcomeFailed, attemptStageTransfer, "throttling", "ServerBusy"},
+		{"http fallback", &azcore.ResponseError{StatusCode: 404}, outcomeFailed, attemptStageEnumeration, "not-found", "http-404"},
+		{"invalid request", &azcore.ResponseError{ErrorCode: "InvalidQueryParameterValue", StatusCode: 400}, outcomeFailed, attemptStageEnumeration, "request", "InvalidQueryParameterValue"},
+		{"deadline", context.DeadlineExceeded, outcomeFailed, attemptStageTransfer, "timeout", "context-deadline-exceeded"},
+		{"local path", &os.PathError{Op: "open", Path: "secret", Err: os.ErrNotExist}, outcomeFailed, attemptStageEnumeration, "local-io", "local-path-error"},
+		{"network", &url.Error{Op: "Get", URL: "https://secret", Err: errors.New("connection refused")}, outcomeFailed, attemptStageTransfer, "network", "network-error"},
+		{"azcopy", common.EAzError.InvalidServiceClient(), outcomeFailed, attemptStageInitialization, "azcopy", "azcopy-4"},
+		{"stage fallback", errors.New("contains sensitive text"), outcomeFailed, attemptStageEnumeration, "enumeration", "enumeration-error"},
+		{"unknown fallback", errors.New("contains sensitive text"), outcomeFailed, attemptStageCompleted, "unknown", "job-failed"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			category, code := jobErrorAttributes(test.err, test.outcome, test.stage)
+			assert.Equal(t, test.wantCategory, category.String())
+			assert.Equal(t, test.wantCode, code)
+		})
+	}
+}
+
+func TestAttemptTelemetryWireValues(t *testing.T) {
+	assert.Equal(t, [...]string{"initialization", "enumeration", "transfer", "completion", "completed"}, attemptStageNames)
+	assert.Equal(t, [...]string{"", "initialization", "enumeration", "transfer", "completion", "authentication", "authorization",
+		"not-found", "conflict", "throttling", "timeout", "request", "service", "network", "local-io", "azcopy", "unknown"}, jobErrorCategoryNames)
+	assert.Empty(t, attemptStage(len(attemptStageNames)).String())
+	assert.Empty(t, jobErrorCategory(len(jobErrorCategoryNames)).String())
+}
+
+func TestSanitizeJobErrorCode(t *testing.T) {
+	assert.Equal(t, "AuthorizationPermissionMismatch", sanitizeJobErrorCode(" AuthorizationPermissionMismatch "))
+	assert.Empty(t, sanitizeJobErrorCode("code with spaces"))
+	assert.Empty(t, sanitizeJobErrorCode(strings.Repeat("a", 65)))
 }
 
 func TestDisabledAgentIsNoop(t *testing.T) {
