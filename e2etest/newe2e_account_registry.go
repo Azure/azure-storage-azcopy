@@ -65,20 +65,20 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	switch accountType { // https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal#storage-account-type-parameters
 	case EAccountType.Standard():
 		accountARMDefinition.Kind = service.AccountKindStorageV2
-		accountARMDefinition.Sku = ARMStorageAccountSKUStandardLRS
+		accountARMDefinition.Sku = ARMStorageAccountSKUStandardZRS
 	case EAccountType.HierarchicalNamespaceEnabled():
 		accountARMDefinition.Kind = service.AccountKindStorageV2
-		accountARMDefinition.Sku = ARMStorageAccountSKUStandardLRS
+		accountARMDefinition.Sku = ARMStorageAccountSKUStandardZRS
 		accountARMDefinition.Properties.IsHnsEnabled = pointerTo(true)
 	case EAccountType.PremiumBlockBlobs():
 		accountARMDefinition.Kind = service.AccountKindBlockBlobStorage
-		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumLRS
+		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumZRS
 	case EAccountType.PremiumFileShares():
 		accountARMDefinition.Kind = service.AccountKindFileStorage
-		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumLRS
+		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumZRS
 	case EAccountType.PremiumPageBlobs():
 		accountARMDefinition.Kind = service.AccountKindStorageV2
-		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumLRS
+		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumZRS
 	default:
 		a.Error(fmt.Sprintf("%s is not currently supported for account creation", accountType))
 	}
