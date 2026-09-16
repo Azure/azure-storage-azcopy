@@ -1,0 +1,10 @@
+// Visual: Column chart
+customEvents
+| where name startswith 'azcopy.'
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend NumericValue = toint(customDimensions.HostNumCPU)
+| extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', tostring(NumericValue))
+| summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))
+| order by SortValue asc
+| project Value, Attempts

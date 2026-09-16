@@ -1,0 +1,10 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Shared usage distributions by topology, source, target, command, status, or customer mapping coverage.') AzCopy_Breakdown(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic, dimension:string)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | extend Category = case(dimension == 'source', SourceType, dimension == 'target', TargetType,
+        dimension == 'command', Command, dimension == 'status', JobStatus,
+        dimension == 'mapping', iff(IsMapped, 'Mapped customer', 'Unmapped customer'), FromTo)
+    | summarize BytesTransferred = sum(BytesTransferred), ObjectsCompleted = sum(ObjectsCompleted), Jobs = sum(Jobs),
+        Installations = dcount(InstallationID), FailedJobs = sumif(Jobs, IsFailure) by Category
+    | order by BytesTransferred desc, Category asc
+}

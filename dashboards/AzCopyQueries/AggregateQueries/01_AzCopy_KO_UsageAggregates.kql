@@ -1,0 +1,142 @@
+.create-or-alter function with (
+    folder = 'AzCopyQueries',
+    docstring = 'Produces Storage Mover-style daily AzCopy usage aggregates for a requested reporting range. The source adapter is replaced during deployment.',
+    skipvalidation = 'true'
+) AzCopy_KO_UsageAggregates(startTime:datetime, endTime:datetime)
+{
+    let AttemptLookback = 30d;
+    let Attempts = materialize(
+        __APP_INSIGHTS_CUSTOM_EVENTS__
+        | where timestamp >= startTime - AttemptLookback and timestamp < max_of(endTime, now() + 1m)
+        | where name == 'azcopy.job.finished'
+        | where tostring(customDimensions.SchemaVersion) in ('1', '3')
+        | extend
+            JobIDValue = tostring(customDimensions.JobID),
+            InvocationIDValue = tostring(customDimensions.InvocationID),
+            InstallationIDValue = tostring(customDimensions.InstallationID),
+            CommandValue = tostring(customDimensions.Command),
+            FromToValue = tostring(customDimensions.FromTo),
+            SourceTypeValue = tostring(customDimensions.SourceType),
+            TargetTypeValue = tostring(customDimensions.DestType),
+            JobStatusValue = tostring(customDimensions.JobStatus),
+            SourceAccountValue = tolower(tostring(customDimensions.SourceStorageAccount)),
+            TargetAccountValue = tolower(tostring(customDimensions.DestStorageAccount)),
+            BytesTransferredValue = todouble(customMeasurements['azcopy.bytes_transferred']),
+            ObjectsCompletedValue = todouble(customMeasurements['azcopy.objects_completed'])
+        | where isnotempty(InstallationIDValue)
+        | extend
+            JobIDValue = iif(isempty(JobIDValue), InvocationIDValue, JobIDValue),
+            InvocationIDValue = iif(isempty(InvocationIDValue), strcat(JobIDValue, ':', tostring(timestamp)), InvocationIDValue)
+        | summarize arg_max(timestamp, *) by InvocationIDValue
+        | project
+            EndTime = timestamp,
+            JobID = JobIDValue,
+            InstallationID = InstallationIDValue,
+            Command = iif(isempty(CommandValue), 'unknown', CommandValue),
+            FromTo = iif(isempty(FromToValue), 'unknown', FromToValue),
+            SourceType = iif(isempty(SourceTypeValue), 'unknown', SourceTypeValue),
+            TargetType = iif(isempty(TargetTypeValue), 'unknown', TargetTypeValue),
+            JobStatus = iif(isempty(JobStatusValue), 'unknown', JobStatusValue),
+            SourceAccount = SourceAccountValue,
+            TargetAccount = TargetAccountValue,
+            BytesTransferred = coalesce(BytesTransferredValue, 0.0),
+            ObjectsCompleted = coalesce(ObjectsCompletedValue, 0.0)
+    );
+    let LogicalJobs = materialize(
+        Attempts
+        | summarize
+            arg_max(EndTime, InstallationID, Command, FromTo, SourceType, TargetType, JobStatus, SourceAccount, TargetAccount),
+            OriginalCommand = take_anyif(Command, Command != 'jobs.resume'),
+            BytesTransferred = max(BytesTransferred),
+            ObjectsCompleted = max(ObjectsCompleted),
+            AttemptCount = count()
+          by JobID
+        | where EndTime >= startTime and EndTime < endTime
+        | extend
+            Command = iif(isempty(OriginalCommand), Command, OriginalCommand),
+            CustomerAccount = case(
+                TargetType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(TargetAccount), TargetAccount,
+                SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(SourceAccount), SourceAccount,
+                ''),
+            SliceDate = startofday(EndTime),
+            ExecutionTime = now()
+    );
+    let AccountDays = materialize(
+        LogicalJobs
+        | where isnotempty(CustomerAccount)
+        | distinct SliceDate, Account = CustomerAccount
+    );
+    let AccountSet = toscalar(AccountDays | summarize make_set(Account, 100000));
+    let HistoricalAccountOwnership = materialize(
+        AccountDays
+        | join kind=inner hint.remote=right hint.strategy=broadcast (
+            __XSTORE_ACCOUNT_PROPERTIES__
+            | where TimePeriod between ((startofday(startTime) - 3d) .. startofday(endTime))
+            | extend Account = tolower(AccountNameWithoutVersion)
+            | where Account in (AccountSet)
+            | project Account, OwnershipSnapshot = TimePeriod, SubscriptionId = tolower(Subscription)
+            | extend CandidateDays = range(startofday(OwnershipSnapshot), startofday(OwnershipSnapshot) + 3d, 1d)
+            | mv-expand SliceDate = CandidateDays to typeof(datetime)
+            | where SliceDate between (startofday(startTime) .. startofday(endTime))
+        ) on SliceDate, Account
+        | summarize arg_max(OwnershipSnapshot, SubscriptionId) by SliceDate, Account
+    );
+    let SubscriptionSet = toscalar(
+        HistoricalAccountOwnership
+        | where isnotempty(SubscriptionId)
+        | summarize make_set(SubscriptionId, 100000)
+    );
+    let CustomerInventory = materialize(
+        __AIPDD_SUBSCRIPTION_SNAPSHOT__
+        | where isnotnull(SubscriptionGuid)
+        | extend SubscriptionId = tolower(tostring(SubscriptionGuid))
+        | where SubscriptionId in (SubscriptionSet)
+                | extend
+                        CustomerKey = tostring(TPID),
+                        CustomerName = tostring(TPName),
+                        FriendlySubscriptionNameValue = tostring(FriendlySubscriptionName),
+                        SnapshotTime = todatetime(AI_UpdatedAt)
+        | summarize arg_max(
+                        SnapshotTime,
+                        CustomerKey,
+                        CustomerName,
+                        FriendlySubscriptionNameValue)
+          by SubscriptionId
+                | project SubscriptionId, CustomerKey, CustomerName, FriendlySubscriptionName = FriendlySubscriptionNameValue
+    );
+    let EnrichedJobs = materialize(
+        LogicalJobs
+        | join kind=leftouter HistoricalAccountOwnership
+            on SliceDate, $left.CustomerAccount == $right.Account
+        | project-away Account, SliceDate1
+        | join kind=leftouter CustomerInventory on SubscriptionId
+        | project-away SubscriptionId1
+        | extend
+            CustomerKey = case(
+                isnotempty(CustomerKey), CustomerKey,
+                isnotempty(SubscriptionId), SubscriptionId,
+                'unmapped'),
+            CustomerName = case(
+                isnotempty(CustomerName), CustomerName,
+                isnotempty(FriendlySubscriptionName), FriendlySubscriptionName,
+                isnotempty(SubscriptionId), strcat('Customer unavailable (', SubscriptionId, ')'),
+                'Unmapped customer'),
+            SubscriptionId = iif(isempty(SubscriptionId), 'unmapped', SubscriptionId)
+    );
+    union
+        (EnrichedJobs
+        | project InstallationID, Command, FromTo, SourceType, TargetType, JobStatus,
+            Count = BytesTransferred, Name = 'JobRunBytesTransferred', SliceDate, ExecutionTime, CustomerKey, CustomerName, SubscriptionId),
+        (EnrichedJobs
+        | project InstallationID, Command, FromTo, SourceType, TargetType, JobStatus,
+            Count = 1.0, Name = 'JobRunResourcesCreated', SliceDate, ExecutionTime, CustomerKey, CustomerName, SubscriptionId),
+        (EnrichedJobs
+        | project InstallationID, Command, FromTo, SourceType, TargetType, JobStatus,
+            Count = ObjectsCompleted, Name = 'JobRunObjectsCompleted', SliceDate, ExecutionTime, CustomerKey, CustomerName, SubscriptionId),
+        (EnrichedJobs
+        | project InstallationID, Command, FromTo, SourceType, TargetType, JobStatus,
+            Count = todouble(AttemptCount), Name = 'JobRunAttempts', SliceDate, ExecutionTime, CustomerKey, CustomerName, SubscriptionId)
+        | summarize Count = sum(Count), ExecutionTime = max(ExecutionTime)
+      by InstallationID, Command, FromTo, SourceType, TargetType, JobStatus, Name, SliceDate, CustomerKey, CustomerName, SubscriptionId
+    | project InstallationID, Command, FromTo, SourceType, TargetType, JobStatus, Count, Name, SliceDate, ExecutionTime, CustomerKey, CustomerName, SubscriptionId
+}

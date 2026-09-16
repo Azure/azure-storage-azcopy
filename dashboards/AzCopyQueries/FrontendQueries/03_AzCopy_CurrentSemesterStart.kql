@@ -1,0 +1,13 @@
+.create-or-alter function with (
+    folder = 'AzCopyQueries',
+    docstring = 'Returns the current April-September or October-March semester start used by the Storage Mover dashboard.',
+    skipvalidation = 'true'
+) AzCopy_CurrentSemesterStart()
+{
+    let CurrentMonth = monthofyear(now());
+    let CurrentYear = getyear(now());
+    toscalar(print Start = case(
+        CurrentMonth >= 10, make_datetime(CurrentYear, 10, 1),
+        CurrentMonth <= 3, make_datetime(CurrentYear - 1, 10, 1),
+        make_datetime(CurrentYear, 4, 1)) | project Start)
+}
