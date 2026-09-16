@@ -546,3 +546,151 @@ func TestDualResource_ReactiveAdditiveIncrease(t *testing.T) {
 		}
 	}
 }
+
+// DisableBandwidth must force the bandwidth dimension to a permanent 0
+// (unlimited) target in proactive equal-share, while IOPS keeps its normal
+// per-worker share. Used for Azure Files File-to-File jobs that want IOPS
+// throttling only.
+func TestDualResource_DisableBandwidthProactiveShareForcedToZero(t *testing.T) {
+	numofWorkers := 1
+	iopsLimit := int64(1000)
+	bwLimit := int64(100 * 1024 * 1024)
+	clk := newManualTestClock(time.Unix(0, 0))
+	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
+	sink := &recordingSink{}
+	cfg := DefaultRateLimitConfig()
+	cfg.DisableBandwidth = true
+	d := newRateLimitControllerWithClock(sink, src, clk, numofWorkers, cfg, true)
+
+	if _, err := d.Refresh(); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	if d.Mode() != ModeProactive {
+		t.Fatalf("expected proactive mode, got %s", d.Mode())
+	}
+	if got := d.BandwidthRate(); got != 0 {
+		t.Fatalf("bandwidth must stay 0 with DisableBandwidth, got %d", got)
+	}
+	if got := d.IopsRate(); got != iopsLimit {
+		t.Fatalf("IOPS share unaffected: want %d, got %d", iopsLimit, got)
+	}
+	if bw, iops := sink.rates(); bw != 0 || iops != iopsLimit {
+		t.Fatalf("sink not driven correctly: bw=%d iops=%d, want bw=0 iops=%d", bw, iops, iopsLimit)
+	}
+}
+
+// A poll-based throttle delta on BOTH dimensions must still halve IOPS
+// normally while leaving bandwidth pinned at 0 when DisableBandwidth is set.
+func TestDualResource_DisableBandwidthIgnoresPollThrottleDelta(t *testing.T) {
+	const iopsLimit = int64(1000)
+	const bwLimit = int64(100 * 1024 * 1024)
+	numofWorkers := 1
+	clk := newManualTestClock(time.Unix(0, 0))
+	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
+	cfg := DefaultRateLimitConfig()
+	cfg.DisableBandwidth = true
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+
+	if _, err := d.Refresh(); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+
+	wantIops := iopsLimit
+	for step := 1; step <= 3; step++ {
+		clk.Advance(5 * time.Second)
+		src.stats.IopsThrottleCount = int64(step)
+		src.stats.BandwidthThrottleCount = int64(step)
+		if _, err := d.Refresh(); err != nil {
+			t.Fatalf("refresh step %d: %v", step, err)
+		}
+		wantIops /= 2
+		if d.Mode() != ModeReactive {
+			t.Fatalf("step %d: want reactive, got %s", step, d.Mode())
+		}
+		if got := d.IopsRate(); got != wantIops {
+			t.Fatalf("step %d: IOPS after halving: want %d, got %d", step, wantIops, got)
+		}
+		if got := d.BandwidthRate(); got != 0 {
+			t.Fatalf("step %d: bandwidth must stay 0, got %d", step, got)
+		}
+	}
+}
+
+// Sustained real-time bandwidth 429/503 responses must not move the
+// bandwidth target at all when DisableBandwidth is set.
+func TestDualResource_DisableBandwidthIgnoresResponseSignal(t *testing.T) {
+	numofWorkers := 1
+	iopsLimit := int64(1000)
+	bwLimit := int64(100 * 1024 * 1024)
+	clk := newManualTestClock(time.Unix(0, 0))
+	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
+	cfg := DefaultRateLimitConfig()
+	cfg.DisableBandwidth = true
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+
+	if _, err := d.Refresh(); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+
+	for i := 0; i < cfg.ResponseMinEvents; i++ {
+		d.HandleResponse(ThrottleBandwidth, 0)
+		clk.Advance(100 * time.Millisecond)
+	}
+
+	if got := d.BandwidthRate(); got != 0 {
+		t.Fatalf("bandwidth must stay 0 despite sustained bandwidth 429s, got %d", got)
+	}
+	if got := d.IopsRate(); got != iopsLimit {
+		t.Fatalf("IOPS must be untouched by bandwidth-only responses: want %d, got %d", iopsLimit, got)
+	}
+}
+
+// While reactive mode is held open by ongoing IOPS throttling, the bandwidth
+// dimension's additive-increase recovery must never move it off 0 when
+// DisableBandwidth is set.
+func TestDualResource_DisableBandwidthNeverRampsViaAdditiveIncrease(t *testing.T) {
+	const iopsLimit = int64(1000)
+	const bwLimit = int64(100 * 1024 * 1024)
+	numofWorkers := 1
+	clk := newManualTestClock(time.Unix(0, 0))
+	src := &fakeStatsSource{stats: ResourceStats{IopsLimit: iopsLimit, BandwidthLimitBytesPerSec: bwLimit}}
+	cfg := DefaultRateLimitConfig()
+	cfg.DisableBandwidth = true
+	d := newRateLimitControllerWithClock(&recordingSink{}, src, clk, numofWorkers, cfg, true)
+
+	if _, err := d.Refresh(); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+
+	// Seed reactive mode via an IOPS delta only; bandwidth stays quiet from the start.
+	throttleCount := int64(1)
+	clk.Advance(5 * time.Second)
+	src.stats.IopsThrottleCount = throttleCount
+	if _, err := d.Refresh(); err != nil {
+		t.Fatalf("seed reactive: %v", err)
+	}
+	if d.Mode() != ModeReactive {
+		t.Fatalf("want reactive after seed, got %s", d.Mode())
+	}
+	if got := d.BandwidthRate(); got != 0 {
+		t.Fatalf("bandwidth must stay 0 after seeding reactive via IOPS, got %d", got)
+	}
+
+	// Keep throttling ONLY IOPS on each poll (holds reactive mode open); bandwidth
+	// stays quiet throughout, which would normally trigger its additive-increase
+	// recovery toward bwLimit. It must instead stay pinned at 0.
+	for step := 1; step <= 3; step++ {
+		clk.Advance(10 * time.Second)
+		throttleCount++
+		src.stats.IopsThrottleCount = throttleCount
+		if _, err := d.Refresh(); err != nil {
+			t.Fatalf("step %d: %v", step, err)
+		}
+		if d.Mode() != ModeReactive {
+			t.Fatalf("step %d: want reactive, got %s", step, d.Mode())
+		}
+		if got := d.BandwidthRate(); got != 0 {
+			t.Fatalf("step %d: bandwidth must stay 0, got %d", step, got)
+		}
+	}
+}
