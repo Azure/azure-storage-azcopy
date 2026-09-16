@@ -245,6 +245,25 @@ func extractJobID(svm *ScenarioVariationManager, stdOut AzCopyStdout) string {
 	return jobId
 }
 
+func cancelledTransferTelemetry(privateValues ...string) *telemetryExpectation {
+	return &telemetryExpectation{
+		FinishedProperties: map[string]string{"JobStatus": "Cancelled", "JobErrorCategory": "", "JobErrorCode": ""},
+		TerminalStages:     []string{"enumeration", "transfer", "completion"},
+		IncompleteProgress: true,
+		ForbiddenValues:    append(privateValues, "sig="),
+	}
+}
+
+// assertCancelled asserts that a throttled first run was cancelled rather than failed.
+func assertCancelled(svm *ScenarioVariationManager, stdOut AzCopyStdout) {
+	if svm.Dryrun() {
+		return
+	}
+	parsed, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout)
+	svm.AssertNow("parse cancelled stdout", Equal{}, ok, true)
+	svm.Assert("first run cancelled", Equal{}, parsed.FinalStatus.JobStatus, common.EJobStatus.Cancelled())
+}
+
 // assertResumeCompleted asserts that a resumed job finished successfully.
 func assertResumeCompleted(svm *ScenarioVariationManager, stdOut AzCopyStdout) {
 	if svm.Dryrun() {
@@ -340,6 +359,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Upload(svm *ScenarioVari
 				FromTo:           pointerTo(common.EFromTo.LocalFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -351,6 +371,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Upload(svm *ScenarioVari
 		ShouldFail:  true,
 		Environment: env,
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -469,6 +490,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariati
 				FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -480,6 +502,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariati
 		ShouldFail:  true,
 		Environment: env,
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -537,6 +560,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Upload(svm *ScenarioVari
 				FromTo:           pointerTo(common.EFromTo.LocalFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -547,6 +571,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Upload(svm *ScenarioVari
 		ShouldFail:  true,
 		Environment: env,
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -670,6 +695,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 				FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -680,6 +706,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 		ShouldFail:  true,
 		Environment: env,
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -705,6 +732,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 // slow it down, cancel the job mid-flight by writing "cancel" to stdin,
 // and then resume the cancelled job to completion.
 // ===========================================================================
+
+// throttledBlockSizeMB must stay under --cap-mbps (2 Mbps is 250,000 B/s), or the pacer fails each chunk instead of throttling it.
+const throttledBlockSizeMB = 0.125
 
 // cancelAfter returns an AfterStart callback that writes "cancel\n" to stdin
 // after the given delay, triggering a graceful cancel via --cancel-from-stdin.
@@ -762,6 +792,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Upload(svm *ScenarioVari
 				FromTo:           pointerTo(common.EFromTo.LocalFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -772,7 +803,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Upload(svm *ScenarioVari
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -820,6 +853,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Download(svm *ScenarioVa
 				FromTo:           pointerTo(common.EFromTo.FileNFSLocal()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -830,7 +864,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Download(svm *ScenarioVa
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -881,6 +917,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_S2S(svm *ScenarioVariati
 				FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -891,7 +928,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_S2S(svm *ScenarioVariati
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -946,6 +985,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Upload(svm *ScenarioVari
 				FromTo:           pointerTo(common.EFromTo.LocalFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -955,7 +995,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Upload(svm *ScenarioVari
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -1007,6 +1049,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Download(svm *ScenarioVa
 				FromTo:           pointerTo(common.EFromTo.FileNFSLocal()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -1016,7 +1059,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Download(svm *ScenarioVa
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
@@ -1070,6 +1115,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_S2S(svm *ScenarioVariati
 				FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				BlockSizeMB:      pointerTo(throttledBlockSizeMB),
 				GlobalFlags: GlobalFlags{
 					CancelFromStdin: pointerTo(true),
 					CapMbps:         pointerTo(float64(2)),
@@ -1079,7 +1125,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_S2S(svm *ScenarioVariati
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
+	assertCancelled(svm, stdOut)
 
 	jobId := extractJobID(svm, stdOut)
 
