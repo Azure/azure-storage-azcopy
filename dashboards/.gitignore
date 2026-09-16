@@ -1,0 +1,9 @@
+!azcopy-business-metrics/azcopy-business-metrics.telemetry-test.dashboard.json
+!azcopy-telemetry-metrics/azcopy-telemetry-metrics.telemetry-test.dashboard.json
+!azcopy-data-metrics/*.dashboard.json
+!azcopy-usage-dashboards/generated/*.dashboard.json
+!azcopy-usage-dashboards/generated/*.grafana.json
+!AzCopyQueries/*.dashboard.json
+!AzCopyQueries/generated/suite/*.json
+AzCopyQueries/generated/**/*.png
+AzCopyQueries/generated/suite/backups/

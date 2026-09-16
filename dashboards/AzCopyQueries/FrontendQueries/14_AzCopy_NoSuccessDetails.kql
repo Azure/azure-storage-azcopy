@@ -1,0 +1,10 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Failed daily activity only for the preclassified no-success customer cohort. Status filtering cannot hide successes when determining eligibility.') AzCopy_NoSuccessDetails(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic, statusFilter:dynamic)
+{
+    let Cohort = AzCopy_NoSuccessCustomers(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter) | project CustomerKey;
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | where CustomerKey in (Cohort) and IsFailure
+    | where isnull(statusFilter) or array_length(statusFilter) == 0 or '$__all' in (statusFilter) or '__all' in (statusFilter) or JobStatus in (statusFilter)
+    | summarize Jobs = sum(Jobs), BytesTransferred = sum(BytesTransferred), Attempts = sum(Attempts), Installations = dcount(InstallationID)
+      by SliceDate, CustomerKey, Customer = CustomerName, SubscriptionId, FromTo, JobStatus
+    | order by SliceDate desc, Jobs desc, Customer asc
+}
