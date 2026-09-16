@@ -1,0 +1,20 @@
+File: azcopy.exe
+Build ID: C:\azcopy-perf-retry\azcopy.exe2026-09-09 13:24:09.7955491 +0000 UTC
+Type: inuse_space
+Time: 2026-09-09 19:24:01 IST
+Showing nodes accounting for 105.91MB, 96.32% of 109.95MB total
+Dropped 34 nodes (cum <= 0.55MB)
+Showing top 12 nodes out of 66
+      flat  flat%   sum%        cum   cum%
+   88.03MB 80.06% 80.06%    88.03MB 80.06%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  6.94% 87.00%     7.63MB  6.94%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.17MB  4.70% 91.70%    12.80MB 11.64%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+       2MB  1.82% 93.52%        2MB  1.82%  runtime.mallocgc
+    1.06MB  0.97% 94.49%     1.06MB  0.97%  github.com/Azure/azure-storage-azcopy/v10/cmd.init.func1
+    1.01MB  0.92% 95.41%     1.01MB  0.92%  crypto/tls.(*Conn).unmarshalHandshakeMessage
+    0.51MB  0.46% 95.87%     1.01MB  0.91%  crypto/internal/fips140/nistec.(*P384Point).generatorTable.func1
+    0.50MB  0.46% 96.32%     1.50MB  1.37%  crypto/x509.parseCertificate
+         0     0% 96.32%     1.01MB  0.91%  crypto/ecdh.(*nistCurve).GenerateKey
+         0     0% 96.32%     1.01MB  0.91%  crypto/ecdh.init.func5
+         0     0% 96.32%     1.01MB  0.91%  crypto/internal/fips140/ecdh.GenerateKey[go.shape.*crypto/internal/fips140/nistec.P384Point]
+         0     0% 96.32%     1.01MB  0.91%  crypto/internal/fips140/ecdh.NewPrivateKey[go.shape.*crypto/internal/fips140/nistec.P384Point]

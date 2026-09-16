@@ -1,0 +1,15 @@
+File: azcopy-diagnostic.exe
+Build ID: C:\Users\sharankur\AppData\Local\Temp\azcopy-local64-ablation-sep09\azcopy-diagnostic.exe2026-09-09 19:56:27.7214898 +0530 IST
+Type: inuse_space
+Time: 2026-09-09 20:08:33 IST
+Showing nodes accounting for 78.90MB, 99.37% of 79.40MB total
+Showing top 8 nodes out of 89
+      flat  flat%   sum%        cum   cum%
+   60.02MB 75.59% 75.59%    60.02MB 75.59%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  9.61% 85.20%     7.63MB  9.61%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.01MB  6.30% 91.51%     5.01MB  6.30%  runtime.mallocgc
+    3.21MB  4.05% 95.56%    10.85MB 13.66%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+    1.01MB  1.27% 96.82%     1.01MB  1.27%  github.com/Azure/azure-storage-azcopy/v10/common.newSimpleSlicePool
+       1MB  1.26% 98.09%        1MB  1.26%  crypto/x509.parseCertificate
+    0.52MB  0.65% 98.74%     0.52MB  0.65%  bytes.growSlice
+    0.50MB  0.63% 99.37%     0.50MB  0.63%  golang.org/x/net/http2.map.init.1

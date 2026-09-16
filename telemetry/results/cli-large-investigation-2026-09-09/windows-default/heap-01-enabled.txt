@@ -1,0 +1,20 @@
+File: azcopy-live.exe
+Build ID: C:\Users\sharankur\AppData\Local\Temp\azcopy-large-profiled-sep09-retry\azcopy-live.exe2026-09-09 16:36:24.5495893 +0530 IST
+Type: inuse_space
+Time: 2026-09-09 16:48:08 IST
+Showing nodes accounting for 375.51MB, 98.55% of 381.03MB total
+Dropped 57 nodes (cum <= 1.91MB)
+Showing top 12 nodes out of 35
+      flat  flat%   sum%        cum   cum%
+  360.12MB 94.51% 94.51%   360.12MB 94.51%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  2.00% 96.52%     7.63MB  2.00%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.75MB  1.51% 98.03%    13.38MB  3.51%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+       2MB  0.53% 98.55%        2MB  0.53%  runtime.mallocgc
+         0     0% 98.55%     2.01MB  0.53%  crypto/tls.(*Conn).HandshakeContext
+         0     0% 98.55%     2.01MB  0.53%  crypto/tls.(*Conn).clientHandshake
+         0     0% 98.55%     2.01MB  0.53%  crypto/tls.(*Conn).handshakeContext
+         0     0% 98.55%     2.01MB  0.53%  crypto/tls.(*clientHandshakeStateTLS13).handshake
+         0     0% 98.55%    13.38MB  3.51%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*Client).Copy
+         0     0% 98.55%    13.38MB  3.51%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*CopyTransferProcessor).DispatchFinalPart
+         0     0% 98.55%    13.38MB  3.51%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*CopyTransferProcessor).sendPartToSte
+         0     0% 98.55%    13.38MB  3.51%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*transferExecutor).initCopyEnumerator.func4

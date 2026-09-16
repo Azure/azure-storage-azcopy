@@ -1,0 +1,2 @@
+2026/09/09 20:10:12 telemetry: sent packed azcopy.job.started event to App Insights
+2026/09/09 20:10:19 telemetry: sent packed azcopy.job.finished event to App Insights

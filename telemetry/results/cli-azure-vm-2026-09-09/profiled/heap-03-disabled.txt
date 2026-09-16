@@ -1,0 +1,20 @@
+File: azcopy.exe
+Build ID: C:\azcopy-perf-retry\azcopy.exe2026-09-09 13:24:09.7955491 +0000 UTC
+Type: inuse_space
+Time: 2026-09-09 19:30:57 IST
+Showing nodes accounting for 109.91MB, 96.02% of 114.46MB total
+Dropped 45 nodes (cum <= 0.57MB)
+Showing top 12 nodes out of 69
+      flat  flat%   sum%        cum   cum%
+   92.03MB 80.40% 80.40%    92.03MB 80.40%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  6.67% 87.07%     7.63MB  6.67%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    4.19MB  3.66% 90.73%    11.82MB 10.33%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+    1.51MB  1.32% 92.05%     1.51MB  1.32%  google.golang.org/protobuf/internal/filedesc.(*File).initDecls (inline)
+    1.50MB  1.31% 93.36%     1.50MB  1.31%  runtime.mallocgc
+    1.04MB  0.91% 94.27%     1.04MB  0.91%  bytes.growSlice
+    1.01MB  0.88% 95.15%     1.01MB  0.88%  github.com/Azure/azure-storage-azcopy/v10/common.newSimpleSlicePool
+    0.50MB  0.44% 95.59%        1MB  0.87%  crypto/x509.parseCertificate
+    0.50MB  0.44% 96.02%     2.01MB  1.75%  google.golang.org/protobuf/internal/filedesc.newRawFile
+         0     0% 96.02%     1.04MB  0.91%  bufio.(*Reader).Read
+         0     0% 96.02%     1.04MB  0.91%  bytes.(*Buffer).Grow (inline)
+         0     0% 96.02%     1.04MB  0.91%  bytes.(*Buffer).grow
