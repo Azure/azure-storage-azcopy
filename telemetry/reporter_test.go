@@ -21,13 +21,54 @@
 package telemetry
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+const testConnString = "InstrumentationKey=11111111-2222-3333-4444-555555555555;IngestionEndpoint=https://eastus.example.com/"
+
+// stubClient is an httpDoer that records the last request it received and
+// returns a canned response (or error), so we can assert on telemetry traffic
+// without making real network calls.
+type stubClient struct {
+	lastReq  *http.Request
+	lastBody []byte
+	status   int
+	respBody string
+	err      error
+	calls    int
+}
+
+func (c *stubClient) Do(req *http.Request) (*http.Response, error) {
+	c.calls++
+	c.lastReq = req
+	if req.Body != nil {
+		c.lastBody, _ = io.ReadAll(req.Body)
+	}
+	if c.err != nil {
+		return nil, c.err
+	}
+	status := c.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(bytes.NewReader([]byte(c.respBody))),
+		Header:     make(http.Header),
+	}, nil
+}
 
 func sampleStarted() JobStartedEvent {
 	ts := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
@@ -128,6 +169,104 @@ func sampleFinished() JobFinishedEvent {
 		ServerBusyPct:                   1.5,
 		NetworkErrorPct:                 0.2,
 		PercentComplete:                 100,
+	}
+}
+
+func TestParseConnectionString(t *testing.T) {
+	m := parseConnectionString(testConnString)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", m["instrumentationkey"])
+	assert.Equal(t, "https://eastus.example.com/", m["ingestionendpoint"])
+
+	// Keys are case-insensitive; whitespace and malformed segments are tolerated.
+	m = parseConnectionString(" A = 1 ; bogus ; b=2")
+	assert.Equal(t, "1", m["a"])
+	assert.Equal(t, "2", m["b"])
+	_, ok := m["bogus"]
+	assert.False(t, ok)
+}
+
+func TestEndpointAndKey(t *testing.T) {
+	const ikey = "11111111-2222-3333-4444-555555555555"
+	tests := []struct {
+		name           string
+		connection     string
+		wantEndpoint   string
+		wantErrContain string
+	}{
+		{
+			name:         "explicit endpoint",
+			connection:   testConnString,
+			wantEndpoint: "https://eastus.example.com",
+		},
+		{
+			name:         "explicit endpoint takes precedence",
+			connection:   "InstrumentationKey=" + ikey + ";IngestionEndpoint=https://proxy.example.test/custom/;EndpointSuffix=ai.contoso.com;Location=westus2;Authorization=IKEY",
+			wantEndpoint: "https://proxy.example.test/custom",
+		},
+		{
+			name:         "case insensitive keys",
+			connection:   " instrumentationkey=" + ikey + "; ingestionendpoint = https://example.test/ ",
+			wantEndpoint: "https://example.test",
+		},
+		{
+			name:         "endpoint suffix",
+			connection:   "InstrumentationKey=" + ikey + ";EndpointSuffix=applicationinsights.azure.cn",
+			wantEndpoint: "https://dc.applicationinsights.azure.cn",
+		},
+		{
+			name:         "endpoint suffix with location",
+			connection:   "InstrumentationKey=" + ikey + ";EndpointSuffix=ai.contoso.com;Location=westus2",
+			wantEndpoint: "https://westus2.dc.ai.contoso.com",
+		},
+		{
+			name:           "missing instrumentation key",
+			connection:     "IngestionEndpoint=https://example.test",
+			wantErrContain: "InstrumentationKey",
+		},
+		{
+			name:           "missing endpoint configuration",
+			connection:     "InstrumentationKey=" + ikey,
+			wantErrContain: "IngestionEndpoint or EndpointSuffix",
+		},
+		{
+			name:           "unsupported authorization",
+			connection:     "InstrumentationKey=" + ikey + ";IngestionEndpoint=https://example.test;Authorization=AAD",
+			wantErrContain: "unsupported",
+		},
+		{
+			name:           "malformed endpoint",
+			connection:     "InstrumentationKey=" + ikey + ";IngestionEndpoint=example.test",
+			wantErrContain: "invalid",
+		},
+		{
+			name:           "endpoint with query",
+			connection:     "InstrumentationKey=" + ikey + ";IngestionEndpoint=https://example.test?route=ingestion",
+			wantErrContain: "invalid",
+		},
+		{
+			name:           "malformed endpoint suffix",
+			connection:     "InstrumentationKey=" + ikey + ";EndpointSuffix=https://example.test",
+			wantErrContain: "EndpointSuffix",
+		},
+		{
+			name:           "malformed location",
+			connection:     "InstrumentationKey=" + ikey + ";EndpointSuffix=ai.contoso.com;Location=west/us",
+			wantErrContain: "Location",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endpoint, gotKey, err := NewReporter(Config{ConnectionString: tt.connection}).endpointAndKey()
+			if tt.wantErrContain != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrContain)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEndpoint, endpoint)
+			assert.Equal(t, ikey, gotKey)
+		})
 	}
 }
 
@@ -386,4 +525,283 @@ func TestTruncateValueToPreservesUTF8(t *testing.T) {
 	assert.LessOrEqual(t, len(truncated), maxPropValueLen)
 	assert.True(t, utf8.ValidString(truncated))
 	assert.True(t, strings.HasSuffix(truncated, truncatedPropertyMarker))
+}
+
+func TestEventPropertiesAreBoundedBeforeExport(t *testing.T) {
+	oversized := strings.Repeat("x", maxPropValueLen+100)
+	event := sampleFinished()
+	event.Resource.OSVersion = oversized
+	event.Resource.HostCPUModel = oversized
+	event.Dimensions.Options = OptionAttributes{
+		FlagsSet: []string{oversized, oversized},
+		Values:   map[string]string{"OptFutureValue": oversized},
+	}
+	event.JobID = oversized
+	event.InvocationID = oversized
+	event.JobStatus = oversized
+	event.FailureErrorCodes = oversized
+
+	envelope := eventToEnvelopes("ikey-1", event)[0]
+	for name, value := range envelope.Data.BaseData.Properties {
+		assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
+	}
+	assert.Len(t, envelope.Data.BaseData.Properties["OSVersion"], maxHostValueLen)
+	assert.Len(t, envelope.Data.BaseData.Properties["JobID"], maxIdentifierValueLen)
+	assert.Len(t, envelope.Data.BaseData.Properties["OptFutureValue"], maxOptionValueLen)
+
+	command := CommandInvokedEvent{
+		Resource:     event.Resource,
+		Command:      oversized,
+		Options:      event.Dimensions.Options,
+		JobID:        oversized,
+		InvocationID: oversized,
+		Timestamp:    time.Now(),
+		InvokedCount: 1,
+	}
+	for name, value := range command.attributes() {
+		assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
+	}
+}
+
+func TestUnsetOptionsAreOmitted(t *testing.T) {
+	attrs := JobDimensions{Command: "copy"}.props()
+	for _, key := range []string{"OptFlagsSet", "OptEnvVarsSet", "OptRecursive", "OptBlockSizeMB", "OptConcurrency"} {
+		_, exists := attrs[key]
+		assert.False(t, exists, key)
+	}
+}
+
+func TestMergeProps(t *testing.T) {
+	out := mergeProps(
+		map[string]string{"a": "1", "b": "1"},
+		map[string]string{"b": "2", "c": "3"},
+	)
+	assert.Equal(t, map[string]string{"a": "1", "b": "2", "c": "3"}, out)
+}
+
+func TestEventToEnvelopes(t *testing.T) {
+	envelopes := eventToEnvelopes("ikey-1", sampleFinished())
+	require.Len(t, envelopes, 1)
+	envelope := envelopes[0]
+	assert.Equal(t, "Microsoft.ApplicationInsights.Event", envelope.Name)
+	assert.Equal(t, "ikey-1", envelope.IKey)
+	assert.Equal(t, "EventData", envelope.Data.BaseType)
+	assert.Equal(t, 2, envelope.Data.BaseData.Version)
+	assert.Equal(t, "azcopy.job.finished", envelope.Data.BaseData.Name)
+	assert.Len(t, envelope.Data.BaseData.Measurements, 50)
+	assert.Equal(t, float64(1), envelope.Data.BaseData.Measurements["azcopy.job.finished"])
+	assert.Equal(t, float64(1024), envelope.Data.BaseData.Measurements["azcopy.bytes_transferred"])
+	assert.Equal(t, float64(100), envelope.Data.BaseData.Measurements["azcopy.percent_complete"])
+	assert.Equal(t, "copy", envelope.Data.BaseData.Properties["Command"])
+	assert.Equal(t, "", envelope.Data.BaseData.Properties["SourceCloudType"])
+	assert.Equal(t, "public", envelope.Data.BaseData.Properties["DestCloudType"])
+	_, hasSourceEndpointIdentity := envelope.Data.BaseData.Properties["SourceEndpointIdentity"]
+	assert.False(t, hasSourceEndpointIdentity)
+	_, hasDestEndpointIdentity := envelope.Data.BaseData.Properties["DestEndpointIdentity"]
+	assert.False(t, hasDestEndpointIdentity)
+	assert.Contains(t, envelope.Data.BaseData.Properties, "SourceStorageAccount")
+	assert.Empty(t, envelope.Data.BaseData.Properties["SourceStorageAccount"])
+	assert.Equal(t, "account", envelope.Data.BaseData.Properties["DestStorageAccount"])
+	_, hasCloudType := envelope.Data.BaseData.Properties["CloudType"]
+	assert.False(t, hasCloudType)
+}
+
+func TestStorageAccountProperties(t *testing.T) {
+	started := sampleStarted()
+	started.Dimensions.SourceStorageAccount = "sourceaccount"
+	started.Dimensions.DestStorageAccount = "targetaccount"
+	finished := sampleFinished()
+	finished.Dimensions = started.Dimensions
+	for _, event := range []MetricEvent{started, finished} {
+		t.Run(event.EventName(), func(t *testing.T) {
+			envelopes := eventToEnvelopes("ikey-1", event)
+			require.Len(t, envelopes, 1)
+			properties := envelopes[0].Data.BaseData.Properties
+			assert.Equal(t, "sourceaccount", properties["SourceStorageAccount"])
+			assert.Equal(t, "targetaccount", properties["DestStorageAccount"])
+			assert.NotContains(t, properties, "SourceEndpointIdentity")
+			assert.NotContains(t, properties, "DestEndpointIdentity")
+		})
+	}
+}
+
+func TestReportEventAppInsights(t *testing.T) {
+	client := &stubClient{status: http.StatusOK}
+	r := NewReporter(Config{
+		Backend:          BackendAppInsights,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+
+	err := r.ReportEvent(context.Background(), sampleFinished())
+	require.NoError(t, err)
+	require.Equal(t, 1, client.calls)
+
+	// Validate the request targets the track endpoint with JSON content.
+	assert.Equal(t, http.MethodPost, client.lastReq.Method)
+	assert.Equal(t, "https://eastus.example.com/v2.1/track", client.lastReq.URL.String())
+	assert.Equal(t, "application/json", client.lastReq.Header.Get("Content-Type"))
+
+	var envs []appInsightsEnvelope
+	require.NoError(t, json.Unmarshal(client.lastBody, &envs))
+	require.Len(t, envs, 1)
+	assert.Equal(t, "Microsoft.ApplicationInsights.Event", envs[0].Name)
+	assert.Equal(t, "EventData", envs[0].Data.BaseType)
+	assert.Equal(t, "azcopy.job.finished", envs[0].Data.BaseData.Name)
+	assert.Len(t, envs[0].Data.BaseData.Measurements, 50)
+	assert.Equal(t, float64(100), envs[0].Data.BaseData.Measurements["azcopy.percent_complete"])
+}
+
+func TestReportEventAppInsightsServerError(t *testing.T) {
+	client := &stubClient{status: http.StatusInternalServerError, respBody: "boom"}
+	r := NewReporter(Config{
+		Backend:          BackendAppInsights,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+	err := r.ReportEvent(context.Background(), sampleStarted())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "500")
+}
+
+func TestReportEventAppInsightsRejectsPartialAcceptance(t *testing.T) {
+	client := &stubClient{
+		status:   http.StatusPartialContent,
+		respBody: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":1,"statusCode":400,"message":"invalid field"}]}`,
+	}
+	r := NewReporter(Config{
+		Backend:          BackendAppInsights,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+
+	err := r.ReportEvent(context.Background(), sampleStarted())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "partially accepted telemetry")
+	assert.ErrorContains(t, err, "index=1 status=400")
+}
+
+func TestReportEventAppInsightsRejectsInvalidPartialResponses(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty", body: "", want: "invalid response"},
+		{name: "malformed", body: "{", want: "invalid response"},
+		{name: "invalid counts", body: `{"itemsReceived":1,"itemsAccepted":2}`, want: "invalid item counts"},
+		{name: "missing errors", body: `{"itemsReceived":2,"itemsAccepted":1}`, want: "inconsistent rejection details"},
+		{name: "invalid index", body: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":2}]}`, want: "invalid rejected item index"},
+		{name: "no rejection", body: `{"itemsReceived":1,"itemsAccepted":1}`, want: "inconsistent rejection details"},
+		{name: "trailing content", body: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":1,"statusCode":400}]} trailing`, want: "trailing content"},
+		{name: "duplicate index", body: `{"itemsReceived":3,"itemsAccepted":1,"errors":[{"index":1,"statusCode":400},{"index":1,"statusCode":400}]}`, want: "duplicate rejected item index"},
+		{name: "invalid status", body: `{"itemsReceived":2,"itemsAccepted":1,"errors":[{"index":1,"statusCode":0}]}`, want: "invalid rejection status"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &stubClient{status: http.StatusPartialContent, respBody: test.body}
+			r := NewReporter(Config{
+				Backend:          BackendAppInsights,
+				ConnectionString: testConnString,
+				HTTPClient:       client,
+			})
+
+			err := r.ReportEvent(context.Background(), sampleStarted())
+			require.Error(t, err)
+			assert.ErrorContains(t, err, test.want)
+		})
+	}
+}
+
+func TestReportEventTransportError(t *testing.T) {
+	client := &stubClient{err: errors.New("network down")}
+	r := NewReporter(Config{
+		Backend:          BackendAppInsights,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+	err := r.ReportEvent(context.Background(), sampleStarted())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "transport failure")
+	assert.NotContains(t, err.Error(), "network down")
+}
+
+func TestReportEventOTel(t *testing.T) {
+	client := &stubClient{status: http.StatusOK}
+	r := NewReporter(Config{
+		Backend:          BackendOTel,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+
+	err := r.ReportEvent(context.Background(), sampleFinished())
+	require.NoError(t, err)
+	require.Equal(t, 1, client.calls)
+	assert.Equal(t, "https://eastus.example.com/v2.1/track", client.lastReq.URL.String())
+
+	var envs []appInsightsEnvelope
+	require.NoError(t, json.Unmarshal(client.lastBody, &envs))
+	require.Len(t, envs, 1)
+	assert.Equal(t, "Microsoft.ApplicationInsights.Event", envs[0].Name)
+	assert.Equal(t, "EventData", envs[0].Data.BaseType)
+	assert.Equal(t, "azcopy.job.finished", envs[0].Data.BaseData.Name)
+	assert.Len(t, envs[0].Data.BaseData.Measurements, 50)
+	assert.Equal(t, float64(100), envs[0].Data.BaseData.Measurements["azcopy.percent_complete"])
+	assert.Equal(t, "copy", envs[0].Data.BaseData.Properties["Command"])
+}
+
+func TestReportEventBackendsBoundProperties(t *testing.T) {
+	for _, backend := range []Backend{BackendAppInsights, BackendOTel} {
+		t.Run(string(backend), func(t *testing.T) {
+			oversized := strings.Repeat("x", maxPropValueLen+100)
+			event := sampleFinished()
+			event.Resource.OSVersion = oversized
+			event.Dimensions.Options.Values = map[string]string{"OptFutureValue": oversized}
+			event.JobID = oversized
+
+			client := &stubClient{status: http.StatusOK}
+			reporter := NewReporter(Config{
+				Backend:          backend,
+				ConnectionString: testConnString,
+				HTTPClient:       client,
+			})
+			require.NoError(t, reporter.ReportEvent(context.Background(), event))
+
+			var envelopes []appInsightsEnvelope
+			require.NoError(t, json.Unmarshal(client.lastBody, &envelopes))
+			require.Len(t, envelopes, 1)
+			for name, value := range envelopes[0].Data.BaseData.Properties {
+				assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
+			}
+			assert.Len(t, envelopes[0].Data.BaseData.Properties["OSVersion"], maxHostValueLen)
+			assert.Len(t, envelopes[0].Data.BaseData.Properties["JobID"], maxIdentifierValueLen)
+			assert.Len(t, envelopes[0].Data.BaseData.Properties["OptFutureValue"], maxOptionValueLen)
+		})
+	}
+}
+
+func TestReportEvents_StopsOnFirstError(t *testing.T) {
+	client := &stubClient{status: http.StatusInternalServerError}
+	r := NewReporter(Config{
+		Backend:          BackendAppInsights,
+		ConnectionString: testConnString,
+		HTTPClient:       client,
+	})
+	err := r.ReportEvents(context.Background(), sampleStarted(), sampleFinished())
+	require.Error(t, err)
+	assert.Equal(t, 1, client.calls) // stopped after the first failed send
+}
+
+func TestReportEventUnknownBackend(t *testing.T) {
+	r := NewReporter(Config{Backend: "nope", ConnectionString: testConnString})
+	err := r.ReportEvent(context.Background(), sampleStarted())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown telemetry backend")
+}
+
+func TestReportEventMissingConnectionString(t *testing.T) {
+	r := NewReporter(Config{Backend: BackendAppInsights, ConnectionString: ""})
+	err := r.ReportEvent(context.Background(), sampleStarted())
+	require.Error(t, err)
 }
