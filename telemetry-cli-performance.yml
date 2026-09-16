@@ -1,0 +1,138 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: serviceConnection
+    type: string
+    default: azcopytestworkloadidentity
+  - name: poolName
+    type: string
+    default: ''
+  - name: workload
+    type: string
+    default: long
+    values: [standard, long, large-only, 64m-only]
+  - name: pairs
+    type: number
+    default: 3
+    values: [3, 5, 8]
+
+jobs:
+  - job: TelemetryCLIPerformance
+    timeoutInMinutes: 240
+    cancelTimeoutInMinutes: 15
+    pool:
+      ${{ if eq(parameters.poolName, '') }}:
+        vmImage: windows-2022
+      ${{ else }}:
+        name: ${{ parameters.poolName }}
+        demands:
+          - Agent.OS -equals Windows_NT
+    variables:
+      performanceOutput: $(Agent.TempDirectory)/telemetry-cli-$(Build.BuildId)-$(System.JobAttempt)
+    steps:
+      - checkout: self
+      - pwsh: |
+          New-Item -ItemType Directory -Path $env:PERF_OUTPUT, $env:PERF_ARTIFACTS -Force | Out-Null
+          foreach ($name in @('PERF_SUBSCRIPTION', 'PERF_GROUP', 'PERF_SUFFIX', 'PERF_ACCOUNT', 'PERF_CONTAINER')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith('$(')) {
+              throw "Missing pipeline configuration: $name"
+            }
+          }
+        displayName: Validate configuration and initialize evidence
+        env:
+          PERF_OUTPUT: $(performanceOutput)
+          PERF_ARTIFACTS: $(Build.ArtifactStagingDirectory)/telemetry-cli-performance
+          PERF_SUBSCRIPTION: $(TELEMETRY_PERF_SUBSCRIPTION_ID)
+          PERF_GROUP: $(TELEMETRY_PERF_RESOURCE_GROUP)
+          PERF_SUFFIX: $(TELEMETRY_PERF_SUFFIX)
+          PERF_ACCOUNT: $(TELEMETRY_PERF_STORAGE_ACCOUNT)
+          PERF_CONTAINER: $(TELEMETRY_PERF_STORAGE_CONTAINER)
+      - task: GoTool@0
+        inputs:
+          version: '1.25.11'
+        displayName: Install pinned Go toolchain
+      - pwsh: |
+          go test -tags telemetrylive,telemetryperf ./azcopy -run '^TestTelemetry(CLIWorkloads|CLIPerformanceAnalysis|CLIPerformanceExistingContainerCleanup|CLIPerformancePipeline)$' -count=1 -timeout=2m
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        displayName: Validate performance and cleanup helpers
+        env:
+          AZCOPY_DISABLE_TELEMETRY: 'true'
+          CGO_ENABLED: '0'
+      - task: AzureCLI@2
+        displayName: Measure actual CLI against real Azure services
+        timeoutInMinutes: 210
+        inputs:
+          azureSubscription: ${{ parameters.serviceConnection }}
+          scriptType: pscore
+          scriptLocation: inlineScript
+          useGlobalConfig: false
+          visibleAzLogin: false
+          keepAzSessionActive: true
+          failOnStandardError: false
+          inlineScript: |
+            & ./testSuite/telemetry-live.ps1 -Run -Scenario cli-performance `
+              -SubscriptionId $env:PERF_SUBSCRIPTION -ResourceGroup $env:PERF_GROUP -Suffix $env:PERF_SUFFIX `
+              -StorageAccountName $env:PERF_ACCOUNT -StorageContainerName $env:PERF_CONTAINER `
+              -PerformanceWorkload $env:PERF_WORKLOAD -PerformancePairs ([int]$env:PERF_PAIRS) `
+              -AuthenticationMode AZCLI -RequireHealthyTelemetry -OutputDirectory $env:PERF_OUTPUT
+        env:
+          PERF_SUBSCRIPTION: $(TELEMETRY_PERF_SUBSCRIPTION_ID)
+          PERF_GROUP: $(TELEMETRY_PERF_RESOURCE_GROUP)
+          PERF_SUFFIX: $(TELEMETRY_PERF_SUFFIX)
+          PERF_ACCOUNT: $(TELEMETRY_PERF_STORAGE_ACCOUNT)
+          PERF_CONTAINER: $(TELEMETRY_PERF_STORAGE_CONTAINER)
+          PERF_WORKLOAD: ${{ parameters.workload }}
+          PERF_PAIRS: ${{ parameters.pairs }}
+          PERF_OUTPUT: $(performanceOutput)
+          AZCOPY_DISABLE_TELEMETRY: 'true'
+          CGO_ENABLED: '0'
+      - task: AzureCLI@2
+        displayName: Recover only recorded benchmark fixtures
+        condition: always()
+        timeoutInMinutes: 15
+        inputs:
+          azureSubscription: ${{ parameters.serviceConnection }}
+          scriptType: pscore
+          scriptLocation: inlineScript
+          useGlobalConfig: false
+          visibleAzLogin: false
+          keepAzSessionActive: true
+          failOnStandardError: false
+          inlineScript: |
+            if (-not (Test-Path -Path (Join-Path $env:PERF_OUTPUT 'comparison-*/metadata.json'))) {
+              Write-Output 'No recorded fixture scope; no cleanup needed.'
+              exit 0
+            }
+            & ./testSuite/telemetry-live.ps1 -Run -Scenario cli-performance -CleanupPerformance `
+              -SubscriptionId $env:PERF_SUBSCRIPTION -ResourceGroup $env:PERF_GROUP -Suffix $env:PERF_SUFFIX `
+              -StorageAccountName $env:PERF_ACCOUNT -StorageContainerName $env:PERF_CONTAINER `
+              -AuthenticationMode AZCLI -OutputDirectory $env:PERF_OUTPUT
+        env:
+          PERF_SUBSCRIPTION: $(TELEMETRY_PERF_SUBSCRIPTION_ID)
+          PERF_GROUP: $(TELEMETRY_PERF_RESOURCE_GROUP)
+          PERF_SUFFIX: $(TELEMETRY_PERF_SUFFIX)
+          PERF_ACCOUNT: $(TELEMETRY_PERF_STORAGE_ACCOUNT)
+          PERF_CONTAINER: $(TELEMETRY_PERF_STORAGE_CONTAINER)
+          PERF_OUTPUT: $(performanceOutput)
+          AZCOPY_DISABLE_TELEMETRY: 'true'
+          CGO_ENABLED: '0'
+      - task: CopyFiles@2
+        condition: always()
+        displayName: Stage measurements and cleanup evidence only
+        inputs:
+          SourceFolder: $(performanceOutput)
+          Contents: |
+            *.jsonl
+            comparison-*/metadata.json
+            comparison-*/comparison.json
+            comparison-*/trials.jsonl
+            comparison-*/cleanup*.json
+          TargetFolder: $(Build.ArtifactStagingDirectory)/telemetry-cli-performance
+      - task: PublishPipelineArtifact@1
+        condition: always()
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/telemetry-cli-performance
+          artifact: telemetry-cli-performance-$(System.JobAttempt)
+        displayName: Publish measurements even when the run fails
