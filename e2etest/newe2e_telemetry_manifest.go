@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"bufio"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -376,4 +379,119 @@ func registerNoTelemetryExpectation(processRunID string) {
 	globalAppInsightsValidation.mu.Lock()
 	defer globalAppInsightsValidation.mu.Unlock()
 	globalAppInsightsValidation.expectedAttempts = append(globalAppInsightsValidation.expectedAttempts, telemetryExpectation{ProcessRunID: processRunID, NoEvents: true})
+}
+
+type telemetryEventQueryClient interface {
+	QueryTelemetryEvents(context.Context, string, string) ([]observedTelemetryEvent, error)
+}
+
+type telemetryManifestVerifier struct {
+	queryClient  telemetryEventQueryClient
+	pollInterval time.Duration
+	timeout      time.Duration
+	// absenceWait limits how long opted-out processes are watched; zero waits until timeout.
+	absenceWait time.Duration
+}
+
+func (v telemetryManifestVerifier) Verify(ctx context.Context, workspaceID, runID string, startedAt time.Time, expected []telemetryExpectation) error {
+	if v.queryClient == nil || v.pollInterval <= 0 || v.timeout <= 0 || len(expected) == 0 {
+		return errors.New("invalid telemetry manifest verifier configuration or empty manifest")
+	}
+	parentContext := ctx
+	observeAbsence := false
+	for _, attempt := range expected {
+		observeAbsence = observeAbsence || attempt.NoEvents
+	}
+	queriedSuccessfully := false
+	absenceDeadline := time.Now().Add(v.absenceWait)
+	ctx, cancel := context.WithTimeout(ctx, v.timeout)
+	defer cancel()
+	query := fmt.Sprintf(`AppEvents
+| where TimeGenerated >= datetime(%s)
+| extend EventProperties = todynamic(Properties)
+| where tostring(EventProperties.E2ETestRunID) startswith "%s/"
+| project Name, Properties=EventProperties, Measurements=todynamic(Measurements)`, startedAt.Add(-5*time.Minute).UTC().Format(time.RFC3339Nano), escapeKQLString(runID))
+	var missing []string
+	var lastErr error
+	for {
+		queryContext, queryCancel := context.WithTimeout(parentContext, appInsightsQueryRequestTimeout)
+		events, err := v.queryClient.QueryTelemetryEvents(queryContext, workspaceID, query)
+		queryCancel()
+		if err == nil {
+			queriedSuccessfully = true
+			missing, err = checkTelemetryManifest(expected, events)
+			if err != nil {
+				return err
+			}
+			if len(missing) == 0 && (!observeAbsence || (v.absenceWait > 0 && !time.Now().Before(absenceDeadline))) {
+				return nil
+			}
+		} else if !isRetryableQueryError(err) {
+			return err
+		}
+		lastErr = err
+		timer := time.NewTimer(v.pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			if parentContext.Err() == nil && observeAbsence && queriedSuccessfully && lastErr == nil && len(missing) == 0 {
+				return nil
+			}
+			state := fmt.Sprintf("missing %v", missing)
+			if !queriedSuccessfully {
+				state = "no successful query"
+			} else if len(missing) == 0 {
+				state = "absence of opted-out telemetry not confirmed"
+			}
+			return fmt.Errorf("telemetry manifest incomplete: %s; last query error: %v: %w", state, lastErr, ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func (c *logAnalyticsQueryClient) QueryTelemetryEvents(ctx context.Context, workspaceID, query string) ([]observedTelemetryEvent, error) {
+	result, err := c.queryResults(ctx, workspaceID, query)
+	if err != nil {
+		return nil, err
+	}
+	return parseTelemetryEvents(result)
+}
+
+func parseTelemetryEvents(result logAnalyticsQueryResponse) ([]observedTelemetryEvent, error) {
+	if len(result.Tables) != 1 {
+		return nil, errors.New("expected one lifecycle result table")
+	}
+	table := result.Tables[0]
+	indexes := make(map[string]int)
+	for index, column := range table.Columns {
+		indexes[column.Name] = index
+	}
+	for _, name := range []string{"Name", "Properties", "Measurements"} {
+		if _, exists := indexes[name]; !exists {
+			return nil, fmt.Errorf("missing lifecycle column %s", name)
+		}
+	}
+	var events []observedTelemetryEvent
+	for _, row := range table.Rows {
+		event := observedTelemetryEvent{}
+		for name, target := range map[string]any{"Name": &event.Name, "Properties": &event.Properties, "Measurements": &event.Measurements} {
+			index := indexes[name]
+			if index >= len(row) {
+				return nil, errors.New("short lifecycle result row")
+			}
+			value := row[index]
+			if name != "Name" && len(value) > 0 && value[0] == '"' {
+				var encoded string
+				if err := json.Unmarshal(value, &encoded); err != nil {
+					return nil, fmt.Errorf("invalid encoded lifecycle %s: %w", name, err)
+				}
+				value = json.RawMessage(encoded)
+			}
+			if err := json.Unmarshal(value, target); err != nil {
+				return nil, fmt.Errorf("invalid lifecycle %s: %w", name, err)
+			}
+		}
+		events = append(events, event)
+	}
+	return events, nil
 }
