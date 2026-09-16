@@ -104,7 +104,7 @@ type rawSyncCmdArgs struct {
 	hashMetaDir  string
 }
 
-func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
+func (raw rawSyncCmdArgs) toOptions(cmd *cobra.Command) (opts azcopy.SyncOptions, err error) {
 	opts = azcopy.SyncOptions{
 		Handler:                 cliSyncHandler{},
 		Recursive:               to.Ptr(raw.recursive),
@@ -170,8 +170,9 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		return opts, err
 	}
 	// set internal only options
-	cmd := ConstructCommandStringFromArgs()
-	opts.SetInternalOptions(raw.dryrun, raw.deleteDestinationFileIfNecessary, cmd, dryrunNewCopyJobPartOrder, dryrunDelete)
+	commandString := ConstructCommandStringFromArgs()
+	opts.SetInternalOptions(raw.dryrun, raw.deleteDestinationFileIfNecessary, commandString, dryrunNewCopyJobPartOrder, dryrunDelete)
+	opts.SetTelemetryOptions(telemetryOptions(cmd))
 	return opts, nil
 }
 
@@ -305,7 +306,7 @@ func init() {
 			}
 
 			var opts azcopy.SyncOptions
-			if opts, err = raw.toOptions(); err != nil {
+			if opts, err = raw.toOptions(cmd); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
