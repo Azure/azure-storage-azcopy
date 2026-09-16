@@ -1,3 +1,13 @@
+parameters:
+  - name: e2eTelemetry
+    displayName: 'E2E telemetry: send, send_and_validate (New E2E checks it at teardown), or disabled'
+    type: string
+    default: send
+    values:
+      - send
+      - send_and_validate
+      - disabled
+
 variables:
   AZCOPY_GOLANG_VERSION: '1.25.11'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.25.11'
@@ -150,6 +160,7 @@ jobs:
     parameters:
       job_name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
+      telemetry: ${{ parameters.e2eTelemetry }}
       
   - job: Unit_and_Python_Tests
     variables:
@@ -257,6 +268,11 @@ jobs:
           coverage_name: 'traverser'
           isMutexSet: variables['isMutexSet']
 
+      # After the Go unit tests, so only AzCopy runs from the Python tests (S3 and GCS included) use it.
+      - template: azurePipelineTemplates/e2e-telemetry.yml
+        parameters:
+          telemetry: ${{ replace(parameters.e2eTelemetry, 'send_and_validate', 'send') }}
+
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
           go build -tags "netgo" -o test-validator ./testSuite/
@@ -326,9 +342,6 @@ jobs:
 
   - job: Additional_E2E_Tests
     timeoutInMinutes: 360
-    # Temporary until the E2E telemetry setup step: keeps these AzCopy runs out of production telemetry.
-    variables:
-      AZCOPY_TELEMETRY_CONNECTION_STRING: 'InstrumentationKey=00000000-0000-0000-0000-000000000000'
     strategy:
       matrix:
         Linux:
@@ -375,6 +388,10 @@ jobs:
         displayName: 'Install Azure CLI - Windows'
         # Don't run if job is canceled
         condition: and(succeededOrFailed(), eq(variables.GOOS, 'windows'))
+
+      - template: azurePipelineTemplates/e2e-telemetry.yml
+        parameters:
+          telemetry: ${{ replace(parameters.e2eTelemetry, 'send_and_validate', 'send') }}
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
