@@ -1,0 +1,11 @@
+diagnostic: time=1788964551032621600 stage=resource-before workingSet=36032512 private=61702144 faults=12212
+diagnostic: time=1788964551032621600 stage=imds-before workingSet=36036608 private=61702144 faults=12213
+diagnostic: time=1788964551046407100 stage=imds-after workingSet=36081664 private=61726720 faults=12224
+diagnostic: time=1788964551046821500 stage=identity-after workingSet=36098048 private=61743104 faults=12228
+diagnostic: time=1788964551046821500 stage=resource-after workingSet=36098048 private=61743104 faults=12228
+diagnostic: time=1788964551047199000 stage=send-before-azcopy.job.started workingSet=36179968 private=61751296 faults=12248
+2026/09/09 20:05:52 telemetry: sent packed azcopy.job.started event to App Insights
+diagnostic: time=1788964552642384900 stage=send-after-azcopy.job.started workingSet=39477248 private=62783488 faults=13105
+diagnostic: time=1788964558937377800 stage=send-before-azcopy.job.finished workingSet=207945728 private=149315584 faults=54296
+2026/09/09 20:05:59 telemetry: sent packed azcopy.job.finished event to App Insights
+diagnostic: time=1788964559426857900 stage=send-after-azcopy.job.finished workingSet=209084416 private=150454272 faults=54676

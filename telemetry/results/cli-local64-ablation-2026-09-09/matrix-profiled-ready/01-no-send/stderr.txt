@@ -1,0 +1,12 @@
+diagnostic: time=1788964682898165500 stage=resource-before workingSet=35471360 private=61071360 faults=12511
+diagnostic: time=1788964682898165500 stage=os-before workingSet=35479552 private=61071360 faults=12513
+diagnostic: time=1788964682898165500 stage=os-after workingSet=35479552 private=61071360 faults=12513
+diagnostic: time=1788964682898694200 stage=cpu-after workingSet=35483648 private=61071360 faults=12514
+diagnostic: time=1788964682898694200 stage=memory-after workingSet=35483648 private=61071360 faults=12514
+diagnostic: time=1788964682902669100 stage=nic-after workingSet=35557376 private=61079552 faults=12568
+diagnostic: time=1788964682902669100 stage=imds-before workingSet=35557376 private=61079552 faults=12568
+diagnostic: time=1788964682917624000 stage=imds-after workingSet=35622912 private=61128704 faults=12584
+diagnostic: time=1788964682918515600 stage=identity-after workingSet=35651584 private=61145088 faults=12591
+diagnostic: time=1788964682918515600 stage=resource-after workingSet=35659776 private=61153280 faults=12593
+diagnostic: suppressed azcopy.job.started
+diagnostic: suppressed azcopy.job.finished

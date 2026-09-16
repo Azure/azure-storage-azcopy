@@ -1,0 +1,17 @@
+diagnostic: time=1788965465332101300 stage=resource-before workingSet=36302848 private=61558784 faults=11779
+diagnostic: time=1788965465332101300 stage=os-before workingSet=36306944 private=61558784 faults=11780
+diagnostic: time=1788965465332101300 stage=os-after workingSet=36311040 private=61558784 faults=11781
+diagnostic: time=1788965465332101300 stage=cpu-after workingSet=36315136 private=61558784 faults=11782
+diagnostic: time=1788965465332101300 stage=memory-after workingSet=36315136 private=61558784 faults=11782
+diagnostic: time=1788965465336304900 stage=nic-after workingSet=36352000 private=61603840 faults=11822
+diagnostic: time=1788965465336304900 stage=imds-before workingSet=36352000 private=61603840 faults=11822
+diagnostic: imds-response status=200 protocol=HTTP/1.1 contentLength=12
+diagnostic: time=1788965465351731200 stage=imds-after workingSet=36438016 private=61620224 faults=11843
+diagnostic: time=1788965465352485300 stage=identity-after workingSet=36438016 private=61620224 faults=11843
+diagnostic: time=1788965465352485300 stage=resource-after workingSet=36438016 private=61620224 faults=11843
+diagnostic: time=1788965465352485300 stage=send-before-azcopy.job.started workingSet=36536320 private=61620224 faults=11867
+2026/09/09 20:21:06 telemetry: sent packed azcopy.job.started event to App Insights
+diagnostic: time=1788965466347314900 stage=send-after-azcopy.job.started workingSet=38453248 private=62205952 faults=12384
+diagnostic: time=1788965471683008800 stage=send-before-azcopy.job.finished workingSet=207470592 private=148856832 faults=53715
+2026/09/09 20:21:12 telemetry: sent packed azcopy.job.finished event to App Insights
+diagnostic: time=1788965472090015900 stage=send-after-azcopy.job.finished workingSet=208781312 private=150167552 faults=54137

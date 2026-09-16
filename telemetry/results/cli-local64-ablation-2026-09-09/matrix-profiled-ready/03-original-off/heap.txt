@@ -1,0 +1,15 @@
+File: azcopy-live.exe
+Build ID: C:\Users\sharankur\AppData\Local\Temp\azcopy-local64-baseline-sep09\azcopy-live.exe2026-09-09 19:49:10.0297864 +0530 IST
+Type: inuse_space
+Time: 2026-09-09 20:12:14 IST
+Showing nodes accounting for 82.87MB, 95.37% of 86.90MB total
+Showing top 8 nodes out of 129
+      flat  flat%   sum%        cum   cum%
+   64.02MB 73.67% 73.67%    64.02MB 73.67%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  8.78% 82.46%     7.63MB  8.78%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.17MB  5.95% 88.40%    12.80MB 14.73%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+       2MB  2.30% 90.71%        2MB  2.30%  runtime.mallocgc
+    1.04MB  1.20% 91.90%     1.04MB  1.20%  bytes.growSlice
+    1.01MB  1.16% 93.06%     1.01MB  1.16%  cloud.google.com/go/monitoring/apiv3/v2/monitoringpb.init
+       1MB  1.15% 94.22%        1MB  1.15%  regexp/syntax.(*compiler).inst
+       1MB  1.15% 95.37%        1MB  1.15%  google.golang.org/protobuf/internal/filedesc.(*File).initDecls
