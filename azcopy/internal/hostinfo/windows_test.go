@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -102,11 +103,11 @@ func TestHostHardwareWindowsPaths(t *testing.T) {
 				return driveFixed
 			})
 			if test.unc {
-				assert.Equal(t, "nas-smb", mountType)
+				assert.Equal(t, telemetry.MountTypeNASSMB, mountType)
 			} else if test.root == "" {
 				assert.Empty(t, mountType)
 			} else {
-				assert.Equal(t, "local-disk", mountType)
+				assert.Equal(t, telemetry.MountTypeLocalDisk, mountType)
 			}
 			assert.Equal(t, test.root != "", resolverCalled)
 		})

@@ -26,8 +26,10 @@ package azcopy
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -180,11 +182,35 @@ func baseJobDimensions(command string, fromTo common.FromTo, srcCredType, dstCre
 		SourceType:          fromTo.From().String(),
 		DestType:            destType,
 		SourceProtocol:      protocolForLocation(fromTo.From()),
-		SourceMountType:     mountTypeForLocation(fromTo.From()),
+		SourceMountType:     string(mountTypeForLocation(fromTo.From())),
 		DestProtocol:        protocolForLocation(fromTo.To()),
 		SourceAuthMechanism: srcCredType.String(),
 		DestAuthMechanism:   dstCredType.String(),
 	}
+}
+
+func resumeJobDimensions(jobDetails common.GetJobDetailsResponse, source, destination common.ResourceString, srcCredType, dstCredType common.CredentialType, options telemetry.OptionAttributes) telemetry.JobDimensions {
+	d := endpointJobDimensions("jobs.resume", jobDetails.FromTo, source, destination, srcCredType, dstCredType, options)
+	d.SummaryCounterScope = "job-cumulative"
+	return d
+}
+
+func endpointJobDimensions(command string, fromTo common.FromTo, source, destination common.ResourceString, srcCredType, dstCredType common.CredentialType, options telemetry.OptionAttributes) telemetry.JobDimensions {
+	src, dst := fromTo.From(), fromTo.To()
+	d := baseJobDimensions(command, fromTo, srcCredType, dstCredType)
+	d.SourceMountType = string(sourceMountType(src, source.Value))
+	d.SourceStorageAccount = storageAccountName(source, src)
+	d.SourceScope = string(scopeForLocation(source, src, true))
+	d.SourceEndpointKind = string(endpointKind(source, src))
+	d.SourceAuthMechanism = authMechanism(srcCredType, source, src)
+	d.SourceCloudType = string(endpointCloudType(source, src))
+	d.DestStorageAccount = storageAccountName(destination, dst)
+	d.DestScope = string(scopeForLocation(destination, dst, false))
+	d.DestEndpointKind = string(endpointKind(destination, dst))
+	d.DestAuthMechanism = authMechanism(dstCredType, destination, dst)
+	d.DestCloudType = string(endpointCloudType(destination, dst))
+	d.Options = options.Clone()
+	return d
 }
 
 // protocolForLocation reports how AzCopy reaches an endpoint. Azure Files uses
@@ -206,19 +232,179 @@ func protocolForLocation(loc common.Location) string {
 
 // mountTypeForLocation classifies the storage backing an endpoint location at a
 // coarse level (no path inspection). For local paths it reports "local-disk".
-func mountTypeForLocation(loc common.Location) string {
+func mountTypeForLocation(loc common.Location) telemetry.MountType {
 	switch {
 	case loc == common.ELocation.Local():
-		return "local-disk"
+		return telemetry.MountTypeLocalDisk
 	case loc.IsAzure():
-		return "cloud-azure"
+		return telemetry.MountTypeCloudAzure
 	case loc == common.ELocation.S3():
-		return "cloud-s3"
+		return telemetry.MountTypeCloudS3
 	case loc == common.ELocation.GCP():
-		return "cloud-gcs"
+		return telemetry.MountTypeCloudGCS
 	default:
 		return ""
 	}
+}
+
+// sourceMountType refines mountTypeForLocation for local sources by inspecting
+// the OS mount table to distinguish network-attached storage from local disk:
+// "nas-nfs" | "nas-smb" | "local-disk". For remote locations it defers to the
+// coarse classification. localPath is ignored for non-local sources.
+func sourceMountType(loc common.Location, localPath string) telemetry.MountType {
+	if loc != common.ELocation.Local() {
+		return mountTypeForLocation(loc)
+	}
+	if mt := localMountType(mountProbePath(localPath)); mt != "" {
+		return mt
+	}
+	return telemetry.MountTypeLocalDisk
+}
+
+// mountProbePath cuts a local source at its first wildcard, which mount probes cannot resolve.
+func mountProbePath(localPath string) string {
+	if i := strings.Index(localPath, "*"); i >= 0 {
+		return filepath.Dir(localPath[:i+1])
+	}
+	return localPath
+}
+
+// Public-cloud Blob, Data Lake, and Files hosts only; sovereign-cloud account names stay in their cloud.
+var publicStorageAccountHost = regexp.MustCompile(`^([a-z0-9]{3,24})\.(?:(?:privatelink\.)?(?:blob|dfs|file)\.core\.windows\.net|z[1-9][0-9]?\.(?:blob|dfs|file)\.storage\.azure\.net)$`)
+
+func storageAccountName(resource common.ResourceString, location common.Location) string {
+	if !location.IsAzure() {
+		return ""
+	}
+	if match := publicStorageAccountHost.FindStringSubmatch(storageHost(resource)); match != nil {
+		return match[1]
+	}
+	return ""
+}
+
+func authMechanism(credType common.CredentialType, resource common.ResourceString, location common.Location) string {
+	if location.IsLocal() || location == common.ELocation.Pipe() || location == common.ELocation.Benchmark() || location == common.ELocation.None() {
+		return "NotApplicable"
+	}
+	if resource.SAS != "" {
+		return "SAS"
+	}
+	if credType == common.ECredentialType.Anonymous() {
+		return "PublicAnonymous"
+	}
+	return credType.String()
+}
+
+func scopeForLocation(resource common.ResourceString, location common.Location, source bool) telemetry.ResourceScope {
+	switch location {
+	case common.ELocation.Pipe():
+		return telemetry.ResourceScopeStream
+	case common.ELocation.Benchmark():
+		return telemetry.ResourceScopeBenchmark
+	case common.ELocation.None():
+		return telemetry.ResourceScopeNone
+	}
+	level, err := DetermineLocationLevel(resource.Value, location, source)
+	if err != nil {
+		return telemetry.ResourceScopeUnknown
+	}
+	if location.IsLocal() {
+		if level == ELocationLevel.Container() {
+			return telemetry.ResourceScopeLocalDirectory
+		}
+		return telemetry.ResourceScopeLocalObject
+	}
+	switch level {
+	case ELocationLevel.Service():
+		return telemetry.ResourceScopeService
+	case ELocationLevel.Object():
+		return telemetry.ResourceScopeObjectOrPrefix
+	case ELocationLevel.Container():
+		switch location {
+		case common.ELocation.File(), common.ELocation.FileNFS():
+			return telemetry.ResourceScopeShare
+		case common.ELocation.S3(), common.ELocation.GCP():
+			return telemetry.ResourceScopeBucket
+		default:
+			return telemetry.ResourceScopeContainer
+		}
+	default:
+		return telemetry.ResourceScopeUnknown
+	}
+}
+
+// storageHost returns the lower-cased host of an http(s) URL without user info, or "".
+func storageHost(resource common.ResourceString) string {
+	endpoint, err := url.Parse(resource.Value)
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil {
+		return ""
+	}
+	return strings.TrimSuffix(strings.ToLower(endpoint.Hostname()), ".")
+}
+
+// endpointKind classifies an Azure hostname, not DNS resolution or network routing.
+// Non-Azure endpoints return an empty value.
+func endpointKind(r common.ResourceString, loc common.Location) telemetry.EndpointKind {
+	if !loc.IsAzure() {
+		return ""
+	}
+	host := storageHost(r)
+	switch {
+	case cloudTypeFromHost(host) == "":
+		return telemetry.EndpointKindUnknown
+	case strings.Contains(host, ".privatelink."):
+		return telemetry.EndpointKindPrivateEndpoint
+	default:
+		return telemetry.EndpointKindPublic
+	}
+}
+
+func endpointCloudType(resource common.ResourceString, location common.Location) telemetry.CloudType {
+	if !location.IsAzure() {
+		return ""
+	}
+	if cloud := cloudTypeFromHost(storageHost(resource)); cloud != "" {
+		return cloud
+	}
+	return telemetry.CloudTypeUnknown
+}
+
+// cloudTypeFromHost maps an Azure storage host suffix to a cloud environment.
+func cloudTypeFromHost(host string) telemetry.CloudType {
+	switch {
+	case host == "":
+		return ""
+	case strings.HasSuffix(host, ".core.windows.net"), strings.HasSuffix(host, ".storage.azure.net"):
+		return telemetry.CloudTypePublic
+	case strings.HasSuffix(host, ".core.usgovcloudapi.net"):
+		return telemetry.CloudTypeUSGov
+	case strings.HasSuffix(host, ".core.chinacloudapi.cn"):
+		return telemetry.CloudTypeChina
+	case strings.HasSuffix(host, ".core.microsoft.scloud"):
+		return telemetry.CloudTypeUSSec
+	case strings.HasSuffix(host, ".core.eaglex.ic.gov"):
+		return telemetry.CloudTypeUSNat
+	case strings.HasSuffix(host, ".core.sovcloud-api.fr"):
+		return telemetry.CloudTypeBleu
+	case strings.HasSuffix(host, ".core.sovcloud-api.de"):
+		return telemetry.CloudTypeDelos
+	case strings.HasSuffix(host, ".core.sovcloud-api.sg"):
+		return telemetry.CloudTypeGovSG
+	default:
+		return ""
+	}
+}
+
+func copyJobDimensions(o *CookedTransferOptions, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
+	return endpointJobDimensions("copy", o.fromTo, o.source, o.destination, srcCredType, dstCredType, o.telemetryOptions)
+}
+
+func shouldEmitCopyTelemetry(o *CookedTransferOptions) bool {
+	return o != nil && !o.dryrun
+}
+
+func syncJobDimensions(o *cookedSyncOptions, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
+	return endpointJobDimensions("sync", o.fromTo, o.source, o.destination, srcCredType, dstCredType, o.telemetryOptions)
 }
 
 func buildFinishedEvent(resource telemetry.ResourceAttributes, dims telemetry.JobDimensions, runID, invocationID string, end time.Time, summary common.ListJobSummaryResponse, elapsed, enumerationElapsed, transferElapsed time.Duration, shape sourceShapeSummary) telemetry.JobFinishedEvent {

@@ -1,6 +1,10 @@
 package hostinfo
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
+)
 
 func DarwinOSVersion(version string, err error) string {
 	if err != nil {
@@ -27,15 +31,15 @@ func DarwinMemoryGB(bytes uint64, err error) int {
 	return PhysicalMemoryGB(bytes)
 }
 
-func DarwinFSType(fsType string) string {
+func DarwinFSType(fsType string) telemetry.MountType {
 	switch {
 	case strings.HasPrefix(fsType, "nfs"):
-		return "nas-nfs"
+		return telemetry.MountTypeNASNFS
 	case strings.HasPrefix(fsType, "smb"):
-		return "nas-smb"
+		return telemetry.MountTypeNASSMB
 	case fsType == "":
 		return ""
 	default:
-		return "local-disk"
+		return telemetry.MountTypeLocalDisk
 	}
 }

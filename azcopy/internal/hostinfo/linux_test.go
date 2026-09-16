@@ -9,17 +9,18 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestHostHardwareLinuxClassifyFSType(t *testing.T) {
-	assert.Equal(t, "nas-nfs", classifyLinuxFSType("nfs"))
-	assert.Equal(t, "nas-nfs", classifyLinuxFSType("nfs4"))
-	assert.Equal(t, "nas-smb", classifyLinuxFSType("cifs"))
-	assert.Equal(t, "nas-smb", classifyLinuxFSType("smb3"))
-	assert.Equal(t, "nas-smb", classifyLinuxFSType("smbfs"))
-	assert.Equal(t, "local-disk", classifyLinuxFSType("ext4"))
-	assert.Equal(t, "local-disk", classifyLinuxFSType("xfs"))
+	assert.Equal(t, telemetry.MountTypeNASNFS, classifyLinuxFSType("nfs"))
+	assert.Equal(t, telemetry.MountTypeNASNFS, classifyLinuxFSType("nfs4"))
+	assert.Equal(t, telemetry.MountTypeNASSMB, classifyLinuxFSType("cifs"))
+	assert.Equal(t, telemetry.MountTypeNASSMB, classifyLinuxFSType("smb3"))
+	assert.Equal(t, telemetry.MountTypeNASSMB, classifyLinuxFSType("smbfs"))
+	assert.Equal(t, telemetry.MountTypeLocalDisk, classifyLinuxFSType("ext4"))
+	assert.Equal(t, telemetry.MountTypeLocalDisk, classifyLinuxFSType("xfs"))
 	assert.Empty(t, classifyLinuxFSType(""))
 }
 
@@ -139,7 +140,7 @@ func TestHostHardwareLinuxMountSelection(t *testing.T) {
 		name     string
 		path     string
 		mounts   string
-		expected string
+		expected telemetry.MountType
 	}{
 		{"longest prefix", "/mnt/nas/team/file", root + nfs + smb, "nas-smb"},
 		{"reversed table", "/mnt/nas/team/file", smb + nfs + root, "nas-smb"},
@@ -160,5 +161,5 @@ func TestHostHardwareLinuxMountSelection(t *testing.T) {
 	}
 	assert.Empty(t, LinuxMountTypeFromReader("/", iotest.ErrReader(errors.New("read failure"))))
 	partialTable := io.MultiReader(strings.NewReader(root+nfs), iotest.ErrReader(errors.New("read failure")))
-	assert.Equal(t, "nas-nfs", LinuxMountTypeFromReader("/mnt/nas/file", partialTable))
+	assert.Equal(t, telemetry.MountTypeNASNFS, LinuxMountTypeFromReader("/mnt/nas/file", partialTable))
 }

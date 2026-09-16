@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 
 	hostinfointernal "github.com/Azure/azure-storage-azcopy/v10/azcopy/internal/hostinfo"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 )
 
 // osVersion returns a human-readable OS version derived from /etc/os-release
@@ -69,7 +70,7 @@ func totalMemoryGB() int {
 // the given local path: "nas-nfs", "nas-smb", or "local-disk". Returns "" when
 // the mount table cannot be read or the path cannot be resolved (caller falls
 // back to "local-disk").
-func localMountType(path string) string {
+func localMountType(path string) telemetry.MountType {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return ""

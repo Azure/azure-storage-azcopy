@@ -26,6 +26,7 @@ import (
 	"unsafe"
 
 	hostinfointernal "github.com/Azure/azure-storage-azcopy/v10/azcopy/internal/hostinfo"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -92,7 +93,7 @@ func totalMemoryGB() int {
 // Windows does not expose a stable, dependency-free way to distinguish SMB from
 // NFS (Client for NFS) mounts, so network-backed paths are reported as "nas-smb"
 // on a best-effort basis.
-func localMountType(path string) string {
+func localMountType(path string) telemetry.MountType {
 	return hostinfointernal.WindowsMountType(path, driveType)
 }
 
