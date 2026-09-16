@@ -319,6 +319,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+		js.StorageHTTPAttemptCount = pipeStats.HTTPAttemptCount()
+		js.NetworkErrorAttemptCount = pipeStats.NetworkErrorAttemptCount()
+		js.ServerBusy503Count = pipeStats.GetTotalRetries()
+		js.ServerBusyThroughputCount = pipeStats.ServerBusyThroughputCount()
+		js.ServerBusyIOPSCount = pipeStats.ServerBusyIOPSCount()
+		js.ServerBusyOtherCount = pipeStats.ServerBusyOtherCount()
 	}
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
@@ -487,6 +493,12 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+		js.StorageHTTPAttemptCount = pipeStats.HTTPAttemptCount()
+		js.NetworkErrorAttemptCount = pipeStats.NetworkErrorAttemptCount()
+		js.ServerBusy503Count = pipeStats.GetTotalRetries()
+		js.ServerBusyThroughputCount = pipeStats.ServerBusyThroughputCount()
+		js.ServerBusyIOPSCount = pipeStats.ServerBusyIOPSCount()
+		js.ServerBusyOtherCount = pipeStats.ServerBusyOtherCount()
 	}
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
