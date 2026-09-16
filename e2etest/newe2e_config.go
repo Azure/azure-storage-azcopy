@@ -18,6 +18,12 @@ var GlobalConfig NewE2EConfig
 
 // ========= Config definition ==========
 
+type AppInsightsValidationConfig struct {
+	ConnectionString string `env:"AZCOPY_TELEMETRY_CONNECTION_STRING"`
+	WorkspaceID      string `env:"NEW_E2E_APP_INSIGHTS_WORKSPACE_ID"`
+	RunID            string `env:"AZCOPY_E2E_TELEMETRY_RUN_ID"`
+}
+
 /*
 The env tag allows you to specify options.
 The first argument will always be the environment variable name.
@@ -104,6 +110,8 @@ type NewE2EConfig struct {
 
 		StressTestEnabled bool `env:"NEW_E2E_TELEMETRY_STRESS_TEST_ENABLED,default=false"`
 	}
+
+	AppInsightsValidationConfig AppInsightsValidationConfig
 
 	AzCopyExecutableConfig struct {
 		ExecutablePath      string `env:"NEW_E2E_AZCOPY_PATH,required"`
