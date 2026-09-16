@@ -28,6 +28,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -159,4 +161,219 @@ func detectInvocationContext(getenv func(string) string) string {
 		}
 	}
 	return "interactive"
+}
+
+func baseJobDimensions(command string, fromTo common.FromTo, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
+	return telemetry.JobDimensions{
+		Command:             command,
+		FromTo:              fromTo.String(),
+		SourceType:          fromTo.From().String(),
+		DestType:            fromTo.To().String(),
+		SourceProtocol:      protocolForLocation(fromTo.From()),
+		SourceMountType:     mountTypeForLocation(fromTo.From()),
+		DestProtocol:        protocolForLocation(fromTo.To()),
+		SourceAuthMechanism: srcCredType.String(),
+		DestAuthMechanism:   dstCredType.String(),
+	}
+}
+
+// protocolForLocation maps a transfer endpoint location to the wire/access
+// protocol used to reach it.
+func protocolForLocation(loc common.Location) string {
+	switch loc {
+	case common.ELocation.Local():
+		return "local"
+	case common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File():
+		return "https"
+	case common.ELocation.FileNFS():
+		return "nfs"
+	case common.ELocation.S3():
+		return "s3"
+	case common.ELocation.GCP():
+		return "gcs"
+	default:
+		return ""
+	}
+}
+
+// mountTypeForLocation classifies the storage backing an endpoint location at a
+// coarse level (no path inspection). For local paths it reports "local-disk";
+// callers that have the concrete local path should prefer sourceMountType to
+// distinguish NAS (SMB/NFS) mounts.
+func mountTypeForLocation(loc common.Location) string {
+	switch {
+	case loc == common.ELocation.Local():
+		return "local-disk"
+	case loc.IsAzure():
+		return "cloud-azure"
+	case loc == common.ELocation.S3():
+		return "cloud-s3"
+	case loc == common.ELocation.GCP():
+		return "cloud-gcs"
+	default:
+		return ""
+	}
+}
+
+func buildFinishedEvent(resource telemetry.ResourceAttributes, dims telemetry.JobDimensions, runID, invocationID string, end time.Time, summary common.ListJobSummaryResponse, elapsed, enumerationElapsed, transferElapsed time.Duration, shape sourceShapeSummary) telemetry.JobFinishedEvent {
+	jobDurationSeconds := elapsed.Seconds()
+	enumerationPhaseDurationSeconds := enumerationElapsed.Seconds()
+	transferPhaseDurationSeconds := transferElapsed.Seconds()
+	failureErrorCodes, failureErrorOtherCount := aggregateErrorCodesWithOther(summary.FailedTransfers)
+	performanceConstraint, adviceCodes := performanceAdviceAttributes(summary.PerfConstraint, summary.PerformanceAdvice)
+	return telemetry.JobFinishedEvent{
+		Resource:               resource,
+		Dimensions:             dims,
+		JobID:                  runID,
+		InvocationID:           invocationID,
+		EndTimestamp:           end,
+		JobStatus:              summary.JobStatus.String(),
+		FailureErrorCodes:      failureErrorCodes,
+		PerformanceConstraint:  performanceConstraint,
+		PerformanceAdviceCodes: adviceCodes,
+		Measurements: telemetry.JobMeasurements{
+			FailureErrorOtherCount:          failureErrorOtherCount,
+			BytesEnumerated:                 int64(summary.TotalBytesEnumerated),
+			BytesExpected:                   int64(summary.TotalBytesExpected),
+			BytesTransferred:                int64(summary.TotalBytesTransferred),
+			BytesOverWire:                   int64(summary.BytesOverWire),
+			ObjectsScheduled:                countExcludingFolders(summary.TotalTransfers, summary.FolderPropertyTransfers),
+			RegularFilesScheduled:           int64(summary.FileTransfers),
+			SymlinksScheduled:               int64(summary.SymlinkTransfers),
+			HardlinksConvertedScheduled:     int64(summary.HardlinksConvertedCount),
+			FolderPropertiesScheduled:       int64(summary.FolderPropertyTransfers),
+			ObjectsCompleted:                countExcludingFolders(summary.TransfersCompleted, summary.FoldersCompleted),
+			ObjectsFailed:                   countExcludingFolders(summary.TransfersFailed, summary.FoldersFailed),
+			ObjectsSkipped:                  countExcludingFolders(summary.TransfersSkipped, summary.FoldersSkipped),
+			FolderPropertiesCompleted:       int64(summary.FoldersCompleted),
+			FolderPropertiesFailed:          int64(summary.FoldersFailed),
+			FolderPropertiesSkipped:         int64(summary.FoldersSkipped),
+			SourceObjectsScanned:            shape.ObjectsScanned,
+			SourceBytesScanned:              shape.BytesScanned,
+			SourceAverageObjectSizeBytes:    shape.AverageObjectSizeBytes,
+			SourceObjectSizeP50BytesApprox:  shape.ObjectSizeP50BytesApprox,
+			SourceObjectSizeP90BytesApprox:  shape.ObjectSizeP90BytesApprox,
+			SourceObjectSizeP95BytesApprox:  shape.ObjectSizeP95BytesApprox,
+			SourceObjectsUnder1MiB:          shape.ObjectsUnder1MiB,
+			SourceObjectsUnder1MiBRatioPct:  shape.ObjectsUnder1MiBRatioPct,
+			SourceMaxDirectoryDepth:         shape.MaxDirectoryDepth,
+			ContainersScanned:               shape.ContainersScanned,
+			ContainersTouched:               shape.ContainersTouched,
+			BucketsScanned:                  shape.BucketsScanned,
+			BucketsTouched:                  shape.BucketsTouched,
+			TransfersCompleted:              int64(summary.TransfersCompleted),
+			TransfersFailed:                 int64(summary.TransfersFailed),
+			TransfersSkipped:                int64(summary.TransfersSkipped),
+			TransfersTotal:                  int64(summary.TotalTransfers),
+			JobDurationSeconds:              jobDurationSeconds,
+			EnumerationPhaseDurationSeconds: enumerationPhaseDurationSeconds,
+			TransferPhaseDurationSeconds:    transferPhaseDurationSeconds,
+			JobThroughputMbps:               throughputMbps(int64(summary.TotalBytesTransferred), jobDurationSeconds),
+			TransferPhaseThroughputMbps:     throughputMbps(int64(summary.TotalBytesTransferred), transferPhaseDurationSeconds),
+			AverageStorageHTTPAttemptE2EMs:  int64(summary.AverageE2EMilliseconds),
+			AvgIOPS:                         int64(summary.AverageIOPS),
+			StorageHTTPAttemptCount:         summary.StorageHTTPAttemptCount,
+			NetworkErrorAttemptCount:        summary.NetworkErrorAttemptCount,
+			ServerBusy503Count:              summary.ServerBusy503Count,
+			ServerBusyThroughputCount:       summary.ServerBusyThroughputCount,
+			ServerBusyIOPSCount:             summary.ServerBusyIOPSCount,
+			ServerBusyOtherCount:            summary.ServerBusyOtherCount,
+			ServerBusyPct:                   float64(summary.ServerBusyPercentage),
+			NetworkErrorPct:                 float64(summary.NetworkErrorPercentage),
+			PercentComplete:                 float64(summary.PercentComplete),
+		},
+	}
+}
+
+func countExcludingFolders(total, folders uint32) int64 {
+	if folders >= total {
+		return 0
+	}
+	return int64(total - folders)
+}
+
+// maxErrorCodeBuckets bounds how many distinct error codes are reported so a job
+// with many different failure codes cannot create an unbounded dimension value.
+const maxErrorCodeBuckets = 10
+
+func aggregateErrorCodesWithOther(failed []common.TransferDetail) (string, int64) {
+	if len(failed) == 0 {
+		return "", 0
+	}
+	counts := make(map[int32]int)
+	for _, t := range failed {
+		counts[t.ErrorCode]++
+	}
+	type bucket struct {
+		code  int32
+		count int
+	}
+	buckets := make([]bucket, 0, len(counts))
+	for code, count := range counts {
+		buckets = append(buckets, bucket{code, count})
+	}
+	sort.Slice(buckets, func(i, j int) bool {
+		if buckets[i].count != buckets[j].count {
+			return buckets[i].count > buckets[j].count
+		}
+		return buckets[i].code < buckets[j].code
+	})
+	var otherCount int64
+	if len(buckets) > maxErrorCodeBuckets {
+		for _, bucket := range buckets[maxErrorCodeBuckets:] {
+			otherCount += int64(bucket.count)
+		}
+		buckets = buckets[:maxErrorCodeBuckets]
+	}
+	parts := make([]string, 0, len(buckets))
+	for _, b := range buckets {
+		parts = append(parts, strconv.Itoa(int(b.code))+":"+strconv.Itoa(b.count))
+	}
+	return strings.Join(parts, ","), otherCount
+}
+
+const maxPerformanceAdviceCodes = 8
+
+func performanceAdviceAttributes(constraint common.PerfConstraint, advice []common.PerformanceAdvice) (string, []string) {
+	constraintValue := ""
+	if constraint != common.EPerfConstraint.Unknown() {
+		constraintValue = constraint.String()
+	}
+
+	seen := make(map[string]struct{})
+	codes := make([]string, 0, len(advice))
+	for _, item := range advice {
+		code := sanitizeAdviceCode(item.Code)
+		if code == "" {
+			continue
+		}
+		if _, exists := seen[code]; exists || len(codes) == maxPerformanceAdviceCodes {
+			continue
+		}
+		seen[code] = struct{}{}
+		codes = append(codes, code)
+	}
+	return constraintValue, codes
+}
+
+func sanitizeAdviceCode(code string) string {
+	code = strings.TrimSpace(code)
+	if code == "" || len(code) > 64 {
+		return ""
+	}
+	for _, char := range code {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return ""
+	}
+	return code
+}
+
+func throughputMbps(bytes int64, durationSeconds float64) float64 {
+	if durationSeconds <= 0 {
+		return 0
+	}
+	return float64(bytes) * 8 / 1e6 / durationSeconds
 }
