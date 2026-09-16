@@ -325,6 +325,7 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 		raw.dryrun, dryrunNewCopyJobPartOrder,
 		raw.deleteDestinationFileIfNecessary,
 		ConstructCommandStringFromArgs())
+	opts.SetTelemetryOptions(telemetryOptions(cmd))
 	return opts, nil
 }
 
@@ -739,10 +740,11 @@ type CookedCopyCmdArgs struct {
 
 	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
 	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
-	followupJobArgs   *CookedCopyCmdArgs
-	priorJobExitCode  *ExitCode
-	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
-	cleanupJobMessage string
+	followupJobArgs      *CookedCopyCmdArgs
+	priorJobExitCode     *ExitCode
+	isCleanupJob         bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
+	cleanupJobMessage    string
+	benchmarkCopyOptions *azcopy.CopyOptions
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	IncludeDirectoryStubs bool
@@ -1283,6 +1285,8 @@ func isStdinPipeIn() (bool, error) {
 var cpCmd *cobra.Command
 
 type cliCopyHandler struct {
+	isBenchmark bool
+	hasFollowup bool
 }
 
 func (c cliCopyHandler) OnStart(ctx azcopy.JobContext) {
@@ -1297,7 +1301,7 @@ func (c cliCopyHandler) OnTransferProgress(progress azcopy.CopyProgress) {
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
-			return azcopy.GetCopyProgress(progress, false)
+			return azcopy.GetCopyProgress(progress, c.isBenchmark)
 		}
 	}
 
@@ -1316,11 +1320,14 @@ func (c cliCopyHandler) OnComplete(result azcopy.CopyResult) {
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
-			return azcopy.GetCopyResult(result, false)
+			return azcopy.GetCopyResult(result, c.isBenchmark)
 		}
 	}
-
-	glcm.Exit(builder, exitCode)
+	if c.hasFollowup {
+		glcm.Exit(builder, EExitCode.NoExit())
+	} else {
+		glcm.Exit(builder, exitCode)
+	}
 }
 
 // TODO check file size, max is 4.75TB

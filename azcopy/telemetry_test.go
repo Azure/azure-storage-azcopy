@@ -783,7 +783,8 @@ func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
 func TestConfiguredTelemetryConnectionString(t *testing.T) {
 	original := telemetryConnectionString
 	t.Cleanup(func() { telemetryConnectionString = original })
-	assert.Empty(t, original)
+	assert.Contains(t, original, "InstrumentationKey=09115a66-cd5e-4f48-b9b6-f71c883eed46")
+	assert.Contains(t, original, "IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/")
 	assert.Equal(t, original, configuredTelemetryConnectionString(func(string) string { return "" }))
 	assert.Equal(t, original, configuredTelemetryConnectionString(func(string) string { return " \t " }))
 	assert.Empty(t, configuredTelemetryConnectionString(func(string) string {
@@ -807,17 +808,6 @@ func TestConfiguredTelemetryConnectionString(t *testing.T) {
 		}
 		return ""
 	}))
-}
-
-func TestTelemetryDisabledByDefault(t *testing.T) {
-	require.True(t, telemetryDisabledByFlag)
-	t.Setenv(envTelemetryConnectionString, "InstrumentationKey=test;IngestionEndpoint=https://example.test/")
-	t.Setenv(envDisableTelemetry, "false")
-
-	agent := newTelemetryAgent()
-	assert.False(t, agent.enabled)
-	assert.Nil(t, agent.reporter)
-	assert.Empty(t, agent.resource.InstallationID)
 }
 
 func TestTelemetryEmbeddedDefaultHonorsOptOut(t *testing.T) {

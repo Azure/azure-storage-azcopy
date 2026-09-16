@@ -50,13 +50,14 @@ const (
 	telemetrySchemaVersion = "1"
 )
 
-// telemetryConnectionString is empty until a later integration layer configures it.
+// telemetryConnectionString defaults to the test Application Insights component.
 // AZCOPY_TELEMETRY_CONNECTION_STRING overrides it at runtime.
-var telemetryConnectionString string
+var telemetryConnectionString = "InstrumentationKey=09115a66-cd5e-4f48-b9b6-f71c883eed46;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=e43bbaa9-f24c-4613-b098-9e80a2a8216a"
 
-// telemetryDisabledByFlag keeps telemetry disabled until CLI policy is wired.
-// A configured connection string does not override this default.
-var telemetryDisabledByFlag = true
+// telemetryDisabledByFlag is set from the --disable-telemetry CLI flag (wired
+// through ClientOptions.DisableTelemetry). When true, telemetry is disabled
+// regardless of the connection string.
+var telemetryDisabledByFlag bool
 
 const (
 	// envTelemetryConnectionString overrides the embedded connection string.
