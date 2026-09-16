@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -98,6 +99,17 @@ type CopyOptions struct {
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 	s2SGetPropertiesInBackend        *bool // Default true
 	deleteDestinationFileIfNecessary bool
+	telemetryOptions                 telemetry.OptionAttributes
+	benchmarkTelemetry               *benchmarkTelemetryOptions
+}
+
+type benchmarkTelemetryOptions struct {
+	mode             common.BenchMarkMode // Upload or download benchmark mode, reported in telemetry.
+	fileCount        int64                // Configured benchmark file count, not the number of completed transfers.
+	fileSizeBytes    int64                // Configured size of each benchmark file in bytes.
+	folderCount      int64                // Configured number of folders in the benchmark workload.
+	cleanupRequested bool                 // Whether to delete test data created by the upload benchmark afterward.
+	isCleanup        bool                 // Identifies the follow-up deletion job so it is excluded from transfer telemetry.
 }
 
 type CopyHandler interface {
@@ -126,6 +138,22 @@ func (c *CopyOptions) SetInternalOptions(listOfFiles string, s2sGetPropertiesInB
 	c.dryrunJobPartOrderHandler = dryrunJobPartOrderHandler
 	c.deleteDestinationFileIfNecessary = deleteDestinationFileIfNecessary
 	c.commandString = cmd
+}
+
+func (c *CopyOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
+	c.telemetryOptions = options.Clone()
+}
+
+// SetBenchmarkTelemetry identifies benchmark copy work using bounded inputs.
+func (c *CopyOptions) SetBenchmarkTelemetry(mode common.BenchMarkMode, fileCount, fileSizeBytes, folderCount int64, cleanupRequested, isCleanup bool) {
+	c.benchmarkTelemetry = &benchmarkTelemetryOptions{
+		mode:             mode,
+		fileCount:        fileCount,
+		fileSizeBytes:    fileSizeBytes,
+		folderCount:      folderCount,
+		cleanupRequested: cleanupRequested,
+		isCleanup:        isCleanup,
+	}
 }
 
 // Copy copies the contents from source to destination.
