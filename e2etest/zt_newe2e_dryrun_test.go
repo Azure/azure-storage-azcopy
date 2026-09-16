@@ -23,8 +23,9 @@ func (*DryrunSuite) Scenario_UploadSync_Encoded(a *ScenarioVariationManager) {
 	})
 
 	stdout, _ := RunAzCopy(a, AzCopyCommand{
-		Verb:    "sync",
-		Targets: []ResourceManager{src, dst},
+		Verb:      "sync",
+		Telemetry: &telemetryExpectation{NoEvents: true},
+		Targets:   []ResourceManager{src, dst},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				DryRun: pointerTo(true),
@@ -56,8 +57,9 @@ func (*DryrunSuite) Scenario_DownloadSync_Encoded(a *ScenarioVariationManager) {
 	dst := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Local()), ResourceDefinitionContainer{})
 
 	stdout, _ := RunAzCopy(a, AzCopyCommand{
-		Verb:    "sync",
-		Targets: []ResourceManager{src, dst},
+		Verb:      "sync",
+		Telemetry: &telemetryExpectation{NoEvents: true},
+		Targets:   []ResourceManager{src, dst},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				DryRun: pointerTo(true),
@@ -116,7 +118,8 @@ func (*DryrunSuite) Scenario_ExtraProps(a *ScenarioVariationManager) {
 	dstContainer := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	stdout, _ := RunAzCopy(a, AzCopyCommand{
-		Verb: ResolveVariation(a, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}),
+		Verb:      ResolveVariation(a, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}),
+		Telemetry: &telemetryExpectation{NoEvents: true},
 		Targets: []ResourceManager{
 			AzCopyTarget{ResourceManager: srcContainer, AuthType: EExplicitCredentialType.OAuth()},
 			AzCopyTarget{ResourceManager: dstContainer, AuthType: EExplicitCredentialType.OAuth()},
