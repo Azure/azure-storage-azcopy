@@ -22,7 +22,6 @@ package telemetry
 
 import (
 	"context"
-	"log"
 	"time"
 )
 
@@ -34,12 +33,7 @@ func (r *Reporter) ReportEvent(ctx context.Context, evt MetricEvent) error {
 	}
 
 	envelopes := eventToEnvelopes(ikey, evt)
-	if err := postEnvelopes(ctx, r.httpClient(), endpoint, envelopes); err != nil {
-		return err
-	}
-
-	log.Printf("telemetry: sent packed %s event to App Insights", evt.EventName())
-	return nil
+	return postEnvelopes(ctx, r.httpClient(), endpoint, envelopes)
 }
 
 // eventToEnvelopes converts an event into one App Insights custom event. Numeric
