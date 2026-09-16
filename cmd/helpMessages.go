@@ -677,6 +677,9 @@ Change tier of blob to hot:
 Change tier of blob to cold:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cold
 
+Change tier of blob to smart:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=smart
+
 Change tier of blob from hot to Archive:
  - azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=archive
 

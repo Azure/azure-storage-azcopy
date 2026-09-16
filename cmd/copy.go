@@ -1550,7 +1550,7 @@ func init() {
 
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None",
 		"Upload block blob to Azure Storage using this blob tier. (default 'None'). "+
-			"\n Valid options are Hot, Cold, Cool, Archive")
+			"\n Valid options are Hot, Cold, Cool, Archive, Smart")
 
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None",
 		"Upload page blob to Azure Storage using this blob tier. (default 'None'). "+
