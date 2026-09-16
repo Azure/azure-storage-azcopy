@@ -1,0 +1,34 @@
+// Visual: Bar chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend
+    Command = tostring(customDimensions.Command),
+    FromTo = tostring(customDimensions.FromTo),
+    SourceType = tostring(customDimensions.SourceType),
+    DestType = tostring(customDimensions.DestType),
+    LegacyDirection = tostring(customDimensions.TransferDirection),
+    LegacyTopology = tostring(customDimensions.TransferTopology)
+| extend
+    Direction = iif(isnotempty(LegacyDirection), LegacyDirection, case(
+        DestType == 'Trash', 'delete',
+        SourceType in ('Local', 'Benchmark', 'Pipe'), 'upload',
+        DestType in ('Local', 'Pipe'), 'download',
+        SourceType !in ('', 'None') and DestType !in ('', 'None'), 's2s',
+        'unknown')),
+    Topology = iif(isnotempty(LegacyTopology), LegacyTopology, case(
+        SourceType == 'S3' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',
+        SourceType == 'GCP' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',
+        SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',
+        DestType == 'Trash', 'azure-delete',
+        SourceType in ('Local', 'Benchmark', 'Pipe') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',
+        SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Local', 'Pipe'), 'azure-to-local',
+        SourceType !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestType !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',
+        'unknown'))
+| summarize Attempts = count() by Command, FromTo, Direction, Topology, SourceType, DestType
+| top 30 by Attempts desc

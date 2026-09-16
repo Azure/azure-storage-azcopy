@@ -1,0 +1,16 @@
+// Visual: Bar chart or table
+// Data source: xdataanalytics.westcentralus.kusto.windows.net / XDataAnalytics
+// Additional dashboard parameter: _account (free text, default empty)
+XStoreAccountTransactionsHourly
+| where TimePeriod between (_startTime .. _endTime)
+| where isempty(_account) or AccountNameWithoutVersion =~ _account
+| summarize
+    Requests = sum(TransactionCount),
+    Successes = sum(TotalSuccessCount),
+    Throttles = sum(ThrottlingError),
+    AuthorizationErrors = sum(AuthorizationError),
+    NetworkErrors = sum(NetworkError),
+    IngressBytes = sum(TotalIngress),
+    EgressBytes = sum(TotalEgress)
+  by Service, RequestType, AuthenticationType
+| top 30 by Requests desc

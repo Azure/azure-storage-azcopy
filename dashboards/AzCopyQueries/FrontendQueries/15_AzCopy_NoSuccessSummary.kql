@@ -1,0 +1,7 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Summary and status distribution for the same no-success cohort and status filter used by failure detail panels.') AzCopy_NoSuccessSummary(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic, statusFilter:dynamic)
+{
+    let Failures = materialize(AzCopy_NoSuccessDetails(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter, statusFilter));
+    union
+        (Failures | summarize Customers = dcount(CustomerKey), FailedJobs = sum(Jobs), BytesTransferred = sum(BytesTransferred) | extend JobStatus = 'All'),
+        (Failures | summarize Customers = dcount(CustomerKey), FailedJobs = sum(Jobs), BytesTransferred = sum(BytesTransferred) by JobStatus)
+}

@@ -1,0 +1,33 @@
+.create-or-alter function with (
+    folder = 'AzCopyQueries',
+    docstring = 'Shared filtered daily AzCopy usage records. Logical jobs use latest observed terminal status; success includes Completed and CompletedWithSkipped.'
+) AzCopy_Usage(
+    startTime:datetime,
+    endTime:datetime,
+    customerFilter:dynamic,
+    subscriptionFilter:dynamic,
+    sourceFilter:dynamic,
+    targetFilter:dynamic)
+{
+    let IsAll = (values:dynamic) {
+        isnull(values) or array_length(values) == 0
+            or array_index_of(values, '$__all') >= 0
+            or array_index_of(values, '__all') >= 0
+    };
+    AzCopyUsageAggregates1
+    | where SliceDate >= startofday(startTime) and SliceDate < endTime
+    | where IsAll(customerFilter) or CustomerKey in (customerFilter)
+    | where IsAll(subscriptionFilter) or SubscriptionId in (subscriptionFilter)
+    | where IsAll(sourceFilter) or SourceType in (sourceFilter)
+    | where IsAll(targetFilter) or TargetType in (targetFilter)
+    | summarize
+        BytesTransferred = sumif(Count, Name == 'JobRunBytesTransferred'),
+        Jobs = tolong(sumif(Count, Name == 'JobRunResourcesCreated')),
+        ObjectsCompleted = tolong(sumif(Count, Name == 'JobRunObjectsCompleted')),
+        Attempts = tolong(sumif(Count, Name == 'JobRunAttempts')),
+        LastRefresh = max(ExecutionTime)
+      by SliceDate, CustomerKey, CustomerName, SubscriptionId, InstallationID, Command, FromTo, SourceType, TargetType, JobStatus
+    | extend IsSuccess = JobStatus in ('Completed', 'CompletedWithSkipped'),
+        IsFailure = JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),
+        IsMapped = CustomerKey != 'unmapped'
+}

@@ -1,0 +1,4009 @@
+{
+  "id": null,
+  "uid": "azcopy-engineering-no-success",
+  "title": "AzCopy Customer Errors - Engineering (Test)",
+  "description": "Test telemetry only. Customer impact uses daily job summaries; error diagnostics use raw attempts and are not linked to customer identities.",
+  "version": 1,
+  "schemaVersion": 42,
+  "timezone": "utc",
+  "editable": true,
+  "refresh": "",
+  "tags": [
+    "azcopy",
+    "engineering",
+    "customer-errors",
+    "test-telemetry"
+  ],
+  "time": {
+    "to": "now",
+    "from": "now-90d"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "SourceType",
+        "label": "Source type",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": "[]",
+        "refresh": 1,
+        "sort": 1,
+        "query": {
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "refId": "Variable-SourceType"
+        },
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'SourceType' | project text=FilterLabel, value=FilterValue",
+        "options": [],
+        "current": {
+          "text": [
+            "All"
+          ],
+          "selected": true,
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "name": "TargetType",
+        "label": "Target type",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-azure-data-explorer-datasource",
+          "uid": "azcopy-usage-analytics"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": "[]",
+        "refresh": 1,
+        "sort": 1,
+        "query": {
+          "query": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+          "database": "usage-analytics",
+          "queryType": "KQL",
+          "refId": "Variable-TargetType"
+        },
+        "definition": "AzCopy_DashboardFilters() | where FilterName == 'TargetType' | project text=FilterLabel, value=FilterValue",
+        "options": [],
+        "current": {
+          "text": [
+            "All"
+          ],
+          "selected": true,
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "includeAll": false,
+        "query": "All : 0,E2E tagged : 1,Untagged : 2",
+        "current": {
+          "value": "0",
+          "text": "All"
+        },
+        "name": "RawRunScope",
+        "multi": false,
+        "type": "custom",
+        "options": [
+          {
+            "text": "All",
+            "selected": true,
+            "value": "0"
+          },
+          {
+            "text": "E2E tagged",
+            "selected": false,
+            "value": "1"
+          },
+          {
+            "text": "Untagged",
+            "selected": false,
+            "value": "2"
+          }
+        ],
+        "label": "Raw run scope"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "title": "Customer impact | persisted TEST aggregates",
+      "gridPos": {
+        "y": 0,
+        "h": 1,
+        "x": 0,
+        "w": 24
+      },
+      "id": 10,
+      "panels": [],
+      "collapsed": false,
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "Customers with errors",
+      "type": "stat",
+      "description": "Customers with at least one failed job, including those with successful jobs. Only customers we can identify are counted.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\nlet Customers = Usage\r\n    | where Mapped\r\n    | summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure), SuccessfulJobs=sumif(Jobs, IsSuccess),\r\n        CancelledJobs=sumif(Jobs, JobStatus == 'Cancelled'), LastErrorDay=maxif(SliceDate, IsFailure),\r\n        Customer=take_any(CustomerName), Subscriptions=make_set(SubscriptionId, 100), Scenarios=make_set(FromTo, 100)\r\n        by CustomerKey\r\n    | extend FailureRate=100.0 * FailedJobs / Jobs;\nCustomers\r\n| summarize ActiveCustomers=count(), AffectedCustomers=countif(FailedJobs > 0), Jobs=sum(Jobs), FailedJobs=sum(FailedJobs)\r\n| extend AffectedPercent=iff(ActiveCustomers > 0, 100.0 * AffectedCustomers / ActiveCustomers, real(null)),\r\n    FailureRate=iff(Jobs > 0, 100.0 * FailedJobs / Jobs, real(null))\n| project AffectedCustomers",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Customers affected (%)",
+      "type": "stat",
+      "description": "Share of active, identified customers with at least one failed job in this view.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\nlet Customers = Usage\r\n    | where Mapped\r\n    | summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure), SuccessfulJobs=sumif(Jobs, IsSuccess),\r\n        CancelledJobs=sumif(Jobs, JobStatus == 'Cancelled'), LastErrorDay=maxif(SliceDate, IsFailure),\r\n        Customer=take_any(CustomerName), Subscriptions=make_set(SubscriptionId, 100), Scenarios=make_set(FromTo, 100)\r\n        by CustomerKey\r\n    | extend FailureRate=100.0 * FailedJobs / Jobs;\nCustomers\r\n| summarize ActiveCustomers=count(), AffectedCustomers=countif(FailedJobs > 0), Jobs=sum(Jobs), FailedJobs=sum(FailedJobs)\r\n| extend AffectedPercent=iff(ActiveCustomers > 0, 100.0 * AffectedCustomers / ActiveCustomers, real(null)),\r\n    FailureRate=iff(Jobs > 0, 100.0 * FailedJobs / Jobs, real(null))\n| project AffectedPercent",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "decimals": 1,
+          "unit": "percent",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Failed jobs (mapped)",
+      "type": "stat",
+      "description": "Jobs whose latest reported outcome was failed or completed with errors. Cancelled jobs are excluded.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\nlet Customers = Usage\r\n    | where Mapped\r\n    | summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure), SuccessfulJobs=sumif(Jobs, IsSuccess),\r\n        CancelledJobs=sumif(Jobs, JobStatus == 'Cancelled'), LastErrorDay=maxif(SliceDate, IsFailure),\r\n        Customer=take_any(CustomerName), Subscriptions=make_set(SubscriptionId, 100), Scenarios=make_set(FromTo, 100)\r\n        by CustomerKey\r\n    | extend FailureRate=100.0 * FailedJobs / Jobs;\nCustomers\r\n| summarize ActiveCustomers=count(), AffectedCustomers=countif(FailedJobs > 0), Jobs=sum(Jobs), FailedJobs=sum(FailedJobs)\r\n| extend AffectedPercent=iff(ActiveCustomers > 0, 100.0 * AffectedCustomers / ActiveCustomers, real(null)),\r\n    FailureRate=iff(Jobs > 0, 100.0 * FailedJobs / Jobs, real(null))\n| project FailedJobs",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Job failure rate (%)",
+      "type": "stat",
+      "description": "Failed jobs divided by all jobs for identified customers. Cancelled jobs are included in the total, but not counted as failures.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\nlet Customers = Usage\r\n    | where Mapped\r\n    | summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure), SuccessfulJobs=sumif(Jobs, IsSuccess),\r\n        CancelledJobs=sumif(Jobs, JobStatus == 'Cancelled'), LastErrorDay=maxif(SliceDate, IsFailure),\r\n        Customer=take_any(CustomerName), Subscriptions=make_set(SubscriptionId, 100), Scenarios=make_set(FromTo, 100)\r\n        by CustomerKey\r\n    | extend FailureRate=100.0 * FailedJobs / Jobs;\nCustomers\r\n| summarize ActiveCustomers=count(), AffectedCustomers=countif(FailedJobs > 0), Jobs=sum(Jobs), FailedJobs=sum(FailedJobs)\r\n| extend AffectedPercent=iff(ActiveCustomers > 0, 100.0 * AffectedCustomers / ActiveCustomers, real(null)),\r\n    FailureRate=iff(Jobs > 0, 100.0 * FailedJobs / Jobs, real(null))\n| project FailureRate",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "decimals": 1,
+          "unit": "percent",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Latest aggregate activity day",
+      "type": "stat",
+      "description": "Latest day with recorded job activity. An old date means the data may be stale.",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\nUsage | summarize LatestDay=max(SliceDate) | project LatestDay=(LatestDay-datetime(1970-01-01))/1ms",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "text",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "dateTimeAsIso",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Aggregate refreshed at",
+      "type": "stat",
+      "description": "When the summary data was last refreshed.",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\nUsage | summarize LastRefresh=max(LastRefresh) | project LastRefresh=(LastRefresh-datetime(1970-01-01))/1ms",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "text",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "dateTimeAsIso",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Customers encountering errors",
+      "type": "table",
+      "description": "Top 100 identified customers by failed jobs, with successes and failure rates shown alongside.",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\r\nlet Customers = Usage\r\n    | where Mapped\r\n    | summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure), SuccessfulJobs=sumif(Jobs, IsSuccess),\r\n        CancelledJobs=sumif(Jobs, JobStatus == 'Cancelled'), LastErrorDay=maxif(SliceDate, IsFailure),\r\n        Customer=take_any(CustomerName), Subscriptions=make_set(SubscriptionId, 100), Scenarios=make_set(FromTo, 100)\r\n        by CustomerKey\r\n    | extend FailureRate=100.0 * FailedJobs / Jobs;\r\nCustomers | where FailedJobs > 0\r\n| project Customer, CustomerKey, FailedJobs, Jobs, FailureRate, SuccessfulJobs, CancelledJobs, LastErrorDay, Subscriptions, Scenarios\r\n| order by FailedJobs desc, FailureRate desc, Customer asc\r\n| take 100",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Affected customers by day",
+      "type": "timeseries",
+      "description": "Customers with failed jobs each day (UTC). Gaps mean no data, not zero errors.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\r\nUsage | where Mapped\r\n| summarize FailedJobs=sumif(Jobs, IsFailure) by SliceDate, CustomerKey\r\n| summarize AffectedCustomers=countif(FailedJobs > 0) by Time=SliceDate\r\n| order by Time asc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "pointSize": 5,
+            "fillOpacity": 12,
+            "showPoints": "always",
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false
+          },
+          "decimals": 0,
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Errors by transfer scenario | mapped",
+      "type": "table",
+      "description": "Failures and rates by command and transfer direction. A customer may appear in more than one row.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\r\nUsage | where Mapped\r\n| summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure) by Command, FromTo, CustomerKey\r\n| summarize Jobs=sum(Jobs), FailedJobs=sum(FailedJobs), AffectedCustomers=countif(FailedJobs > 0) by Command, FromTo\r\n| where FailedJobs > 0\r\n| extend FailureRate=100.0 * FailedJobs / Jobs\r\n| project Command, FromTo, AffectedCustomers, FailedJobs, Jobs, FailureRate\r\n| order by FailedJobs desc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 11,
+      "title": "Terminal outcomes | mapped",
+      "type": "table",
+      "description": "Reported job outcomes, including successes and cancellations. These are statuses, not error causes.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\r\nUsage | where Mapped\r\n| summarize Jobs=sum(Jobs) by JobStatus, CustomerKey\r\n| summarize Customers=count(), Jobs=sum(Jobs) by JobStatus\r\n| order by Jobs desc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 12,
+      "title": "Customer mapping coverage",
+      "type": "table",
+      "description": "Jobs split by whether we can identify the customer. Unmapped jobs are excluded from customer counts.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Usage = materialize(\r\n    AzCopy_Usage($__timeFrom, $__timeTo, dynamic([]), dynamic([]), dynamic(${SourceType:json}), dynamic(${TargetType:json}))\r\n    | where Jobs > 0\r\n    | extend Mapped = IsMapped and isnotempty(CustomerKey)\r\n);\r\nUsage | summarize Jobs=sum(Jobs), FailedJobs=sumif(Jobs, IsFailure) by Attribution=iff(Mapped, 'Mapped', 'Unmapped')\r\n| extend FailureRate=iff(Jobs > 0, 100.0 * FailedJobs / Jobs, real(null))\r\n| order by Attribution asc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 30,
+      "type": "text",
+      "gridPos": {
+        "y": 38,
+        "h": 14,
+        "x": 0,
+        "w": 24
+      },
+      "options": {
+        "content": "A **job** is one logical AzCopy operation, identified by `JobID`. An **attempt** is one execution of that job, identified by `InvocationID`.\r\n\r\n**Example:** `azcopy copy` fails, then `azcopy jobs resume` completes the same job. That is **1 job, 2 attempts and 1 failed attempt**. The job panels count the latest reported job outcome, so this example becomes a successful job. The raw panels still count its earlier failed attempt.\r\n\r\nRunning `azcopy copy` again from scratch generally creates a new job. Internal HTTP retries, chunks and individual files are **not** additional attempts here. Duplicate finish events are counted once when an invocation ID is available.\r\n\r\n### Comparing the counts\r\n\r\nCustomer panels use persisted daily job summaries for identified customers. Raw panels count execution attempts, are not linked to customer identities, and can contain newer data. **Their totals are not directly comparable:** check the freshness cards and selected filters. Both sections show test telemetry, not production usage.\r\n\r\nFailed outcomes include `Failed`, `CompletedWithErrors` and `CompletedWithErrorsAndSkipped`. Cancellations are not counted as failures. Only delivered finish telemetry is represented; missing events or telemetry opt-out can leave gaps.",
+        "mode": "markdown"
+      },
+      "title": "Jobs, attempts and customer counts"
+    },
+    {
+      "title": "Error diagnostics | raw TEST attempts, not customer-attributed",
+      "gridPos": {
+        "y": 52,
+        "h": 1,
+        "x": 0,
+        "w": 24
+      },
+      "id": 20,
+      "panels": [],
+      "collapsed": false,
+      "type": "row"
+    },
+    {
+      "id": 21,
+      "title": "Failed attempts | raw",
+      "type": "stat",
+      "description": "Failed attempts, deduplicated where an invocation ID is available. Includes failures followed by a successful retry.",
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 53
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\nRaw | summarize FailedAttempts=countif(IsFailure)",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 22,
+      "title": "E2E-tagged failed attempts | raw",
+      "type": "stat",
+      "description": "Failed attempts tagged with an E2E test run ID. Untagged events can still be test traffic.",
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 53
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\nRaw | summarize E2EFailedAttempts=countif(IsFailure and isnotempty(RunID))",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 23,
+      "title": "Latest finish event | raw",
+      "type": "stat",
+      "description": "Time of the latest recorded finish event, including successful runs. This is event time, not ingestion time.",
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 53
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\nRaw | summarize LastSeen=max(timestamp) | project LastSeen=(LastSeen-datetime(1970-01-01))/1ms",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "text",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "unit": "dateTimeAsIso",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "textMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 24,
+      "title": "Reported error categories | raw",
+      "type": "table",
+      "description": "Failed attempts grouped by reported error category and execution stage. Categories may be broad, not root causes.",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nRaw | where IsFailure\r\n| summarize FailedAttempts=count() by Category, Stage\r\n| order by FailedAttempts desc, Category asc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 25,
+      "title": "Reported terminal error codes | raw",
+      "type": "table",
+      "description": "Error codes reported by AzCopy and the number of failed attempts. Some codes are generic, not Storage service codes.",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nRaw | where IsFailure\r\n| summarize FailedAttempts=count() by Code\r\n| order by FailedAttempts desc, Code asc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 26,
+      "title": "Error patterns by command, OS and version | raw",
+      "type": "table",
+      "description": "Top 100 error patterns by command, transfer direction, OS and version. Counts are attempts, not customers.",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nRaw | where IsFailure\r\n| summarize FailedAttempts=count(), E2EAttempts=countif(isnotempty(RunID)), LastSeen=max(timestamp)\r\n    by Command, FromTo, OS, Version, Category, Code\r\n| order by FailedAttempts desc\r\n| take 100",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 31,
+      "type": "text",
+      "gridPos": {
+        "y": 79,
+        "h": 21,
+        "x": 0,
+        "w": 24
+      },
+      "options": {
+        "content": "- **Category:** the reported kind of error, such as `authentication`, `authorization`, `not-found`, `timeout`, `network` or `local-io`.\r\n- **Stage:** the execution phase recorded when the attempt ended. It is not the phase of every individual file failure.\r\n- **Code:** a more specific reported identifier, such as `NoAuthenticationInformation` or `ResourceNotFound`. Generic codes such as `completion-error` do not establish a root cause.\r\n\r\n| Stage | Meaning |\r\n| --- | --- |\r\n| `initialization` | Setting up the operation. |\r\n| `enumeration` | Discovering objects and deciding what to transfer. |\r\n| `transfer` | Executing or waiting for transfers. |\r\n| `completion` | Finalizing and checking the result. |\r\n| `completed` | Reached a completed outcome, possibly with transfer errors. |\r\n\r\n**Why can an error have stage `completed`?** A job can finish processing with `CompletedWithErrors`. AzCopy then reports category `transfer`, stage `completed` and code `transfer-failures`. **Completed does not mean every transfer succeeded.**\r\n\r\nFor example, category `authentication` with stage `enumeration` means an authentication error ended the attempt while discovering objects. Categories named `initialization`, `enumeration`, `transfer` or `completion` may be broad fallback classifications when a more specific cause is unavailable.\r\n\r\n**Reading category / stage pairs:** `completion / completion` means a generic error while finalizing the job; `transfer / transfer` means a generic error while transfers were executing. Repeated words are two fields, not two failures. `transfer / completed` means processing finished with transfer errors. `completed` and `completion` are different values; read the **Error category** and **Stage at exit** columns in that order. `completion / transfer` is not the normal fallback pairing and should not be interpreted as completed-with-errors without inspecting its event.",
+        "mode": "markdown"
+      },
+      "title": "Error categories, stages and codes"
+    },
+    {
+      "title": "Request reliability | raw TEST telemetry",
+      "gridPos": {
+        "y": 100,
+        "h": 1,
+        "x": 0,
+        "w": 24
+      },
+      "id": 40,
+      "panels": [],
+      "collapsed": false,
+      "type": "row"
+    },
+    {
+      "id": 41,
+      "title": "Storage request reliability",
+      "type": "table",
+      "description": "Storage HTTP attempts, including retries, grouped by final outcome. Rates use matching request counters, including from successful executions.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 101
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nlet Reliability = Raw\r\n    | extend HTTPAttempts=todouble(Measurements['azcopy.storage_http_attempt_count']),\r\n        NetworkErrors=todouble(Measurements['azcopy.network_error_attempt_count']),\r\n        Busy503=todouble(Measurements['azcopy.server_busy_503_count']),\r\n        BusyThroughput=todouble(Measurements['azcopy.server_busy_throughput_count']),\r\n        BusyIOPS=todouble(Measurements['azcopy.server_busy_iops_count']),\r\n        BusyOther=todouble(Measurements['azcopy.server_busy_other_count']),\r\n        OmittedErrors=todouble(Measurements['azcopy.failure_error_other_count']),\r\n        Progress=todouble(Measurements['azcopy.percent_complete']);\r\nlet Requests = Reliability\r\n    | where HTTPAttempts >= 0 and NetworkErrors >= 0 and Busy503 >= 0\r\n        and NetworkErrors <= HTTPAttempts and Busy503 <= HTTPAttempts;\r\nRequests\r\n| summarize ReportingExecutions=count(), HTTPAttempts=sum(HTTPAttempts), NetworkErrors=sum(NetworkErrors), Busy503=sum(Busy503) by JobStatus\r\n| extend NetworkErrorPercent=iff(HTTPAttempts > 0, 100.0 * NetworkErrors / HTTPAttempts, real(null)),\r\n    ServerBusyPercent=iff(HTTPAttempts > 0, 100.0 * Busy503 / HTTPAttempts, real(null))\r\n| project JobStatus, ReportingExecutions, HTTPAttempts, NetworkErrors, NetworkErrorPercent, Busy503, ServerBusyPercent\r\n| order by HTTPAttempts desc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 42,
+      "title": "Request error rates by finish hour",
+      "type": "timeseries",
+      "description": "Errors divided by total HTTP attempts, grouped by execution finish hour. Not an average of execution percentages or a real-time request timeline.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 109
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nlet Reliability = Raw\r\n    | extend HTTPAttempts=todouble(Measurements['azcopy.storage_http_attempt_count']),\r\n        NetworkErrors=todouble(Measurements['azcopy.network_error_attempt_count']),\r\n        Busy503=todouble(Measurements['azcopy.server_busy_503_count']),\r\n        BusyThroughput=todouble(Measurements['azcopy.server_busy_throughput_count']),\r\n        BusyIOPS=todouble(Measurements['azcopy.server_busy_iops_count']),\r\n        BusyOther=todouble(Measurements['azcopy.server_busy_other_count']),\r\n        OmittedErrors=todouble(Measurements['azcopy.failure_error_other_count']),\r\n        Progress=todouble(Measurements['azcopy.percent_complete']);\r\nlet Requests = Reliability\r\n    | where HTTPAttempts >= 0 and NetworkErrors >= 0 and Busy503 >= 0\r\n        and NetworkErrors <= HTTPAttempts and Busy503 <= HTTPAttempts;\r\nRequests\r\n| summarize HTTPAttempts=sum(HTTPAttempts), NetworkErrors=sum(NetworkErrors), Busy503=sum(Busy503) by Time=bin(timestamp, 1h)\r\n| project Time, NetworkErrorPercent=iff(HTTPAttempts > 0, 100.0 * NetworkErrors / HTTPAttempts, real(null)),\r\n    ServerBusyPercent=iff(HTTPAttempts > 0, 100.0 * Busy503 / HTTPAttempts, real(null))\r\n| order by Time asc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "pointSize": 5,
+            "fillOpacity": 12,
+            "showPoints": "always",
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false
+          },
+          "decimals": 1,
+          "unit": "percent",
+          "noValue": "No data",
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 43,
+      "title": "Server busy (503) reasons",
+      "type": "table",
+      "description": "503 responses split by reported reason. The total includes all three reasons; mismatches flag inconsistent counters.",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 118
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nlet Reliability = Raw\r\n    | extend HTTPAttempts=todouble(Measurements['azcopy.storage_http_attempt_count']),\r\n        NetworkErrors=todouble(Measurements['azcopy.network_error_attempt_count']),\r\n        Busy503=todouble(Measurements['azcopy.server_busy_503_count']),\r\n        BusyThroughput=todouble(Measurements['azcopy.server_busy_throughput_count']),\r\n        BusyIOPS=todouble(Measurements['azcopy.server_busy_iops_count']),\r\n        BusyOther=todouble(Measurements['azcopy.server_busy_other_count']),\r\n        OmittedErrors=todouble(Measurements['azcopy.failure_error_other_count']),\r\n        Progress=todouble(Measurements['azcopy.percent_complete']);\r\nlet Requests = Reliability\r\n    | where HTTPAttempts >= 0 and NetworkErrors >= 0 and Busy503 >= 0\r\n        and NetworkErrors <= HTTPAttempts and Busy503 <= HTTPAttempts;\r\nReliability\r\n| where Busy503 >= 0 and BusyThroughput >= 0 and BusyIOPS >= 0 and BusyOther >= 0\r\n| summarize ReportingExecutions=count(), Total503=sum(Busy503), Throughput=sum(BusyThroughput), IOPS=sum(BusyIOPS), Other=sum(BusyOther),\r\n    MismatchedExecutions=countif(Busy503 != BusyThroughput + BusyIOPS + BusyOther)\r\n| where ReportingExecutions > 0",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 44,
+      "title": "Progress at failure or cancellation",
+      "type": "table",
+      "description": "Reported transfer progress when an execution ended. Includes cancellations; progress is not a success rate and can include earlier resumed work.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 124
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nlet Reliability = Raw\r\n    | extend HTTPAttempts=todouble(Measurements['azcopy.storage_http_attempt_count']),\r\n        NetworkErrors=todouble(Measurements['azcopy.network_error_attempt_count']),\r\n        Busy503=todouble(Measurements['azcopy.server_busy_503_count']),\r\n        BusyThroughput=todouble(Measurements['azcopy.server_busy_throughput_count']),\r\n        BusyIOPS=todouble(Measurements['azcopy.server_busy_iops_count']),\r\n        BusyOther=todouble(Measurements['azcopy.server_busy_other_count']),\r\n        OmittedErrors=todouble(Measurements['azcopy.failure_error_other_count']),\r\n        Progress=todouble(Measurements['azcopy.percent_complete']);\r\nlet Requests = Reliability\r\n    | where HTTPAttempts >= 0 and NetworkErrors >= 0 and Busy503 >= 0\r\n        and NetworkErrors <= HTTPAttempts and Busy503 <= HTTPAttempts;\r\nReliability | where IsFailure or JobStatus == 'Cancelled'\r\n| extend ValidProgress=iff(Progress >= 0 and Progress <= 100, Progress, real(null))\r\n| summarize Executions=count(), WithProgress=countif(Progress >= 0 and Progress <= 100),\r\n    AveragePercent=avg(ValidProgress), P50Percent=percentile(ValidProgress, 50),\r\n    P95Percent=percentile(ValidProgress, 95) by JobStatus\r\n| extend AveragePercent=iff(WithProgress > 0, AveragePercent, real(null))\r\n| order by Executions desc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "unit": "none",
+          "noValue": "No data",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      }
+    },
+    {
+      "id": 45,
+      "title": "Reported errors",
+      "type": "barchart",
+      "description": "Failed executions by reported error code. Missing codes and generic error labels are grouped as Unknown / other.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 132
+      },
+      "datasource": {
+        "type": "grafana-azure-data-explorer-datasource",
+        "uid": "azcopy-usage-analytics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-azure-data-explorer-datasource",
+            "uid": "azcopy-usage-analytics"
+          },
+          "database": "usage-analytics",
+          "query": "let Events = materialize(\r\n    cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents\r\n    | where timestamp between ($__timeFrom .. $__timeTo)\r\n    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')\r\n    | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),\r\n        SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),\r\n        JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),\r\n        Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),\r\n        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),\r\n        OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),\r\n        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)\r\n);\r\nlet IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };\r\nlet Raw = materialize(\r\n    union (Events | where isnotempty(InvocationID) | summarize arg_max(timestamp, *) by InvocationID),\r\n          (Events | where isempty(InvocationID))\r\n    | where IsAll(dynamic(${SourceType:json})) or SourceType in (dynamic(${SourceType:json}))\r\n    | where IsAll(dynamic(${TargetType:json})) or TargetType in (dynamic(${TargetType:json}))\r\n    | where toint(dynamic(${RawRunScope:json})) == 0 or (toint(dynamic(${RawRunScope:json})) == 1 and isnotempty(RunID))\r\n        or (toint(dynamic(${RawRunScope:json})) == 2 and isempty(RunID))\r\n    | extend IsFailure=JobStatus in ('Failed', 'CompletedWithErrors', 'CompletedWithErrorsAndSkipped'),\r\n        Category=iff(isempty(Category), 'Not reported', Category), Code=iff(isempty(Code), 'Not reported', Code),\r\n        Stage=iff(isempty(Stage), 'Not reported', Stage)\r\n);\r\nRaw | where IsFailure\r\n| extend ReportedCode=trim(@'\\s+', Code)\r\n| extend ErrorCode=case(\r\n    not(ReportedCode matches regex @'^(?:[A-Za-z][A-Za-z0-9_.-]{0,63}|[45][0-9]{2})$'), 'Unknown / other',\r\n    ReportedCode in~ ('unknown', 'other', 'none', 'null', 'not-reported', 'initialization', 'enumeration', 'transfer', 'completion', 'completed',\r\n        'initialization-error', 'enumeration-error', 'transfer-error', 'completion-error', 'transfer-failures', 'job-failed',\r\n        'storage-service-error', 'context-deadline-exceeded', 'local-path-error', 'network-timeout', 'network-error'), 'Unknown / other',\r\n    ReportedCode startswith 'http-' and not(tolower(ReportedCode) matches regex @'^http-[45][0-9]{2}$'), 'Unknown / other',\r\n    ReportedCode)\r\n| summarize FailedAttempts=count() by ErrorCode\r\n| order by FailedAttempts desc, ErrorCode asc",
+          "queryType": "KQL",
+          "rawMode": true,
+          "refId": "A",
+          "resultFormat": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisWidth": 210
+          },
+          "decimals": 0,
+          "unit": "none",
+          "noValue": "No data",
+          "min": 0,
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Rate|Percent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(NetworkErrorPercent|ServerBusyPercent)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ],
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(Day|Seen|Refresh)$"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "FailedAttempts"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error category"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Category"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Stage at exit"
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Stage"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "CustomerKey"
+            }
+          },
+          {
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Customer drilldown",
+                    "url": "/d/azcopy-customer-drilldown?${__url_time_range}&var-Customer=${__data.fields.CustomerKey:percentencode}&var-SubscriptionId=$__all&var-SourceType=$__all&var-TargetType=$__all",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ],
+            "matcher": {
+              "id": "byName",
+              "options": "Customer"
+            }
+          }
+        ]
+      },
+      "options": {
+        "xField": "ErrorCode",
+        "groupWidth": 0.7,
+        "legend": {
+          "showLegend": false
+        },
+        "barWidth": 0.9,
+        "orientation": "horizontal",
+        "tooltip": {
+          "mode": "single"
+        },
+        "barRadius": 0,
+        "xTickLabelMaxLength": 64,
+        "showValue": "always"
+      }
+    },
+    {
+      "id": 32,
+      "type": "text",
+      "gridPos": {
+        "y": 141,
+        "h": 16,
+        "x": 0,
+        "w": 24
+      },
+      "options": {
+        "content": "An **HTTP attempt** is one instrumented Storage request attempt, including retries. A single AzCopy execution can make many HTTP attempts. Network error counts exclude cancellations; telemetry sends and local disk operations are not Storage HTTP attempts. The request panels include successful, failed and cancelled executions because a recovered request error can occur in any of them.\r\n\r\n**Request error rates** are total network errors or 503 responses divided by total HTTP attempts from the same executions, not averages of per-execution percentages. Missing or inconsistent counters are excluded; zero HTTP attempts gives no rate. Hourly points assign each execution's counters to its finish hour, not the hour when every request occurred.\r\n\r\n**Server busy (503)** has throughput, IOPS and other reason buckets. Add the buckets to get the total; do not add the total again. Mismatched executions flag counters that do not reconcile. No reported 503s does not rule out other errors or other forms of throttling.\r\n\r\n**Progress** is the reported transfer percentage at exit, not an error or success rate. The table separates terminal outcomes and shows coverage plus an unweighted average, median (P50) and 95th percentile (P95). Progress can include work from an earlier attempt of a resumed job.\r\n\r\n**Reported errors** counts failed executions by their reported terminal error code, not individual file failures or HTTP requests. Specific codes such as `NoAuthenticationInformation`, `ResourceNotFound`, HTTP error statuses and AzCopy numeric codes keep their own bars. Missing or malformed codes and generic labels such as `completion-error`, `transfer-failures` and `network-error` are grouped as **Unknown / other**. Successes and cancellations are excluded; a failed attempt followed by a successful resume still counts once.",
+        "mode": "markdown"
+      },
+      "title": "Request reliability and progress"
+    }
+  ],
+  "links": [
+    {
+      "title": "Existing AzCopy no-observed-success dashboard",
+      "url": "/d/azcopy-no-observed-success",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ]
+}

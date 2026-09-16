@@ -1,0 +1,55 @@
+[
+  {
+    "adxTiles": 14,
+    "sourceVersion": 161,
+    "title": "AzCopy Data Metrics",
+    "queryFunctions": [
+      "AzCopy_Activity",
+      "AzCopy_Breakdown",
+      "AzCopy_UsageSummary"
+    ],
+    "uid": "azcopy-data-metrics",
+    "sourceUid": "be3i4q07jl5vka",
+    "grafanaPanels": 15
+  },
+  {
+    "adxTiles": 21,
+    "sourceVersion": 125,
+    "title": "AzCopy Customer Drilldown",
+    "queryFunctions": [
+      "AzCopy_Activity",
+      "AzCopy_Breakdown",
+      "AzCopy_CustomerSubscriptions",
+      "AzCopy_UsageDetails",
+      "AzCopy_UsageSummary"
+    ],
+    "uid": "azcopy-customer-drilldown",
+    "sourceUid": "aedhihs9max34c",
+    "grafanaPanels": 24
+  },
+  {
+    "adxTiles": 5,
+    "sourceVersion": 21,
+    "title": "AzCopy Recurring Customer Trends",
+    "queryFunctions": [
+      "AzCopy_RecurringCustomers",
+      "AzCopy_RecurringSummary"
+    ],
+    "uid": "azcopy-recurring-trends",
+    "sourceUid": "eea4p1kr7v5dse",
+    "grafanaPanels": 5
+  },
+  {
+    "adxTiles": 6,
+    "sourceVersion": 30,
+    "title": "AzCopy Customers with No Observed Success",
+    "queryFunctions": [
+      "AzCopy_NoSuccessCustomers",
+      "AzCopy_NoSuccessDetails",
+      "AzCopy_NoSuccessSummary"
+    ],
+    "uid": "azcopy-no-observed-success",
+    "sourceUid": "afeix0jmzcxkwd",
+    "grafanaPanels": 8
+  }
+]

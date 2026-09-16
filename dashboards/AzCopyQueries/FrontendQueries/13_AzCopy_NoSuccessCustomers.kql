@@ -1,0 +1,11 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Mapped customer cohort with failures and no observed successful logical job in the selected time/source/target scope. Determined before filtering terminal status.') AzCopy_NoSuccessCustomers(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic)
+{
+    AzCopy_Usage(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | where IsMapped
+    | summarize Customer = take_any(CustomerName), Jobs = sum(Jobs), SuccessfulJobs = sumif(Jobs, IsSuccess),
+        FailedJobs = sumif(Jobs, IsFailure), CancelledJobs = sumif(Jobs, JobStatus == 'Cancelled'),
+        BytesTransferred = sum(BytesTransferred), Installations = dcount(InstallationID),
+        SubscriptionIds = make_set(SubscriptionId, 1000), FirstSeen = min(SliceDate), LastSeen = max(SliceDate) by CustomerKey
+    | where Jobs > 0 and SuccessfulJobs == 0 and FailedJobs > 0
+    | order by FailedJobs desc, Customer asc
+}

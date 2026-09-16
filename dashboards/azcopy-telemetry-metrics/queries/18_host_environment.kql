@@ -1,0 +1,30 @@
+// Visual: Table
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend
+    Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),
+    SchemaVersion = tostring(customDimensions.SchemaVersion),
+    OSType = tostring(customDimensions.OSType),
+    OSVersion = tostring(customDimensions.OSVersion),
+    Architecture = tostring(customDimensions.HostArch),
+    CPUCount = toint(customDimensions.HostNumCPU),
+    CPUModel = tostring(customDimensions.HostCPUModel),
+    MemoryGB = toint(customDimensions.HostMemoryTotalGB),
+    NICSpeedBucket = tostring(customDimensions.HostNICSpeedBucket),
+    AzureVMDetectedNew = tostring(customDimensions.AzureVMDetected),
+    CountryOrRegion = tostring(client_CountryOrRegion),
+    InvocationContext = tostring(customDimensions.InvocationContext)
+| extend AzureVMDetected = case(
+    isnotempty(AzureVMDetectedNew), AzureVMDetectedNew,
+    tostring(customDimensions.HostVirtualization) == 'azure-vm' or tostring(customDimensions.NetworkRunContext) == 'azure-vm', 'true',
+    isnotempty(tostring(customDimensions.HostVirtualization)) or isnotempty(tostring(customDimensions.NetworkRunContext)), 'false',
+    'unknown')
+| project-away AzureVMDetectedNew
+| summarize Attempts = count() by Version, SchemaVersion, OSType, OSVersion, Architecture, CPUCount, CPUModel, MemoryGB, NICSpeedBucket, AzureVMDetected, CountryOrRegion, InvocationContext
+| top 100 by Attempts desc

@@ -1,0 +1,14 @@
+// Visual: Column chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name == 'azcopy.job.finished'
+| extend NumericValue = toint(customDimensions.HostNumCPU)
+| extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', tostring(NumericValue))
+| summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))
+| order by SortValue asc
+| project Value, Attempts
