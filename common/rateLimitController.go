@@ -112,6 +112,12 @@ type RateLimitConfig struct {
 	ResponseWindow    time.Duration
 	ResponseMinEvents int
 	ResponseMinRatio  float64
+
+	// DisableBandwidth, when true, keeps the bandwidth dimension permanently
+	// unlimited (target 0) regardless of what the stats source reports or what
+	// real-time throttle responses are observed. IOPS is unaffected. Used for
+	// Azure Files File-to-File jobs where only IOPS throttling is desired.
+	DisableBandwidth bool
 }
 
 // DefaultRateLimitConfig returns the recommended defaults.
@@ -465,6 +471,9 @@ func (d *RateLimitController) applyProactiveLocked(stats ResourceStats) {
 	}
 	iopsShare := stats.IopsLimit / int64(workers)
 	bwShare := stats.BandwidthLimitBytesPerSec / int64(workers)
+	if d.cfg.DisableBandwidth {
+		bwShare = 0
+	}
 	if iopsShare != d.curIops || bwShare != d.curBw {
 		d.trace(LogDebug, "proactive equal-share: iops=%d bw=%d (workers=%d)", iopsShare, bwShare, workers)
 	}
@@ -489,7 +498,9 @@ func (d *RateLimitController) maybeReturnToProactiveLocked(stats ResourceStats, 
 	// half of AIMD: without it the targets stay pinned at the last decrease for
 	// the whole quiet window, then jump straight to full equal-share.
 	d.increaseIopsLocked(stats.IopsLimit)
-	d.increaseBandwidthLocked(stats.BandwidthLimitBytesPerSec)
+	if !d.cfg.DisableBandwidth {
+		d.increaseBandwidthLocked(stats.BandwidthLimitBytesPerSec)
+	}
 }
 
 // additiveStep returns one increase step: IncreaseFraction of the reported
@@ -572,10 +583,12 @@ func (d *RateLimitController) applyReactiveLocked(stats ResourceStats, iopsThrot
 	}
 
 	// Bandwidth resource.
-	if bwThrottled {
-		d.decreaseBandwidthLocked(now, limitBw)
-	} else if allowIncrease {
-		d.increaseBandwidthLocked(limitBw)
+	if !d.cfg.DisableBandwidth {
+		if bwThrottled {
+			d.decreaseBandwidthLocked(now, limitBw)
+		} else if allowIncrease {
+			d.increaseBandwidthLocked(limitBw)
+		}
 	}
 
 	if retryAfterSec > 0 {
