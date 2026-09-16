@@ -501,7 +501,8 @@ func (b *BlobFSPathResourceProvider) GetPropertiesWithOptions(a Asserter, option
 			contentType:        resp.ContentType,
 			contentMD5:         resp.ContentMD5,
 		},
-		Metadata: resp.Metadata,
+		Metadata:         resp.Metadata,
+		LastModifiedTime: resp.LastModified,
 		BlobFSProperties: BlobFSProperties{
 			Permissions: resp.Permissions,
 			Owner:       resp.Owner,
