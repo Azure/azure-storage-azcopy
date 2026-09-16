@@ -1,0 +1,20 @@
+File: azcopy-live.exe
+Build ID: C:\Users\sharankur\AppData\Local\Temp\azcopy-large-buffer128-profiled-sep09\azcopy-live.exe2026-09-09 17:23:24.3517385 +0530 IST
+Type: inuse_space
+Time: 2026-09-09 17:34:49 IST
+Showing nodes accounting for 114.40MB, 95.75% of 119.48MB total
+Dropped 76 nodes (cum <= 0.60MB)
+Showing top 12 nodes out of 64
+      flat  flat%   sum%        cum   cum%
+   96.03MB 80.38% 80.38%    96.03MB 80.38%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  6.39% 86.77%     7.63MB  6.39%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.17MB  4.32% 91.09%    12.80MB 10.71%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+    2.50MB  2.10% 93.19%     2.50MB  2.10%  runtime.mallocgc
+    1.54MB  1.29% 94.48%     1.54MB  1.29%  bytes.growSlice
+    1.52MB  1.27% 95.75%     1.52MB  1.27%  github.com/Azure/azure-storage-azcopy/v10/common.newSimpleSlicePool
+         0     0% 95.75%     1.04MB  0.87%  bufio.(*Reader).Read
+         0     0% 95.75%     1.04MB  0.87%  bytes.(*Buffer).Grow (inline)
+         0     0% 95.75%     1.54MB  1.29%  bytes.(*Buffer).grow
+         0     0% 95.75%     1.50MB  1.26%  crypto/tls.(*Conn).HandshakeContext
+         0     0% 95.75%     1.04MB  0.87%  crypto/tls.(*Conn).Read
+         0     0% 95.75%     1.50MB  1.26%  crypto/tls.(*Conn).clientHandshake

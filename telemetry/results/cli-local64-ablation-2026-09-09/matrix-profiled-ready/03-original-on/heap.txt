@@ -1,0 +1,15 @@
+File: azcopy-live.exe
+Build ID: C:\Users\sharankur\AppData\Local\Temp\azcopy-local64-baseline-sep09\azcopy-live.exe2026-09-09 19:49:10.0297864 +0530 IST
+Type: inuse_space
+Time: 2026-09-09 20:12:24 IST
+Showing nodes accounting for 78.41MB, 100% of 78.41MB total
+Showing top 8 nodes out of 71
+      flat  flat%   sum%        cum   cum%
+   60.02MB 76.55% 76.55%    60.02MB 76.55%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  9.73% 86.28%     7.63MB  9.73%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.75MB  7.33% 93.61%    13.38MB 17.07%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+    2.50MB  3.19% 96.81%     2.50MB  3.19%  runtime.mallocgc
+       1MB  1.28% 98.08%        1MB  1.28%  crypto/internal/fips140/nistec.NewP384Point
+    0.50MB  0.64% 98.72%     0.50MB  0.64%  regexp/syntax.(*compiler).inst
+    0.50MB  0.64% 99.36%     0.50MB  0.64%  github.com/Azure/azure-storage-azcopy/v10/common.NewMultiSizeSlicePool
+    0.50MB  0.64%   100%     0.50MB  0.64%  time.Sleep

@@ -1,0 +1,16 @@
+diagnostic: time=1788964760596187300 stage=resource-before workingSet=35794944 private=61595648 faults=11665
+diagnostic: time=1788964760596187300 stage=os-before workingSet=35811328 private=61603840 faults=11669
+diagnostic: time=1788964760596187300 stage=os-after workingSet=35811328 private=61603840 faults=11669
+diagnostic: time=1788964760596187300 stage=cpu-after workingSet=35815424 private=61603840 faults=11670
+diagnostic: time=1788964760596604500 stage=memory-after workingSet=35815424 private=61603840 faults=11670
+diagnostic: time=1788964760600825900 stage=nic-after workingSet=35856384 private=61665280 faults=11714
+diagnostic: time=1788964760600825900 stage=imds-before workingSet=35856384 private=61665280 faults=11714
+diagnostic: time=1788964760616216900 stage=imds-after workingSet=35930112 private=61689856 faults=11732
+diagnostic: time=1788964760616583500 stage=identity-after workingSet=35950592 private=61689856 faults=11737
+diagnostic: time=1788964760616583500 stage=resource-after workingSet=35950592 private=61689856 faults=11737
+diagnostic: time=1788964760616583500 stage=send-before-azcopy.job.started workingSet=36028416 private=61689856 faults=11756
+diagnostic: serialized-only azcopy.job.started
+diagnostic: time=1788964760616583500 stage=send-after-azcopy.job.started workingSet=36159488 private=61706240 faults=11788
+diagnostic: time=1788964768241034500 stage=send-before-azcopy.job.finished workingSet=207417344 private=148783104 faults=53713
+diagnostic: serialized-only azcopy.job.finished
+diagnostic: time=1788964768241034500 stage=send-after-azcopy.job.finished workingSet=207417344 private=148783104 faults=53713

@@ -1,0 +1,20 @@
+File: azcopy.exe
+Build ID: C:\azcopy-perf-retry\azcopy.exe2026-09-09 13:24:09.7955491 +0000 UTC
+Type: inuse_space
+Time: 2026-09-09 19:26:20 IST
+Showing nodes accounting for 102.44MB, 96.20% of 106.48MB total
+Dropped 74 nodes (cum <= 0.53MB)
+Showing top 12 nodes out of 32
+      flat  flat%   sum%        cum   cum%
+   88.03MB 82.67% 82.67%    88.03MB 82.67%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  7.17% 89.84%     7.63MB  7.17%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    4.77MB  4.48% 94.32%    12.40MB 11.65%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+       2MB  1.88% 96.20%        2MB  1.88%  runtime.mallocgc
+         0     0% 96.20%    13.41MB 12.59%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*Client).Copy
+         0     0% 96.20%    12.40MB 11.65%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*CopyTransferProcessor).DispatchFinalPart
+         0     0% 96.20%    12.40MB 11.65%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*CopyTransferProcessor).sendPartToSte
+         0     0% 96.20%    12.40MB 11.65%  github.com/Azure/azure-storage-azcopy/v10/azcopy.(*transferExecutor).initCopyEnumerator.func4
+         0     0% 96.20%    13.41MB 12.59%  github.com/Azure/azure-storage-azcopy/v10/cmd.InitializeAndExecute
+         0     0% 96.20%    13.41MB 12.59%  github.com/Azure/azure-storage-azcopy/v10/cmd.init.2.func2
+         0     0% 96.20%    88.03MB 82.67%  github.com/Azure/azure-storage-azcopy/v10/common.(*chunkedFileWriter).EnqueueChunk
+         0     0% 96.20%    12.40MB 11.65%  github.com/Azure/azure-storage-azcopy/v10/jobsAdmin.(*jobIDToJobMgr).EnsureExists
