@@ -56,17 +56,21 @@ type Client struct {
 	CurrentJobID      common.JobID                  // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
 	oauthTokenManager *common.UserOAuthTokenManager // OAuth token manager for the current user, used for authentication
 	logLevel          common.LogLevel
+	telemetry         *clientTelemetry
 }
 
 type ClientOptions struct {
 	CapMbps         float64
 	TrustedSuffixes string
 	LogLevel        *common.LogLevel
+	// EnableTelemetry opts in to usage telemetry; AZCOPY_DISABLE_TELEMETRY=true still opts out.
+	EnableTelemetry bool
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
 	c := Client{
-		logLevel: common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
+		logLevel:  common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
+		telemetry: &clientTelemetry{enabled: opts.EnableTelemetry},
 	}
 	TrustedSuffixes = opts.TrustedSuffixes
 	common.InitializeFolders()
