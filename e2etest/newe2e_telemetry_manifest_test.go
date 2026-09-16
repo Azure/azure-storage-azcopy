@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -125,6 +127,27 @@ func TestTelemetryManifestFunctionalCases(t *testing.T) {
 	require.ErrorContains(t, err, "installation ID changed")
 }
 
+func TestTelemetryBenchmarkPrimaryCapture(t *testing.T) {
+	capture := newAzCopyJobIDCapture(&AzCopyRawStdout{})
+	capture.firstJobOnly = true
+	primary, cleanup := common.NewJobID(), common.NewJobID()
+	for _, job := range []common.JobID{primary, cleanup} {
+		content, err := json.Marshal(common.ListJobSummaryResponse{JobID: job, JobStatus: common.EJobStatus.Completed()})
+		require.NoError(t, err)
+		line, err := json.Marshal(cmd.JsonOutputTemplate{MessageType: "EndOfJob", MessageContent: string(content)})
+		require.NoError(t, err)
+		for _, value := range append(line, '\n') {
+			_, err = capture.Write([]byte{value})
+			require.NoError(t, err)
+		}
+	}
+	require.Equal(t, primary.String(), capture.JobID())
+	require.Equal(t, primary, capture.FinalSummary().JobID)
+	summaries := capture.Summaries()
+	require.Len(t, summaries, 2)
+	require.Equal(t, cleanup, summaries[1].JobID)
+}
+
 func TestTelemetryManifestAuthCloud(t *testing.T) {
 	for _, test := range []struct {
 		name, fromTo, sourceAuth, destinationAuth, sourceCloud, destinationCloud string
@@ -166,6 +189,22 @@ func TestTelemetryManifestAuthCloud(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTelemetryConcurrentLogRegistration(t *testing.T) {
+	environment := &AzCopyEnvironmentContext{mu: &sync.Mutex{}}
+	var workers sync.WaitGroup
+	for index := range 100 {
+		workers.Add(1)
+		go func() { defer workers.Done(); environment.RegisterLogUpload(LogUpload{RunID: uint(index)}) }()
+	}
+	workers.Wait()
+	require.Len(t, environment.LogUploads, 100)
+	seen := map[uint]bool{}
+	for _, entry := range environment.LogUploads {
+		seen[entry.RunID] = true
+	}
+	require.Len(t, seen, 100)
 }
 
 type manifestQueryStub struct {
@@ -313,6 +352,53 @@ func TestTelemetryManifestEndpointTypes(t *testing.T) {
 	assert.Empty(t, destination)
 	_, _, err = telemetryEndpointTypes([]string{"source", "destination"}, map[string]string{"from-to": "invalid"})
 	require.Error(t, err)
+}
+
+func TestTelemetryManifestRegistration(t *testing.T) {
+	resetAppInsightsValidation()
+	t.Cleanup(resetAppInsightsValidation)
+	jobID := common.NewJobID()
+	summary := common.ListJobSummaryResponse{
+		JobID: jobID, JobStatus: common.EJobStatus.Completed(), TotalBytesTransferred: 123, TransfersCompleted: 2,
+		FileTransfers: 1, FolderPropertyTransfers: 1, FoldersCompleted: 1, StorageHTTPAttemptCount: 7, PercentComplete: 100,
+		SymlinkTransfers: 2, HardlinksConvertedCount: 3, NetworkErrorAttemptCount: 4, ServerBusy503Count: 5,
+	}
+	capture := newAzCopyJobIDCapture(&AzCopyRawStdout{})
+	_, err := capture.Write([]byte("Job " + jobID.String() + " has started\n"))
+	require.NoError(t, err)
+	encodedSummary, err := json.Marshal(summary)
+	require.NoError(t, err)
+	encodedOutput, err := json.Marshal(cmd.JsonOutputTemplate{MessageType: cmd.EOutputMessageType.EndOfJob().String(), MessageContent: string(encodedSummary)})
+	require.NoError(t, err)
+	_, err = capture.Write(encodedOutput[:len(encodedOutput)/2])
+	require.NoError(t, err)
+	_, err = capture.Write(encodedOutput[len(encodedOutput)/2:])
+	require.NoError(t, err)
+	registerTelemetryExpectation("run/process", capture.JobID(), AzCopyVerbJobsResume, capture.FinalSummary(), "Blob", "File")
+	attempt := snapshotAppInsightsValidation().expectedAttempts[0]
+	assert.Equal(t, "jobs.resume", attempt.Command)
+	assert.Equal(t, "job-cumulative", attempt.Properties["SummaryCounterScope"])
+	assert.Equal(t, "Blob", attempt.Properties["SourceType"])
+	assert.Equal(t, "Completed", attempt.FinishedProperties["JobStatus"])
+	assert.Equal(t, float64(123), attempt.Measurements["azcopy.bytes_transferred"])
+	assert.Equal(t, float64(1), attempt.Measurements["azcopy.folder_properties_scheduled"])
+	assert.Equal(t, float64(1), attempt.Measurements["azcopy.objects_completed"])
+	assert.Equal(t, float64(7), attempt.Measurements["azcopy.storage_http_attempt_count"])
+	assert.Equal(t, float64(2), attempt.Measurements["azcopy.symlinks_scheduled"])
+	assert.Equal(t, float64(3), attempt.Measurements["azcopy.hardlinks_converted_scheduled"])
+	assert.Equal(t, float64(4), attempt.Measurements["azcopy.network_error_attempt_count"])
+	assert.Equal(t, float64(5), attempt.Measurements["azcopy.server_busy_503_count"])
+	assert.Equal(t, float64(100), attempt.Measurements["azcopy.percent_complete"])
+	assert.Equal(t, jobID.String(), attempt.InstallationGroup)
+	assert.Contains(t, attempt.AbsentMeasurements, "azcopy.job_throughput_mbps")
+	assert.Contains(t, attempt.AbsentMeasurements, "azcopy.transfer_phase_throughput_mbps")
+	environment, first := telemetryProcessEnvironment([]string{"KEEP=yes", "AZCOPY_E2E_TELEMETRY_RUN_ID=old", "azcopy_e2e_telemetry_run_id=other"}, "run")
+	_, second := telemetryProcessEnvironment(nil, "run")
+	assert.NotEqual(t, first, second)
+	assert.Equal(t, []string{"KEEP=yes", "AZCOPY_E2E_TELEMETRY_RUN_ID=" + first}, environment)
+	assert.True(t, strings.HasPrefix(first, "run/"))
+	_, err = validateAppInsightsValidationConfig(AppInsightsValidationConfig{RunID: strings.Repeat("x", 81), WorkspaceID: "workspace", ConnectionString: "InstrumentationKey=test"})
+	assert.ErrorContains(t, err, "at most 80 bytes")
 }
 
 func TestTelemetryManifestOptOut(t *testing.T) {

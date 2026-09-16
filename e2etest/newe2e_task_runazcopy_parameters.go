@@ -195,6 +195,7 @@ type RawFlags map[string]string
 // in a test, without rewriting all the flags for every use case.
 
 type GlobalFlags struct {
+	DisableTelemetry *bool    `flag:"disable-telemetry"`
 	CapMbps          *float64 `flag:"cap-mbps"`
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
 	SkipVersionCheck *bool    `flag:"skip-version-check,default:true"`

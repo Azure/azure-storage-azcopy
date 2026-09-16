@@ -3,6 +3,7 @@ package e2etest
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -14,6 +15,133 @@ var _ AzCopyStdout = &AzCopyParsedCopySyncRemoveStdout{}
 var _ AzCopyStdout = &AzCopyParsedDryrunStdout{}
 var _ AzCopyStdout = &AzCopyParsedJobsListStdout{}
 var _ AzCopyStdout = &AzCopyParsedJobsShowStdout{}
+
+type azCopyJobIDCapture struct {
+	target       AzCopyStdout
+	mu           sync.Mutex
+	pending      string
+	jobID        string
+	finalSummary *common.ListJobSummaryResponse
+	summaries    []common.ListJobSummaryResponse
+	onJobID      func()
+	firstJobOnly bool
+}
+
+func newAzCopyJobIDCapture(target AzCopyStdout) *azCopyJobIDCapture {
+	return &azCopyJobIDCapture{target: target}
+}
+
+func (c *azCopyJobIDCapture) RawStdout() []string { return c.target.RawStdout() }
+
+func (c *azCopyJobIDCapture) String() string { return c.target.String() }
+
+func (c *azCopyJobIDCapture) Write(p []byte) (int, error) {
+	n, err := c.target.Write(p)
+	if n > 0 {
+		c.capture(string(p[:n]), false)
+	}
+	return n, err
+}
+
+func (c *azCopyJobIDCapture) JobID() string {
+	c.capture("", true)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.jobID
+}
+
+func (c *azCopyJobIDCapture) capture(chunk string, flush bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.pending += chunk
+	for {
+		lineEnd := strings.IndexByte(c.pending, '\n')
+		if lineEnd < 0 {
+			break
+		}
+
+		line := strings.TrimSuffix(c.pending[:lineEnd], "\r")
+		c.pending = c.pending[lineEnd+1:]
+		c.captureLine(line)
+	}
+
+	if flush && c.pending != "" {
+		line := strings.TrimSuffix(c.pending, "\r")
+		c.pending = ""
+		c.captureLine(line)
+	}
+}
+
+func (c *azCopyJobIDCapture) FinalSummary() *common.ListJobSummaryResponse {
+	c.capture("", true)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.finalSummary == nil {
+		return nil
+	}
+	summary := *c.finalSummary
+	return &summary
+}
+
+func (c *azCopyJobIDCapture) Summaries() []common.ListJobSummaryResponse {
+	c.capture("", true)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]common.ListJobSummaryResponse(nil), c.summaries...)
+}
+
+func (c *azCopyJobIDCapture) captureLine(line string) bool {
+	var output cmd.JsonOutputTemplate
+	if json.Unmarshal([]byte(line), &output) == nil && output.MessageType == cmd.EOutputMessageType.EndOfJob().String() {
+		var summary common.ListJobSummaryResponse
+		if json.Unmarshal([]byte(output.MessageContent), &summary) == nil && !summary.JobID.IsEmpty() {
+			if c.firstJobOnly {
+				c.summaries = append(c.summaries, summary)
+			}
+			if c.firstJobOnly && c.jobID != "" && c.jobID != summary.JobID.String() {
+				return false
+			}
+			c.finalSummary = &summary
+			return c.setJobID(summary.JobID.String())
+		}
+	}
+	if json.Unmarshal([]byte(line), &output) == nil &&
+		output.MessageType == cmd.EOutputMessageType.Init().String() {
+		var initMessage cmd.InitMsgJsonTemplate
+		if json.Unmarshal([]byte(output.MessageContent), &initMessage) == nil &&
+			c.setJobID(initMessage.JobID) {
+			return true
+		}
+	}
+
+	const (
+		textPrefix = "Job "
+		textSuffix = " has started"
+	)
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, textPrefix) && strings.HasSuffix(line, textSuffix) {
+		return c.setJobID(strings.TrimSuffix(strings.TrimPrefix(line, textPrefix), textSuffix))
+	}
+	return false
+}
+
+func (c *azCopyJobIDCapture) setJobID(candidate string) bool {
+	jobID, err := common.ParseJobID(candidate)
+	if err != nil {
+		return false
+	}
+	if c.firstJobOnly && c.jobID != "" && c.jobID != candidate {
+		return false
+	}
+
+	c.jobID = jobID.String()
+	if c.onJobID != nil {
+		c.onJobID()
+	}
+	return true
+}
 
 // ManySubscriberChannel is intended to reproduce the effects of .NET's events.
 // This allows us to *partially* answer the question of how we want to handle testing of prompting in the New E2E framework.
