@@ -32,6 +32,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +62,7 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			commandLineArgs.telemetryOptions = telemetryOptions(cmd)
 			includeTransfer := parseTransfers(commandLineArgs.includeTransfer)
 			excludeTransfer := parseTransfers(commandLineArgs.excludeTransfer)
 			if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
@@ -89,8 +91,9 @@ type resumeCmdArgs struct {
 	includeTransfer string
 	excludeTransfer string
 
-	SourceSAS      string
-	DestinationSAS string
+	SourceSAS        string
+	DestinationSAS   string
+	telemetryOptions telemetry.OptionAttributes
 }
 
 // processes the resume command,
@@ -108,6 +111,7 @@ func (rca resumeCmdArgs) process() error {
 		DestinationSAS: rca.DestinationSAS,
 		Handler:        cliResumeHandler{},
 	}
+	resumeOptions.SetTelemetryOptions(rca.telemetryOptions)
 	// Create a context that can be cancelled by Ctrl-C
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
