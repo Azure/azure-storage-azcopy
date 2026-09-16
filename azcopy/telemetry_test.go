@@ -23,6 +23,7 @@ package azcopy
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -47,6 +48,16 @@ func TestBaseJobDimensions(t *testing.T) {
 	a.Equal(common.ECredentialType.SharedKey().String(), d.DestAuthMechanism)
 }
 
+func TestSourceMountType(t *testing.T) {
+	a := assert.New(t)
+	// Remote sources use the coarse cloud classification (no path inspection).
+	a.Equal("cloud-azure", sourceMountType(common.ELocation.Blob(), ""))
+	a.Equal("cloud-s3", sourceMountType(common.ELocation.S3(), ""))
+	a.Equal("cloud-gcs", sourceMountType(common.ELocation.GCP(), ""))
+	// A local path that cannot be classified falls back to local-disk (never empty).
+	a.Equal("local-disk", sourceMountType(common.ELocation.Local(), "this-path-does-not-exist-xyz"))
+}
+
 func TestProtocolForLocation(t *testing.T) {
 	a := assert.New(t)
 	a.Equal("local", protocolForLocation(common.ELocation.Local()))
@@ -67,6 +78,247 @@ func TestMountTypeForLocation(t *testing.T) {
 	a.Equal("cloud-gcs", mountTypeForLocation(common.ELocation.GCP()))
 }
 
+func TestEndpointKind(t *testing.T) {
+	a := assert.New(t)
+	a.Equal("public", endpointKind(
+		common.ResourceString{Value: "https://acct.blob.core.windows.net/c"},
+		common.ELocation.Blob()))
+	a.Equal("private-endpoint", endpointKind(
+		common.ResourceString{Value: "https://acct.privatelink.blob.core.windows.net/c"},
+		common.ELocation.Blob()))
+	// Non-Azure destinations have no endpoint kind.
+	a.Equal("", endpointKind(
+		common.ResourceString{Value: "/local/path"},
+		common.ELocation.Local()))
+}
+
+func TestEndpointCloudType(t *testing.T) {
+	a := assert.New(t)
+	a.Equal("public", endpointCloudType(
+		common.ResourceString{Value: "https://acct.blob.core.windows.net/c"}, common.ELocation.Blob()))
+	a.Equal("gov", endpointCloudType(
+		common.ResourceString{Value: "https://acct.blob.core.usgovcloudapi.net/c"}, common.ELocation.Blob()))
+	a.Equal("china", endpointCloudType(
+		common.ResourceString{Value: "https://acct.blob.core.chinacloudapi.cn/c"}, common.ELocation.Blob()))
+	a.Equal("germany", endpointCloudType(
+		common.ResourceString{Value: "https://acct.blob.core.cloudapi.de/c"}, common.ELocation.Blob()))
+	a.Equal("unknown", endpointCloudType(
+		common.ResourceString{Value: "https://acct.blob.example.com/c"}, common.ELocation.Blob()))
+	a.Empty(endpointCloudType(
+		common.ResourceString{Value: "https://s3.amazonaws.com/bucket"}, common.ELocation.S3()))
+	a.Empty(endpointCloudType(
+		common.ResourceString{Value: "/local/path"}, common.ELocation.Local()))
+}
+
+func TestStorageAccountName(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource string
+		location common.Location
+		want     string
+	}{
+		{"blob", "https://account.blob.core.windows.net/container/object?sig=secret", common.ELocation.Blob(), "account"},
+		{"dfs", "https://account.dfs.core.windows.net/filesystem/path", common.ELocation.BlobFS(), "account"},
+		{"file", "https://account.file.core.windows.net/share/path", common.ELocation.File(), "account"},
+		{"nfs", "https://account.file.core.windows.net/share/path", common.ELocation.FileNFS(), "account"},
+		{"private link", "https://account.privatelink.blob.core.windows.net/container", common.ELocation.Blob(), "account"},
+		{"government", "https://account.blob.core.usgovcloudapi.net/container", common.ELocation.Blob(), "account"},
+		{"china", "https://account.blob.core.chinacloudapi.cn/container", common.ELocation.Blob(), "account"},
+		{"germany", "https://account.blob.core.cloudapi.de/container", common.ELocation.Blob(), "account"},
+		{"dns zone", "https://account.z12.blob.storage.azure.net/container", common.ELocation.Blob(), "account"},
+		{"case and port", "https://Account123.Blob.Core.Windows.Net:443/container", common.ELocation.Blob(), "account123"},
+		{"trailing dot", "https://account.blob.core.windows.net./container", common.ELocation.Blob(), "account"},
+		{"http", "http://account.blob.core.windows.net/container", common.ELocation.Blob(), "account"},
+		{"local", "/local/private/path", common.ELocation.Local(), ""},
+		{"local mount", "\\\\account.file.core.windows.net\\share", common.ELocation.Local(), ""},
+		{"s3", "https://bucket.s3.amazonaws.com/object", common.ELocation.S3(), ""},
+		{"gcp", "https://storage.googleapis.com/bucket/object", common.ELocation.GCP(), ""},
+		{"non Azure type", "https://account.blob.core.windows.net/container", common.ELocation.S3(), ""},
+		{"custom host", "https://account.example.com/container", common.ELocation.Blob(), ""},
+		{"suffix spoof", "https://account.blob.core.windows.net.example.com/container", common.ELocation.Blob(), ""},
+		{"emulator", "http://127.0.0.1:10000/devstoreaccount1/container", common.ELocation.Blob(), ""},
+		{"empty", "", common.ELocation.Blob(), ""},
+		{"malformed", "https://%zz/container", common.ELocation.Blob(), ""},
+		{"missing account", "https://.blob.core.windows.net/container", common.ELocation.Blob(), ""},
+		{"short account", "https://ab.blob.core.windows.net/container", common.ELocation.Blob(), ""},
+		{"long account", "https://" + strings.Repeat("a", 25) + ".blob.core.windows.net/container", common.ELocation.Blob(), ""},
+		{"invalid account", "https://account-name.blob.core.windows.net/container", common.ELocation.Blob(), ""},
+		{"userinfo", "https://user:secret@account.blob.core.windows.net/container", common.ELocation.Blob(), ""},
+		{"unsupported scheme", "ftp://account.blob.core.windows.net/container", common.ELocation.Blob(), ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resource := common.ResourceString{Value: test.resource, SAS: "sig=another-secret", ExtraQuery: "versionid=private-version"}
+			assert.Equal(t, test.want, storageAccountName(resource, test.location))
+		})
+	}
+}
+
+func TestStorageAccountDimensions(t *testing.T) {
+	source := common.ResourceString{Value: "https://sourceaccount.blob.core.windows.net/source/private-object", SAS: "sig=source-secret"}
+	destination := common.ResourceString{Value: "https://targetaccount.blob.core.windows.net/target/private-object", SAS: "sig=target-secret"}
+	credential := common.ECredentialType.Anonymous()
+	fromTo := common.EFromTo.BlobBlob()
+	dimensions := map[string]telemetry.JobDimensions{
+		"copy":   copyJobDimensions(&CookedTransferOptions{fromTo: fromTo, source: source, destination: destination}, credential, credential),
+		"sync":   syncJobDimensions(&cookedSyncOptions{fromTo: fromTo, source: source, destination: destination}, credential, credential),
+		"resume": resumeJobDimensions(common.GetJobDetailsResponse{FromTo: fromTo}, source, destination, credential, credential, telemetry.OptionAttributes{}),
+	}
+	for name, dimension := range dimensions {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, "sourceaccount", dimension.SourceStorageAccount)
+			assert.Equal(t, "targetaccount", dimension.DestStorageAccount)
+		})
+	}
+}
+
+func TestCopyJobDimensions(t *testing.T) {
+	a := assert.New(t)
+	o := &CookedTransferOptions{
+		fromTo:      common.EFromTo.LocalBlob(),
+		source:      common.ResourceString{Value: "local"},
+		destination: common.ResourceString{Value: "https://account.blob.core.windows.net/container"},
+		telemetryOptions: telemetry.OptionAttributes{
+			FlagsSet: []string{"block-size-mb", "put-md5", "recursive"},
+			Values: map[string]string{
+				"OptBlockSizeMB": "8",
+				"OptPutMD5":      "true",
+				"OptRecursive":   "true",
+			},
+		},
+	}
+	d := copyJobDimensions(o, common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken())
+	a.Equal("copy", d.Command)
+	a.Equal("NotApplicable", d.SourceAuthMechanism)
+	a.Equal(common.ECredentialType.OAuthToken().String(), d.DestAuthMechanism)
+	a.Empty(d.SourceCloudType)
+	a.Equal("public", d.DestCloudType)
+	a.Empty(d.SourceStorageAccount)
+	a.Equal("account", d.DestStorageAccount)
+	a.Equal([]string{"block-size-mb", "put-md5", "recursive"}, d.Options.FlagsSet)
+	a.Equal("8", d.Options.Values["OptBlockSizeMB"])
+	o.telemetryOptions.FlagsSet[0] = "mutated"
+	o.telemetryOptions.Values["OptBlockSizeMB"] = "mutated"
+	a.Equal([]string{"block-size-mb", "put-md5", "recursive"}, d.Options.FlagsSet)
+	a.Equal("8", d.Options.Values["OptBlockSizeMB"])
+}
+
+func TestCopyJobDimensionsS3ToAzureGovernment(t *testing.T) {
+	o := &CookedTransferOptions{
+		fromTo:      common.EFromTo.S3Blob(),
+		source:      common.ResourceString{Value: "https://s3.amazonaws.com/source-bucket"},
+		destination: common.ResourceString{Value: "https://account.blob.core.usgovcloudapi.net/container"},
+	}
+	dimensions := copyJobDimensions(o, common.ECredentialType.S3AccessKey(), common.ECredentialType.OAuthToken())
+	assert.Equal(t, "S3Blob", dimensions.FromTo)
+	assert.Empty(t, dimensions.SourceCloudType)
+	assert.Equal(t, "gov", dimensions.DestCloudType)
+	assert.Empty(t, dimensions.SourceStorageAccount)
+	assert.Equal(t, "account", dimensions.DestStorageAccount)
+}
+
+func TestCopyJobDimensionsBenchmark(t *testing.T) {
+	o := &CookedTransferOptions{
+		fromTo:      common.EFromTo.BenchmarkBlob(),
+		source:      common.ResourceString{Value: "https://benchmark"},
+		destination: common.ResourceString{Value: "https://account.blob.core.windows.net/container/benchmark-job"},
+		benchmarkTelemetry: &benchmarkTelemetryOptions{
+			mode:             "upload",
+			fileCount:        100,
+			fileSizeBytes:    256 * 1024 * 1024,
+			folderCount:      10,
+			cleanupRequested: true,
+		},
+	}
+	dimensions := copyJobDimensions(o, common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken())
+	assert.Equal(t, "bench", dimensions.Command)
+	assert.Equal(t, "upload", dimensions.BenchmarkMode)
+	assert.Empty(t, dimensions.SourceStorageAccount)
+	assert.Equal(t, "account", dimensions.DestStorageAccount)
+	assert.Equal(t, int64(100), dimensions.BenchmarkFileCount)
+	assert.Equal(t, int64(256*1024*1024), dimensions.BenchmarkFileSizeBytes)
+	assert.Equal(t, int64(10), dimensions.BenchmarkFolderCount)
+	assert.True(t, dimensions.BenchmarkCleanupRequested)
+	assert.False(t, dimensions.BenchmarkIsCleanup)
+}
+
+func TestShouldEmitCopyTelemetry(t *testing.T) {
+	assert.True(t, shouldEmitCopyTelemetry(&CookedTransferOptions{}))
+	assert.False(t, shouldEmitCopyTelemetry(&CookedTransferOptions{dryrun: true}))
+	assert.True(t, shouldEmitCopyTelemetry(&CookedTransferOptions{benchmarkTelemetry: &benchmarkTelemetryOptions{}}))
+	assert.False(t, shouldEmitCopyTelemetry(&CookedTransferOptions{benchmarkTelemetry: &benchmarkTelemetryOptions{isCleanup: true}}))
+}
+
+func TestBenchmarkTelemetrySurvivesOptionCooking(t *testing.T) {
+	options := CopyOptions{
+		FromTo:    common.EFromTo.BenchmarkBlob(),
+		Recursive: true,
+	}
+	options.SetBenchmarkTelemetry("upload", 25, 4*1024*1024, 5, true, false)
+	source := traverser.BenchmarkSourceHelper{}.ToUrl(25, 4*1024*1024, 5)
+	cooked, err := newCookedCopyOptions(source, "https://account.blob.core.windows.net/container/benchmark-job", options)
+	require.NoError(t, err)
+	dimensions := copyJobDimensions(cooked, common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken())
+	assert.Equal(t, "bench", dimensions.Command)
+	assert.Equal(t, "upload", dimensions.BenchmarkMode)
+	assert.Equal(t, int64(25), dimensions.BenchmarkFileCount)
+	assert.Equal(t, int64(4*1024*1024), dimensions.BenchmarkFileSizeBytes)
+	assert.Equal(t, int64(5), dimensions.BenchmarkFolderCount)
+	assert.True(t, dimensions.BenchmarkCleanupRequested)
+}
+
+func TestSyncJobDimensions(t *testing.T) {
+	a := assert.New(t)
+	o := &cookedSyncOptions{
+		fromTo:      common.EFromTo.LocalBlob(),
+		source:      common.ResourceString{Value: "local"},
+		destination: common.ResourceString{Value: "https://account.blob.core.windows.net/container"},
+		telemetryOptions: telemetry.OptionAttributes{
+			FlagsSet: []string{"delete-destination", "mirror-mode", "recursive"},
+			Values: map[string]string{
+				"OptDeleteDestination": "true",
+				"OptMirrorMode":        "true",
+				"OptRecursive":         "false",
+			},
+		},
+	}
+	d := syncJobDimensions(o, common.ECredentialType.SharedKey(), common.ECredentialType.Anonymous())
+	a.Equal("sync", d.Command)
+	a.Empty(d.SourceCloudType)
+	a.Equal("public", d.DestCloudType)
+	a.Empty(d.SourceStorageAccount)
+	a.Equal("account", d.DestStorageAccount)
+	a.Equal([]string{"delete-destination", "mirror-mode", "recursive"}, d.Options.FlagsSet)
+	a.Equal("false", d.Options.Values["OptRecursive"])
+}
+
+func TestResumeJobDimensions(t *testing.T) {
+	options := telemetry.OptionAttributes{
+		FlagsSet: []string{"include"},
+		Values:   map[string]string{"OptExample": "value"},
+	}
+	dimensions := resumeJobDimensions(
+		common.GetJobDetailsResponse{FromTo: common.EFromTo.LocalBlob()},
+		common.ResourceString{Value: "local"},
+		common.ResourceString{Value: "https://account.blob.core.windows.net/container", SAS: "?sig=redacted"},
+		common.ECredentialType.Anonymous(),
+		common.ECredentialType.Anonymous(),
+		options,
+	)
+	assert.Equal(t, "jobs.resume", dimensions.Command)
+	assert.Equal(t, "job-cumulative", dimensions.SummaryCounterScope)
+	assert.Equal(t, "NotApplicable", dimensions.SourceAuthMechanism)
+	assert.Equal(t, "SAS", dimensions.DestAuthMechanism)
+	assert.Empty(t, dimensions.SourceCloudType)
+	assert.Equal(t, "public", dimensions.DestCloudType)
+	assert.Empty(t, dimensions.SourceStorageAccount)
+	assert.Equal(t, "account", dimensions.DestStorageAccount)
+	assert.Equal(t, []string{"include"}, dimensions.Options.FlagsSet)
+	options.FlagsSet[0] = "mutated"
+	options.Values["OptExample"] = "mutated"
+	assert.Equal(t, []string{"include"}, dimensions.Options.FlagsSet)
+	assert.Equal(t, "value", dimensions.Options.Values["OptExample"])
+}
 func TestBuildFinishedEvent(t *testing.T) {
 	a := assert.New(t)
 	start := time.Now()
@@ -236,6 +488,24 @@ func TestPerformanceAdviceAttributes(t *testing.T) {
 	constraint, codes := performanceAdviceAttributes(common.EPerfConstraint.Service(), advice)
 	assert.Equal(t, common.EPerfConstraint.Service().String(), constraint)
 	assert.Equal(t, []string{"NetworkErrors", "AccountIOPS"}, codes)
+}
+
+func TestAuthMechanism(t *testing.T) {
+	resourceWithSAS := common.ResourceString{Value: "https://account.blob.core.windows.net/container", SAS: "?sig=secret"}
+	assert.Equal(t, "SAS", authMechanism(common.ECredentialType.Anonymous(), resourceWithSAS, common.ELocation.Blob()))
+	assert.Equal(t, "PublicAnonymous", authMechanism(common.ECredentialType.Anonymous(), common.ResourceString{}, common.ELocation.Blob()))
+	assert.Equal(t, common.ECredentialType.OAuthToken().String(), authMechanism(common.ECredentialType.OAuthToken(), common.ResourceString{}, common.ELocation.Blob()))
+	assert.Equal(t, "NotApplicable", authMechanism(common.ECredentialType.Anonymous(), common.ResourceString{}, common.ELocation.Local()))
+}
+
+func TestScopeForLocation(t *testing.T) {
+	assert.Equal(t, "service", scopeForLocation(common.ResourceString{Value: "https://account.blob.core.windows.net"}, common.ELocation.Blob(), true))
+	assert.Equal(t, "container", scopeForLocation(common.ResourceString{Value: "https://account.blob.core.windows.net/container"}, common.ELocation.Blob(), true))
+	assert.Equal(t, "share", scopeForLocation(common.ResourceString{Value: "https://account.file.core.windows.net/share"}, common.ELocation.File(), true))
+	assert.Equal(t, "bucket", scopeForLocation(common.ResourceString{Value: "https://s3.amazonaws.com/bucket"}, common.ELocation.S3(), true))
+	assert.Equal(t, "object-or-prefix", scopeForLocation(common.ResourceString{Value: "https://account.blob.core.windows.net/container/path"}, common.ELocation.Blob(), true))
+	assert.Equal(t, "stream", scopeForLocation(common.ResourceString{}, common.ELocation.Pipe(), true))
+	assert.Equal(t, "benchmark", scopeForLocation(common.ResourceString{}, common.ELocation.Benchmark(), true))
 }
 
 func TestThroughputMbps(t *testing.T) {

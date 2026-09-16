@@ -24,13 +24,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"time"
 )
 
 // CopyOptions contains the optional parameters for the Copy operation.
@@ -98,6 +98,17 @@ type CopyOptions struct {
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 	s2SGetPropertiesInBackend        *bool // Default true
 	deleteDestinationFileIfNecessary bool
+	telemetryOptions                 telemetry.OptionAttributes
+	benchmarkTelemetry               *benchmarkTelemetryOptions
+}
+
+type benchmarkTelemetryOptions struct {
+	mode             string
+	fileCount        int64
+	fileSizeBytes    int64
+	folderCount      int64
+	cleanupRequested bool
+	isCleanup        bool
 }
 
 type CopyHandler interface {
@@ -126,6 +137,22 @@ func (c *CopyOptions) SetInternalOptions(listOfFiles string, s2sGetPropertiesInB
 	c.dryrunJobPartOrderHandler = dryrunJobPartOrderHandler
 	c.deleteDestinationFileIfNecessary = deleteDestinationFileIfNecessary
 	c.commandString = cmd
+}
+
+func (c *CopyOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
+	c.telemetryOptions = options.Clone()
+}
+
+// SetBenchmarkTelemetry identifies benchmark copy work using bounded inputs.
+func (c *CopyOptions) SetBenchmarkTelemetry(mode string, fileCount, fileSizeBytes, folderCount int64, cleanupRequested, isCleanup bool) {
+	c.benchmarkTelemetry = &benchmarkTelemetryOptions{
+		mode:             mode,
+		fileCount:        fileCount,
+		fileSizeBytes:    fileSizeBytes,
+		folderCount:      folderCount,
+		cleanupRequested: cleanupRequested,
+		isCleanup:        isCleanup,
+	}
 }
 
 // Copy copies the contents from source to destination.
