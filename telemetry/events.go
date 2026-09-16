@@ -45,33 +45,33 @@ import (
 // ---------------------------------------------------------------------------
 
 type ResourceAttributes struct {
-	AzCopyVersion      string // "10.32.2"
-	SchemaVersion      string
-	E2ETestRunID       string // optional correlation ID used only by AzCopy E2E validation
-	OSType             string // runtime.GOOS
-	OSVersion          string // uname / RtlGetVersion
-	HostArch           string // runtime.GOARCH
-	HostNumCPU         int    // runtime.NumCPU()
-	HostCPUModel       string // /proc/cpuinfo, WMI, sysctl
-	HostMemoryTotalGB  int    // total physical memory
-	AzureVMDetected    bool   // true for a local Azure public-cloud chassis-tag match; false means not detected
-	InstallationID     string // anonymous, stable per-install identifier (no PII)
-	InvocationContext  string // inferred at startup: known CI environment markers produce "ci"; otherwise "interactive" ("sdk" and "unknown" are reserved)
+	AzCopyVersion     string // "10.32.2"
+	SchemaVersion     string
+	E2ETestRunID      string // optional correlation ID used only by AzCopy E2E validation
+	OSType            string // runtime.GOOS
+	OSVersion         string // uname / RtlGetVersion
+	HostArch          string // runtime.GOARCH
+	HostNumCPU        int    // runtime.NumCPU()
+	HostCPUModel      string // /proc/cpuinfo, WMI, sysctl
+	HostMemoryTotalGB int    // total physical memory
+	AzureVMDetected   bool   // true for a local Azure public-cloud chassis-tag match; false means not detected
+	InstallationID    string // anonymous, stable per-install identifier (no PII)
+	InvocationContext string // inferred at startup: known CI environment markers produce "ci"; otherwise "interactive" ("sdk" and "unknown" are reserved)
 }
 
 func (ra ResourceAttributes) props() map[string]string {
 	props := map[string]string{
-		"AzCopyVersion":      ra.AzCopyVersion,
-		"SchemaVersion":      ra.SchemaVersion,
-		"OSType":             ra.OSType,
-		"OSVersion":          ra.OSVersion,
-		"HostArch":           ra.HostArch,
-		"HostNumCPU":         strconv.Itoa(ra.HostNumCPU),
-		"HostCPUModel":       ra.HostCPUModel,
-		"HostMemoryTotalGB":  strconv.Itoa(ra.HostMemoryTotalGB),
-		"AzureVMDetected":    strconv.FormatBool(ra.AzureVMDetected),
-		"InstallationID":     ra.InstallationID,
-		"InvocationContext":  ra.InvocationContext,
+		"AzCopyVersion":     ra.AzCopyVersion,
+		"SchemaVersion":     ra.SchemaVersion,
+		"OSType":            ra.OSType,
+		"OSVersion":         ra.OSVersion,
+		"HostArch":          ra.HostArch,
+		"HostNumCPU":        strconv.Itoa(ra.HostNumCPU),
+		"HostCPUModel":      ra.HostCPUModel,
+		"HostMemoryTotalGB": strconv.Itoa(ra.HostMemoryTotalGB),
+		"AzureVMDetected":   strconv.FormatBool(ra.AzureVMDetected),
+		"InstallationID":    ra.InstallationID,
+		"InvocationContext": ra.InvocationContext,
 	}
 	if ra.E2ETestRunID != "" {
 		props["E2ETestRunID"] = ra.E2ETestRunID
@@ -136,9 +136,8 @@ func validOptionPropertyName(name string) bool {
 type JobDimensions struct {
 	Command                   string // "copy" | "sync" | "remove"
 	SummaryCounterScope       string // job-cumulative for resume summaries; empty otherwise
-	FromTo                    string // "LocalBlob", "BlobLocal", "S3Blob", ...
 	SourceType                string // "Local" | "Blob" | "File" | "S3" | ...
-	DestType                  string
+	DestType                  string // SourceType values, or "Trash" for delete jobs
 	SourceProtocol            string // "local" | "https" | "s3" | "gcs"
 	SourceMountType           string // "nas-smb" | "nas-nfs" | "local-disk" | "cloud-azure" | ...
 	SourceStorageAccount      string
@@ -164,7 +163,6 @@ type JobDimensions struct {
 func (jd JobDimensions) props() map[string]string {
 	props := map[string]string{
 		"Command":              jd.Command,
-		"FromTo":               jd.FromTo,
 		"SourceType":           jd.SourceType,
 		"DestType":             jd.DestType,
 		"SourceProtocol":       jd.SourceProtocol,
@@ -505,7 +503,6 @@ var propertyValueLimits = map[string]int{
 	"InvocationContext":         32,
 	"Command":                   64,
 	"SummaryCounterScope":       32,
-	"FromTo":                    64,
 	"SourceType":                64,
 	"DestType":                  64,
 	"SourceProtocol":            32,

@@ -44,7 +44,6 @@ func sampleStarted() JobStartedEvent {
 		},
 		Dimensions: JobDimensions{
 			Command:            "copy",
-			FromTo:             "LocalBlob",
 			SourceType:         "Local",
 			DestType:           "Blob",
 			SourceCloudType:    "",
@@ -290,8 +289,8 @@ func TestCommandInvokedEvent(t *testing.T) {
 	_, hasServiceVersion := attrs["ServiceVersion"]
 	assert.False(t, hasServiceVersion)
 	// No job dimensions on a command.invoked event.
-	_, hasFromTo := attrs["FromTo"]
-	assert.False(t, hasFromTo)
+	_, hasSourceType := attrs["SourceType"]
+	assert.False(t, hasSourceType)
 
 	// Empty JobID is omitted.
 	e.JobID = ""
