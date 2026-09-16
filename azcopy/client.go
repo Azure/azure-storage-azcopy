@@ -66,6 +66,7 @@ type ClientOptions struct {
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
+	telemetryDisabledByFlag = opts.DisableTelemetry
 	c := Client{
 		logLevel: common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
 	}
