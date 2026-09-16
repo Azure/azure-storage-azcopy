@@ -21,24 +21,26 @@
 package telemetry
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func sampleStarted() JobStartedEvent {
 	ts := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
 	return JobStartedEvent{
 		Resource: ResourceAttributes{
-			AzCopyVersion:    "10.32.2",
-			SchemaVersion:    "1",
-			OSType:           "linux",
-			HostArch:         "amd64",
-			HostNumCPU:       8,
-			AzureVMDetected:  true,
-			InstallationID:   "abc123",
+			AzCopyVersion:   "10.32.2",
+			SchemaVersion:   "1",
+			OSType:          "linux",
+			HostArch:        "amd64",
+			HostNumCPU:      8,
+			AzureVMDetected: true,
+			InstallationID:  "abc123",
 		},
 		Dimensions: JobDimensions{
 			Command:            "copy",
@@ -477,6 +479,76 @@ func TestTruncateValueToHandlesSmallLimits(t *testing.T) {
 			assert.Equal(t, test.want, actual)
 			assert.True(t, utf8.ValidString(actual))
 			assert.LessOrEqual(t, len(actual), max(test.maxBytes, 0))
+		})
+	}
+}
+
+func TestEventPropertiesAreBoundedBeforeExport(t *testing.T) {
+	oversized := strings.Repeat("x", maxPropValueLen+100)
+	event := sampleFinished()
+	event.Resource.OSVersion = oversized
+	event.Resource.HostCPUModel = oversized
+	event.Dimensions.Options = OptionAttributes{
+		FlagsSet: []string{oversized, oversized},
+		Values:   map[string]string{"OptFutureValue": oversized},
+	}
+	event.JobID = oversized
+	event.InvocationID = oversized
+	event.JobStatus = oversized
+	event.FailureErrorCodes = oversized
+
+	envelope := eventToEnvelopes("ikey-1", event)[0]
+	for name, value := range envelope.Data.BaseData.Properties {
+		assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
+	}
+	assert.Len(t, envelope.Data.BaseData.Properties["OSVersion"], maxHostValueLen)
+	assert.Len(t, envelope.Data.BaseData.Properties["JobID"], maxIdentifierValueLen)
+	assert.Len(t, envelope.Data.BaseData.Properties["OptFutureValue"], maxOptionValueLen)
+
+	command := CommandInvokedEvent{
+		Resource:     event.Resource,
+		Command:      oversized,
+		Options:      event.Dimensions.Options,
+		JobID:        oversized,
+		InvocationID: oversized,
+		Timestamp:    time.Now(),
+	}
+	for name, value := range command.properties() {
+		assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
+	}
+}
+
+func TestUnsetOptionsAreOmitted(t *testing.T) {
+	attrs := JobDimensions{Command: "copy"}.props()
+	for _, key := range []string{"OptFlagsSet", "OptEnvVarsSet", "OptRecursive", "OptBlockSizeMB", "OptConcurrency"} {
+		_, exists := attrs[key]
+		assert.False(t, exists, key)
+	}
+}
+
+func TestMergeProps(t *testing.T) {
+	out := mergeProps(
+		map[string]string{"a": "1", "b": "1"},
+		map[string]string{"b": "2", "c": "3"},
+	)
+	assert.Equal(t, map[string]string{"a": "1", "b": "2", "c": "3"}, out)
+}
+
+func TestStorageAccountProperties(t *testing.T) {
+	started := sampleStarted()
+	started.Dimensions.SourceStorageAccount = "sourceaccount"
+	started.Dimensions.DestStorageAccount = "targetaccount"
+	finished := sampleFinished()
+	finished.Dimensions = started.Dimensions
+	for _, event := range []MetricEvent{started, finished} {
+		t.Run(event.EventName(), func(t *testing.T) {
+			envelopes := eventToEnvelopes("ikey-1", event)
+			require.Len(t, envelopes, 1)
+			properties := envelopes[0].Data.BaseData.Properties
+			assert.Equal(t, "sourceaccount", properties["SourceStorageAccount"])
+			assert.Equal(t, "targetaccount", properties["DestStorageAccount"])
+			assert.NotContains(t, properties, "SourceEndpointIdentity")
+			assert.NotContains(t, properties, "DestEndpointIdentity")
 		})
 	}
 }
