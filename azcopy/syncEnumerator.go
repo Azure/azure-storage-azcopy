@@ -81,6 +81,9 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	if err != nil {
 		return nil, err
 	}
+	if err = s.spt.shapeTracker.initializeScopes(sourceTraverser); err != nil {
+		return nil, err
+	}
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
@@ -311,7 +314,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			return nil
 		}
 
-		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
+		return traverser.NewSyncEnumeratorWithObservers(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize,
+			s.spt.shapeTracker.recordScanned, nil), nil
 	default:
 		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
@@ -348,7 +352,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			return nil
 		}
 
-		return traverser.NewSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+		return traverser.NewSyncEnumeratorWithObservers(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize,
+			nil, s.spt.shapeTracker.recordScanned), nil
 	}
 }
 

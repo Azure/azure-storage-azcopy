@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"time"
 )
 
 // CopyOptions contains the optional parameters for the Copy operation.
@@ -156,7 +157,7 @@ func (c *CopyOptions) SetBenchmarkTelemetry(mode string, fileCount, fileSizeByte
 }
 
 // Copy copies the contents from source to destination.
-func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (CopyResult, error) {
+func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (result CopyResult, err error) {
 	// Input
 	if src == "" || dest == "" {
 		return CopyResult{}, fmt.Errorf("source and destination must be specified for copy")
@@ -176,6 +177,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		c.CurrentJobID = jobID
 	}
 	timeAtPrestart := time.Now()
+	telemetryInvocationID := newTelemetryInvocationID()
 	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
@@ -226,16 +228,40 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 
 		mgr := NewJobLifecycleManager(copyHandler)
 
+		telemetryAgent := getTelemetryAgent()
+		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+		var telemetryFinalizer *attemptTelemetryFinalizer
+		if shouldEmitCopyTelemetry(t.opts) {
+			telemetryFinalizer = telemetryAgent.newAttempt(func() telemetry.JobDimensions {
+				return copyJobDimensions(t.opts, t.trp.srcCredType, t.trp.dstCredType)
+			}, jobID.String(), telemetryInvocationID, timeAtPrestart)
+			telemetryFinalizer.enumerationElapsedFn = t.tpt.GetEnumerationElapsedTime
+			telemetryFinalizer.transferElapsedFn = t.tpt.GetTransferElapsedTime
+			telemetryFinalizer.shapeFn = t.tpt.GetSourceShapeSummary
+			telemetryFinalizer.startEvent()
+			defer func() {
+				attemptErr := err
+				if errors.Is(ctx.Err(), context.Canceled) {
+					attemptErr = context.Canceled
+				}
+				telemetryFinalizer.finish(attemptErr)
+			}()
+		}
 		enumerator, err := t.initCopyEnumerator(ctx, c.GetLogLevel(), mgr)
 		if err != nil {
 			return CopyResult{}, err
+		}
+		if telemetryFinalizer != nil {
+			telemetryFinalizer.summaryFn = func() (common.ListJobSummaryResponse, bool) {
+				return jobsAdmin.GetJobSummary(t.tpt.jobID), true
+			}
+			telemetryFinalizer.setStage("enumeration")
 		}
 		if !t.opts.dryrun {
 			common.GetLifecycleMgr().Info("Scanning...")
 			mgr.InitiateProgressReporting(ctx, t.tpt)
 		}
 		err = enumerator.Enumerate()
-		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -252,9 +278,15 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 			return CopyResult{}, nil
 		}
 
+		if telemetryFinalizer != nil {
+			telemetryFinalizer.setStage("transfer")
+		}
 		err = mgr.Wait()
 		if err != nil {
 			return CopyResult{}, err
+		}
+		if telemetryFinalizer != nil {
+			telemetryFinalizer.setStage("completion")
 		}
 
 		// Get final job summary
@@ -263,9 +295,13 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		finalSummary.SkippedSpecialFileCount = t.tpt.getSkippedSpecialFileCount()
 		finalSummary.SkippedHardlinkCount = t.tpt.getSkippedHardlinkCount()
 
-		result := CopyResult{
+		result = CopyResult{
 			ListJobSummaryResponse: finalSummary,
 			ElapsedTime:            t.tpt.GetElapsedTime(),
+		}
+		if telemetryFinalizer != nil {
+			telemetryFinalizer.setFinalSummary(finalSummary)
+			telemetryFinalizer.finish(nil)
 		}
 
 		if common.AzcopyCurrentJobLogger != nil {
@@ -314,7 +350,17 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
 
-	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
+	agent := getTelemetryAgent()
+	progressTracker := newTransferProgressTracker(
+		jobID,
+		opts.Handler,
+		cookedOpts.fromTo,
+		cookedOpts.symlinks,
+		cookedOpts.hardlinks,
+		agent.shouldCollectSourceShape())
+	if progressTracker.shapeTracker != nil {
+		progressTracker.shapeTracker.isActive = agent.isActive
+	}
 
 	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
 }

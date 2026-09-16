@@ -23,12 +23,6 @@ package azcopy
 import (
 	"context"
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/url"
@@ -38,6 +32,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBaseJobDimensions(t *testing.T) {
@@ -335,6 +336,10 @@ func TestResumeJobDimensions(t *testing.T) {
 	assert.Equal(t, "value", dimensions.Options.Values["OptExample"])
 }
 
+func TestResumeProgressTrackerElapsedTimeBeforeStart(t *testing.T) {
+	assert.Zero(t, (&resumeProgressTracker{}).GetElapsedTime())
+}
+
 func TestBuildFinishedEvent(t *testing.T) {
 	a := assert.New(t)
 	start := time.Now()
@@ -622,6 +627,43 @@ func TestShouldCollectSourceShape(t *testing.T) {
 	assert.True(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape())
 }
 
+func TestProgressTrackersOnlyCollectSourceShapeWhenEligible(t *testing.T) {
+	jobID := common.NewJobID()
+	copyWithoutShape := newTransferProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		false)
+	copyWithShape := newTransferProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		true)
+	syncWithoutShape := newSyncProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		false)
+	syncWithShape := newSyncProgressTracker(
+		jobID,
+		nil,
+		common.EFromTo.LocalBlob(),
+		common.ESymlinkHandlingType.Skip(),
+		common.EHardlinkHandlingType.Follow(),
+		true)
+
+	assert.Nil(t, copyWithoutShape.shapeTracker)
+	assert.NotNil(t, copyWithShape.shapeTracker)
+	assert.Nil(t, syncWithoutShape.shapeTracker)
+	assert.NotNil(t, syncWithShape.shapeTracker)
+}
+
 func TestBuildResourceAttributesSchemaVersion(t *testing.T) {
 	resource := buildResourceAttributes()
 	assert.Equal(t, "1", resource.SchemaVersion)
@@ -767,6 +809,28 @@ func TestSanitizeJobErrorCode(t *testing.T) {
 	assert.Equal(t, "AuthorizationPermissionMismatch", sanitizeJobErrorCode(" AuthorizationPermissionMismatch "))
 	assert.Empty(t, sanitizeJobErrorCode("code with spaces"))
 	assert.Empty(t, sanitizeJobErrorCode(strings.Repeat("a", 65)))
+}
+
+func TestTransferPhaseElapsedTime(t *testing.T) {
+	copyTracker := &transferProgressTracker{}
+	syncTracker := &syncProgressTracker{}
+	assert.Zero(t, copyTracker.GetTransferElapsedTime())
+	assert.Zero(t, syncTracker.GetTransferElapsedTime())
+	assert.Zero(t, copyTracker.GetEnumerationElapsedTime())
+	assert.Zero(t, syncTracker.GetEnumerationElapsedTime())
+
+	now := time.Now()
+	started := now.Add(-2 * time.Second).UnixNano()
+	copyTracker.atomicTransferStartUnixNano = started
+	syncTracker.atomicTransferStartUnixNano = started
+	copyTracker.jobStartTime = now.Add(-3 * time.Second)
+	syncTracker.jobStartTime = now.Add(-3 * time.Second)
+	copyTracker.atomicEnumerationEndUnixNano = now.Add(-time.Second).UnixNano()
+	syncTracker.atomicEnumerationEndUnixNano = now.Add(-time.Second).UnixNano()
+	assert.InDelta(t, 2*time.Second, copyTracker.GetTransferElapsedTime(), float64(250*time.Millisecond))
+	assert.InDelta(t, 2*time.Second, syncTracker.GetTransferElapsedTime(), float64(250*time.Millisecond))
+	assert.InDelta(t, 2*time.Second, copyTracker.GetEnumerationElapsedTime(), float64(250*time.Millisecond))
+	assert.InDelta(t, 2*time.Second, syncTracker.GetEnumerationElapsedTime(), float64(250*time.Millisecond))
 }
 
 func TestDisabledAgentIsNoop(t *testing.T) {

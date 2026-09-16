@@ -155,6 +155,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	if err != nil {
 		return nil, err
 	}
+	if err = t.tpt.shapeTracker.initializeScopes(sourceTraverser); err != nil {
+		return nil, err
+	}
 
 	// Ensure we're only copying a directory under valid conditions
 	isSourceDir, err := sourceTraverser.IsDirectory(true)
@@ -315,6 +318,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	transferScheduler := t.newCopyTransferProcessor(NumOfFilesPerDispatchJobPart, jobPartOrder)
 
 	processor := func(object traverser.StoredObject) error {
+		if err := t.tpt.shapeTracker.recordScanned(object); err != nil {
+			return err
+		}
 		// Start by resolving the name and creating the container
 		if object.ContainerName != "" {
 			// set up the destination container name.
@@ -444,7 +450,9 @@ func (t *transferExecutor) newCopyTransferProcessor(numOfTransfersPerPart int,
 	reportFinalPart := func() { t.tpt.setScanningComplete() }
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return NewCopyTransferProcessor(true, copyJobTemplate, numOfTransfersPerPart, t.opts.source, t.opts.destination, reportFirstPart, reportFinalPart, t.opts.s2sPreserveAccessTier.Get(), t.opts.dryrun, t.opts.dryrunJobPartOrderHandler)
+	processor := NewCopyTransferProcessor(true, copyJobTemplate, numOfTransfersPerPart, t.opts.source, t.opts.destination, reportFirstPart, reportFinalPart, t.opts.s2sPreserveAccessTier.Get(), t.opts.dryrun, t.opts.dryrunJobPartOrderHandler)
+	processor.SetTransferScheduledObserver(t.tpt.shapeTracker.recordScheduled)
+	return processor
 }
 
 func isResourceDirectory(ctx context.Context, res common.ResourceString, loc common.Location, serviceClient *common.ServiceClient, isSource bool, trailingDotOption common.TrailingDotOption) bool {
