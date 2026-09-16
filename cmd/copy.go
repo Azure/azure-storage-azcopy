@@ -325,6 +325,7 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 		raw.dryrun, dryrunNewCopyJobPartOrder,
 		raw.deleteDestinationFileIfNecessary,
 		ConstructCommandStringFromArgs())
+	opts.SetTelemetryOptions(telemetryOptions(cmd))
 	return opts, nil
 }
 
