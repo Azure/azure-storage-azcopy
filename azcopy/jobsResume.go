@@ -30,14 +30,20 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 // ResumeJobOptions contains the optional parameters for resuming a job.
 type ResumeJobOptions struct {
-	SourceSAS      string
-	DestinationSAS string
-	Handler        ResumeJobHandler
+	SourceSAS        string
+	DestinationSAS   string
+	Handler          ResumeJobHandler
+	telemetryOptions telemetry.OptionAttributes
+}
+
+func (o *ResumeJobOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
+	o.telemetryOptions = options.Clone()
 }
 
 // ResumeJobProgress contains the progress information for a resumed job.
@@ -54,13 +60,14 @@ type ResumeJobHandler interface {
 type ResumeJobResult CopyResult
 
 // ResumeJob resumes a job with the specified JobID.
-func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (ResumeJobResult, error) {
+func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (result ResumeJobResult, err error) {
 	if jobID.IsEmpty() {
 		return ResumeJobResult{}, errors.New("resume job requires the JobID")
 	}
 	// Initialization of logs
 	c.CurrentJobID = jobID
 	timeAtPrestart := time.Now()
+	telemetryInvocationID := newTelemetryInvocationID()
 
 	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
@@ -116,7 +123,8 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
+	agent := c.telemetry.get()
+	srcServiceClient, dstServiceClient, srcCredType, dstCredType, err := getSourceAndDestinationServiceClients(
 		ctx,
 		srcResourceString,
 		dstResourceString,
@@ -124,7 +132,11 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 		c.GetUserOAuthTokenManagerInstance(),
 	)
 	if err != nil {
-		return ResumeJobResult{}, fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
+		err = fmt.Errorf("cannot resume job with JobId %s, could not create service clients %w", jobID, err)
+		agent.reportInitializationFailure(func() telemetry.JobDimensions {
+			return resumeJobDimensions(jobDetails, srcResourceString, dstResourceString, srcCredType, dstCredType, opts.telemetryOptions)
+		}, jobID.String(), telemetryInvocationID, timeAtPrestart, err)
+		return ResumeJobResult{}, err
 	}
 
 	// AzCopy CLI sets this globally before calling ResumeJob.
@@ -139,6 +151,35 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	mgr := NewJobLifecycleManager(resumeHandler)
 	rpt := newResumeProgressTracker(jobID, opts.Handler)
 
+	// Registered before the telemetry defer so finish reads the job summary first.
+	// Cleanup still runs only after ResumeJobOrder has been called.
+	cleanupJobManager := false
+	defer func() {
+		if cleanupJobManager {
+			jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+		}
+	}()
+
+	telemetryRecorder := agent.newAttempt(func() telemetry.JobDimensions {
+		return resumeJobDimensions(jobDetails, srcResourceString, dstResourceString, srcCredType, dstCredType, opts.telemetryOptions)
+	}, jobID.String(), telemetryInvocationID, timeAtPrestart)
+	summaryAvailable := false
+	telemetryRecorder.summaryFn = func() (common.ListJobSummaryResponse, bool) {
+		if !summaryAvailable {
+			return common.ListJobSummaryResponse{}, false
+		}
+		return jobsAdmin.GetJobSummary(jobID), true
+	}
+	telemetryRecorder.transferElapsedFn = rpt.GetElapsedTime
+	telemetryRecorder.startEvent()
+	defer func() {
+		attemptErr := err
+		if errors.Is(ctx.Err(), context.Canceled) {
+			attemptErr = context.Canceled
+		}
+		telemetryRecorder.finish(attemptErr)
+	}()
+
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
 		JobID:            jobID,
@@ -146,11 +187,13 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 		DstServiceClient: dstServiceClient,
 		JobErrorHandler:  mgr,
 	})
-	defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+	cleanupJobManager = true
 
 	if !resumeJobResponse.CancelledPauseResumed {
 		return ResumeJobResult{}, errors.New(resumeJobResponse.ErrorMsg)
 	}
+	summaryAvailable = true
+	telemetryRecorder.setStage(attemptStageTransfer)
 	mgr.InitiateProgressReporting(ctx, rpt)
 
 	err = mgr.Wait()
@@ -161,10 +204,13 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	// Get final job summary
 	finalSummary := jobsAdmin.GetJobSummary(jobID)
 
-	result := ResumeJobResult{
+	result = ResumeJobResult{
 		ListJobSummaryResponse: finalSummary,
 		ElapsedTime:            rpt.GetElapsedTime(),
 	}
+	telemetryRecorder.setStage(attemptStageCompletion)
+	telemetryRecorder.setFinalSummary(finalSummary)
+	telemetryRecorder.finish(nil)
 
 	if opts.Handler != nil {
 		opts.Handler.OnComplete(result)
@@ -187,12 +233,12 @@ func getSourceAndDestinationServiceClients(
 	destination common.ResourceString,
 	jobDetails common.GetJobDetailsResponse,
 	uotm *common.UserOAuthTokenManager,
-) (*common.ServiceClient, *common.ServiceClient, error) {
+) (*common.ServiceClient, *common.ServiceClient, common.CredentialType, common.CredentialType, error) {
 	fromTo := jobDetails.FromTo
 
 	srcCredType, isSrcPublic, err := GetCredentialTypeForLocation(ctx, fromTo.From(), source, true, common.CpkOptions{}, uotm)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, common.ECredentialType.Unknown(), common.ECredentialType.Unknown(), err
 	}
 
 	var errorMsg = ""
@@ -206,7 +252,7 @@ func getSourceAndDestinationServiceClients(
 
 	dstCredType, isDstPublic, err := GetCredentialTypeForLocation(ctx, fromTo.To(), destination, false, common.CpkOptions{}, uotm)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, srcCredType, common.ECredentialType.Unknown(), err
 	}
 
 	if fromTo.To().IsAzure() && dstCredType == common.ECredentialType.Anonymous() && destination.SAS == "" {
@@ -219,7 +265,7 @@ func getSourceAndDestinationServiceClients(
 		}
 	}
 	if errorMsg != "" {
-		return nil, nil, fmt.Errorf("the %s switch must be provided to resume the job", errorMsg)
+		return nil, nil, srcCredType, dstCredType, fmt.Errorf("the %s switch must be provided to resume the job", errorMsg)
 	}
 
 	var tc azcore.TokenCredential
@@ -227,12 +273,12 @@ func getSourceAndDestinationServiceClients(
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, srcCredType, dstCredType, err
 		}
 
 		tc, err = tokenInfo.GetTokenCredential()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, srcCredType, dstCredType, err
 		}
 	}
 
@@ -252,7 +298,7 @@ func getSourceAndDestinationServiceClients(
 	}
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, srcCredType, dstCredType, err
 	}
 
 	var srcCred *common.ScopedToken
@@ -269,9 +315,9 @@ func getSourceAndDestinationServiceClients(
 	}
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, srcCredType, dstCredType, err
 	}
-	return srcServiceClient, dstServiceClient, nil
+	return srcServiceClient, dstServiceClient, srcCredType, dstCredType, nil
 }
 
 type resumeProgressTracker struct {
@@ -351,6 +397,9 @@ func (r *resumeProgressTracker) GetJobID() common.JobID {
 }
 
 func (r *resumeProgressTracker) GetElapsedTime() time.Duration {
+	if r.jobStartTime.IsZero() {
+		return 0
+	}
 	return time.Since(r.jobStartTime)
 }
 

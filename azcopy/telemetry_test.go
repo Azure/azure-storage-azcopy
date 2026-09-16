@@ -304,6 +304,11 @@ func TestResumeJobDimensions(t *testing.T) {
 	assert.Equal(t, []string{"include"}, dimensions.Options.FlagsSet)
 	assert.Equal(t, "value", dimensions.Options.Values["OptExample"])
 }
+
+func TestResumeProgressTrackerElapsedTimeBeforeStart(t *testing.T) {
+	assert.Zero(t, (&resumeProgressTracker{}).GetElapsedTime())
+}
+
 func TestBuildFinishedEvent(t *testing.T) {
 	a := assert.New(t)
 	start := time.Now()
@@ -669,6 +674,15 @@ func TestShouldCollectSourceShape(t *testing.T) {
 	assert.False(t, stopped.shouldCollectSourceShape())
 }
 
+func TestProgressTrackersOnlyCollectSourceShapeWhenEligible(t *testing.T) {
+	for _, collect := range []bool{false, true} {
+		copyTracker := newTransferProgressTracker(common.NewJobID(), nil, common.EFromTo.LocalBlob(), common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow(), collect)
+		syncTracker := newSyncProgressTracker(common.NewJobID(), nil, common.EFromTo.LocalBlob(), common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow(), collect)
+		assert.Equal(t, collect, copyTracker.shapeTracker != nil)
+		assert.Equal(t, collect, syncTracker.shapeTracker != nil)
+	}
+}
+
 func TestBuildResourceAttributesSchemaVersion(t *testing.T) {
 	t.Setenv(common.EEnvironmentVariable.UserDir().Name, t.TempDir())
 	resource := buildResourceAttributes()
@@ -827,6 +841,22 @@ func TestSanitizeJobErrorCode(t *testing.T) {
 	assert.Equal(t, "AuthorizationPermissionMismatch", sanitizeJobErrorCode(" AuthorizationPermissionMismatch "))
 	assert.Empty(t, sanitizeJobErrorCode("code with spaces"))
 	assert.Empty(t, sanitizeJobErrorCode(strings.Repeat("a", 65)))
+}
+
+func TestTransferPhaseElapsedTime(t *testing.T) {
+	copyTracker, syncTracker := &transferProgressTracker{}, &syncProgressTracker{}
+	assert.Zero(t, copyTracker.GetTransferElapsedTime())
+	assert.Zero(t, syncTracker.GetEnumerationElapsedTime())
+
+	now := time.Now()
+	copyTracker.jobStartTime, syncTracker.jobStartTime = now.Add(-3*time.Second), now.Add(-3*time.Second)
+	for _, timer := range []*phaseTimer{&copyTracker.phaseTimer, &syncTracker.phaseTimer} {
+		timer.transferStartUnixNano = now.Add(-2 * time.Second).UnixNano()
+		timer.enumerationEndUnixNano = now.Add(-time.Second).UnixNano()
+	}
+	for _, elapsed := range []time.Duration{copyTracker.GetTransferElapsedTime(), syncTracker.GetTransferElapsedTime(), copyTracker.GetEnumerationElapsedTime(), syncTracker.GetEnumerationElapsedTime()} {
+		assert.InDelta(t, 2*time.Second, elapsed, float64(250*time.Millisecond))
+	}
 }
 
 func TestDisabledAgentIsNoop(t *testing.T) {

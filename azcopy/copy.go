@@ -135,7 +135,7 @@ func (c *CopyOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
 }
 
 // Copy copies the contents from source to destination.
-func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (CopyResult, error) {
+func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (result CopyResult, err error) {
 	// Input
 	if src == "" || dest == "" {
 		return CopyResult{}, fmt.Errorf("source and destination must be specified for copy")
@@ -155,6 +155,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		c.CurrentJobID = jobID
 	}
 	timeAtPrestart := time.Now()
+	telemetryInvocationID := newTelemetryInvocationID()
 	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
@@ -184,8 +185,25 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 	}
 
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	t, err := newCopyTransferExecutor(ctx, jobID, src, dest, opts, c.GetUserOAuthTokenManagerInstance())
+	cookedOpts, err := newCookedCopyOptions(src, dest, opts)
 	if err != nil {
+		return CopyResult{}, err
+	}
+	agent := c.telemetry.get()
+	// Dry runs and piped copies send no telemetry.
+	if !shouldEmitCopyTelemetry(cookedOpts) || cookedOpts.fromTo.IsRedirection() {
+		agent = nil
+	}
+	copyRemote, err := newCopyRemoteProvider(ctx, c.GetUserOAuthTokenManagerInstance(), cookedOpts.source, cookedOpts.destination,
+		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot)
+	var t *transferExecutor
+	if err == nil {
+		t, err = newCopyTransferExecutor(jobID, cookedOpts, copyRemote, opts.Handler, agent)
+	}
+	if err != nil {
+		agent.reportInitializationFailure(func() telemetry.JobDimensions {
+			return copyJobDimensions(cookedOpts, copyRemote.srcCredType, copyRemote.dstCredType)
+		}, jobID.String(), telemetryInvocationID, timeAtPrestart, err)
 		return CopyResult{}, err
 	}
 	defer t.Close()
@@ -205,16 +223,35 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 
 		mgr := NewJobLifecycleManager(copyHandler)
 
+		// Registered before the telemetry defer so finish reads the job summary first.
+		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+		telemetryRecorder := agent.newAttempt(func() telemetry.JobDimensions {
+			return copyJobDimensions(t.opts, t.trp.srcCredType, t.trp.dstCredType)
+		}, jobID.String(), telemetryInvocationID, timeAtPrestart)
+		telemetryRecorder.enumerationElapsedFn = t.tpt.GetEnumerationElapsedTime
+		telemetryRecorder.transferElapsedFn = t.tpt.GetTransferElapsedTime
+		telemetryRecorder.shapeFn = t.tpt.GetSourceShapeSummary
+		telemetryRecorder.startEvent()
+		defer func() {
+			attemptErr := err
+			if errors.Is(ctx.Err(), context.Canceled) {
+				attemptErr = context.Canceled
+			}
+			telemetryRecorder.finish(attemptErr)
+		}()
 		enumerator, err := t.initCopyEnumerator(ctx, c.GetLogLevel(), mgr)
 		if err != nil {
 			return CopyResult{}, err
 		}
+		telemetryRecorder.summaryFn = func() (common.ListJobSummaryResponse, bool) {
+			return jobsAdmin.GetJobSummary(t.tpt.jobID), true
+		}
+		telemetryRecorder.setStage(attemptStageEnumeration)
 		if !t.opts.dryrun {
 			common.GetLifecycleMgr().Info("Scanning...")
 			mgr.InitiateProgressReporting(ctx, t.tpt)
 		}
 		err = enumerator.Enumerate()
-		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -231,10 +268,12 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 			return CopyResult{}, nil
 		}
 
+		telemetryRecorder.setStage(attemptStageTransfer)
 		err = mgr.Wait()
 		if err != nil {
 			return CopyResult{}, err
 		}
+		telemetryRecorder.setStage(attemptStageCompletion)
 
 		// Get final job summary
 		finalSummary := jobsAdmin.GetJobSummary(t.tpt.jobID)
@@ -242,10 +281,12 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		finalSummary.SkippedSpecialFileCount = t.tpt.getSkippedSpecialFileCount()
 		finalSummary.SkippedHardlinkCount = t.tpt.getSkippedHardlinkCount()
 
-		result := CopyResult{
+		result = CopyResult{
 			ListJobSummaryResponse: finalSummary,
 			ElapsedTime:            t.tpt.GetElapsedTime(),
 		}
+		telemetryRecorder.setFinalSummary(finalSummary)
+		telemetryRecorder.finish(nil)
 
 		if common.AzcopyCurrentJobLogger != nil {
 			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyResult(result, true))
@@ -276,24 +317,22 @@ func (t *transferExecutor) Close() error {
 	return err
 }
 
-func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
-	cookedOpts, err := newCookedCopyOptions(src, dst, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	copyRemote, err := newCopyRemoteProvider(ctx, uotm, cookedOpts.source, cookedOpts.destination,
-		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot)
-	if err != nil {
-		return nil, err
-	}
-
+func newCopyTransferExecutor(jobID common.JobID, cookedOpts *CookedTransferOptions, copyRemote *remoteProvider, handler CopyHandler, agent *telemetryAgent) (t *transferExecutor, err error) {
 	store, err := common.NewInodeStore(jobID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
 
-	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
+	progressTracker := newTransferProgressTracker(
+		jobID,
+		handler,
+		cookedOpts.fromTo,
+		cookedOpts.symlinks,
+		cookedOpts.hardlinks,
+		agent.shouldCollectSourceShape())
+	if progressTracker.shapeTracker != nil {
+		progressTracker.shapeTracker.isActive = agent.isActive
+	}
 
 	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
 }

@@ -124,7 +124,7 @@ func (s *SyncOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
 	s.telemetryOptions = options.Clone()
 }
 
-func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (SyncResult, error) {
+func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (result SyncResult, err error) {
 	// Input
 	if src == "" || dest == "" {
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
@@ -144,6 +144,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		c.CurrentJobID = jobID
 	}
 	timeAtPrestart := time.Now()
+	telemetryInvocationID := newTelemetryInvocationID()
 	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
@@ -174,24 +175,58 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 
 	var s *syncer
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	s, err := newSyncer(ctx, jobID, src, dest, opts, c.GetUserOAuthTokenManagerInstance())
+	cookedOpts, err := newCookedSyncOptions(src, dest, opts)
 	if err != nil {
+		return SyncResult{}, err
+	}
+	agent := c.telemetry.get()
+	if cookedOpts.dryrun {
+		agent = nil
+	}
+	syncRemote, err := newSyncRemoteProvider(ctx, c.GetUserOAuthTokenManagerInstance(), cookedOpts.source, cookedOpts.destination,
+		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot)
+	if err == nil {
+		s, err = newSyncer(jobID, cookedOpts, syncRemote, opts.Handler, agent)
+	}
+	if err != nil {
+		agent.reportInitializationFailure(func() telemetry.JobDimensions {
+			return syncJobDimensions(cookedOpts, syncRemote.srcCredType, syncRemote.dstCredType)
+		}, jobID.String(), telemetryInvocationID, timeAtPrestart, err)
 		return SyncResult{}, err
 	}
 	defer s.Close()
 
 	mgr := NewJobLifecycleManager(syncHandler)
 
+	// Registered before the telemetry defer so finish reads the job summary first.
+	defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+	telemetryRecorder := agent.newAttempt(func() telemetry.JobDimensions {
+		return syncJobDimensions(s.opts, s.srp.srcCredType, s.srp.dstCredType)
+	}, jobID.String(), telemetryInvocationID, timeAtPrestart)
+	telemetryRecorder.enumerationElapsedFn = s.spt.GetEnumerationElapsedTime
+	telemetryRecorder.transferElapsedFn = s.spt.GetTransferElapsedTime
+	telemetryRecorder.shapeFn = s.spt.GetSourceShapeSummary
+	telemetryRecorder.startEvent()
+	defer func() {
+		attemptErr := err
+		if errors.Is(ctx.Err(), context.Canceled) {
+			attemptErr = context.Canceled
+		}
+		telemetryRecorder.finish(attemptErr)
+	}()
 	enumerator, err := s.initEnumerator(ctx, c.GetLogLevel(), mgr)
 	if err != nil {
 		return SyncResult{}, err
 	}
+	telemetryRecorder.summaryFn = func() (common.ListJobSummaryResponse, bool) {
+		return jobsAdmin.GetJobSummary(s.spt.jobID), true
+	}
+	telemetryRecorder.setStage(attemptStageEnumeration)
 
 	if !s.opts.dryrun {
 		mgr.InitiateProgressReporting(ctx, s.spt)
 	}
 	err = enumerator.Enumerate()
-	defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -208,10 +243,12 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, nil
 	}
 
+	telemetryRecorder.setStage(attemptStageTransfer)
 	err = mgr.Wait()
 	if err != nil {
 		return SyncResult{}, err
 	}
+	telemetryRecorder.setStage(attemptStageCompletion)
 
 	// Get final job summary
 	finalSummary := jobsAdmin.GetJobSummary(s.spt.jobID)
@@ -219,7 +256,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	finalSummary.SkippedSpecialFileCount = s.spt.getSkippedSpecialFileCount()
 	finalSummary.SkippedHardlinkCount = s.spt.getSkippedHardlinkCount()
 
-	result := SyncResult{
+	result = SyncResult{
 		SourceFilesScanned:       s.spt.getSourceFilesScanned(),
 		DestinationFilesScanned:  s.spt.getDestinationFilesScanned(),
 		ListJobSummaryResponse:   finalSummary,
@@ -227,6 +264,8 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		DeleteTransfersCompleted: s.spt.getDeletionCount(),
 		ElapsedTime:              s.spt.GetElapsedTime(),
 	}
+	telemetryRecorder.setFinalSummary(finalSummary)
+	telemetryRecorder.finish(nil)
 
 	if common.AzcopyCurrentJobLogger != nil {
 		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetSyncResult(result, true))
@@ -256,21 +295,21 @@ func (s *syncer) Close() error {
 	return err
 }
 
-func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
-	cookedOpts, err := newCookedSyncOptions(src, dst, opts)
-	if err != nil {
-		return nil, err
-	}
-	syncRemote, err := newSyncRemoteProvider(ctx, uotm, cookedOpts.source, cookedOpts.destination,
-		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot)
-	if err != nil {
-		return nil, err
-	}
+func newSyncer(jobID common.JobID, cookedOpts *cookedSyncOptions, syncRemote *remoteProvider, handler SyncHandler, agent *telemetryAgent) (s *syncer, err error) {
 	store, err := common.NewInodeStore(jobID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
-	progressTracker := newSyncProgressTracker(jobID, opts.Handler)
+	progressTracker := newSyncProgressTracker(
+		jobID,
+		handler,
+		cookedOpts.fromTo,
+		cookedOpts.symlinks,
+		cookedOpts.hardlinks,
+		agent.shouldCollectSourceShape())
+	if progressTracker.shapeTracker != nil {
+		progressTracker.shapeTracker.isActive = agent.isActive
+	}
 	sync := &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}
 
 	// Ensure that resources are eventually released even if the caller forgets to close the syncer.
