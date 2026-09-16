@@ -1,0 +1,10 @@
+// Visual: Time chart
+// Data source: azcore.centralus.kusto.windows.net / Xstore
+// Additional dashboard parameter: _account (free text, default empty)
+XAggUserAgentTelemetryMetric()
+| where TimeWindow between (_startTime .. _endTime)
+| where Tool =~ 'azcopy'
+| where isempty(_account) or Account =~ _account
+| summarize Requests = sum(RequestCount)
+  by timestamp = bin(TimeWindow, 5m), ToolVersion, SDK, SDKVersion
+| order by timestamp asc

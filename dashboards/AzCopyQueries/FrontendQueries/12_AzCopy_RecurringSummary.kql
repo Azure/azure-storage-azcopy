@@ -1,0 +1,6 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Headline recurrence metrics reuse the same customer cohort as the Trends detail table.') AzCopy_RecurringSummary(startTime:datetime, endTime:datetime, customerFilter:dynamic, subscriptionFilter:dynamic, sourceFilter:dynamic, targetFilter:dynamic)
+{
+    AzCopy_RecurringCustomers(startTime, endTime, customerFilter, subscriptionFilter, sourceFilter, targetFilter)
+    | summarize RecurringCustomers = count(), BytesTransferred = sum(BytesTransferred), AverageActiveMonths = avg(MonthsActive)
+    | extend AverageActiveMonths = iff(RecurringCustomers == 0, real(null), AverageActiveMonths)
+}

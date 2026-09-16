@@ -1,0 +1,11 @@
+// Visual: Time chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.bytes_enumerated', 'azcopy.bytes_expected', 'azcopy.bytes_transferred', 'azcopy.bytes_over_wire')
+| summarize Bytes = sum(value) by bin(timestamp, 1h), Metric = name
+| order by timestamp asc

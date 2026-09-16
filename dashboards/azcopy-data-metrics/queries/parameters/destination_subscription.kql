@@ -1,0 +1,6 @@
+let QueryStart = _startTime;
+let QueryEnd = _endTime;
+{{ENRICHED_FINISHED_JOBS}}
+EnrichedFinishedJobs
+| summarize Label = any(DestinationSubscription) by Value = DestinationSubscriptionKey
+| order by Label asc

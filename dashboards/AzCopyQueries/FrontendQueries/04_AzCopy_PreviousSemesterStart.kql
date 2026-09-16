@@ -1,0 +1,8 @@
+.create-or-alter function with (
+    folder = 'AzCopyQueries',
+    docstring = 'Returns the previous April-September or October-March semester start used by the Storage Mover dashboard.',
+    skipvalidation = 'true'
+) AzCopy_PreviousSemesterStart()
+{
+    datetime_add('month', -6, AzCopy_CurrentSemesterStart())
+}

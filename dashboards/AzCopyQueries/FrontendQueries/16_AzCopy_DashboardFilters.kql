@@ -1,0 +1,14 @@
+.create-or-alter function with (folder = 'AzCopyQueries', docstring = 'Shared filter values for both Grafana and ADX suite dashboards, including explicit unmapped ownership.') AzCopy_DashboardFilters()
+{
+    let Base = materialize(AzCopyUsageAggregates1 | where Name == 'JobRunResourcesCreated');
+    union
+        (Base | summarize FilterLabel = take_any(CustomerName) by FilterValue = CustomerKey | extend FilterName = 'Customer'),
+        (Base | distinct FilterValue = SubscriptionId | extend FilterName = 'SubscriptionId'),
+        (Base | distinct FilterValue = SourceType | extend FilterName = 'SourceType'),
+        (Base | distinct FilterValue = TargetType | extend FilterName = 'TargetType'),
+        (Base | distinct FilterValue = JobStatus | extend FilterName = 'JobStatus')
+    | extend FilterLabel = iff(isempty(FilterLabel), FilterValue, FilterLabel)
+    | where isnotempty(FilterValue)
+    | project FilterName, FilterValue, FilterLabel
+    | order by FilterName asc, FilterLabel asc
+}

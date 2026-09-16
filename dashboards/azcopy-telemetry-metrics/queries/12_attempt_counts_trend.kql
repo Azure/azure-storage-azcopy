@@ -1,0 +1,11 @@
+// Visual: Time chart
+customEvents
+| where name startswith 'azcopy.'
+| mv-expand MetricName = bag_keys(customMeasurements)
+| extend name = tostring(MetricName)
+| extend value = todouble(customMeasurements[name])
+| project-away MetricName
+| where timestamp between (_startTime .. _endTime)
+| where name in ('azcopy.storage_http_attempt_count', 'azcopy.network_error_attempt_count', 'azcopy.failure_error_other_count')
+| summarize Attempts = sum(value) by bin(timestamp, 1h), Metric = name
+| order by timestamp asc

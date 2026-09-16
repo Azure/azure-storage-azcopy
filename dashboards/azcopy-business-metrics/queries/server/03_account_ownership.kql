@@ -1,0 +1,23 @@
+// Visual: Table
+// Data source: xdataanalytics.westcentralus.kusto.windows.net / XDataAnalytics
+// Additional dashboard parameter: _account (free text, default empty)
+XStoreAccountPropertiesDaily
+| where TimePeriod between ((_startTime - 3d) .. _endTime)
+| where isempty(_account) or AccountNameWithoutVersion =~ _account
+| summarize arg_max(
+    TimePeriod,
+    Subscription,
+    BilledSubscription,
+    ResourceGroup,
+    LogicalTenant,
+    IsLive)
+  by AccountNameWithoutVersion
+| project
+    AccountName = AccountNameWithoutVersion,
+    SubscriptionId = Subscription,
+    BilledSubscriptionId = BilledSubscription,
+    ResourceGroup,
+    StorageTenant = LogicalTenant,
+    IsLive,
+    SnapshotTime = TimePeriod
+| top 500 by AccountName asc
