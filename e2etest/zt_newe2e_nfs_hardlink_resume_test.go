@@ -245,6 +245,15 @@ func extractJobID(svm *ScenarioVariationManager, stdOut AzCopyStdout) string {
 	return jobId
 }
 
+func cancelledTransferTelemetry(privateValues ...string) *telemetryExpectation {
+	return &telemetryExpectation{
+		FinishedProperties: map[string]string{"JobStatus": "Cancelled", "JobErrorCategory": "", "JobErrorCode": ""},
+		TerminalStages:     []string{"enumeration", "transfer", "completion"},
+		IncompleteProgress: true,
+		ForbiddenValues:    append(privateValues, "sig="),
+	}
+}
+
 // assertResumeCompleted asserts that a resumed job finished successfully.
 func assertResumeCompleted(svm *ScenarioVariationManager, stdOut AzCopyStdout) {
 	if svm.Dryrun() {
@@ -772,6 +781,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Upload(svm *ScenarioVari
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
 
 	jobId := extractJobID(svm, stdOut)
@@ -830,6 +840,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Download(svm *ScenarioVa
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
 
 	jobId := extractJobID(svm, stdOut)
@@ -891,6 +902,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_S2S(svm *ScenarioVariati
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
 
 	jobId := extractJobID(svm, stdOut)
@@ -955,6 +967,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Upload(svm *ScenarioVari
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
 
 	jobId := extractJobID(svm, stdOut)
@@ -1016,6 +1029,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Download(svm *ScenarioVa
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
 
 	jobId := extractJobID(svm, stdOut)
@@ -1079,6 +1093,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_S2S(svm *ScenarioVariati
 		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
+		Telemetry:   cancelledTransferTelemetry(rootDir, srcContainer.URI(GetURIOptions{}), dstContainer.URI(GetURIOptions{})),
 	})
 
 	jobId := extractJobID(svm, stdOut)

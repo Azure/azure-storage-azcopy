@@ -20,7 +20,8 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: verb,
+			Verb:      verb,
+			Telemetry: &telemetryExpectation{Properties: map[string]string{"FromTo": "FileBlob", "SourceAuthMechanism": "OAuth", "DestAuthMechanism": "OAuth", "SourceCloudType": "public", "DestCloudType": "public"}},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
 				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
@@ -71,7 +72,8 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 
 	RunAzCopy(svm,
 		AzCopyCommand{
-			Verb: AzCopyVerbCopy,
+			Verb:      AzCopyVerbCopy,
+			Telemetry: &telemetryExpectation{Properties: map[string]string{"FromTo": "FileBlob", "SourceAuthMechanism": "OAuth", "DestAuthMechanism": "OAuth", "SourceCloudType": "public", "DestCloudType": "public"}},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
 				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
@@ -97,7 +99,8 @@ func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManage
 
 	RunAzCopy(svm,
 		AzCopyCommand{
-			Verb: AzCopyVerbSync,
+			Verb:      AzCopyVerbSync,
+			Telemetry: &telemetryExpectation{Properties: map[string]string{"FromTo": "FileBlob", "SourceAuthMechanism": "OAuth", "DestAuthMechanism": "OAuth", "SourceCloudType": "public", "DestCloudType": "public"}},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
 				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
