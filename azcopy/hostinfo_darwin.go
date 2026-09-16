@@ -24,6 +24,7 @@ package azcopy
 
 import (
 	hostinfointernal "github.com/Azure/azure-storage-azcopy/v10/azcopy/internal/hostinfo"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"golang.org/x/sys/unix"
 )
 
@@ -48,7 +49,7 @@ func totalMemoryGB() int {
 // localMountType classifies the filesystem backing a local macOS path as
 // "nas-nfs", "nas-smb", or "local-disk" using statfs(2)'s f_fstypename. Returns
 // "" when statfs fails (caller falls back to "local-disk").
-func localMountType(path string) string {
+func localMountType(path string) telemetry.MountType {
 	var st unix.Statfs_t
 	if err := unix.Statfs(path, &st); err != nil {
 		return ""

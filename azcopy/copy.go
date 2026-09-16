@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -98,6 +99,7 @@ type CopyOptions struct {
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 	s2SGetPropertiesInBackend        *bool // Default true
 	deleteDestinationFileIfNecessary bool
+	telemetryOptions                 telemetry.OptionAttributes
 }
 
 type CopyHandler interface {
@@ -126,6 +128,10 @@ func (c *CopyOptions) SetInternalOptions(listOfFiles string, s2sGetPropertiesInB
 	c.dryrunJobPartOrderHandler = dryrunJobPartOrderHandler
 	c.deleteDestinationFileIfNecessary = deleteDestinationFileIfNecessary
 	c.commandString = cmd
+}
+
+func (c *CopyOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
+	c.telemetryOptions = options.Clone()
 }
 
 // Copy copies the contents from source to destination.

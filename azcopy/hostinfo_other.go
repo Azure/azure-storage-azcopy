@@ -22,6 +22,8 @@
 
 package azcopy
 
+import "github.com/Azure/azure-storage-azcopy/v10/telemetry"
+
 // On platforms without a dedicated probe implementation, host hardware facts are
 // reported as sentinels (unknown). The telemetry pipeline treats these as
 // "not collected".
@@ -32,4 +34,4 @@ func totalMemoryGB() int { return -1 }
 
 // localMountType is not implemented on this platform; the caller falls back to
 // "local-disk".
-func localMountType(string) string { return "" }
+func localMountType(string) telemetry.MountType { return "" }

@@ -3,6 +3,8 @@ package hostinfo
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 )
 
 type WindowsRegistryReader interface {
@@ -39,10 +41,10 @@ func WindowsCPUModel(reader WindowsRegistryReader) string {
 	return strings.TrimSpace(name)
 }
 
-func WindowsMountType(path string, driveType func(string) int) string {
+func WindowsMountType(path string, driveType func(string) int) telemetry.MountType {
 	path = stripExtendedLengthPrefix(path)
 	if isUNCPath(path) {
-		return "nas-smb"
+		return telemetry.MountTypeNASSMB
 	}
 	root := volumeRoot(path)
 	if root == "" {
@@ -51,12 +53,12 @@ func WindowsMountType(path string, driveType func(string) int) string {
 	return classifyWindowsDriveType(driveType(root))
 }
 
-func classifyWindowsDriveType(kind int) string {
+func classifyWindowsDriveType(kind int) telemetry.MountType {
 	switch kind {
 	case driveRemote:
-		return "nas-smb"
+		return telemetry.MountTypeNASSMB
 	case driveFixed, driveRemovable, driveCDROM, driveRAMDisk:
-		return "local-disk"
+		return telemetry.MountTypeLocalDisk
 	default:
 		return ""
 	}

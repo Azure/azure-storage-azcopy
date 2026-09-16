@@ -61,5 +61,5 @@ func ProbeHostHardware() HostHardwareInfo {
 // LocalMountType returns the best-effort backing-store category for a local
 // path. An empty result means the platform could not determine the mount type.
 func LocalMountType(path string) string {
-	return localMountType(path)
+	return string(localMountType(path))
 }

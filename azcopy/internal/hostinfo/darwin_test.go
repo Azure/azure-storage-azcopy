@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +37,7 @@ func TestHostHardwareDarwinMemoryGB(t *testing.T) {
 func TestHostHardwareDarwinClassifyFSType(t *testing.T) {
 	tests := []struct {
 		fsType   string
-		expected string
+		expected telemetry.MountType
 	}{
 		{"nfs", "nas-nfs"},
 		{"nfs4", "nas-nfs"},

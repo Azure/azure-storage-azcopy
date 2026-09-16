@@ -5,6 +5,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 )
 
 func ParseLinuxOSVersion(reader io.Reader) string {
@@ -49,7 +51,7 @@ func ParseLinuxMemoryGB(reader io.Reader) int {
 	return -1
 }
 
-func LinuxMountTypeFromReader(path string, reader io.Reader) string {
+func LinuxMountTypeFromReader(path string, reader io.Reader) telemetry.MountType {
 	bestLength := -1
 	bestFSType := ""
 	scanner := bufio.NewScanner(reader)
@@ -97,15 +99,15 @@ func pathHasMountPrefix(path, mountPoint string) bool {
 	return strings.HasPrefix(path, mountPoint+"/")
 }
 
-func classifyLinuxFSType(fsType string) string {
+func classifyLinuxFSType(fsType string) telemetry.MountType {
 	switch {
 	case fsType == "":
 		return ""
 	case strings.HasPrefix(fsType, "nfs"):
-		return "nas-nfs"
+		return telemetry.MountTypeNASNFS
 	case fsType == "cifs" || strings.HasPrefix(fsType, "smb"):
-		return "nas-smb"
+		return telemetry.MountTypeNASSMB
 	default:
-		return "local-disk"
+		return telemetry.MountTypeLocalDisk
 	}
 }
