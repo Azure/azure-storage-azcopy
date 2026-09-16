@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -80,6 +79,7 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
 	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
+	AzCopyVerbBenchmark   AzCopyVerb = "bench"
 )
 
 type AzCopyTarget struct {
@@ -541,4 +541,38 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	})
 
 	return out, &AzCopyJobPlan{}
+}
+
+func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
+	switch verb {
+	case AzCopyVerbCopy, AzCopyVerbSync, AzCopyVerbJobsResume, AzCopyVerbBenchmark:
+		return true
+	default:
+		return false
+	}
+}
+
+func azCopyCommandProducesJobFinishedTelemetry(verb AzCopyVerb, flags map[string]string) bool {
+	return azCopyVerbProducesJobFinishedTelemetry(verb) &&
+		!telemetryExpectsNoEvents(verb, flags, nil)
+}
+
+type appInsightsJobValidationDecision struct {
+	missingJobID bool
+	jobID        string
+}
+
+func decideAppInsightsJobValidation(
+	verb AzCopyVerb,
+	flags map[string]string,
+	shouldFail bool,
+	jobID string,
+) appInsightsJobValidationDecision {
+	if !azCopyCommandProducesJobFinishedTelemetry(verb, flags) {
+		return appInsightsJobValidationDecision{}
+	}
+	if jobID != "" {
+		return appInsightsJobValidationDecision{jobID: jobID}
+	}
+	return appInsightsJobValidationDecision{missingJobID: !shouldFail}
 }
