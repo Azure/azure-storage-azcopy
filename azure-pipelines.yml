@@ -150,6 +150,7 @@ jobs:
     parameters:
       job_name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
+      validate_telemetry: true
       
   - job: Unit_and_Python_Tests
     variables:
