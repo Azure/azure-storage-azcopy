@@ -6,14 +6,23 @@ param(
     [string]$Location = 'eastus',
     [switch]$Provision,
     [switch]$Run,
-    [ValidateSet('all', 'shutdown', 'cli-shutdown', 'invalid-key')][string]$Scenario = 'all',
+    [ValidateSet('all', 'shutdown', 'cli-shutdown', 'cli-performance', 'invalid-key')][string]$Scenario = 'all',
     [string]$StorageAccountName,
+    [string]$StorageContainerName,
     [switch]$GrantStoragePermission,
+    [switch]$CleanupPerformance,
+    [switch]$RequireHealthyTelemetry,
+    [ValidateSet('AZCLI', 'MSI')][string]$AuthenticationMode = 'AZCLI',
+    [ValidateRange(3, 15)][int]$PerformancePairs = 8,
+    [ValidateSet('standard', 'long')][string]$PerformanceWorkload = 'standard',
     [string]$OutputDirectory = (Join-Path ([IO.Path]::GetTempPath()) "azcopy-telemetry-live-$([guid]::NewGuid().ToString('N'))")
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($CleanupPerformance -and ($Scenario -ne 'cli-performance' -or -not $StorageContainerName -or $GrantStoragePermission -or $Provision)) {
+    throw '-CleanupPerformance requires cli-performance and an existing container, with no provisioning or permission grants.'
+}
 if (-not $Provision -and -not $Run) {
     throw 'Specify -Provision to create isolated resources and/or -Run to send real, billable telemetry.'
 }
@@ -82,12 +91,29 @@ try {
         $cliExecutable = ''
         $storagePrincipal = ''
         $storageResourceId = ''
-        if ($GrantStoragePermission -and $Scenario -ne 'cli-shutdown') {
-            throw '-GrantStoragePermission is only supported with -Scenario cli-shutdown.'
+        if ($RequireHealthyTelemetry -and $Scenario -ne 'cli-performance') {
+            throw '-RequireHealthyTelemetry requires -Scenario cli-performance.'
         }
-        if ($Scenario -eq 'cli-shutdown') {
+        if ($Scenario -eq 'cli-performance' -and -not ($IsWindows -or $IsLinux)) {
+            throw 'Full CLI performance measurement requires Windows or Linux process memory counters.'
+        }
+        if ($PerformanceWorkload -ne 'standard' -and $Scenario -ne 'cli-performance') {
+            throw '-PerformanceWorkload requires -Scenario cli-performance.'
+        }
+        if ($GrantStoragePermission -and $Scenario -notin @('cli-shutdown', 'cli-performance')) {
+            throw '-GrantStoragePermission is only supported with a full CLI scenario.'
+        }
+        if ($StorageContainerName) {
+            if ($Scenario -ne 'cli-performance' -or $GrantStoragePermission) {
+                throw '-StorageContainerName requires -Scenario cli-performance and cannot be combined with -GrantStoragePermission.'
+            }
+            if ($StorageContainerName -cnotmatch '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$' -or $StorageContainerName.Contains('--')) {
+                throw '-StorageContainerName must be a valid existing Azure Blob container name.'
+            }
+        }
+        if ($Scenario -in @('cli-shutdown', 'cli-performance')) {
             if ($StorageAccountName -notmatch '^[a-z0-9]{3,24}$') {
-                throw '-Scenario cli-shutdown requires -StorageAccountName for an Azure Blob test account accessible through your Azure CLI login.'
+                throw 'Full CLI scenarios require -StorageAccountName for an Azure Blob test account accessible through your Azure CLI login.'
             }
             if ($GrantStoragePermission) {
                 $storagePrincipal = Invoke-AzureJson @('ad', 'signed-in-user', 'show', '--query', 'id')
@@ -99,8 +125,14 @@ try {
             }
             $extension = if ($IsWindows) { '.exe' } else { '' }
             $cliExecutable = Join-Path $OutputDirectory "azcopy-live$extension"
-            & go build -o $cliExecutable .
-            if ($LASTEXITCODE -ne 0) { throw 'Failed to build the current AzCopy CLI for the live E2E test.' }
+            if ($CleanupPerformance) {
+                $cliExecutable = ''
+            } elseif ($Scenario -eq 'cli-performance') {
+                & go build -trimpath -buildvcs=false '-ldflags=-s -w' -o $cliExecutable .
+            } else {
+                & go build -o $cliExecutable .
+            }
+            if (-not $CleanupPerformance -and $LASTEXITCODE -ne 0) { throw 'Failed to build the current AzCopy CLI for the live E2E test.' }
         }
         $settings = @{
             AZCOPY_RUN_LIVE_TELEMETRY = '1'
@@ -112,6 +144,13 @@ try {
             AZCOPY_LIVE_TELEMETRY_STORAGE_PRINCIPAL = $storagePrincipal
             AZCOPY_LIVE_TELEMETRY_STORAGE_RESOURCE_ID = $storageResourceId
             AZCOPY_LIVE_TELEMETRY_OUTPUT = $OutputDirectory
+            AZCOPY_LIVE_TELEMETRY_AUTH_MODE = $AuthenticationMode
+            AZCOPY_CLI_TELEMETRY_PERF_CLEANUP = $(if ($CleanupPerformance) { '1' } else { '0' })
+            AZCOPY_CLI_TELEMETRY_PERF_REQUIRE_HEALTHY = $(if ($RequireHealthyTelemetry) { '1' } else { '0' })
+            AZCOPY_RUN_CLI_TELEMETRY_PERF = $(if ($Scenario -eq 'cli-performance') { '1' } else { '0' })
+            AZCOPY_CLI_TELEMETRY_PERF_PAIRS = [string]$PerformancePairs
+            AZCOPY_CLI_TELEMETRY_PERF_WORKLOAD = $PerformanceWorkload
+            AZCOPY_CLI_TELEMETRY_PERF_CONTAINER = $StorageContainerName
         }
         $previous = @{}
         foreach ($name in $settings.Keys) {
@@ -125,15 +164,35 @@ try {
                 $filter = switch ($selected) {
                     'shutdown' { '^TestLiveTelemetryEmergencyShutdown$' }
                     'cli-shutdown' { '^TestLiveTelemetryCLIEmergencyShutdown$' }
+                    'cli-performance' { '^TestTelemetryCLIPerformance$' }
                     'invalid-key' { '^TestLiveTelemetryInvalidInstrumentationKey$' }
                 }
-                if ($selected -eq 'cli-shutdown') {
+                $tags = 'telemetrylive'
+                $timeout = '25m'
+                if ($selected -eq 'cli-performance') {
+                    $tags = 'telemetrylive,telemetryperf'
+                    $timeout = '40m'
+                    if ($PerformanceWorkload -eq 'long') {
+                        $timeout = "$((20 + 12 * $PerformancePairs))m"
+                    }
+                    if ($StorageContainerName) {
+                        $timeout = "$([int]$timeout.TrimEnd('m') + 10)m"
+                    }
+                    if ($CleanupPerformance) {
+                        $filter = '^TestTelemetryCLIPerformanceCleanup$'
+                        $timeout = '12m'
+                        Write-Output 'Recovering recorded performance fixtures only; no transfers or telemetry sends.'
+                    } else {
+                        Write-Output "Running full CLI telemetry performance comparison: $PerformanceWorkload preset, $PerformancePairs pairs per workload plus warm-ups; real Blob transfers and Application Insights."
+                    }
+                } elseif ($selected -eq 'cli-shutdown') {
                     Write-Output 'Running full CLI shutdown E2E: real Blob downloads and Application Insights; no mock server.'
                 } else {
                     Write-Output "Running real-endpoint scenario: $selected (no mock server)."
                 }
-                & go test -tags telemetrylive ./azcopy -run $filter -count=1 -timeout=25m -json |
-                    Tee-Object -FilePath (Join-Path $OutputDirectory "$selected.jsonl") |
+                $logName = if ($CleanupPerformance) { 'cli-performance-cleanup' } else { $selected }
+                & go test -tags $tags ./azcopy -run $filter -count=1 "-timeout=$timeout" -json |
+                    Tee-Object -FilePath (Join-Path $OutputDirectory "$logName.jsonl") |
                     ForEach-Object {
                         $entry = $_ | ConvertFrom-Json
                         if ($entry.Action -in @('output', 'build-output')) {
