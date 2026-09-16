@@ -58,8 +58,13 @@ type CopyTransferProcessor struct {
 	dryrunMode                bool
 	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 	// Separate tracking for files/folder/symlink vs hardlink based on processing mode
-	dispatcher     syncJobPartDispatcher
-	processingMode common.JobProcessingMode
+	dispatcher              syncJobPartDispatcher
+	processingMode          common.JobProcessingMode
+	reportTransferScheduled func(traverser.StoredObject)
+}
+
+func (s *CopyTransferProcessor) SetTransferScheduledObserver(observer func(traverser.StoredObject)) {
+	s.reportTransferScheduled = observer
 }
 
 func NewCopyTransferProcessor(isCopy bool, copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrun bool, dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse) *CopyTransferProcessor {
@@ -149,6 +154,9 @@ func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 	err = s.appendTransfer(copyTransfer)
 	if err != nil {
 		return fmt.Errorf("error appending transfer: %w", err)
+	}
+	if s.reportTransferScheduled != nil {
+		s.reportTransferScheduled(storedObject)
 	}
 
 	return nil
