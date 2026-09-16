@@ -3,6 +3,13 @@ parameters:
     type: string
   - name: test_cli_param
     type: string
+  - name: telemetry
+    type: string
+    default: disabled
+    values:
+      - disabled
+      - send
+      - send_and_validate
 
 jobs:
   - job: ${{ parameters.job_name }}
@@ -60,6 +67,10 @@ jobs:
           mkdir azurite
           azurite --silent --location azurite --skipApiVersionCheck --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
+
+      - template: e2e-telemetry.yml
+        parameters:
+          telemetry: ${{ parameters.telemetry }}
 
       - task: AzureCLI@2
         inputs:

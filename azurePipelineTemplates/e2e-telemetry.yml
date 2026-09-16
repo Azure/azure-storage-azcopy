@@ -1,0 +1,111 @@
+parameters:
+  # disabled: AzCopy sends nothing. send: AzCopy reports to the test Application Insights
+  # component, tagged with the run ID. send_and_validate: the New E2E suite also checks it.
+  - name: telemetry
+    type: string
+    default: disabled
+    values:
+      - disabled
+      - send
+      - send_and_validate
+
+steps:
+  # Each step sets AzCopy telemetry variables for the steps that follow in the job.
+  # A plain step runs first, so telemetry stays off even if the Azure sign-in below fails.
+  - pwsh: |
+      # AzCopy treats the all-zero instrumentation key as unconfigured.
+      Write-Output "##vso[task.setvariable variable=AZCOPY_TELEMETRY_CONNECTION_STRING]InstrumentationKey=00000000-0000-0000-0000-000000000000"
+      Write-Output "AzCopy telemetry: disabled"
+    displayName: 'Disable AzCopy telemetry'
+    condition: succeededOrFailed()
+  - ${{ if ne(parameters.telemetry, 'disabled') }}:
+    - task: AzureCLI@2
+      displayName: 'Configure AzCopy telemetry'
+      condition: succeededOrFailed()
+      # In send mode, a setup failure the script cannot catch, such as sign-in, only warns.
+      continueOnError: ${{ eq(parameters.telemetry, 'send') }}
+      inputs:
+        azureSubscription: azcopytestworkloadidentity
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+          function Set-JobVariable([string]$Name, [string]$Value) {
+            Write-Output "##vso[task.setvariable variable=$Name]$Value"
+          }
+
+          # Retries ride out transient Azure Resource Manager errors.
+          function Get-AzResource([string[]]$Arguments) {
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              $json = az resource show @Arguments
+              if ($LASTEXITCODE -eq 0 -and $json) {
+                return $json | ConvertFrom-Json
+              }
+              if ($attempt -lt 3) {
+                Start-Sleep -Seconds (10 * $attempt)
+              }
+            }
+            return $null
+          }
+
+          $telemetryResourceSettings = @{
+            SubscriptionId = $env:AZCOPY_TELEMETRY_SUBSCRIPTION_ID
+            ResourceGroup = $env:AZCOPY_TELEMETRY_RESOURCE_GROUP
+            AppName = $env:AZCOPY_TELEMETRY_APP_NAME
+          }
+          # Unset Azure DevOps variables reach the script as literal $(NAME) text.
+          $configuredTelemetrySettings = @($telemetryResourceSettings.Values | Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_) -and -not $_.StartsWith('$(')
+          })
+          $telemetryMode = '${{ parameters.telemetry }}'
+          if ($configuredTelemetrySettings.Count -eq 0) {
+            Write-Output "##vso[task.logissue type=warning]AzCopy telemetry is disabled because the AZCOPY_TELEMETRY_*_TEST pipeline variables are not set"
+            $telemetryMode = 'disabled'
+          } elseif ($configuredTelemetrySettings.Count -ne $telemetryResourceSettings.Count) {
+            throw "The AZCOPY_TELEMETRY_*_TEST pipeline variables are only partially set"
+          }
+
+          if ($telemetryMode -ne 'disabled') {
+            try {
+              az account set --subscription $telemetryResourceSettings.SubscriptionId
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to select the telemetry subscription"
+              }
+
+              $appInsights = Get-AzResource @(
+                '--resource-group', $telemetryResourceSettings.ResourceGroup,
+                '--name', $telemetryResourceSettings.AppName,
+                '--resource-type', 'Microsoft.Insights/components',
+                '--api-version', '2020-02-02')
+              if ($null -eq $appInsights) {
+                throw "Failed to retrieve the test Application Insights component"
+              }
+              if ($appInsights.tags.environment -ne 'test') {
+                throw "The configured Application Insights component is not tagged as the test environment"
+              }
+              $connectionString = $appInsights.properties.ConnectionString
+              if ([string]::IsNullOrWhiteSpace($connectionString) -or -not $connectionString.StartsWith("InstrumentationKey=")) {
+                throw "The test Application Insights component returned an invalid connection string"
+              }
+
+              if ($telemetryMode -eq 'send_and_validate') {
+                $workspace = Get-AzResource @('--ids', $appInsights.properties.WorkspaceResourceId, '--api-version', '2023-09-01')
+                if ($null -eq $workspace -or [string]::IsNullOrWhiteSpace($workspace.properties.customerId)) {
+                  throw "Failed to retrieve the test Log Analytics workspace customer ID"
+                }
+                Set-JobVariable NEW_E2E_APP_INSIGHTS_WORKSPACE_ID $workspace.properties.customerId
+              }
+              Set-JobVariable AZCOPY_E2E_TELEMETRY_RUN_ID "$env:BUILD_BUILDID-$env:SYSTEM_JOBID"
+              Set-JobVariable AZCOPY_TELEMETRY_CONNECTION_STRING $connectionString
+            } catch {
+              if ($telemetryMode -eq 'send_and_validate') {
+                throw
+              }
+              Write-Output "##vso[task.logissue type=warning]AzCopy telemetry is disabled because its setup failed: $($_.Exception.Message)"
+              $telemetryMode = 'disabled'
+            }
+          }
+          Write-Output "AzCopy telemetry: $telemetryMode"
+      env:
+        AZCOPY_TELEMETRY_SUBSCRIPTION_ID: $(AZCOPY_TELEMETRY_SUBSCRIPTION_ID_TEST)
+        AZCOPY_TELEMETRY_RESOURCE_GROUP: $(AZCOPY_TELEMETRY_RESOURCE_GROUP_TEST)
+        AZCOPY_TELEMETRY_APP_NAME: $(AZCOPY_TELEMETRY_APP_NAME_TEST)
