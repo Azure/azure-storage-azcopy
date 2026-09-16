@@ -59,12 +59,14 @@ type Client struct {
 }
 
 type ClientOptions struct {
-	CapMbps         float64
-	TrustedSuffixes string
-	LogLevel        *common.LogLevel
+	CapMbps          float64
+	TrustedSuffixes  string
+	LogLevel         *common.LogLevel
+	DisableTelemetry bool
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
+	telemetryDisabledByFlag = opts.DisableTelemetry
 	c := Client{
 		logLevel: common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
 	}
