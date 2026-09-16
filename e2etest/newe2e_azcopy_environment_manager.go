@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type AzCopyEnvironmentManagerKey struct{}
@@ -134,7 +135,7 @@ func (envCtx *AzCopyEnvironmentContext) RegisterEnvironment(env *AzCopyEnvironme
 
 func (envCtx *AzCopyEnvironmentContext) RegisterLogUpload(upload LogUpload) {
 	envCtx.mu.Lock()
-	envCtx.mu.Unlock()
+	defer envCtx.mu.Unlock()
 
 	envCtx.LogUploads = append(envCtx.LogUploads, upload)
 }

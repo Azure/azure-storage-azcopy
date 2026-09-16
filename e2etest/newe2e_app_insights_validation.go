@@ -52,9 +52,16 @@ func SetupAppInsightsTelemetryValidation(a Asserter) {
 		a.NoError("configure Application Insights validation", err)
 		return
 	}
+	globalAppInsightsValidation.mu.Lock()
+	globalAppInsightsValidation.runID = config.RunID
+	globalAppInsightsValidation.mu.Unlock()
 	if !enabled {
 		disableUnconfiguredTelemetry()
-		a.Log("Application Insights validation is disabled.")
+		if config.RunID != "" && config.ConnectionString != "" {
+			a.Log("Sending telemetry for run %q without Application Insights validation.", config.RunID)
+		} else {
+			a.Log("Application Insights validation is disabled.")
+		}
 		return
 	}
 
@@ -80,25 +87,22 @@ func disableUnconfiguredTelemetry() {
 	}
 }
 
+// Without a workspace, AzCopy still sends telemetry tagged with the run ID but nothing checks it.
 func validateAppInsightsValidationConfig(config AppInsightsValidationConfig) (bool, error) {
-	configuredValues := 0
-	for _, value := range []string{config.ConnectionString, config.WorkspaceID, config.RunID} {
-		if strings.TrimSpace(value) != "" {
-			configuredValues++
+	if config.RunID != "" {
+		if len(config.RunID) > 80 {
+			return false, errors.New("E2E telemetry run ID must be at most 80 bytes to leave room for process correlation")
+		}
+		if !e2eTelemetryRunIDPattern.MatchString(config.RunID) {
+			return false, errors.New("E2E telemetry run ID may contain only letters, digits, '.', '_', and '-'")
 		}
 	}
-	if configuredValues == 0 {
+	if config.WorkspaceID == "" {
 		return false, nil
 	}
-	if configuredValues != 3 {
+	if config.ConnectionString == "" || config.RunID == "" {
 		return false, errors.New(
-			"AZCOPY_TELEMETRY_CONNECTION_STRING, NEW_E2E_APP_INSIGHTS_WORKSPACE_ID, and AZCOPY_E2E_TELEMETRY_RUN_ID must all be set")
-	}
-	if len(config.RunID) > 80 {
-		return false, errors.New("E2E telemetry run ID must be at most 80 bytes to leave room for process correlation")
-	}
-	if !e2eTelemetryRunIDPattern.MatchString(config.RunID) {
-		return false, errors.New("E2E telemetry run ID may contain only letters, digits, '.', '_', and '-'")
+			"AZCOPY_TELEMETRY_CONNECTION_STRING, NEW_E2E_APP_INSIGHTS_WORKSPACE_ID, and AZCOPY_E2E_TELEMETRY_RUN_ID must all be set to validate telemetry")
 	}
 	return true, nil
 }
@@ -117,6 +121,13 @@ func AppInsightsTelemetryValidationEnabled() bool {
 	globalAppInsightsValidation.mu.RLock()
 	defer globalAppInsightsValidation.mu.RUnlock()
 	return globalAppInsightsValidation.enabled
+}
+
+// e2eTelemetryRunID is set whenever the run sends telemetry, validated or not.
+func e2eTelemetryRunID() string {
+	globalAppInsightsValidation.mu.RLock()
+	defer globalAppInsightsValidation.mu.RUnlock()
+	return globalAppInsightsValidation.runID
 }
 
 func VerifyAppInsightsTelemetry(a Asserter) {
