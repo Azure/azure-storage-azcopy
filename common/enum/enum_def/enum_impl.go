@@ -66,7 +66,8 @@ func (e *enumBackend[Val, Self]) init() {
 	}
 	var aliases []aliasEntry
 
-	for m := range enumType.Methods() {
+	for i := 0; i < enumType.NumMethod(); i++ {
+		m := enumType.Method(i)
 		// Ensure format of `func (Self) FooBar() Val` or `func (*Self) FooBar() Val`
 		if m.Type.NumIn() != 1 ||
 			(m.Type.In(0) != enumType &&
