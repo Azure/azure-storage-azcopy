@@ -1,7 +1,16 @@
 package e2etest
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +120,35 @@ func RegisterExpectedAppInsightsJob(jobID string) {
 	}
 }
 
+func VerifyAppInsightsTelemetry(a Asserter) {
+	snapshot := snapshotAppInsightsValidation()
+	if !snapshot.enabled {
+		return
+	}
+	if len(snapshot.expectedAttempts) == 0 {
+		a.NoError("verify Application Insights telemetry", errors.New(
+			"no telemetry expectations were collected during the E2E run"))
+		return
+	}
+
+	verifier := telemetryManifestVerifier{
+		queryClient: &logAnalyticsQueryClient{
+			tokens: PrimaryOAuthCache,
+			client: &http.Client{Timeout: appInsightsQueryRequestTimeout},
+		},
+		pollInterval: appInsightsPollInterval,
+		timeout:      appInsightsPollTimeout,
+	}
+	err := verifier.Verify(
+		context.Background(),
+		snapshot.workspaceID,
+		snapshot.runID,
+		snapshot.startedAt,
+		snapshot.expectedAttempts,
+	)
+	a.NoError("verify Application Insights telemetry", err)
+}
+
 func snapshotAppInsightsValidation() appInsightsValidationState {
 	globalAppInsightsValidation.mu.RLock()
 	defer globalAppInsightsValidation.mu.RUnlock()
@@ -126,5 +164,298 @@ func snapshotAppInsightsValidation() appInsightsValidationState {
 		startedAt:        globalAppInsightsValidation.startedAt,
 		expectedJobs:     expectedJobs,
 		expectedAttempts: append([]telemetryExpectation(nil), globalAppInsightsValidation.expectedAttempts...),
+	}
+}
+
+type finishedEventQueryClient interface {
+	QueryFinishedEventCounts(ctx context.Context, workspaceID, query string) (map[string]int, error)
+}
+
+type appInsightsVerifier struct {
+	queryClient  finishedEventQueryClient
+	pollInterval time.Duration
+	timeout      time.Duration
+}
+
+func (v appInsightsVerifier) Verify(
+	ctx context.Context,
+	workspaceID string,
+	runID string,
+	startedAt time.Time,
+	expected map[string]int,
+) error {
+	if v.queryClient == nil {
+		return errors.New("Application Insights query client is nil")
+	}
+	if v.pollInterval <= 0 || v.timeout <= 0 {
+		return errors.New("Application Insights polling interval and timeout must be positive")
+	}
+
+	query := buildFinishedEventQuery(runID, startedAt)
+	deadline := time.Now().Add(v.timeout)
+	var (
+		lastReceived map[string]int
+		lastErr      error
+	)
+
+	for {
+		received, err := v.queryClient.QueryFinishedEventCounts(ctx, workspaceID, query)
+		if err == nil {
+			lastReceived = received
+			missing := missingExpectedEvents(expected, received)
+			if len(missing) == 0 {
+				return nil
+			}
+		} else {
+			lastErr = err
+			if !isRetryableQueryError(err) {
+				return fmt.Errorf("query Application Insights telemetry: %w", err)
+			}
+		}
+
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		wait := v.pollInterval
+		if remaining < wait {
+			wait = remaining
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("wait for Application Insights telemetry: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	missing := missingExpectedEvents(expected, lastReceived)
+	return fmt.Errorf(
+		"timed out after %s waiting for Application Insights telemetry for run %q; missing events: %s; last query error: %v; query:\n%s",
+		v.timeout,
+		runID,
+		formatMissingEvents(missing),
+		lastErr,
+		query,
+	)
+}
+
+func buildFinishedEventQuery(runID string, startedAt time.Time) string {
+	return fmt.Sprintf(`AppEvents
+| where TimeGenerated >= datetime(%s)
+| where Name == "azcopy.job.finished"
+| extend EventProperties = todynamic(Properties)
+| where tostring(EventProperties.E2ETestRunID) == "%s"
+| summarize ReceivedCount = count() by JobID = tostring(EventProperties.JobID)`,
+		startedAt.UTC().Format(time.RFC3339Nano),
+		escapeKQLString(runID),
+	)
+}
+
+func escapeKQLString(value string) string {
+	encoded, _ := json.Marshal(value)
+	return string(encoded[1 : len(encoded)-1])
+}
+
+func missingExpectedEvents(expected, received map[string]int) map[string]int {
+	missing := make(map[string]int)
+	for jobID, expectedCount := range expected {
+		if receivedCount := received[jobID]; receivedCount < expectedCount {
+			missing[jobID] = expectedCount - receivedCount
+		}
+	}
+	return missing
+}
+
+func formatMissingEvents(missing map[string]int) string {
+	if len(missing) == 0 {
+		return "none"
+	}
+	jobIDs := make([]string, 0, len(missing))
+	for jobID := range missing {
+		jobIDs = append(jobIDs, jobID)
+	}
+	sort.Strings(jobIDs)
+
+	parts := make([]string, 0, len(jobIDs))
+	for _, jobID := range jobIDs {
+		parts = append(parts, fmt.Sprintf("%s (%d)", jobID, missing[jobID]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+type accessTokenProvider interface {
+	GetAccessToken(scope string) (*AzCoreAccessToken, error)
+}
+
+type httpDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+type logAnalyticsQueryClient struct {
+	tokens accessTokenProvider
+	client httpDoer
+}
+
+type logAnalyticsQueryRequest struct {
+	Query string `json:"query"`
+}
+
+type logAnalyticsQueryResponse struct {
+	Error  json.RawMessage `json:"error"`
+	Tables []struct {
+		Columns []struct {
+			Name string `json:"name"`
+		} `json:"columns"`
+		Rows [][]json.RawMessage `json:"rows"`
+	} `json:"tables"`
+}
+
+func (c *logAnalyticsQueryClient) QueryFinishedEventCounts(
+	ctx context.Context,
+	workspaceID string,
+	query string,
+) (map[string]int, error) {
+	result, err := c.queryResults(ctx, workspaceID, query)
+	if err != nil {
+		return nil, err
+	}
+	return parseFinishedEventCounts(result)
+}
+
+func (c *logAnalyticsQueryClient) queryResults(ctx context.Context, workspaceID, query string) (logAnalyticsQueryResponse, error) {
+	failure := logAnalyticsQueryResponse{}
+	if c.tokens == nil {
+		return failure, errors.New("OAuth token provider is nil")
+	}
+	if c.client == nil {
+		return failure, errors.New("HTTP client is nil")
+	}
+
+	token, err := c.tokens.GetAccessToken(LogAnalyticsResource)
+	if err != nil {
+		return failure, fmt.Errorf("get Log Analytics access token: %w", err)
+	}
+	tokenValue, err := token.FreshToken()
+	if err != nil {
+		return failure, fmt.Errorf("refresh Log Analytics access token: %w", err)
+	}
+
+	payload, err := json.Marshal(logAnalyticsQueryRequest{Query: query})
+	if err != nil {
+		return failure, fmt.Errorf("serialize Log Analytics query: %w", err)
+	}
+	endpoint := fmt.Sprintf("%s/%s/query", appInsightsQueryEndpoint, url.PathEscape(workspaceID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return failure, fmt.Errorf("create Log Analytics query request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+tokenValue)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return failure, retryableQueryError{err: fmt.Errorf("send Log Analytics query: %w", err)}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxQueryErrorBodyBytes))
+		if readErr != nil {
+			return failure, fmt.Errorf("read Log Analytics error response: %w", readErr)
+		}
+		statusErr := fmt.Errorf("Log Analytics query returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		if isRetryableHTTPStatus(resp.StatusCode) {
+			return failure, retryableQueryError{err: statusErr}
+		}
+		return failure, statusErr
+	}
+
+	var result logAnalyticsQueryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return failure, fmt.Errorf("decode Log Analytics query response: %w", err)
+	}
+	if len(result.Error) > 0 && string(result.Error) != "null" {
+		return failure, errors.New("Log Analytics returned a partial query error")
+	}
+	return result, nil
+}
+
+func parseFinishedEventCounts(result logAnalyticsQueryResponse) (map[string]int, error) {
+	if len(result.Tables) != 1 {
+		return nil, fmt.Errorf("expected one Log Analytics result table, got %d", len(result.Tables))
+	}
+	table := result.Tables[0]
+	columnIndexes := make(map[string]int, len(table.Columns))
+	for index, column := range table.Columns {
+		columnIndexes[column.Name] = index
+	}
+	jobIDIndex, hasJobID := columnIndexes["JobID"]
+	countIndex, hasCount := columnIndexes["ReceivedCount"]
+	if !hasJobID || !hasCount {
+		return nil, fmt.Errorf("Log Analytics response is missing JobID or ReceivedCount columns")
+	}
+
+	counts := make(map[string]int, len(table.Rows))
+	for rowIndex, row := range table.Rows {
+		if jobIDIndex >= len(row) || countIndex >= len(row) {
+			return nil, fmt.Errorf("Log Analytics response row %d has fewer columns than expected", rowIndex)
+		}
+		var jobID string
+		if err := json.Unmarshal(row[jobIDIndex], &jobID); err != nil {
+			return nil, fmt.Errorf("decode JobID in row %d: %w", rowIndex, err)
+		}
+		count, err := parseJSONInt(row[countIndex])
+		if err != nil {
+			return nil, fmt.Errorf("decode ReceivedCount in row %d: %w", rowIndex, err)
+		}
+		if jobID != "" {
+			counts[jobID] = count
+		}
+	}
+	return counts, nil
+}
+
+func parseJSONInt(value json.RawMessage) (int, error) {
+	var number json.Number
+	if err := json.Unmarshal(value, &number); err != nil {
+		return 0, err
+	}
+	parsed, err := strconv.Atoi(number.String())
+	if err != nil {
+		return 0, err
+	}
+	return parsed, nil
+}
+
+type retryableQueryError struct {
+	err error
+}
+
+func (e retryableQueryError) Error() string {
+	return e.err.Error()
+}
+
+func (e retryableQueryError) Unwrap() error {
+	return e.err
+}
+
+func isRetryableQueryError(err error) bool {
+	var retryable retryableQueryError
+	return errors.As(err, &retryable)
+}
+
+func isRetryableHTTPStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusRequestTimeout,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
 	}
 }

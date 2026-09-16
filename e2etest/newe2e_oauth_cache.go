@@ -15,6 +15,7 @@ const (
 	AzureManagementResource = "https://management.core.windows.net/.default"
 	AzureStorageResource    = "https://storage.azure.com/.default"
 	AzureDisksResource      = "https://disk.azure.com/.default"
+	LogAnalyticsResource    = "https://api.loganalytics.io/.default"
 )
 
 var PrimaryOAuthCache *OAuthCache

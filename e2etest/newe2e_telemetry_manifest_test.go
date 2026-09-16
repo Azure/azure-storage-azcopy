@@ -1,12 +1,15 @@
 package e2etest
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+	"time"
 )
 
 func manifestEvent(process, invocation, name string) observedTelemetryEvent {
@@ -165,6 +168,128 @@ func TestTelemetryManifestAuthCloud(t *testing.T) {
 	}
 }
 
+type manifestQueryStub struct {
+	responses [][]observedTelemetryEvent
+	errors    []error
+	calls     int
+	query     string
+}
+
+func (s *manifestQueryStub) QueryTelemetryEvents(ctx context.Context, workspaceID, query string) ([]observedTelemetryEvent, error) {
+	s.query = query
+	index := s.calls
+	s.calls++
+	if index < len(s.errors) && s.errors[index] != nil {
+		return nil, s.errors[index]
+	}
+	if index < len(s.responses) {
+		return s.responses[index], nil
+	}
+	return nil, nil
+}
+
+func TestTelemetryManifestPolling(t *testing.T) {
+	started := manifestEvent("run/process", "invocation", "azcopy.job.started")
+	finished := manifestEvent("run/process", "invocation", "azcopy.job.finished")
+	expected := []telemetryExpectation{{ProcessRunID: "run/process", JobID: "job", Command: "copy"}}
+	client := &manifestQueryStub{
+		responses: [][]observedTelemetryEvent{nil, {finished}, {finished, started}},
+		errors:    []error{retryableQueryError{errors.New("transient")}},
+	}
+	verifier := telemetryManifestVerifier{queryClient: client, pollInterval: time.Millisecond, timeout: time.Second}
+	require.NoError(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected))
+	assert.Equal(t, 3, client.calls)
+	assert.Contains(t, client.query, `startswith "run/"`)
+	assert.Contains(t, client.query, "Measurements=todynamic(Measurements)")
+	client = &manifestQueryStub{errors: []error{errors.New("forbidden")}}
+	verifier.queryClient = client
+	assert.ErrorContains(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected), "forbidden")
+	assert.Equal(t, 1, client.calls)
+	client = &manifestQueryStub{responses: [][]observedTelemetryEvent{{finished, finished}}}
+	verifier.queryClient = client
+	assert.ErrorContains(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected), "duplicate")
+	client = &manifestQueryStub{}
+	verifier.queryClient = client
+	verifier.timeout = 5 * time.Millisecond
+	assert.ErrorContains(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected), "manifest incomplete")
+}
+
+type manifestQueryFunc func(context.Context, string, string) ([]observedTelemetryEvent, error)
+
+func (query manifestQueryFunc) QueryTelemetryEvents(ctx context.Context, workspaceID, text string) ([]observedTelemetryEvent, error) {
+	return query(ctx, workspaceID, text)
+}
+
+func TestTelemetryManifestQueryAcrossObservationDeadline(t *testing.T) {
+	started := manifestEvent("run/process", "invocation", "azcopy.job.started")
+	finished := manifestEvent("run/process", "invocation", "azcopy.job.finished")
+	complete := []observedTelemetryEvent{started, finished}
+	expected := []telemetryExpectation{
+		{ProcessRunID: "run/process", JobID: "job", Command: "copy"},
+		{ProcessRunID: "run/disabled", NoEvents: true},
+	}
+	for _, test := range []struct {
+		name         string
+		events       []observedTelemetryEvent
+		queryErr     error
+		cancelParent bool
+		wantError    string
+	}{
+		{name: "successful query completes after observation", events: complete},
+		{name: "missing finish still fails", events: []observedTelemetryEvent{started}, wantError: "incomplete"},
+		{name: "duplicate still fails", events: []observedTelemetryEvent{started, finished, finished}, wantError: "duplicate"},
+		{name: "late opt-out event still fails", events: append(append([]observedTelemetryEvent(nil), complete...), manifestEvent("run/disabled", "other", "azcopy.job.started")), wantError: "unexpected telemetry"},
+		{name: "query failure still fails", queryErr: retryableQueryError{errors.New("service unavailable")}, wantError: "service unavailable"},
+		{name: "parent cancellation still fails", cancelParent: true, wantError: "context canceled"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parent, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			calls := 0
+			client := manifestQueryFunc(func(ctx context.Context, _, _ string) ([]observedTelemetryEvent, error) {
+				calls++
+				if calls == 1 {
+					return complete, nil
+				}
+				_, bounded := ctx.Deadline()
+				require.True(t, bounded, "queries must retain their own timeout")
+				if test.cancelParent {
+					cancel()
+				}
+				timer := time.NewTimer(60 * time.Millisecond)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					return nil, retryableQueryError{ctx.Err()}
+				case <-timer.C:
+					return test.events, test.queryErr
+				}
+			})
+			verifier := telemetryManifestVerifier{queryClient: client, pollInterval: time.Millisecond, timeout: 30 * time.Millisecond}
+			err := verifier.Verify(parent, "workspace", "run", time.Now(), expected)
+			if test.wantError == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, test.wantError)
+			}
+			require.Equal(t, 2, calls)
+		})
+	}
+}
+
+func TestTelemetryManifestParsing(t *testing.T) {
+	var result logAnalyticsQueryResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"tables":[{"columns":[{"name":"Measurements"},{"name":"Name"},{"name":"Properties"}],"rows":[[{"azcopy.job.started":1},"azcopy.job.started","{\"JobID\":\"job\"}"]]}]}`), &result))
+	events, err := parseTelemetryEvents(result)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "job", events[0].Properties["JobID"])
+	assert.Equal(t, float64(1), events[0].Measurements["azcopy.job.started"])
+	result.Tables[0].Rows[0] = result.Tables[0].Rows[0][:1]
+	_, err = parseTelemetryEvents(result)
+	assert.ErrorContains(t, err, "short lifecycle")
+}
+
 func TestTelemetryManifestEndpointTypes(t *testing.T) {
 	for _, test := range []struct {
 		name, source, destination, fromTo, wantSource, wantDestination string
@@ -188,6 +313,31 @@ func TestTelemetryManifestEndpointTypes(t *testing.T) {
 	assert.Empty(t, destination)
 	_, _, err = telemetryEndpointTypes([]string{"source", "destination"}, map[string]string{"from-to": "invalid"})
 	require.Error(t, err)
+}
+
+func TestTelemetryManifestOptOut(t *testing.T) {
+	for _, flags := range []map[string]string{{"disable-telemetry": "true"}, {"disable-telemetry": "1"}, {"dry-run": "true"}} {
+		assert.False(t, azCopyCommandProducesJobFinishedTelemetry(AzCopyVerbCopy, flags))
+		assert.Empty(t, decideAppInsightsJobValidation(AzCopyVerbCopy, flags, false, "job").jobID)
+	}
+	assert.True(t, telemetryExpectsNoEvents(AzCopyVerbCopy, nil, []string{"AZCOPY_DISABLE_TELEMETRY=TRUE"}))
+	assert.True(t, azCopyCommandProducesJobFinishedTelemetry(AzCopyVerbCopy, map[string]string{"disable-telemetry": "false"}))
+	expected := []telemetryExpectation{{ProcessRunID: "run/disabled", NoEvents: true}}
+	missing, err := checkTelemetryManifest(expected, nil)
+	require.NoError(t, err)
+	assert.Empty(t, missing)
+	_, err = checkTelemetryManifest(expected, []observedTelemetryEvent{manifestEvent("run/disabled", "invocation", "azcopy.job.started")})
+	assert.ErrorContains(t, err, "unexpected telemetry")
+	client := &manifestQueryStub{}
+	verifier := telemetryManifestVerifier{queryClient: client, pollInterval: time.Millisecond, timeout: 15 * time.Millisecond}
+	require.NoError(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected))
+	assert.Greater(t, client.calls, 1)
+	client = &manifestQueryStub{responses: [][]observedTelemetryEvent{nil, {manifestEvent("run/disabled", "invocation", "azcopy.job.finished")}}}
+	verifier.queryClient = client
+	assert.ErrorContains(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected), "unexpected telemetry")
+	client = &manifestQueryStub{errors: []error{errors.New("forbidden")}}
+	verifier.queryClient = client
+	assert.Error(t, verifier.Verify(context.Background(), "workspace", "run", time.Now(), expected))
 }
 
 func TestTelemetryExistingWorkflowAssertions(t *testing.T) {
