@@ -1,0 +1,15 @@
+File: azcopy-live.exe
+Build ID: C:\Users\sharankur\AppData\Local\Temp\azcopy-local64-baseline-sep09\azcopy-live.exe2026-09-09 19:49:10.0297864 +0530 IST
+Type: inuse_space
+Time: 2026-09-09 20:10:28 IST
+Showing nodes accounting for 83.44MB, 96.51% of 86.46MB total
+Showing top 8 nodes out of 83
+      flat  flat%   sum%        cum   cum%
+   64.02MB 74.05% 74.05%    64.02MB 74.05%  github.com/Azure/azure-storage-azcopy/v10/common.(*multiSizeSlicePool).RentSlice
+    7.63MB  8.83% 82.88%     7.63MB  8.83%  github.com/Azure/azure-storage-azcopy/v10/common.NewChunkStatusLogger
+    5.75MB  6.65% 89.53%    13.38MB 15.48%  github.com/Azure/azure-storage-azcopy/v10/ste.NewJobMgr
+       3MB  3.47% 93.00%        3MB  3.47%  runtime.mallocgc
+    1.01MB  1.16% 94.17%     1.01MB  1.16%  github.com/Azure/azure-storage-azcopy/v10/common.newSimpleSlicePool
+       1MB  1.16% 95.32%        1MB  1.16%  bytes.Clone
+    0.52MB   0.6% 95.93%     0.52MB   0.6%  github.com/Azure/azure-storage-azcopy/v10/cmd.init.func1
+    0.51MB  0.59% 96.51%     0.51MB  0.59%  hash/crc64.makeSlicingBy8Table
