@@ -1,0 +1,49 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: azureServiceConnection
+    type: string
+    default: azcopytestworkloadidentity
+  - name: subscriptionId
+    type: string
+    default: '31347be8-d066-464e-9866-7e58d85027b7'
+  - name: resourceGroup
+    type: string
+    default: azcopy-telemetry-test-rg
+  - name: suffix
+    type: string
+    default: manual
+  - name: location
+    type: string
+    default: eastus
+
+jobs:
+  - job: ProvisionManualTelemetryFaultTargets
+    timeoutInMinutes: 30
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+      - task: AzureCLI@2
+        displayName: Provision isolated low-cap targets only (no tests)
+        inputs:
+          azureSubscription: ${{ parameters.azureServiceConnection }}
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            & ./testSuite/telemetry-live.ps1 -Provision `
+              -SubscriptionId $env:FAULT_SUBSCRIPTION -ResourceGroup $env:FAULT_RESOURCE_GROUP `
+              -Suffix $env:FAULT_SUFFIX -Location $env:FAULT_LOCATION `
+              -OutputDirectory $env:FAULT_OUTPUT
+        env:
+          FAULT_SUBSCRIPTION: ${{ parameters.subscriptionId }}
+          FAULT_RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+          FAULT_SUFFIX: ${{ parameters.suffix }}
+          FAULT_LOCATION: ${{ parameters.location }}
+          FAULT_OUTPUT: $(Build.ArtifactStagingDirectory)/telemetry-fault-infrastructure
+      - task: PublishPipelineArtifact@1
+        condition: always()
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/telemetry-fault-infrastructure
+          artifact: telemetry-fault-infrastructure
