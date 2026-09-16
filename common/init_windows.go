@@ -25,8 +25,9 @@ import (
 	"strings"
 )
 
-// getAzCopyAppPath returns the path of Azcopy in local appdata.
-func getAzCopyAppPath() string {
+// GetAzCopyAppPath returns the persistent AzCopy application-data directory.
+// It is publicly exported so other packages can reuse it.
+func GetAzCopyAppPath() string {
 	userProfile := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 
