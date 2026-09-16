@@ -1,0 +1,298 @@
+{
+  "large-blob": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 139.1211198,
+      "EnabledMedian": 139.9955623,
+      "PairedDeltaMedian": 0.8486622000000068,
+      "DeltaLower95": 0.8129189999999937,
+      "DeltaUpper95": 1.1182354000000032,
+      "PairedPercentMedian": 0.6100167977515225,
+      "PercentLower95": 0.5840663610963359,
+      "PercentUpper95": 0.8041514879668421
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 7.6875,
+      "EnabledMedian": 6.859375,
+      "PairedDeltaMedian": -0.859375,
+      "DeltaLower95": -1.046875,
+      "DeltaUpper95": 0.78125,
+      "PairedPercentMedian": -11.178861788617889,
+      "PercentLower95": -13.24110671936759,
+      "PercentUpper95": 11.31221719457014
+    },
+    {
+      "Metric": "average-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 342.90995167356994,
+      "EnabledMedian": 320.8987527793623,
+      "PairedDeltaMedian": -22.01119889420761,
+      "DeltaLower95": -64.98138646366465,
+      "DeltaUpper95": 26.728323602708258,
+      "PairedPercentMedian": -6.418944328323539,
+      "PercentLower95": -17.206779785735506,
+      "PercentUpper95": 7.8632164830608975
+    },
+    {
+      "Metric": "average-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 374.62736479088187,
+      "EnabledMedian": 351.3250106580704,
+      "PairedDeltaMedian": -23.302354132811445,
+      "DeltaLower95": -68.98595261286755,
+      "DeltaUpper95": 26.81109620772429,
+      "PairedPercentMedian": -6.220142019208574,
+      "PercentLower95": -16.75727994360351,
+      "PercentUpper95": 7.241477092948867
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 454.19921875,
+      "EnabledMedian": 453.6015625,
+      "PairedDeltaMedian": -13.4140625,
+      "DeltaLower95": -77.06640625,
+      "DeltaUpper95": 21.12890625,
+      "PairedPercentMedian": -3.051847638683991,
+      "PercentLower95": -14.522528358274878,
+      "PercentUpper95": 4.651902816598574
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 456.359375,
+      "EnabledMedian": 443.3125,
+      "PairedDeltaMedian": -14.3046875,
+      "DeltaLower95": -89.65234375,
+      "DeltaUpper95": 6.55859375,
+      "PairedPercentMedian": -3.23801439510496,
+      "PercentLower95": -16.821436685991543,
+      "PercentUpper95": 1.437155476426888
+    }
+  ],
+  "large-blob/healthy-only": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 139.1211198,
+      "EnabledMedian": 139.9955623,
+      "PairedDeltaMedian": 0.8486622000000068,
+      "DeltaLower95": 0.8129189999999937,
+      "DeltaUpper95": 1.1182354000000032,
+      "PairedPercentMedian": 0.6100167977515225,
+      "PercentLower95": 0.5840663610963359,
+      "PercentUpper95": 0.8041514879668421
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 7.6875,
+      "EnabledMedian": 6.859375,
+      "PairedDeltaMedian": -0.859375,
+      "DeltaLower95": -1.046875,
+      "DeltaUpper95": 0.78125,
+      "PairedPercentMedian": -11.178861788617889,
+      "PercentLower95": -13.24110671936759,
+      "PercentUpper95": 11.31221719457014
+    },
+    {
+      "Metric": "average-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 342.90995167356994,
+      "EnabledMedian": 320.8987527793623,
+      "PairedDeltaMedian": -22.01119889420761,
+      "DeltaLower95": -64.98138646366465,
+      "DeltaUpper95": 26.728323602708258,
+      "PairedPercentMedian": -6.418944328323539,
+      "PercentLower95": -17.206779785735506,
+      "PercentUpper95": 7.8632164830608975
+    },
+    {
+      "Metric": "average-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 374.62736479088187,
+      "EnabledMedian": 351.3250106580704,
+      "PairedDeltaMedian": -23.302354132811445,
+      "DeltaLower95": -68.98595261286755,
+      "DeltaUpper95": 26.81109620772429,
+      "PairedPercentMedian": -6.220142019208574,
+      "PercentLower95": -16.75727994360351,
+      "PercentUpper95": 7.241477092948867
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 454.19921875,
+      "EnabledMedian": 453.6015625,
+      "PairedDeltaMedian": -13.4140625,
+      "DeltaLower95": -77.06640625,
+      "DeltaUpper95": 21.12890625,
+      "PairedPercentMedian": -3.051847638683991,
+      "PercentLower95": -14.522528358274878,
+      "PercentUpper95": 4.651902816598574
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 456.359375,
+      "EnabledMedian": 443.3125,
+      "PairedDeltaMedian": -14.3046875,
+      "DeltaLower95": -89.65234375,
+      "DeltaUpper95": 6.55859375,
+      "PairedPercentMedian": -3.23801439510496,
+      "PercentLower95": -16.821436685991543,
+      "PercentUpper95": 1.437155476426888
+    }
+  ],
+  "small-blobs": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 77.1849364,
+      "EnabledMedian": 77.4097825,
+      "PairedDeltaMedian": 0.21416720000000566,
+      "DeltaLower95": 0.19723349999999584,
+      "DeltaUpper95": 2.9854145999999986,
+      "PairedPercentMedian": 0.2774344101898807,
+      "PercentLower95": 0.2555336691318466,
+      "PercentUpper95": 3.8705372278362127
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 18.5,
+      "EnabledMedian": 19.78125,
+      "PairedDeltaMedian": 0.78125,
+      "DeltaLower95": 0.765625,
+      "DeltaUpper95": 1.28125,
+      "PairedPercentMedian": 4.3975373790677175,
+      "PercentLower95": 3.9644012944983764,
+      "PercentUpper95": 6.92567567567568
+    },
+    {
+      "Metric": "average-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 187.37330458778655,
+      "EnabledMedian": 190.0516549527862,
+      "PairedDeltaMedian": 0.6684002050429285,
+      "DeltaLower95": -0.8541391615450493,
+      "DeltaUpper95": 6.516070781361833,
+      "PairedPercentMedian": 0.3567211489989841,
+      "PercentLower95": -0.4474139538339639,
+      "PercentUpper95": 3.527040900200018
+    },
+    {
+      "Metric": "average-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 141.5127332920056,
+      "EnabledMedian": 142.81661257240157,
+      "PairedDeltaMedian": 0.6514969945013718,
+      "DeltaLower95": -1.590963836835698,
+      "DeltaUpper95": 6.978463676867619,
+      "PairedPercentMedian": 0.46038047555554407,
+      "PercentLower95": -1.1017177051203086,
+      "PercentUpper95": 5.044066638252431
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 219.86328125,
+      "EnabledMedian": 228.05078125,
+      "PairedDeltaMedian": 3.58984375,
+      "DeltaLower95": -0.64453125,
+      "DeltaUpper95": 15.9765625,
+      "PairedPercentMedian": 1.6327618370791441,
+      "PercentLower95": -0.2818296723943514,
+      "PercentUpper95": 7.436904502145603
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 162.41796875,
+      "EnabledMedian": 170.37890625,
+      "PairedDeltaMedian": 3.6875,
+      "DeltaLower95": -0.39453125,
+      "DeltaUpper95": 16.67578125,
+      "PairedPercentMedian": 2.2703768729406715,
+      "PercentLower95": -0.2310261219634957,
+      "PercentUpper95": 10.638987190350392
+    }
+  ],
+  "small-blobs/healthy-only": [
+    {
+      "Metric": "wall",
+      "Unit": "seconds",
+      "DisabledMedian": 77.1849364,
+      "EnabledMedian": 77.4097825,
+      "PairedDeltaMedian": 0.21416720000000566,
+      "DeltaLower95": 0.19723349999999584,
+      "DeltaUpper95": 2.9854145999999986,
+      "PairedPercentMedian": 0.2774344101898807,
+      "PercentLower95": 0.2555336691318466,
+      "PercentUpper95": 3.8705372278362127
+    },
+    {
+      "Metric": "cpu",
+      "Unit": "seconds",
+      "DisabledMedian": 18.5,
+      "EnabledMedian": 19.78125,
+      "PairedDeltaMedian": 0.78125,
+      "DeltaLower95": 0.765625,
+      "DeltaUpper95": 1.28125,
+      "PairedPercentMedian": 4.3975373790677175,
+      "PercentLower95": 3.9644012944983764,
+      "PercentUpper95": 6.92567567567568
+    },
+    {
+      "Metric": "average-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 187.37330458778655,
+      "EnabledMedian": 190.0516549527862,
+      "PairedDeltaMedian": 0.6684002050429285,
+      "DeltaLower95": -0.8541391615450493,
+      "DeltaUpper95": 6.516070781361833,
+      "PairedPercentMedian": 0.3567211489989841,
+      "PercentLower95": -0.4474139538339639,
+      "PercentUpper95": 3.527040900200018
+    },
+    {
+      "Metric": "average-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 141.5127332920056,
+      "EnabledMedian": 142.81661257240157,
+      "PairedDeltaMedian": 0.6514969945013718,
+      "DeltaLower95": -1.590963836835698,
+      "DeltaUpper95": 6.978463676867619,
+      "PairedPercentMedian": 0.46038047555554407,
+      "PercentLower95": -1.1017177051203086,
+      "PercentUpper95": 5.044066638252431
+    },
+    {
+      "Metric": "peak-working-set",
+      "Unit": "MiB",
+      "DisabledMedian": 219.86328125,
+      "EnabledMedian": 228.05078125,
+      "PairedDeltaMedian": 3.58984375,
+      "DeltaLower95": -0.64453125,
+      "DeltaUpper95": 15.9765625,
+      "PairedPercentMedian": 1.6327618370791441,
+      "PercentLower95": -0.2818296723943514,
+      "PercentUpper95": 7.436904502145603
+    },
+    {
+      "Metric": "peak-commit",
+      "Unit": "MiB",
+      "DisabledMedian": 162.41796875,
+      "EnabledMedian": 170.37890625,
+      "PairedDeltaMedian": 3.6875,
+      "DeltaLower95": -0.39453125,
+      "DeltaUpper95": 16.67578125,
+      "PairedPercentMedian": 2.2703768729406715,
+      "PercentLower95": -0.2310261219634957,
+      "PercentUpper95": 10.638987190350392
+    }
+  ]
+}
