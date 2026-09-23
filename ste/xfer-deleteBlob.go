@@ -40,6 +40,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
+			jptm.SetErrorMessage(fmt.Sprintf("DELETE FAILED: %v, %v", info.Source, err.Error()))
 		} else if status == common.ETransferStatus.SkippedBlobHasSnapshots() {
 			explainedSkippedRemoveOnce.Do(func() {
 				common.GetLifecycleMgr().Info("Blobs with snapshots are skipped. Please specify the --delete-snapshots flag for alternative behaviors.")

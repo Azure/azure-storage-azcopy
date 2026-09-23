@@ -55,6 +55,7 @@ type LifecycleMgr interface {
 	Init(OutputBuilder)                                          // let the user know the job has started and initial information like log location
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
+	SanitizeLogMessage(string) string                            // return log message with sensitive information removed
 	Info(string)                                                 // simple print, allowed to float up
 	Warn(string)                                                 // simple print, allowed to float up
 	Dryrun(OutputBuilder)                                        // print files for dry run mode
@@ -271,6 +272,10 @@ func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
 		msgContent: messageContent,
 		msgType:    EOutputMessageType.Progress(),
 	}
+}
+
+func (lcm *lifecycleMgr) SanitizeLogMessage(msg string) string {
+	return lcm.logSanitizer.SanitizeLogMessage(msg)
 }
 
 func (lcm *lifecycleMgr) Info(msg string) {

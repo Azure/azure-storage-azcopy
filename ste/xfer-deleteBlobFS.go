@@ -75,6 +75,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
+			jptm.SetErrorMessage(fmt.Sprintf("DELETE FAILED: %v, %v", info.Source, err.Error()))
 		} else {
 			jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
 		}

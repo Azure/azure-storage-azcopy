@@ -47,6 +47,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "SET-PROPERTIES FAILED with error: ", err)
+			jptm.SetErrorMessage(fmt.Sprintf("SET-PROPERTIES FAILED: %v, %v", info.Source, err.Error()))
 		} else {
 			jptm.Log(common.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
@@ -116,6 +117,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "SET-PROPERTIES ERROR ", err)
+			jptm.SetErrorMessage(fmt.Sprintf("SET-PROPERTIES FAILED: %v, %v", info.Source, err.Error()))
 		} else {
 			jptm.Log(common.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
@@ -179,6 +181,7 @@ func setPropertiesFile(jptm IJobPartTransferMgr) {
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "SET-PROPERTIES ERROR ", err)
+			jptm.SetErrorMessage(fmt.Sprintf("SET-PROPERTIES FAILED: %v, %v", info.Source, err.Error()))
 		} else {
 			jptm.Log(common.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}

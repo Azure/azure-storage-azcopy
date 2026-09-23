@@ -1,8 +1,9 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
@@ -62,6 +63,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderF
 	d, err := df(jptm)
 	if err != nil {
 		jptm.LogDownloadError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetErrorMessage(err.Error())
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -69,7 +71,9 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderF
 
 	dl, ok := d.(symlinkDownloader)
 	if !ok {
-		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support symlinks", 0)
+		err_msg := "downloader implementation does not support symlinks"
+		jptm.LogDownloadError(info.Source, info.Destination, err_msg, 0)
+		jptm.SetErrorMessage(err_msg)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
