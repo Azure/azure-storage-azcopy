@@ -62,7 +62,10 @@ func mergeJoinTwoWayPollErrs(cca *cookedSyncCmdArgs, srcSideErr, dstSideErr *two
 	if e := srcSideErr.get(); e != nil {
 		return &mergeJoinTraversalError{location: cca.fromTo.From(), err: fmt.Errorf("source traversal error during merge-join: %w", e)}
 	}
-	if e := dstSideErr.get(); e != nil {
+	// A destination "not found" (empty/absent prefix) is NOT a failure: it mirrors the indexMap path's
+	// isDestinationPresent=false handling. Treat the destination as empty so every source object is
+	// copied. Only genuine destination traversal errors are fatal.
+	if e := dstSideErr.get(); e != nil && !IsDestinationNotFoundDuringSync(e) {
 		return &mergeJoinTraversalError{location: cca.fromTo.To(), err: fmt.Errorf("destination traversal error during merge-join: %w", e)}
 	}
 	return nil
@@ -289,7 +292,9 @@ func mergeJoinTwoWaySyncDir(
 		if err == nil {
 			if e := srcSideErr.get(); e != nil {
 				err = &mergeJoinTraversalError{location: cca.fromTo.From(), err: fmt.Errorf("source traversal error during merge-join: %w", e)}
-			} else if e := dstSideErr.get(); e != nil {
+			} else if e := dstSideErr.get(); e != nil && !IsDestinationNotFoundDuringSync(e) {
+				// Destination not-found = empty/absent prefix; benign (all source copied). See
+				// mergeJoinTwoWayPollErrs.
 				err = &mergeJoinTraversalError{location: cca.fromTo.To(), err: fmt.Errorf("destination traversal error during merge-join: %w", e)}
 			}
 		}
