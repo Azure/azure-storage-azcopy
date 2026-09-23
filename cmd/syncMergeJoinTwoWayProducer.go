@@ -224,8 +224,16 @@ func traverserToTypedChannels(
 		}
 
 		if err != nil {
-			mergeJoinSyncOneDirLog(common.LogError,
-				fmt.Sprintf("%s traversal error: %v", label, err), true)
+			// A destination "not found" (empty/absent prefix) is benign: the consumer treats it as an
+			// empty destination and copies all source. Log it at info, not error, so it isn't mistaken
+			// for a failure. Genuine traversal errors stay at error level.
+			if IsDestinationNotFoundDuringSync(err) {
+				mergeJoinSyncOneDirLog(common.LogInfo,
+					fmt.Sprintf("%s destination empty/absent, treating as not-present (all source will be copied): %v", label, err), true)
+			} else {
+				mergeJoinSyncOneDirLog(common.LogError,
+					fmt.Sprintf("%s traversal error: %v", label, err), true)
+			}
 			sideErr.set(err)
 		}
 	}()
