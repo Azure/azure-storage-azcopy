@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -75,6 +76,7 @@ type cookedSyncOptions struct {
 	dryrunDeleteHandler              ObjectDeleter
 	deleteDestinationFileIfNecessary bool
 	commandString                    string
+	telemetryOptions                 telemetry.OptionAttributes
 }
 
 func newCookedSyncOptions(src, dst string, opts SyncOptions) (s *cookedSyncOptions, err error) {
@@ -197,6 +199,7 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.dryrun = opts.dryrun
 	s.deleteDestinationFileIfNecessary = opts.deleteDestinationFileIfNecessary
 	s.commandString = opts.commandString
+	s.telemetryOptions = opts.telemetryOptions.Clone()
 	s.dryrunJobPartOrderHandler = opts.dryrunJobPartOrderHandler
 	s.dryrunDeleteHandler = opts.dryrunDeleteHandler
 

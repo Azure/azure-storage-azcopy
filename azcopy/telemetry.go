@@ -26,6 +26,7 @@ package azcopy
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -181,6 +182,24 @@ func baseJobDimensions(command string, fromTo common.FromTo, srcCredType, dstCre
 	}
 }
 
+func resumeJobDimensions(jobDetails common.GetJobDetailsResponse, source, destination common.ResourceString, srcCredType, dstCredType common.CredentialType, options telemetry.OptionAttributes) telemetry.JobDimensions {
+	d := baseJobDimensions("jobs.resume", jobDetails.FromTo, srcCredType, dstCredType)
+	d.SummaryCounterScope = "job-cumulative"
+	d.SourceMountType = sourceMountType(jobDetails.FromTo.From(), source.Value)
+	d.SourceStorageAccount = storageAccountName(source, jobDetails.FromTo.From())
+	d.SourceScope = scopeForLocation(source, jobDetails.FromTo.From(), true)
+	d.SourceEndpointKind = endpointKind(source, jobDetails.FromTo.From())
+	d.DestStorageAccount = storageAccountName(destination, jobDetails.FromTo.To())
+	d.DestScope = scopeForLocation(destination, jobDetails.FromTo.To(), false)
+	d.SourceAuthMechanism = authMechanism(srcCredType, source, jobDetails.FromTo.From())
+	d.DestAuthMechanism = authMechanism(dstCredType, destination, jobDetails.FromTo.To())
+	d.DestEndpointKind = endpointKind(destination, jobDetails.FromTo.To())
+	d.SourceCloudType = endpointCloudType(source, jobDetails.FromTo.From())
+	d.DestCloudType = endpointCloudType(destination, jobDetails.FromTo.To())
+	d.Options = options.Clone()
+	return d
+}
+
 // protocolForLocation maps a transfer endpoint location to the wire/access
 // protocol used to reach it.
 func protocolForLocation(loc common.Location) string {
@@ -217,6 +236,196 @@ func mountTypeForLocation(loc common.Location) string {
 	default:
 		return ""
 	}
+}
+
+// sourceMountType refines mountTypeForLocation for local sources by inspecting
+// the OS mount table to distinguish network-attached storage from local disk:
+// "nas-nfs" | "nas-smb" | "local-disk". For remote locations it defers to the
+// coarse classification. localPath is ignored for non-local sources.
+func sourceMountType(loc common.Location, localPath string) string {
+	if loc != common.ELocation.Local() {
+		return mountTypeForLocation(loc)
+	}
+	if mt := localMountType(localPath); mt != "" {
+		return mt
+	}
+	return "local-disk"
+}
+
+func storageAccountName(resource common.ResourceString, location common.Location) string {
+	if !location.IsAzure() {
+		return ""
+	}
+	endpoint, err := url.Parse(resource.Value)
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil {
+		return ""
+	}
+	host := strings.TrimSuffix(strings.ToLower(endpoint.Hostname()), ".")
+	if cloudTypeFromHost(host) == "" {
+		return ""
+	}
+	account, _, found := strings.Cut(host, ".")
+	if !found || len(account) < 3 || len(account) > 24 {
+		return ""
+	}
+	for _, character := range account {
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') {
+			return ""
+		}
+	}
+	return account
+}
+
+func authMechanism(credType common.CredentialType, resource common.ResourceString, location common.Location) string {
+	if location.IsLocal() || location == common.ELocation.Pipe() || location == common.ELocation.Benchmark() || location == common.ELocation.None() {
+		return "NotApplicable"
+	}
+	if resource.SAS != "" {
+		return "SAS"
+	}
+	if credType == common.ECredentialType.Anonymous() {
+		return "PublicAnonymous"
+	}
+	return credType.String()
+}
+
+func scopeForLocation(resource common.ResourceString, location common.Location, source bool) string {
+	switch location {
+	case common.ELocation.Pipe():
+		return "stream"
+	case common.ELocation.Benchmark():
+		return "benchmark"
+	case common.ELocation.None():
+		return "none"
+	}
+	level, err := DetermineLocationLevel(resource.Value, location, source)
+	if err != nil {
+		return "unknown"
+	}
+	if location.IsLocal() {
+		if level == ELocationLevel.Container() {
+			return "local-directory"
+		}
+		return "local-object"
+	}
+	switch level {
+	case ELocationLevel.Service():
+		return "service"
+	case ELocationLevel.Object():
+		return "object-or-prefix"
+	case ELocationLevel.Container():
+		switch location {
+		case common.ELocation.File(), common.ELocation.FileNFS():
+			return "share"
+		case common.ELocation.S3(), common.ELocation.GCP():
+			return "bucket"
+		default:
+			return "container"
+		}
+	default:
+		return "unknown"
+	}
+}
+
+// hostOf returns the lower-cased hostname of a resource URL, or "" when it
+// cannot be parsed or has no host.
+func hostOf(r common.ResourceString) string {
+	u, err := url.Parse(r.Value)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// endpointKind classifies an Azure hostname, not DNS resolution or network routing.
+// Non-Azure endpoints and unparseable hosts return an empty value.
+func endpointKind(r common.ResourceString, loc common.Location) string {
+	if !loc.IsAzure() {
+		return ""
+	}
+	host := hostOf(r)
+	if host == "" {
+		return ""
+	}
+	if strings.Contains(host, ".privatelink.") {
+		return "private-endpoint"
+	}
+	return "public"
+}
+
+func endpointCloudType(resource common.ResourceString, location common.Location) string {
+	if !location.IsAzure() {
+		return ""
+	}
+	if cloud := cloudTypeFromHost(hostOf(resource)); cloud != "" {
+		return cloud
+	}
+	return "unknown"
+}
+
+// cloudTypeFromHost maps an Azure storage host suffix to a cloud environment.
+func cloudTypeFromHost(host string) string {
+	switch {
+	case host == "":
+		return ""
+	case strings.HasSuffix(host, ".core.usgovcloudapi.net"):
+		return "gov"
+	case strings.HasSuffix(host, ".core.chinacloudapi.cn"):
+		return "china"
+	case strings.HasSuffix(host, ".core.cloudapi.de"):
+		return "germany"
+	case strings.HasSuffix(host, ".core.windows.net"), strings.HasSuffix(host, ".storage.azure.net"):
+		return "public"
+	default:
+		return ""
+	}
+}
+
+func copyJobDimensions(o *CookedTransferOptions, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
+	d := baseJobDimensions("copy", o.fromTo, srcCredType, dstCredType)
+	d.SourceMountType = sourceMountType(o.fromTo.From(), o.source.Value)
+	d.SourceStorageAccount = storageAccountName(o.source, o.fromTo.From())
+	d.SourceScope = scopeForLocation(o.source, o.fromTo.From(), true)
+	d.SourceEndpointKind = endpointKind(o.source, o.fromTo.From())
+	d.DestStorageAccount = storageAccountName(o.destination, o.fromTo.To())
+	d.DestScope = scopeForLocation(o.destination, o.fromTo.To(), false)
+	d.SourceAuthMechanism = authMechanism(srcCredType, o.source, o.fromTo.From())
+	d.DestAuthMechanism = authMechanism(dstCredType, o.destination, o.fromTo.To())
+	d.DestEndpointKind = endpointKind(o.destination, o.fromTo.To())
+	d.SourceCloudType = endpointCloudType(o.source, o.fromTo.From())
+	d.DestCloudType = endpointCloudType(o.destination, o.fromTo.To())
+	d.Options = o.telemetryOptions.Clone()
+	if o.benchmarkTelemetry != nil {
+		d.Command = "bench"
+		d.BenchmarkMode = strings.ToLower(o.benchmarkTelemetry.mode.String())
+		d.BenchmarkFileCount = o.benchmarkTelemetry.fileCount
+		d.BenchmarkFileSizeBytes = o.benchmarkTelemetry.fileSizeBytes
+		d.BenchmarkFolderCount = o.benchmarkTelemetry.folderCount
+		d.BenchmarkCleanupRequested = o.benchmarkTelemetry.cleanupRequested
+		d.BenchmarkIsCleanup = o.benchmarkTelemetry.isCleanup
+	}
+	return d
+}
+
+func shouldEmitCopyTelemetry(o *CookedTransferOptions) bool {
+	return o != nil && !o.dryrun && (o.benchmarkTelemetry == nil || !o.benchmarkTelemetry.isCleanup)
+}
+
+func syncJobDimensions(o *cookedSyncOptions, srcCredType, dstCredType common.CredentialType) telemetry.JobDimensions {
+	d := baseJobDimensions("sync", o.fromTo, srcCredType, dstCredType)
+	d.SourceMountType = sourceMountType(o.fromTo.From(), o.source.Value)
+	d.SourceStorageAccount = storageAccountName(o.source, o.fromTo.From())
+	d.SourceScope = scopeForLocation(o.source, o.fromTo.From(), true)
+	d.SourceEndpointKind = endpointKind(o.source, o.fromTo.From())
+	d.DestStorageAccount = storageAccountName(o.destination, o.fromTo.To())
+	d.DestScope = scopeForLocation(o.destination, o.fromTo.To(), false)
+	d.SourceAuthMechanism = authMechanism(srcCredType, o.source, o.fromTo.From())
+	d.DestAuthMechanism = authMechanism(dstCredType, o.destination, o.fromTo.To())
+	d.DestEndpointKind = endpointKind(o.destination, o.fromTo.To())
+	d.SourceCloudType = endpointCloudType(o.source, o.fromTo.From())
+	d.DestCloudType = endpointCloudType(o.destination, o.fromTo.To())
+	d.Options = o.telemetryOptions.Clone()
+	return d
 }
 
 func buildFinishedEvent(resource telemetry.ResourceAttributes, dims telemetry.JobDimensions, runID, invocationID string, end time.Time, summary common.ListJobSummaryResponse, elapsed, enumerationElapsed, transferElapsed time.Duration, shape sourceShapeSummary) telemetry.JobFinishedEvent {
