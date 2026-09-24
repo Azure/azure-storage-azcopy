@@ -120,6 +120,7 @@ func traverserToTypedChannels(
 	filters []ObjectFilter,
 	label string,
 	sideErr *twoWaySideErr,
+	isDestination bool,
 ) (<-chan StoredObject, <-chan StoredObject) {
 
 	folderCh := make(chan StoredObject, mergeJoinChannelBufferSize)
@@ -225,9 +226,10 @@ func traverserToTypedChannels(
 
 		if err != nil {
 			// A destination "not found" (empty/absent prefix) is benign: the consumer treats it as an
-			// empty destination and copies all source. Log it at info, not error, so it isn't mistaken
-			// for a failure. Genuine traversal errors stay at error level.
-			if IsDestinationNotFoundDuringSync(err) {
+			// empty destination and copies all source. Downgrade it to info ONLY on the destination
+			// side, so it isn't mistaken for a failure. Source-side errors and genuine destination
+			// traversal errors stay at error level.
+			if isDestination && IsDestinationNotFoundDuringSync(err) {
 				mergeJoinSyncOneDirLog(common.LogInfo,
 					fmt.Sprintf("%s destination empty/absent, treating as not-present (all source will be copied): %v", label, err), true)
 			} else {

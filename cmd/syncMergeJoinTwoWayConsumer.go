@@ -269,11 +269,11 @@ func mergeJoinTwoWaySyncDir(
 	srcSideErr := &twoWaySideErr{}
 	dstSideErr := &twoWaySideErr{}
 
-	srcFolderCh, srcFileCh := traverserToTypedChannels(ctx, pt, enumerator.filters, srcLabel, srcSideErr)
+	srcFolderCh, srcFileCh := traverserToTypedChannels(ctx, pt, enumerator.filters, srcLabel, srcSideErr, false)
 
 	var dstFolderCh, dstFileCh <-chan StoredObject
 	if isDestinationPresent {
-		dstFolderCh, dstFileCh = traverserToTypedChannels(ctx, st, enumerator.filters, dstLabel, dstSideErr)
+		dstFolderCh, dstFileCh = traverserToTypedChannels(ctx, st, enumerator.filters, dstLabel, dstSideErr, true)
 	} else {
 		dstFolderCh = twoWayClosedObjCh()
 		dstFileCh = twoWayClosedObjCh()
