@@ -25,6 +25,7 @@ import (
 	"errors"
 	"hash"
 	"io"
+	"os"
 	"sync"
 )
 
@@ -264,6 +265,13 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	// We can continue, so use the data we have read
 	cr.buffer = targetBuffer
+
+	if IsNFSCopy() {
+		if file, ok := fileReader.(*os.File); ok {
+			_ = FadviseDontNeed(file, cr.chunkId.OffsetInFile(), cr.length)
+		}
+	}
+
 	return nil
 }
 
