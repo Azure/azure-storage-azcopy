@@ -72,6 +72,8 @@ var (
 		"BlobNotFound",
 		"PathNotFound",
 		"ResourceNotFound",
+		"ShareNotFound",
+		"ShareBeingDeleted",
 	}
 
 	orchestratorOptions *SyncOrchestratorOptions
@@ -208,6 +210,27 @@ func validateLocalRoot(path string) error {
 	return nil
 }
 
+// validateFileShareRoot validates an Azure Files share root URL
+func validateFileShareRoot(sourcePath string) error {
+	parsedURL, err := url.Parse(sourcePath)
+	if err != nil {
+		return err
+	}
+
+	// Require an absolute URL (scheme + host) and at least a share name in the path.
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return fmt.Errorf("invalid Azure Files URL: must include scheme and host")
+	}
+
+	trimmedPath := strings.Trim(parsedURL.Path, "/")
+	shareName := strings.SplitN(trimmedPath, "/", 2)[0]
+	if shareName == "" {
+		return fmt.Errorf("invalid Azure Files URL: missing share name")
+	}
+
+	return nil
+}
+
 // validateS3Root returns the root object for the sync orchestrator based on the S3 source path.
 // It parses the S3 URL and determines the entity type (file or folder) based on the URL structure.
 //
@@ -277,6 +300,8 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 		err = validateBlobRoot(path)
 	case common.ELocation.BlobFS():
 		err = validateBlobFSRoot(path)
+	case common.ELocation.File():
+		err = validateFileShareRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
 	}
@@ -561,7 +586,7 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 		// sync orchestrator is supported for these types
 	case common.EFromTo.S3Blob():
 		// sync orchestrator is supported for these types
-	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS():
+	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.FileFile():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -575,7 +600,8 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Blob->Blob\n" +
 				"\t- Blob->BlobFS\n" +
 				"\t- BlobFS->Blob\n" +
-				"\t- BlobFS->BlobFS",
+				"\t- BlobFS->BlobFS\n" +
+				"\t- File->File",
 		)
 	}
 

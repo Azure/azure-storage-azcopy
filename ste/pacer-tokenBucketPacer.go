@@ -72,14 +72,20 @@ type tokenBucketPacer struct {
 	atomicGrandTotal           int64
 	atomicWaitCount            int64
 	expectedBytesPerRequest    int64
+	maxSecondsToOverpopulate   float32
 	newTargetBytesPerSecond    chan int64
 	done                       chan struct{}
 }
 
 func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
+	return newTokenBucketPacer(bytesPerSecond, expectedBytesPerCoarseRequest, maxSecondsToOverpopulateBucket)
+}
+
+func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64, maxBurstSeconds float32) *tokenBucketPacer {
 	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
+		maxSecondsToOverpopulate:   maxBurstSeconds,
 		done:                       make(chan struct{}),
 		newTargetBytesPerSecond:    make(chan int64),
 	}
@@ -92,11 +98,19 @@ func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 // RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
 func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	_, err := p.requestTokens(ctx, byteCount)
+	return err
+}
+
+// requestTokens is RequestTrafficAllocation plus the bucket level produced by
+// this caller's own reservation. Callers must use this rather than re-reading
+// the counter, which races with other goroutines and the refill loop.
+func (p *tokenBucketPacer) requestTokens(ctx context.Context, byteCount int64) (remaining int64, err error) {
 	targetBytes := p.targetBytesPerSecond()
 	//if targetBytesIsZero, we have a null pacer, we just track GrandTotal
 	if targetBytes == 0 {
 		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
-		return nil
+		return atomic.LoadInt64(&p.atomicTokenBucket), nil
 	}
 
 	// Wait until p.targetBytesPerSecond() is positive or zero
@@ -105,17 +119,21 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 	for p.targetBytesPerSecond() < 0 {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case <-time.After(time.Second * 5): // sleep for five seconds
 		}
 	}
 
 	if targetBytes < byteCount {
-		return errors.New("request size greater than pacer target. ensure --block-size-mb is smaller than --cap-mbps and retry the transfer")
+		return 0, errors.New("request size greater than pacer target. ensure --block-size-mb is smaller than --cap-mbps and retry the transfer")
 	}
 
 	// block until tokens are available
-	for atomic.AddInt64(&p.atomicTokenBucket, -byteCount) < 0 {
+	for {
+		remaining = atomic.AddInt64(&p.atomicTokenBucket, -byteCount)
+		if remaining >= 0 {
+			break
+		}
 
 		// by taking our desired count we've moved below zero, which means our allocation is not available
 		// right now, so put back what we asked for, and then wait
@@ -128,7 +146,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
@@ -136,7 +154,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		// If we've updated target to a NULL pacer, we'll return immediately
 		if p.targetBytesPerSecond() == 0 {
 			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
-			return nil
+			return atomic.LoadInt64(&p.atomicTokenBucket), nil
 		}
 
 	}
@@ -144,7 +162,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 	// record what we issued
 	atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 
-	return nil
+	return remaining, nil
 }
 
 // UndoRequest allows a caller to return unused tokens
@@ -175,9 +193,15 @@ func (p *tokenBucketPacer) pacerBody() {
 		}
 
 		/*check if we have to update target rate */
-		if newTarget != p.targetBytesPerSecond() && time.Since(lastTargetUpdateTime) >= deadBandDuration {
-			p.setTargetBytesPerSecond(newTarget)
-			lastTargetUpdateTime = time.Now()
+		if current := p.targetBytesPerSecond(); newTarget != current {
+			// A tightening target is an authoritative "slow down now" signal (a 503, or
+			// the GetShareStats controller's multiplicative decrease), so it skips the
+			// dead band that exists to damp increases. 0 means unlimited.
+			tightening := newTarget != 0 && (current == 0 || newTarget < current)
+			if tightening || time.Since(lastTargetUpdateTime) >= deadBandDuration {
+				p.setTargetBytesPerSecond(newTarget)
+				lastTargetUpdateTime = time.Now()
+			}
 		}
 
 		currentTarget := atomic.LoadInt64(&p.atomicTargetBytesPerSecond)
@@ -188,10 +212,7 @@ func (p *tokenBucketPacer) pacerBody() {
 
 		// If the backlog of unsent bytes is now too great, then trim it back down.
 		// Why don't we want a big backlog? Because it limits our ability to accurately control the speed.
-		maxAllowedUnsentBytes := int64(float32(currentTarget) * maxSecondsToOverpopulateBucket)
-		if maxAllowedUnsentBytes < p.expectedBytesPerRequest {
-			maxAllowedUnsentBytes = p.expectedBytesPerRequest // just in case we are very coarse grained at a very slow speed
-		}
+		maxAllowedUnsentBytes := p.maxTokenCapacity(currentTarget)
 		if newTokenCount > maxAllowedUnsentBytes {
 			common.AtomicMorphInt64(&p.atomicTokenBucket, func(currentVal int64) (newVal int64, _ interface{}) {
 				newVal = currentVal
@@ -204,6 +225,14 @@ func (p *tokenBucketPacer) pacerBody() {
 
 		lastTime = time.Now()
 	}
+}
+
+func (p *tokenBucketPacer) maxTokenCapacity(target int64) int64 {
+	maxAllowedUnsentBytes := int64(float32(target) * p.maxSecondsToOverpopulate)
+	if maxAllowedUnsentBytes < p.expectedBytesPerRequest {
+		maxAllowedUnsentBytes = p.expectedBytesPerRequest
+	}
+	return maxAllowedUnsentBytes
 }
 
 func (p *tokenBucketPacer) targetBytesPerSecond() int64 {

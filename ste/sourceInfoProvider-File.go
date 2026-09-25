@@ -201,6 +201,7 @@ type fileSourceInfoProvider struct {
 	cachedProperties    shareFilePropertyProvider // use interface because may be file or directory properties
 	sourceURL           string
 	srcShareClient      *share.Client
+	scanPacer           common.IOPSPacer		// For Azure Files2Files DR, the Pacer is applied on source share not on destination
 	defaultRemoteSourceInfoProvider
 }
 
@@ -237,6 +238,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		ctx:                             ctx,
 		cacheOnce:                       &sync.Once{},
 		srcShareClient:                  s.NewShareClient(jptm.Info().SrcContainer),
+		scanPacer:                       sourceSharePacer(source.URL()),
 		sourceURL:                       source.URL()}, nil
 }
 
@@ -258,8 +260,11 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 		return nil, err
 	}
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
+	if err := common.ScanPacerAcquire(p.ctx, p.scanPacer, 1); err != nil {
+		return nil, err
+	}
 	switch p.EntityType() {
-	case common.EEntityType.File(), common.EEntityType.Hardlink():
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
 		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
@@ -323,7 +328,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		p.cachedPermissionKey = properties.FilePermissionKey() // We cache this as getting the SDDL is a separate operation.
 
 		switch p.EntityType() {
-		case common.EEntityType.File(), common.EEntityType.Hardlink():
+		case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
 					ContentType:        properties.ContentType(),
@@ -375,6 +380,11 @@ func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		}
 		shareClient := fsc.NewShareClient(p.transferInfo.SrcContainer)
 		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
+		if p.scanPacer != nil {
+			if err := p.scanPacer.AcquireIO(p.ctx, count, 1); err != nil {
+				return nil, err
+			}
+		}
 		response, err := fileClient.DownloadStream(p.ctx, &file.DownloadStreamOptions{
 			Range:              file.HTTPRange{Offset: offset, Count: count},
 			RangeGetContentMD5: rangeGetContentMD5,
