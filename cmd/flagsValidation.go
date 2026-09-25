@@ -176,6 +176,23 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	return nil
 }
 
+func validatePosixPropertiesStyle(style common.PosixPropertiesStyle, preserve bool, fromTo common.FromTo) error {
+	switch style {
+	case common.StandardPosixPropertiesStyle:
+		return nil
+	case common.AMLFSPosixPropertiesStyle:
+		if !preserve {
+			return errors.New("--posix-properties-style=amlfs requires --preserve-posix-properties")
+		}
+		if !areBothLocationsPOSIXAware(fromTo) {
+			return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid POSIX properties style: %d", style)
+	}
+}
+
 // performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
 // for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
 // properties are set correctly for SMB copy operations.

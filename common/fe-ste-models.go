@@ -60,6 +60,7 @@ const (
 	EINTR_RETRY_COUNT         = 5
 	RECOMMENDED_OBJECTS_COUNT = 10000000
 	ERR_MULTIPLE_PROCESSES    = "more than one AzCopy process is running. It is best practice to run a single process per VM."
+	AMLFS_MOD_TIME_LAYOUT     = "2006-01-02 15:04:05 -0700"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1938,4 +1939,29 @@ func WarnIfTooManyObjects() {
 		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
 			RECOMMENDED_OBJECTS_COUNT))
 	})
+}
+
+type PosixPropertiesStyle uint8
+
+var EPosixPropertiesStyle = PosixPropertiesStyle(0)
+var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard()
+var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
+
+func (PosixPropertiesStyle) Standard() PosixPropertiesStyle { return 0 }
+func (PosixPropertiesStyle) AMLFS() PosixPropertiesStyle    { return 1 }
+
+func (style PosixPropertiesStyle) String() string {
+	return enum.StringInt(style, reflect.TypeOf(style))
+}
+
+func (style *PosixPropertiesStyle) Parse(value string) error {
+	switch strings.ToLower(value) {
+	case "", "standard":
+		*style = StandardPosixPropertiesStyle
+	case "amlfs":
+		*style = AMLFSPosixPropertiesStyle
+	default:
+		return fmt.Errorf("invalid POSIX properties style %q: expected standard or amlfs", value)
+	}
+	return nil
 }

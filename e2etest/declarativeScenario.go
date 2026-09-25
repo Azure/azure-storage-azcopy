@@ -664,7 +664,12 @@ func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]*s
 		s.a.AssertNoErr(err, "reading stat from metadata")
 	}
 
-	s.a.Assert(f.verificationProperties.posixProperties.EquivalentToStatAdapter(adapter), equals(), "", "POSIX properties were mismatched")
+	style := common.StandardPosixPropertiesStyle
+	if s.fromTo.To() == common.ELocation.Blob() {
+		style = s.p.posixPropertiesStyle
+	}
+	s.a.Assert(f.verificationProperties.posixProperties.EquivalentToStatAdapter(adapter, style), equals(), "",
+		fmt.Sprintf("POSIX properties were mismatched for object %v", f.name))
 }
 
 func (s *scenario) validateSymlink(f *testObject, metadata map[string]*string) {

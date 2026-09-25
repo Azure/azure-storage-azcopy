@@ -29,6 +29,10 @@ func (cooked *CookedCopyCmdArgs) PreservePOSIXProperties() bool {
 	return cooked.preservePOSIXProperties
 }
 
+func (cooked *CookedCopyCmdArgs) PosixPropertiesStyle() common.PosixPropertiesStyle {
+	return cooked.posixPropertiesStyle
+}
+
 func (cooked *CookedCopyCmdArgs) PreservePermissions() common.PreservePermissionsOption {
 	return cooked.preservePermissions
 }
@@ -83,6 +87,10 @@ func (cooked *CookedCopyCmdArgs) Hardlinks() common.HardlinkHandlingType {
 
 func (cooked *CookedCopyCmdArgs) SetPreservePOSIXProperties(preservePOSIXProperties bool) {
 	cooked.preservePOSIXProperties = preservePOSIXProperties
+}
+
+func (cooked *CookedCopyCmdArgs) SetPosixPropertiesStyle(style common.PosixPropertiesStyle) {
+	cooked.posixPropertiesStyle = style
 }
 
 func (cooked *CookedCopyCmdArgs) SetAsSubdir(asSubdir bool) {
@@ -328,6 +336,7 @@ type RawMoverSyncCmdArgs struct {
 	FollowSymlinks          bool
 	DeleteDestination       string
 	PreservePOSIXProperties bool
+	PosixPropertiesStyle    string
 	PreservePermissions     bool
 	PreserveSMBInfo         bool
 	PreserveInfo            bool
@@ -369,6 +378,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		followSymlinks:          args.FollowSymlinks,
 		deleteDestination:       args.DeleteDestination,
 		preservePOSIXProperties: args.PreservePOSIXProperties,
+		posixPropertiesStyle:    args.PosixPropertiesStyle,
 		preservePermissions:     args.PreservePermissions,
 		preserveSMBInfo:         args.PreserveSMBInfo,
 		preserveInfo:            args.PreserveInfo,
@@ -452,6 +462,7 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	}
 	if cooked.preservePOSIXProperties {
 		result["preservePOSIXProperties"] = "true"
+		result["posixPropertiesStyle"] = cooked.posixPropertiesStyle.String()
 	}
 	if cooked.s2sPreserveBlobTags {
 		result["s2sPreserveBlobTags"] = "true"
@@ -655,6 +666,7 @@ func (cooked *CookedCopyCmdArgs) ToStringMap() map[string]string {
 	}
 	if cooked.preservePOSIXProperties {
 		result["preservePOSIXProperties"] = "true"
+		result["posixPropertiesStyle"] = cooked.posixPropertiesStyle.String()
 	}
 	if cooked.backupMode {
 		result["backupMode"] = "true"

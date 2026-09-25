@@ -68,6 +68,7 @@ type rawSyncCmdArgs struct {
 	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
+	posixPropertiesStyle    string
 	followSymlinks          bool
 	preserveSymlinks        bool
 	backupMode              bool
@@ -205,6 +206,10 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
+	if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+		return cooked, err
+	}
+
 	// NFS/SMB arg processing
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
@@ -290,6 +295,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	}
 
 	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
+		return err
+	}
+
+	if err = validatePosixPropertiesStyle(cooked.posixPropertiesStyle, cooked.preservePOSIXProperties, cooked.fromTo); err != nil {
 		return err
 	}
 
@@ -464,6 +473,7 @@ type cookedSyncCmdArgs struct {
 	preservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
+	posixPropertiesStyle    common.PosixPropertiesStyle
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
@@ -1140,6 +1150,9 @@ func init() {
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Style of POSIX metadata: standard (default) or amlfs (Azure Managed Lustre). Requires --preserve-posix-properties.")
 
 	// TODO: enable when we support local <-> File
 	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+

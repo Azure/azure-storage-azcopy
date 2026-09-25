@@ -123,6 +123,7 @@ type rawCopyCmdArgs struct {
 	preserveSMBInfo bool
 	// Opt-in flag to persist additional POSIX properties
 	preservePOSIXProperties bool
+	posixPropertiesStyle    string
 	// Opt-in flag to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
@@ -373,6 +374,10 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
+	if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+		return cooked, err
+	}
+
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
@@ -457,6 +462,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
+	raw.posixPropertiesStyle = common.StandardPosixPropertiesStyle.String()
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
 }
 
@@ -691,6 +697,7 @@ type CookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the POSIX properties ...
 	preservePOSIXProperties bool
+	posixPropertiesStyle    common.PosixPropertiesStyle
 
 	// Whether to enable Windows special privileges
 	backupMode bool
@@ -1802,6 +1809,9 @@ func init() {
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Style of POSIX metadata: standard (default) or amlfs (Azure Managed Lustre). Requires --preserve-posix-properties.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
 		"False by default. If enabled, symlink destinations are preserved as the blob content, rather"+

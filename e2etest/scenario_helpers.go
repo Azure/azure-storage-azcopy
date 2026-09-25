@@ -176,6 +176,14 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//   by local files. E.g. not contentHeaders or metadata).
 
+			// Apply the specified file permissions when needed
+			if file.creationProperties.posixProperties != nil && file.creationProperties.posixProperties.mode != nil {
+				mode := *file.creationProperties.posixProperties.mode
+				// Get just permission bits
+				permBits := os.FileMode(mode & 07777)
+				c.AssertNoErr(os.Chmod(destFile, permBits), "set file permissions")
+			}
+
 			if file.creationProperties.smbPermissionsSddl != nil {
 				osScenarioHelper{}.setFileSDDLString(c, destFile, *file.creationProperties.smbPermissionsSddl)
 			}
@@ -404,6 +412,7 @@ type generateFromListOptions struct {
 	fs                      []*testObject
 	defaultSize             string
 	preservePosixProperties bool
+	posixPropertiesStyle    common.PosixPropertiesStyle
 	accountType             AccountType
 }
 
@@ -434,7 +443,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			b.creationProperties.nameValueMetadata[common.POSIXFolderMeta] = to.Ptr("true")
 			mode := uint64(os.FileMode(common.DEFAULT_FILE_PERM) | os.ModeDir)
 			b.creationProperties.nameValueMetadata[common.POSIXModeMeta] = to.Ptr(strconv.FormatUint(mode, 10))
-			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata)
+			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata, options.posixPropertiesStyle)
 		case common.EEntityType.Symlink():
 			if b.creationProperties.nameValueMetadata == nil {
 				b.creationProperties.nameValueMetadata = map[string]*string{}
@@ -444,13 +453,13 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			b.creationProperties.nameValueMetadata[common.POSIXSymlinkMeta] = to.Ptr("true")
 			mode := uint64(os.FileMode(common.DEFAULT_FILE_PERM) | os.ModeSymlink)
 			b.creationProperties.nameValueMetadata[common.POSIXModeMeta] = to.Ptr(strconv.FormatUint(mode, 10))
-			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata)
+			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata, options.posixPropertiesStyle)
 		default:
 			if b.creationProperties.nameValueMetadata == nil {
 				b.creationProperties.nameValueMetadata = map[string]*string{}
 			}
 
-			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata)
+			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata, options.posixPropertiesStyle)
 
 			if b.creationProperties.posixProperties != nil && b.creationProperties.posixProperties.mode != nil {
 				mode := *b.creationProperties.posixProperties.mode

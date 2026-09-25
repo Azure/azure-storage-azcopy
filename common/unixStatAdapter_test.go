@@ -1,10 +1,14 @@
 package common
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/stretchr/testify/assert"
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_ReadStatFromMetadata(t *testing.T) {
@@ -77,6 +81,124 @@ func Test_ReadStatFromMetadata(t *testing.T) {
 	a.Equal(time.Unix(0, int64(1702376216773153924)), statAdapter.CTime())
 }
 
+func TestAMLFSFullPrecisionRoundTrip(t *testing.T) {
+	modTime := time.Unix(1767366245, 123456789)
+	for _, extended := range []bool{false, true} {
+		for _, style := range []PosixPropertiesStyle{StandardPosixPropertiesStyle, AMLFSPosixPropertiesStyle} {
+			t.Run(fmt.Sprintf("%s/statx=%t", style, extended), func(t *testing.T) {
+				stat := UnixStatContainer{
+					statx: extended, mask: STATX_BASIC_STATS, mode: S_IFREG | 0640,
+					ownerUID: 1000, groupGID: 2000, modTime: modTime, changeTime: modTime,
+				}
+				metadata := make(Metadata)
+				AddStatToBlobMetadata(stat, metadata, style)
+				if style == AMLFSPosixPropertiesStyle {
+					require.Equal(t, "0640", *metadata[POSIXModeMeta])
+					require.Equal(t, "1000", *metadata[AMLFSOwnerMeta])
+					require.Equal(t, "2000", *metadata[AMLFSGroupMeta])
+					require.Equal(t, modTime.Format(AMLFS_MOD_TIME_LAYOUT), *metadata[POSIXModTimeMeta])
+					require.Equal(t, strconv.FormatInt(modTime.UnixNano(), 10), *metadata[POSIXModTimeNanoMeta])
+					require.NotContains(t, metadata, POSIXOwnerMeta)
+				} else {
+					require.Equal(t, strconv.FormatInt(modTime.UnixNano(), 10), *metadata[POSIXModTimeMeta])
+					require.NotContains(t, metadata, POSIXModTimeNanoMeta)
+					require.NotContains(t, metadata, AMLFSOwnerMeta)
+				}
+				adapter, err := ReadStatFromMetadata(metadata, 0)
+				require.NoError(t, err)
+				require.True(t, modTime.Equal(adapter.MTime()))
+				require.Equal(t, uint32(2000), adapter.Group())
+				got, found, err := TryReadModTimeForSyncFromMetadata(metadata)
+				require.NoError(t, err)
+				require.True(t, found)
+				require.True(t, modTime.Equal(got))
+			})
+		}
+	}
+}
+
+func TestAMLFSMetadataTimestampValidation(t *testing.T) {
+	modTime := time.Unix(1767366245, 123456789)
+	coarse := modTime.Truncate(time.Second)
+	for _, test := range []struct {
+		name     string
+		metadata Metadata
+		wantErr  bool
+		found    bool
+		precise  bool
+	}{
+		{"missing", Metadata{}, false, false, false},
+		{"external AMLFS", Metadata{POSIXModTimeMeta: to.Ptr(coarse.Format(AMLFS_MOD_TIME_LAYOUT))}, false, true, false},
+		{"capitalized", Metadata{"Modtime": to.Ptr(coarse.Format(AMLFS_MOD_TIME_LAYOUT)), "Azcopy_modtime": to.Ptr(strconv.FormatInt(modTime.UnixNano(), 10))}, false, true, true},
+		{"malformed", Metadata{POSIXModTimeMeta: to.Ptr("invalid")}, true, false, false},
+		{"nil", Metadata{POSIXModTimeMeta: nil}, true, false, false},
+		{"overflow", Metadata{POSIXModTimeMeta: to.Ptr("999999999999999999999999999")}, true, false, false},
+		{"invalid precise", Metadata{POSIXModTimeMeta: to.Ptr(coarse.Format(AMLFS_MOD_TIME_LAYOUT)), POSIXModTimeNanoMeta: to.Ptr("invalid")}, true, false, false},
+		{"inconsistent precise", Metadata{POSIXModTimeMeta: to.Ptr(coarse.Format(AMLFS_MOD_TIME_LAYOUT)), POSIXModTimeNanoMeta: to.Ptr("0")}, true, false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, found, err := TryReadModTimeFromMetadata(test.metadata)
+			require.Equal(t, test.wantErr, err != nil)
+			require.Equal(t, test.found, found)
+			if found {
+				if test.precise {
+					require.True(t, modTime.Equal(got))
+				} else {
+					require.True(t, coarse.Equal(got))
+				}
+			}
+			got, found, err = TryReadModTimeForSyncFromMetadata(test.metadata)
+			require.Equal(t, test.wantErr, err != nil)
+			require.Equal(t, test.precise, found)
+			if !found {
+				require.True(t, got.IsZero())
+			}
+		})
+	}
+}
+
+func TestAMLFSSpecialFileTypes(t *testing.T) {
+	for _, mode := range []uint32{S_IFLNK, S_IFIFO, S_IFSOCK, S_IFCHR, S_IFBLK, S_IFDIR} {
+		for _, extended := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%o/statx=%t", mode, extended), func(t *testing.T) {
+				metadata := make(Metadata)
+				stat := UnixStatContainer{statx: extended, mask: STATX_MODE, mode: mode | 0755, modTime: time.Now()}
+				AddStatToBlobMetadata(stat, metadata, AMLFSPosixPropertiesStyle)
+				got, err := ReadStatFromMetadata(metadata, 0)
+				require.NoError(t, err)
+				require.Equal(t, stat.FileMode(), got.FileMode())
+				ClearStatFromBlobMetadata(metadata)
+				require.Empty(t, metadata)
+			})
+		}
+	}
+}
+
+func TestAMLFSRespectsStatxMaskAndUserMetadata(t *testing.T) {
+	metadata := make(Metadata)
+	AddStatToBlobMetadata(UnixStatContainer{statx: true}, metadata, AMLFSPosixPropertiesStyle)
+	require.NotContains(t, metadata, POSIXModTimeMeta)
+	require.NotContains(t, metadata, POSIXModTimeNanoMeta)
+	require.NotContains(t, metadata, AMLFSOwnerMeta)
+	require.NotContains(t, metadata, AMLFSGroupMeta)
+	metadata = Metadata{"Modtime": to.Ptr("123")}
+	AddStatToBlobMetadata(UnixStatContainer{modTime: time.Now()}, metadata, AMLFSPosixPropertiesStyle)
+	require.Equal(t, "123", *metadata["Modtime"])
+	require.NotContains(t, metadata, POSIXModTimeNanoMeta)
+}
+
+func TestPosixPropertiesStyle(t *testing.T) {
+	for _, value := range []string{"", "standard", "Standard", "AMLFS", "amlfs"} {
+		var style PosixPropertiesStyle
+		require.NoError(t, style.Parse(value))
+		require.Contains(t, []PosixPropertiesStyle{StandardPosixPropertiesStyle, AMLFSPosixPropertiesStyle}, style)
+	}
+	for _, value := range []string{"unknown", "2", " amlfs"} {
+		var style PosixPropertiesStyle
+		require.Error(t, style.Parse(value))
+	}
+}
+
 func Test_AddStatToBlobMetadata(t *testing.T) {
 	a := assert.New(t)
 
@@ -97,7 +219,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	statAdapter.devID = uint64(2049)
 
 	metadata := make(Metadata)
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(metadata)
 	a.Contains(metadata, "linux_statx_mask")
 	a.Equal("8191", *metadata["linux_statx_mask"])
@@ -140,7 +262,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	metadata["Posix_atime"] = to.Ptr("1702478036104313337")
 	metadata["Modtime"] = to.Ptr("1702376209109248073")
 	metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(metadata)
 	a.Contains(metadata, "Linux_statx_mask")
 	a.Equal("8191", *metadata["Linux_statx_mask"])
@@ -190,7 +312,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	statAdapter.devID = uint64(2049)
 
 	metadata := make(Metadata)
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 
 	adapter, err := ReadStatFromMetadata(metadata, 1024)
 	a.Nil(err)
@@ -209,4 +331,70 @@ func TestAddReadStatMetadata(t *testing.T) {
 	a.Equal(time.Unix(0, int64(1702478036104313337)), adapter.ATime())
 	a.Equal(time.Unix(0, int64(1702376209109248073)), adapter.MTime())
 	a.Equal(time.Unix(0, int64(1702376216773153924)), adapter.CTime())
+}
+
+func Test_AMLFSAddStatToBlobMetadata(t *testing.T) {
+	a := assert.New(t)
+	statAdapter := UnixStatContainer{size: uint64(1024)}
+	statAdapter.statx = true
+	statAdapter.mask = uint32(8191)
+	statAdapter.attributes = uint64(0)
+	statAdapter.ownerUID = uint32(1000)
+	statAdapter.groupGID = uint32(1000)
+	statAdapter.mode = uint32(0664)
+	mTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, "2026-01-01 15:04:05 -0700")
+	a.NoError(err)
+	statAdapter.modTime = mTime
+
+	metadata := make(Metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, AMLFSPosixPropertiesStyle)
+	a.NotEmpty(metadata)
+	a.Contains(metadata, "linux_statx_mask")
+	a.Equal("8191", *metadata["linux_statx_mask"])
+	a.Contains(metadata, "owner")
+	a.Equal("1000", *metadata["owner"])
+	a.Contains(metadata, "group")
+	a.Equal("1000", *metadata["group"])
+	a.Contains(metadata, "permissions")
+	a.Equal("0664", *metadata["permissions"])
+	a.Contains(metadata, "modtime")
+	a.Equal("2026-01-01 15:04:05 -0700", *metadata["modtime"])
+}
+
+func Test_AMLFSReadStatFromBlobMetadata(t *testing.T) {
+	a := assert.New(t)
+
+	statAdapter := UnixStatContainer{size: uint64(1024)}
+	statAdapter.statx = true
+	statAdapter.mask = uint32(8191)
+	statAdapter.attributes = uint64(0)
+	statAdapter.ownerUID = uint32(0)
+	statAdapter.groupGID = uint32(0)
+	statAdapter.mode = uint32(0775)
+	mTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, "2026-01-01 15:04:05 -0700")
+	a.NoError(err)
+	statAdapter.modTime = mTime
+
+	metadata := make(Metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, AMLFSPosixPropertiesStyle)
+	a.NotEmpty(metadata)
+	a.Contains(metadata, "owner")
+	a.Equal("0", *metadata["owner"])
+	a.Contains(metadata, "group")
+	a.Equal("0", *metadata["group"])
+	a.Contains(metadata, "permissions")
+	a.Equal("0775", *metadata["permissions"])
+	a.Contains(metadata, "modtime")
+	a.Equal("2026-01-01 15:04:05 -0700", *metadata["modtime"])
+
+	adapter, err := ReadStatFromMetadata(metadata, 1024)
+	a.Nil(err)
+	a.NotNil(adapter)
+	a.True(adapter.Extended())
+	a.Equal(uint32(0), adapter.Owner())
+	a.Equal(uint32(0), adapter.Group())
+	permInt, err := strconv.ParseUint("0775", 8, 32)
+	a.NoError(err)
+	a.Equal(uint32(permInt), adapter.FileMode())
+	a.Equal(time.Unix(0, mTime.UnixNano()), adapter.MTime())
 }

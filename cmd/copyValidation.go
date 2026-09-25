@@ -91,6 +91,10 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
+	if err = validatePosixPropertiesStyle(cooked.posixPropertiesStyle, cooked.preservePOSIXProperties, cooked.FromTo); err != nil {
+		return err
+	}
+
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,

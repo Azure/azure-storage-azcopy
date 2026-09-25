@@ -323,6 +323,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreservePermissions:            cca.preservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
+		PosixPropertiesStyle:           cca.posixPropertiesStyle,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,

@@ -172,8 +172,15 @@ func (so *StoredObject) tryUpdateTimestampsFromMetadata(meta common.Metadata) {
 		return
 	}
 
-	so.lastWriteTime, _, _ = common.TryReadModTimeFromMetadata(meta)
-	so.changeTime, _, _ = common.TryReadCTimeFromMetadata(meta)
+	var err error
+	so.lastWriteTime, _, err = common.TryReadModTimeForSyncFromMetadata(meta)
+	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Cannot compare modification time for %q: %v; the object will be recopied.", so.relativePath, err))
+	}
+	so.changeTime, _, err = common.TryReadCTimeFromMetadata(meta)
+	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Cannot compare change time for %q: %v; metadata will be recopied.", so.relativePath, err))
+	}
 }
 
 // ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.

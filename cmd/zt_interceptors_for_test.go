@@ -89,6 +89,11 @@ func (m *mockedLifecycleManager) Warn(msg string) {
 	default:
 	}
 }
+
+func (*mockedLifecycleManager) SanitizeLogMessage(msg string) string {
+	return common.NewAzCopyLogSanitizer().SanitizeLogMessage(msg)
+}
+
 func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
 	select {
 	case m.dryrunLog <- o(m.outputFormat):

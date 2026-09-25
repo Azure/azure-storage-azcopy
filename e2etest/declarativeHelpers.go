@@ -161,6 +161,7 @@ type params struct {
 	preserveSMBPermissions    bool
 	preserveSMBInfo           *bool
 	preservePOSIXProperties   bool
+	posixPropertiesStyle      common.PosixPropertiesStyle
 	relativeSourcePath        string
 	blobTags                  string
 	blobType                  string
