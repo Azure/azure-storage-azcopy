@@ -68,6 +68,7 @@ type rawSyncCmdArgs struct {
 	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
+	posixPropertiesStyle    string
 	followSymlinks          bool
 	preserveSymlinks        bool
 	backupMode              bool
@@ -220,6 +221,9 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+		if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+			return cooked, err
+		}
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.fromTo)
@@ -303,7 +307,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
 			return err
 		}
 	}
@@ -464,6 +468,7 @@ type cookedSyncCmdArgs struct {
 	preservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
+	posixPropertiesStyle    common.PosixPropertiesStyle
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
@@ -1140,6 +1145,11 @@ func init() {
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
+			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
+			"\n This flag must be used in-tandem with --preserve-posix-properties.")
 
 	// TODO: enable when we support local <-> File
 	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+

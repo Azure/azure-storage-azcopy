@@ -193,6 +193,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	preservePOSIXProperties bool,
+	posixStyle common.PosixPropertiesStyle,
 	hardlinkHandling common.HardlinkHandlingType) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
@@ -202,6 +203,9 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	}
 	if preservePOSIXProperties && !areBothLocationsPOSIXAware(fromTo) {
 		return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
+	}
+	if posixStyle != common.StandardPosixPropertiesStyle && !preservePOSIXProperties {
+		return errors.New(POSIXStyleMisuse)
 	}
 	if err = validatePreserveSMBPropertyOption(preservePermissions.IsTruthy(),
 		fromTo,

@@ -29,6 +29,10 @@ func (cooked *CookedCopyCmdArgs) PreservePOSIXProperties() bool {
 	return cooked.preservePOSIXProperties
 }
 
+func (cooked *CookedCopyCmdArgs) PosixPropertiesStyle() common.PosixPropertiesStyle {
+	return cooked.posixPropertiesStyle
+}
+
 func (cooked *CookedCopyCmdArgs) PreservePermissions() common.PreservePermissionsOption {
 	return cooked.preservePermissions
 }
@@ -83,6 +87,12 @@ func (cooked *CookedCopyCmdArgs) Hardlinks() common.HardlinkHandlingType {
 
 func (cooked *CookedCopyCmdArgs) SetPreservePOSIXProperties(preservePOSIXProperties bool) {
 	cooked.preservePOSIXProperties = preservePOSIXProperties
+}
+
+// SetPosixPropertiesStyle sets the posixPropertiesStyle from the provided string.
+// Accepted values: "standard" (default) and "amlfs".
+func (cooked *CookedCopyCmdArgs) SetPosixPropertiesStyle(posixPropertiesStyle string) error {
+	return cooked.posixPropertiesStyle.Parse(posixPropertiesStyle)
 }
 
 func (cooked *CookedCopyCmdArgs) SetAsSubdir(asSubdir bool) {
@@ -174,6 +184,10 @@ func (raw *rawSyncCmdArgs) PreservePOSIXProperties() bool {
 	return raw.preservePOSIXProperties
 }
 
+func (raw *rawSyncCmdArgs) PosixPropertiesStyle() string {
+	return raw.posixPropertiesStyle
+}
+
 func (raw *rawSyncCmdArgs) FollowSymlinks() bool {
 	return raw.followSymlinks
 }
@@ -236,6 +250,12 @@ func (raw *rawSyncCmdArgs) SetPreserveSMBInfo(preserveSMBInfo bool) {
 
 func (raw *rawSyncCmdArgs) SetPreservePOSIXProperties(preservePOSIXProperties bool) {
 	raw.preservePOSIXProperties = preservePOSIXProperties
+}
+
+// SetPosixPropertiesStyle sets the posixPropertiesStyle from the provided string.
+// Accepted values: "standard" (default) and "amlfs". Empty string defaults to "standard".
+func (raw *rawSyncCmdArgs) SetPosixPropertiesStyle(posixPropertiesStyle string) {
+	raw.posixPropertiesStyle = posixPropertiesStyle
 }
 
 func (raw *rawSyncCmdArgs) SetFollowSymlinks(followSymlinks bool) {
@@ -328,6 +348,7 @@ type RawMoverSyncCmdArgs struct {
 	FollowSymlinks          bool
 	DeleteDestination       string
 	PreservePOSIXProperties bool
+	PosixPropertiesStyle    string
 	PreservePermissions     bool
 	PreserveSMBInfo         bool
 	PreserveInfo            bool
@@ -349,6 +370,7 @@ type SyncCmdArgsInput struct {
 	FollowSymlinks          bool
 	DeleteDestination       string
 	PreservePOSIXProperties bool
+	PosixPropertiesStyle    string
 	PreservePermissions     bool
 	PreserveSMBInfo         bool
 	ForceIfReadOnly         bool
@@ -369,6 +391,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		followSymlinks:          args.FollowSymlinks,
 		deleteDestination:       args.DeleteDestination,
 		preservePOSIXProperties: args.PreservePOSIXProperties,
+		posixPropertiesStyle:    args.PosixPropertiesStyle,
 		preservePermissions:     args.PreservePermissions,
 		preserveSMBInfo:         args.PreserveSMBInfo,
 		preserveInfo:            args.PreserveInfo,

@@ -123,6 +123,10 @@ type rawCopyCmdArgs struct {
 	preserveSMBInfo bool
 	// Opt-in flag to persist additional POSIX properties
 	preservePOSIXProperties bool
+	// Opt-in flag to specify the style of POSIX properties. Used in-tandem with preservePosixProperties.
+	// Default is "standard"
+	// Using "amlfs" style will preserve properties to be compatible with Azure Managed Lustre File System
+	posixPropertiesStyle string
 	// Opt-in flag to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
@@ -384,6 +388,9 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+		if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+			return cooked, err
+		}
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.FromTo)
@@ -458,6 +465,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
+	raw.posixPropertiesStyle = common.StandardPosixPropertiesStyle.String()
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
@@ -691,6 +699,10 @@ type CookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the POSIX properties ...
 	preservePOSIXProperties bool
+
+	// Specifies the style of POSIX properties preserved.
+	// Supported options: 'standard' (default) & 'amlfs' (Azure Managed Lustre File System)
+	posixPropertiesStyle common.PosixPropertiesStyle
 
 	// Whether to enable Windows special privileges
 	backupMode bool
@@ -1802,6 +1814,11 @@ func init() {
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
+			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
+			"\n This flag must be used in-tandem with --preserve-posix-properties.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
 		"False by default. If enabled, symlink destinations are preserved as the blob content, rather"+

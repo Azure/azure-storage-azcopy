@@ -100,7 +100,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
 			return err
 		}
 

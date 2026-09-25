@@ -252,7 +252,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	}
 
 	meta := u.metadataToSet.Clone() // clone the metadata to avoid modifying the original
-	common.AddStatToBlobMetadata(adapter, meta)
+	common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
 	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta, nil)
@@ -297,7 +297,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		return nil // No-op
 	}
 
-	common.AddStatToBlobMetadata(adapter, meta)
+	common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
 	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,

@@ -97,7 +97,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	statAdapter.devID = uint64(2049)
 
 	metadata := make(Metadata)
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(metadata)
 	a.Contains(metadata, "linux_statx_mask")
 	a.Equal("8191", *metadata["linux_statx_mask"])
@@ -140,7 +140,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	metadata["Posix_atime"] = to.Ptr("1702478036104313337")
 	metadata["Modtime"] = to.Ptr("1702376209109248073")
 	metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(metadata)
 	a.Contains(metadata, "Linux_statx_mask")
 	a.Equal("8191", *metadata["Linux_statx_mask"])
@@ -190,7 +190,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	statAdapter.devID = uint64(2049)
 
 	metadata := make(Metadata)
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 
 	adapter, err := ReadStatFromMetadata(metadata, 1024)
 	a.Nil(err)
