@@ -146,7 +146,7 @@ func TestTwoWayTypedChannels_HNSFolderReorder(t *testing.T) {
 	fake := &fakeMergeJoinTraverser{objects: objs}
 	sideErr := &twoWaySideErr{}
 
-	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr)
+	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false)
 	folders, files := drainTypedChannelsForTest(folderCh, fileCh)
 
 	// Folders reordered to canonical "<name>/" key order (dist-info before its shorter sibling).
@@ -167,7 +167,7 @@ func TestTwoWayTypedChannels_FileOrderViolation(t *testing.T) {
 	fake := &fakeMergeJoinTraverser{objects: objs}
 	sideErr := &twoWaySideErr{}
 
-	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr)
+	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false)
 	drainTypedChannelsForTest(folderCh, fileCh)
 
 	a.Error(sideErr.get())
@@ -185,7 +185,7 @@ func TestTwoWayTypedChannels_TraversalErrorRecorded(t *testing.T) {
 	}
 	sideErr := &twoWaySideErr{}
 
-	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr)
+	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false)
 	drainTypedChannelsForTest(folderCh, fileCh)
 
 	a.ErrorIs(sideErr.get(), boom)
@@ -203,7 +203,7 @@ func TestTwoWayTypedChannels_Cancel(t *testing.T) {
 	sideErr := &twoWaySideErr{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	folderCh, fileCh := traverserToTypedChannels(ctx, fake, nil, "SRC[]", sideErr)
+	folderCh, fileCh := traverserToTypedChannels(ctx, fake, nil, "SRC[]", sideErr, false)
 	cancel()
 	// Draining must terminate (channels close after the producer observes cancellation).
 	done := make(chan struct{})
@@ -383,6 +383,112 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 		mu.Unlock()
 	case <-time.After(60 * time.Second):
 		a.Fail("two-way merge did not complete — possible deadlock")
+	}
+}
+
+// mjDestNotFoundErr builds the exact "destination lists empty" signal the blob traverser returns for
+// a sync destination whose prefix has no children (flat-blob emptyPrefix, or DFS 404): the message
+// ends in "Err BlobNotFound", which IsDestinationNotFoundDuringSync recognizes.
+func mjDestNotFoundErr(dir string) error {
+	return fmt.Errorf("blob https://acct.blob.core.windows.net/c/%s not found in destination. Err %s", dir, "BlobNotFound")
+}
+
+// newMergeJoinRecordingEnumerator builds a syncEnumerator wired with a REAL copyTransferProcessor
+// whose scheduled transfers accumulate in its copyJobTemplate (part size set huge so nothing is
+// dispatched to the STE), so a test can assert exactly which source objects were scheduled for copy.
+func newMergeJoinRecordingEnumerator(deletedPaths *[]string, mu *sync.Mutex) *syncEnumerator {
+	tmpl := &common.CopyJobPartOrderRequest{
+		FromTo:              common.EFromTo.S3Blob(),
+		Fpo:                 common.EFolderPropertiesOption.NoFolders(),
+		SymlinkHandlingType: common.ESymlinkHandlingType.Skip(),
+	}
+	ctp := newCopyTransferProcessor(tmpl, 1_000_000, common.ResourceString{}, common.ResourceString{}, nil, nil, false, false)
+	return &syncEnumerator{
+		objectIndexer: newObjectIndexer(),
+		objectComparator: func(o StoredObject) error {
+			mu.Lock()
+			*deletedPaths = append(*deletedPaths, o.relativePath)
+			mu.Unlock()
+			return nil
+		},
+		ctp: ctp,
+	}
+}
+
+// scheduledTransferSources returns the Source of every transfer the merge-join scheduled for copy.
+func scheduledTransferSources(enum *syncEnumerator) []string {
+	out := make([]string, 0, len(enum.ctp.copyJobTemplate.Transfers.List))
+	for _, tx := range enum.ctp.copyJobTemplate.Transfers.List {
+		out = append(out, tx.Source)
+	}
+	return out
+}
+
+// TestTwoWaySyncDir_DestNotFoundIsBenignAndTransfersSource is the S3->Blob regression: when the
+// destination prefix lists EMPTY (surfaced as "... not found in destination. Err BlobNotFound"), the
+// old code treated it as a FATAL directory error — it returned an error (so the orchestrator never
+// enqueued the sub-dirs => whole subtree silently skipped) and scheduled none of the new source
+// files. The destination-absent case must be benign (same as isDestinationPresent=false): every
+// source file is copied and every source sub-dir is enqueued for recursion.
+func TestTwoWaySyncDir_DestNotFoundIsBenignAndTransfersSource(t *testing.T) {
+	a := assert.New(t)
+	var deleted []string
+	var mu sync.Mutex
+	enum := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.S3Blob(), deleteDestination: common.EDeleteDestination.False()}
+
+	src := &fakeMergeJoinTraverser{objects: []StoredObject{
+		mjTestFile("a.txt"), mjTestFile("z.txt"),
+		mjTestVirtualFolder("dirA"), mjTestVirtualFolder("dirB"),
+	}}
+	// Destination lists empty -> traverser returns the not-found signal. isDestinationPresent=true
+	// reproduces the real precondition (the parent enumeration believed the dir was present).
+	dst := &fakeMergeJoinTraverser{finalErr: mjDestNotFoundErr("stg_millennium/working_view_A/")}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	subDirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+
+	a.NoError(err, "destination not-found (empty prefix) must be benign, not a fatal directory error")
+
+	got := scheduledTransferSources(enum)
+	sort.Strings(got)
+	a.Equal([]string{"/a.txt", "/z.txt"}, got, "all new source files must be transferred when the destination is empty")
+
+	subPaths := make([]string, len(subDirs))
+	for i, s := range subDirs {
+		subPaths[i] = s.relativePath
+	}
+	sort.Strings(subPaths)
+	a.Equal([]string{"/dirA/", "/dirB/"}, subPaths, "source sub-dirs must be enqueued so the subtree is not skipped")
+	for _, s := range subDirs {
+		a.False(s.isPresentAtDestination, "sub-dirs of an absent destination must be marked not-present")
+	}
+
+	mu.Lock()
+	a.Empty(deleted, "nothing to delete when the destination is empty")
+	mu.Unlock()
+}
+
+// TestTwoWaySyncDir_DestRealErrorStillFatal guards against over-suppression: a genuine (non
+// not-found) destination traversal error must still be fatal and attributed to the destination.
+func TestTwoWaySyncDir_DestRealErrorStillFatal(t *testing.T) {
+	a := assert.New(t)
+	var deleted []string
+	var mu sync.Mutex
+	enum := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.S3Blob(), deleteDestination: common.EDeleteDestination.False()}
+
+	src := &fakeMergeJoinTraverser{objects: []StoredObject{mjTestFile("a.txt")}}
+	dst := &fakeMergeJoinTraverser{finalErr: errors.New("destination listing failed: 500 InternalServerError")}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+
+	a.Error(err, "a genuine destination traversal error must remain fatal")
+	var mjErr *mergeJoinTraversalError
+	a.True(errors.As(err, &mjErr), "expected *mergeJoinTraversalError, got %T: %v", err, err)
+	if mjErr != nil {
+		a.Equal(cca.fromTo.To(), mjErr.location, "error must be attributed to the destination")
 	}
 }
 
