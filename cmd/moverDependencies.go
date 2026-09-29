@@ -182,7 +182,6 @@ func (raw *rawSyncCmdArgs) PreservePOSIXProperties() bool {
 	return raw.preservePOSIXProperties
 }
 
-
 func (raw *rawSyncCmdArgs) FollowSymlinks() bool {
 	return raw.followSymlinks
 }
@@ -245,7 +244,6 @@ func (raw *rawSyncCmdArgs) SetPreserveSMBInfo(preserveSMBInfo bool) {
 
 func (raw *rawSyncCmdArgs) SetPreservePOSIXProperties(preservePOSIXProperties bool) {
 	raw.preservePOSIXProperties = preservePOSIXProperties
-
 }
 
 func (raw *rawSyncCmdArgs) SetFollowSymlinks(followSymlinks bool) {

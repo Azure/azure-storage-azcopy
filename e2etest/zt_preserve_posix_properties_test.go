@@ -209,7 +209,7 @@ func TestPOSIX_SpecialFilesFromHNS(t *testing.T) {
 		anonymousAuthOnly, // this is a small test, so running it with all cred types (which will really just be oauth and anon) is fine
 		anonymousAuthOnly,
 		params{
-			recursive: true,
+			recursive:               true,
 			preservePOSIXProperties: true,
 			symlinkHandling:         common.ESymlinkHandlingType.Preserve(),
 		},
