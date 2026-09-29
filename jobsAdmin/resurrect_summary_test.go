@@ -62,8 +62,9 @@ func (j planOnlyJobMgr) TransferDirection() common.TransferDirection {
 }
 
 type plannedTransfer struct {
-	status    common.TransferStatus
-	errorCode int32
+	status     common.TransferStatus
+	errorCode  int32
+	entityType common.EntityType
 }
 
 func resurrectPlannedSummary(t *testing.T, transfers []plannedTransfer) common.ListJobSummaryResponse {
@@ -85,13 +86,14 @@ func resurrectPlannedSummary(t *testing.T, transfers []plannedTransfer) common.L
 		JobID:           jobID,
 		IsFinalPart:     true,
 		FromTo:          common.EFromTo.LocalBlob(),
+		Fpo:             common.EFolderPropertiesOption.AllFolders(),
 		SourceRoot:      common.ResourceString{Value: "/source"},
 		DestinationRoot: common.ResourceString{Value: "https://account.blob.core.windows.net/container"},
 	}
-	for i := range transfers {
+	for i, transfer := range transfers {
 		name := fmt.Sprintf("/file%d.txt", i)
 		order.Transfers.List = append(order.Transfers.List,
-			common.CopyTransfer{Source: name, Destination: name, EntityType: common.EEntityType.File(), SourceSize: 10})
+			common.CopyTransfer{Source: name, Destination: name, EntityType: transfer.entityType, SourceSize: 10})
 	}
 	planFile := ste.JobPartPlanFileName(fmt.Sprintf(ste.JobPartPlanFileNameFormat, jobID.String(), 0, ste.DataSchemaVersion))
 	planFile.Create(order)
@@ -128,4 +130,24 @@ func TestResurrectJobSummaryWithoutFailuresHasNoErrorCodes(t *testing.T) {
 
 	assert.Zero(t, summary.TransfersFailed)
 	assert.Nil(t, summary.FailedTransferErrorCodeCounts)
+}
+
+func TestResurrectJobSummaryCountsFolderOutcomes(t *testing.T) {
+	folder := common.EEntityType.Folder()
+	summary := resurrectPlannedSummary(t, []plannedTransfer{
+		{status: common.ETransferStatus.Success()},
+		{status: common.ETransferStatus.Success(), entityType: folder},
+		{status: common.ETransferStatus.Failed(), entityType: folder},
+		{status: common.ETransferStatus.SkippedEntityAlreadyExists(), entityType: folder},
+	})
+
+	assert.EqualValues(t, 4, summary.TotalTransfers)
+	assert.EqualValues(t, 1, summary.FileTransfers)
+	assert.EqualValues(t, 3, summary.FolderPropertyTransfers)
+	assert.EqualValues(t, 2, summary.TransfersCompleted)
+	assert.EqualValues(t, 1, summary.TransfersFailed)
+	assert.EqualValues(t, 1, summary.TransfersSkipped)
+	assert.EqualValues(t, 1, summary.FoldersCompleted)
+	assert.EqualValues(t, 1, summary.FoldersFailed)
+	assert.EqualValues(t, 1, summary.FoldersSkipped)
 }
