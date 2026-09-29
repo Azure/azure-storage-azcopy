@@ -1947,7 +1947,6 @@ var EPosixPropertiesStyle = PosixPropertiesStyle(0)
 var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard()
 var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
 
-
 // Standard means use the default POSIX properties type
 func (PosixPropertiesStyle) Standard() PosixPropertiesStyle {
 	return PosixPropertiesStyle(0)

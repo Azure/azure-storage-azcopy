@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Block/char device rep is untested due to difficulty to test
@@ -27,39 +28,39 @@ func TestPOSIX_SpecialFilesToBlob(t *testing.T) {
 		allCredentialTypes, // this relies upon a working source info provider; this validates appropriate creds are supplied to it.
 		anonymousAuthOnly,
 		params{
-			recursive: true,
+			recursive:               true,
 			preservePOSIXProperties: true,
-			symlinkHandling: common.ESymlinkHandlingType.Preserve(),
+			symlinkHandling:         common.ESymlinkHandlingType.Preserve(),
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				folder(""),
-				f("fifo", with{ posixProperties: objectUnixStatContainer{ mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFIFO) } }), // fifo should work
-				f("sock", with{ posixProperties: objectUnixStatContainer{ mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFSOCK) } }), // sock should work
+				f("fifo", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFIFO)}}),  // fifo should work
+				f("sock", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFSOCK)}}), // sock should work
 				"a",
 				symlink("b", "a"), //symlink to real target should succeed
 				symlink("d", "c"), //symlink to nowhere should succeed
 			},
 		},
 		EAccountType.Standard(), EAccountType.Standard(), "",
-		)
+	)
 }
 
-// Test that AMLFS style props are correctly uploaded to & downloaded from Blob storage
+// Test that AMLFS style props are correctly uploaded to & downloaded from Blob storage.
 func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 	ptr := func(u uint32) *uint32 {
 		return &u
 	}
 	timeStr := "2026-01-02 15:04:05 -0700"
 	modTime, err := time.Parse(common.AMLFS_MOD_TIME_LAYOUT, timeStr)
-	a := assert.New(t)
-	a.NoError(err)
+	require.NoError(t, err)
+	modTime = modTime.Add(123456789 * time.Nanosecond)
 
 	RunScenarios(
 		t,
-		eOperation.Copy(),
+		eOperation.CopyAndSync(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(),
 			common.EFromTo.BlobBlob()),
 		eValidate.Auto(),
@@ -86,7 +87,10 @@ func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 						break
 					}
 				}
-				a.NotNil(props, "could not find properties for file")
+				c.Assert(props != nil, equals(), true, "could not find properties for file")
+				if props == nil {
+					return
+				}
 
 				// check modtime format
 				mt, ok := props.nameValueMetadata[common.POSIXModTimeMeta]
@@ -95,6 +99,8 @@ func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 					_, err := time.Parse(common.AMLFS_MOD_TIME_LAYOUT, *mt)
 					c.AssertNoErr(err, "mod time is not in expected AMLFS format.")
 				}
+				_, ok = props.nameValueMetadata[common.POSIXModTimeNanoMeta]
+				c.Assert(ok, equals(), true, "full-precision mod time metadata is missing")
 
 				_, ok = props.nameValueMetadata[common.AMLFSOwnerMeta]
 				c.Assert(ok, equals(), true, "AMLFS owner is missing")
@@ -126,6 +132,37 @@ func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 	)
 }
 
+func TestAMLFSMetadataFixture(t *testing.T) {
+	modTime := time.Unix(1767366245, 123456789)
+	for _, style := range []common.PosixPropertiesStyle{common.StandardPosixPropertiesStyle, common.AMLFSPosixPropertiesStyle} {
+		t.Run(style.String(), func(t *testing.T) {
+			properties := objectUnixStatContainer{
+				owner: to.Ptr(uint32(1000)), group: to.Ptr(uint32(2000)),
+				mode: to.Ptr(uint32(common.S_IFREG | 0640)), modTime: &modTime,
+			}
+			metadata := make(common.Metadata)
+			properties.AddToMetadata(metadata, style)
+			adapter, err := common.ReadStatFromMetadata(metadata, 0)
+			require.NoError(t, err)
+			require.Equal(t, uint32(1000), adapter.Owner())
+			require.Equal(t, uint32(2000), adapter.Group())
+			require.Empty(t, properties.EquivalentToStatAdapter(adapter, style))
+			if style == common.AMLFSPosixPropertiesStyle {
+				require.Equal(t, "1767366245123456789", *metadata[common.POSIXModTimeNanoMeta])
+				require.NotEmpty(t, properties.EquivalentToStatAdapter(adapter, common.StandardPosixPropertiesStyle),
+					"Standard validation must not ignore missing file-type bits")
+			}
+
+			metadata = make(common.Metadata)
+			groupOnly := objectUnixStatContainer{group: to.Ptr(uint32(2000))}
+			groupOnly.AddToMetadata(metadata, style)
+			adapter, err = common.ReadStatFromMetadata(metadata, 0)
+			require.NoError(t, err)
+			require.Equal(t, uint32(2000), adapter.Group())
+		})
+	}
+}
+
 // *** TESTS DISABLED UNTIL POSIX PROPS HNS PR ***
 
 // Block/char device rep is untested due to difficulty to test
@@ -142,17 +179,17 @@ func TestPOSIX_SpecialFilesToHNS(t *testing.T) {
 		anonymousAuthOnly, // this is a small test, so running it with all cred types (which will really just be oauth and anon) is fine
 		anonymousAuthOnly,
 		params{
-			recursive: true,
+			recursive:               true,
 			preservePOSIXProperties: true,
-			symlinkHandling: common.ESymlinkHandlingType.Preserve(),
+			symlinkHandling:         common.ESymlinkHandlingType.Preserve(),
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				folder(""),
-				f("fifo", with{ posixProperties: objectUnixStatContainer{ mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFIFO) } }), // fifo should work
-				f("sock", with{ posixProperties: objectUnixStatContainer{ mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFSOCK) } }), // sock should work
+				f("fifo", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFIFO)}}),  // fifo should work
+				f("sock", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFSOCK)}}), // sock should work
 				"a",
 				symlink("b", "a"), //symlink to real target should succeed
 				symlink("d", "c"), //symlink to nowhere should succeed
@@ -174,16 +211,16 @@ func TestPOSIX_SpecialFilesFromHNS(t *testing.T) {
 		params{
 			recursive: true,
 			preservePOSIXProperties: true,
-			symlinkHandling: common.ESymlinkHandlingType.Preserve(),
+			symlinkHandling:         common.ESymlinkHandlingType.Preserve(),
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
-				folder("", with{ posixProperties: objectUnixStatContainer{ modTime: pointerTo(time.Now().Add(time.Second*-5))}}),
-				f("fifo", with{ posixProperties: objectUnixStatContainer{ mode: pointerTo(uint32(common.DEFAULT_FILE_PERM | common.S_IFIFO)) } }),  // fifo should work
-				f("sock", with{ posixProperties: objectUnixStatContainer{ mode: pointerTo(uint32(common.DEFAULT_FILE_PERM | common.S_IFSOCK)) } }), // sock should work
-				f("a", with{ posixProperties: objectUnixStatContainer{ modTime: pointerTo(time.Now().Add(time.Second*-5))}}),
+				folder("", with{posixProperties: objectUnixStatContainer{modTime: pointerTo(time.Now().Add(time.Second * -5))}}),
+				f("fifo", with{posixProperties: objectUnixStatContainer{mode: pointerTo(uint32(common.DEFAULT_FILE_PERM | common.S_IFIFO))}}),  // fifo should work
+				f("sock", with{posixProperties: objectUnixStatContainer{mode: pointerTo(uint32(common.DEFAULT_FILE_PERM | common.S_IFSOCK))}}), // sock should work
+				f("a", with{posixProperties: objectUnixStatContainer{modTime: pointerTo(time.Now().Add(time.Second * -5))}}),
 				symlink("b", "a"), //symlink to real target should succeed
 				symlink("d", "c"), //symlink to nowhere should succeed
 			},

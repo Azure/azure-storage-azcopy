@@ -23,16 +23,17 @@ package e2etest
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	bfsfile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	bfsfile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -233,7 +234,7 @@ func (o *objectUnixStatContainer) DeepCopy() *objectUnixStatContainer {
 }
 
 // EquivalentToStatAdapter validates the metadata values, not format
-func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapter) string {
+func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapter, style common.PosixPropertiesStyle) string {
 	if o == nil {
 		return "" // no comparison to make
 	}
@@ -241,8 +242,10 @@ func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapt
 	mismatched := make([]string, 0)
 	// only compare if we set it
 	if o.mode != nil {
-		if (s.FileMode() != *o.mode) && // First do a straight comparison
-			fmt.Sprintf("%04o", uint32(s.FileMode())&0777) != fmt.Sprintf("%04o", *o.mode&0777) { // Compare just the permission bits
+		// AMLFS represents regular files with permission bits only.
+		regularPermissionsOnly := style == common.AMLFSPosixPropertiesStyle &&
+			*o.mode&0xf000 == common.S_IFREG && s.FileMode() == *o.mode&0777
+		if s.FileMode() != *o.mode && !regularPermissionsOnly {
 			mismatched = append(mismatched, fmt.Sprintf("actual:%v mode expected:%v", strconv.FormatInt(int64(s.FileMode()), 10),
 				strconv.FormatUint(uint64(*o.mode), 10)))
 
@@ -312,6 +315,7 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string, sty
 		// Use style to determine format to store
 		if style == common.AMLFSPosixPropertiesStyle {
 			metadata[common.POSIXModTimeMeta] = to.Ptr(o.modTime.Format(common.AMLFS_MOD_TIME_LAYOUT))
+			metadata[common.POSIXModTimeNanoMeta] = to.Ptr(strconv.FormatInt(o.modTime.UnixNano(), 10))
 		} else {
 			metadata[common.POSIXModTimeMeta] = to.Ptr(strconv.FormatInt(o.modTime.UnixNano(), 10))
 		}
@@ -329,9 +333,9 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string, sty
 	if o.group != nil {
 		mask |= common.STATX_GID
 		if style == common.AMLFSPosixPropertiesStyle {
-			metadata[common.AMLFSGroupMeta] = to.Ptr(strconv.FormatUint(uint64(*o.owner), 10))
+			metadata[common.AMLFSGroupMeta] = to.Ptr(strconv.FormatUint(uint64(*o.group), 10))
 		} else {
-			metadata[common.POSIXGroupMeta] = to.Ptr(strconv.FormatUint(uint64(*o.owner), 10))
+			metadata[common.POSIXGroupMeta] = to.Ptr(strconv.FormatUint(uint64(*o.group), 10))
 		}
 	}
 
@@ -438,7 +442,7 @@ type testObject struct {
 
 	body []byte
 
-	// info to be used at creation time. Usually, creationInfo and and verificationInfo will be the same
+	// info to be used at creation time. Usually, creationInfo and verificationInfo will be the same
 	// I.e. we expect the creation properties to be preserved. But, for flexibility, they can be set to something different.
 	creationProperties objectProperties
 	// info to be used at verification time. Will be nil if there is no validation (of properties) to be done

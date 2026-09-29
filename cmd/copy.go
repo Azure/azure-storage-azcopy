@@ -380,6 +380,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
 		return cooked, err
 	}
+
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,

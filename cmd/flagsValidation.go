@@ -192,6 +192,7 @@ func validatePosixPropertiesStyle(style common.PosixPropertiesStyle, preserve bo
 		return fmt.Errorf("invalid POSIX properties style: %d", style)
 	}
 }
+
 // performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
 // for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
 // properties are set correctly for SMB copy operations.

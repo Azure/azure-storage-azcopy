@@ -3,6 +3,7 @@ package ste
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 

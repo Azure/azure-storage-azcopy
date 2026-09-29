@@ -209,6 +209,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
 		return cooked, err
 	}
+
 	// NFS/SMB arg processing
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
@@ -300,6 +301,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	if err = validatePosixPropertiesStyle(cooked.posixPropertiesStyle, cooked.preservePOSIXProperties, cooked.fromTo); err != nil {
 		return err
 	}
+
 	// NFS/SMB validation
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
