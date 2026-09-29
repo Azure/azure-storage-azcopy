@@ -206,6 +206,9 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
+	if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+		return cooked, err
+	}
 	// NFS/SMB arg processing
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
@@ -221,9 +224,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-		if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
-			return cooked, err
-		}
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.fromTo)
@@ -297,6 +297,9 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return err
 	}
 
+	if err = validatePosixPropertiesStyle(cooked.posixPropertiesStyle, cooked.preservePOSIXProperties, cooked.fromTo); err != nil {
+		return err
+	}
 	// NFS/SMB validation
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
@@ -307,7 +310,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
 			return err
 		}
 	}

@@ -91,6 +91,9 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
+	if err = validatePosixPropertiesStyle(cooked.posixPropertiesStyle, cooked.preservePOSIXProperties, cooked.FromTo); err != nil {
+		return err
+	}
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
@@ -100,7 +103,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
 			return err
 		}
 

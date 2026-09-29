@@ -377,6 +377,9 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
+	if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+		return cooked, err
+	}
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
@@ -388,9 +391,6 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-		if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
-			return cooked, err
-		}
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.FromTo)

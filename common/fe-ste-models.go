@@ -1941,13 +1941,12 @@ func WarnIfTooManyObjects() {
 	})
 }
 
-// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+type PosixPropertiesStyle uint8
 var EPosixPropertiesStyle = PosixPropertiesStyle(0)
 
-var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard() // Default
+var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard()
 var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
 
-type PosixPropertiesStyle uint8
 
 // Standard means use the default POSIX properties type
 func (PosixPropertiesStyle) Standard() PosixPropertiesStyle {
@@ -1959,8 +1958,8 @@ func (PosixPropertiesStyle) AMLFS() PosixPropertiesStyle {
 	return PosixPropertiesStyle(1)
 }
 
-func (ppt PosixPropertiesStyle) String() string {
-	return enum.StringInt(ppt, reflect.TypeOf(ppt))
+func (style PosixPropertiesStyle) String() string {
+	return enum.StringInt(style, reflect.TypeOf(style))
 }
 
 func (ppt *PosixPropertiesStyle) Parse(s string) error {
