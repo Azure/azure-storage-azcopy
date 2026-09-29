@@ -83,8 +83,9 @@ func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 	return (*JobPartPlanMMF)(mmf)
 }
 
-// createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
+// Create writes a native plan. Flush/close errors are logged and returned;
+// validation and write failures retain their existing panic contract.
+func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) error {
 	if jpfn.Exists() {
 		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", jpfn.GetJobPartPlanPath()))
 	}
@@ -430,6 +431,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// In case of Mover - C2C, plan files are persisted on Azure File Share.
 	// Ensure data hits the remote filesystem.
+	var durabilityErr error
 	if buildmode.IsMover && order.FromTo.From().IsRemote() {
 		// TO DO - Remove logging once, this is for testing purpose only.
 		planFlushLogOnce.Do(func() {
@@ -438,6 +440,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 		if err := file.Sync(); err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("fsync error: %v", err))
+			durabilityErr = errors.Join(durabilityErr, err)
 		}
 		// Ensure file data is durable before dropping page cache, especially on network filesystems.
 		// Prefer fdatasync (data-only) to reduce metadata flush overhead; fall back to fsync log on error.
@@ -445,13 +448,15 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] fdatasync failed prior to fadvise: %v", err))
 			if err2 := file.Sync(); err2 != nil {
 				common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] fsync also failed prior to fadvise: %v", err2))
+				durabilityErr = errors.Join(durabilityErr, err, err2)
 			}
 		}
 	}
 
 	if err := file.Close(); err != nil {
 		common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] close failed after fsync or fdatasync: %v", err))
+		durabilityErr = errors.Join(durabilityErr, err)
 	}
 
-	// the file is closed to due to defer above
+	return durabilityErr
 }

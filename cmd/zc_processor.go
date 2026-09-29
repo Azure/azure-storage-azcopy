@@ -97,6 +97,7 @@ type dispatchItem struct {
 
 type copyTransferProcessor struct {
 	numOfTransfersPerPart int
+	maxBytesPerPart       uint64
 	copyJobTemplate       *common.CopyJobPartOrderRequest
 	source                common.ResourceString
 	destination           common.ResourceString
@@ -234,6 +235,9 @@ func (s *copyTransferProcessor) dispatchPartNow(item dispatchItem) error {
 }
 
 func (s *copyTransferProcessor) dispatchPart(item dispatchItem) error {
+	if s.copyJobTemplate.PlanOnly != nil {
+		return s.dispatchPartNow(item)
+	}
 	if useAsyncDispatchPipeline() {
 		s.startDispatchPipeline()
 		s.dispatchCh <- item
@@ -250,7 +254,7 @@ func (s *copyTransferProcessor) dispatchPart(item dispatchItem) error {
 // dispatch error. startDispatchPipeline is called first (idempotent) so small jobs that never flushed
 // a full part don't deadlock on an unclosed dispatchDone.
 func (s *copyTransferProcessor) waitForDispatchPipeline() error {
-	if !useAsyncDispatchPipeline() {
+	if s.copyJobTemplate.PlanOnly != nil || !useAsyncDispatchPipeline() {
 		return nil
 	}
 
@@ -476,7 +480,9 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil
 	}
 
-	if UseSyncOrchestrator && useHighPerfSyncPath() {
+	// Byte-capped orders use the existing synchronous accumulator below, which
+	// retains the last transfer batch for finalization rather than preflushing it.
+	if UseSyncOrchestrator && useHighPerfSyncPath() && s.maxBytesPerPart == 0 {
 		if isShuffleEnabled() {
 			shuffleThreshold := getShuffleThresholdParts()
 
@@ -541,7 +547,13 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		defer s.syncTransferMutex.Unlock()
 	}
 
-	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
+	if s.maxBytesPerPart > 0 && copyTransfer.SourceSize < 0 {
+		return errors.New("negative source size in byte-capped job")
+	}
+	currentBytes := s.copyJobTemplate.Transfers.TotalSizeInBytes
+	byteLimitReached := s.maxBytesPerPart > 0 && len(s.copyJobTemplate.Transfers.List) > 0 &&
+		(currentBytes >= s.maxBytesPerPart || uint64(copyTransfer.SourceSize) > s.maxBytesPerPart-currentBytes)
+	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart || byteLimitReached {
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
