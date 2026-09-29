@@ -396,6 +396,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 
 			// check for all completed transfer to calculate the progress percentage at the end
 			isHardlink := jppt.EntityType == common.EEntityType.Hardlink()
+			isFolder := jppt.EntityType == common.EEntityType.Folder()
 
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
@@ -407,6 +408,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
+				if isFolder {
+					js.FoldersCompleted++
+				}
 				if isHardlink {
 					js.HardlinksCompleted++
 				}
@@ -416,6 +420,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
+				if isFolder {
+					js.FoldersFailed++
+				}
 				if isHardlink {
 					js.HardlinksFailed++
 				}
@@ -433,6 +440,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
+				if isFolder {
+					js.FoldersSkipped++
+				}
 				if isHardlink {
 					js.HardlinksSkipped++
 				}
