@@ -23,6 +23,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -400,6 +401,11 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 		return false
 	}
 
+	// Files->Files with proactive stats on: flag the destination so it does not start
+	// share stats polling, which is source-only.
+	skipDestShareStats := cca.FromTo.From().IsFile() && cca.FromTo.To().IsFile() &&
+		enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true"
+
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
 
@@ -412,6 +418,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 
 		ExcludeContainers: cca.excludeContainer,
 		HardlinkHandling:  cca.hardlinks,
+		IsSyncDestination: skipDestShareStats,
 	})
 
 	if err != nil {
