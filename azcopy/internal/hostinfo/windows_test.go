@@ -101,7 +101,7 @@ func TestHostHardwareWindowsPaths(t *testing.T) {
 				resolverCalled = true
 				assert.Equal(t, test.root, root)
 				return driveFixed
-			})
+			}, func(string) string { return "" }, func(string) string { return "NTFS" })
 			if test.unc {
 				assert.Equal(t, telemetry.MountTypeNASSMB, mountType)
 			} else if test.root == "" {

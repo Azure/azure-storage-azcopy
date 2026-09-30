@@ -27,6 +27,8 @@ const (
 	MountTypeLocalDisk  MountType = "local-disk"
 	MountTypeNASSMB     MountType = "nas-smb"
 	MountTypeNASNFS     MountType = "nas-nfs"
+	MountTypeNASOther   MountType = "nas-other"
+	MountTypeVMShare    MountType = "vm-share"
 	MountTypeCloudAzure MountType = "cloud-azure"
 	MountTypeCloudS3    MountType = "cloud-s3"
 	MountTypeCloudGCS   MountType = "cloud-gcs"

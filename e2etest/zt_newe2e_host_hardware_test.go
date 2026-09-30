@@ -113,6 +113,9 @@ func (*HostHardwareSuite) Scenario_NativeProbes(svm *ScenarioVariationManager) {
 	case "darwin":
 		svm.Assert("nonexistent macOS path should remain unknown", Empty{}, azcopy.LocalMountType(filepath.Join(root, "not-created")))
 		svm.Assert("invalid macOS path should remain unknown", Empty{}, azcopy.LocalMountType(root+"\x00"))
+		link := filepath.Join(root, "dangling-link")
+		svm.NoError("create dangling symlink", os.Symlink(filepath.Join(root, "not-created"), link), true)
+		svm.Assert("macOS symlink should be classified by its directory", Equal{}, "local-disk", azcopy.LocalMountType(link))
 	default:
 		svm.Skip("host hardware E2E requires Windows, Linux, or macOS")
 	}

@@ -25,30 +25,37 @@ func TestHostHardwareLinuxClassifyFSType(t *testing.T) {
 }
 
 func TestHostHardwareLinuxParseMountinfoLine(t *testing.T) {
-	mountPoint, fsType, ok := parseMountinfoLine("36 35 98:0 / /mnt/nas rw,noatime - nfs4 1.2.3.4:/export rw")
+	mountPoint, fsType, source, ok := parseMountinfoLine("36 35 98:0 / /mnt/nas rw,noatime - nfs4 1.2.3.4:/export rw")
 	assert.True(t, ok)
 	assert.Equal(t, "/mnt/nas", mountPoint)
 	assert.Equal(t, "nfs4", fsType)
+	assert.Equal(t, "1.2.3.4:/export", source)
 
-	mountPoint, fsType, ok = parseMountinfoLine(`36 35 98:0 / /mnt/nas\040share rw,noatime - nfs4 server:/export rw`)
+	mountPoint, fsType, source, ok = parseMountinfoLine(`36 35 98:0 / /mnt/nas\040share rw,noatime - nfs4 server:/export\040dir rw`)
 	assert.True(t, ok)
 	assert.Equal(t, "/mnt/nas share", mountPoint)
 	assert.Equal(t, "nfs4", fsType)
+	assert.Equal(t, "server:/export dir", source)
 
-	mountPoint, _, ok = parseMountinfoLine(`36 35 98:0 / /mnt/nas\134040share rw,noatime - nfs4 server:/export rw`)
+	mountPoint, _, _, ok = parseMountinfoLine(`36 35 98:0 / /mnt/nas\134040share rw,noatime - nfs4 server:/export rw`)
 	assert.True(t, ok)
 	assert.Equal(t, `/mnt/nas\040share`, mountPoint)
 
-	mountPoint, _, ok = parseMountinfoLine(`36 35 98:0 / /mnt/nas\011tab\012line rw,noatime - nfs4 server:/export rw`)
+	mountPoint, _, _, ok = parseMountinfoLine(`36 35 98:0 / /mnt/nas\011tab\012line rw,noatime - nfs4 server:/export rw`)
 	assert.True(t, ok)
 	assert.Equal(t, "/mnt/nas\ttab\nline", mountPoint)
 
-	mountPoint, fsType, ok = parseMountinfoLine("22 30 0:21 / / rw,relatime shared:1 - ext4 /dev/root rw")
+	mountPoint, fsType, _, ok = parseMountinfoLine("22 30 0:21 / / rw,relatime shared:1 - ext4 /dev/root rw")
 	assert.True(t, ok)
 	assert.Equal(t, "/", mountPoint)
 	assert.Equal(t, "ext4", fsType)
 
-	_, _, ok = parseMountinfoLine("garbage line without separator")
+	_, fsType, source, ok = parseMountinfoLine("22 30 0:21 / /mnt/x rw - fuse")
+	assert.True(t, ok)
+	assert.Equal(t, "fuse", fsType)
+	assert.Empty(t, source)
+
+	_, _, _, ok = parseMountinfoLine("garbage line without separator")
 	assert.False(t, ok)
 }
 

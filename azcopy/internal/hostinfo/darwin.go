@@ -31,7 +31,8 @@ func DarwinMemoryGB(bytes uint64, err error) int {
 	return PhysicalMemoryGB(bytes)
 }
 
-func DarwinFSType(fsType string) telemetry.MountType {
+// DarwinMountType classifies a statfs result; local reports whether MNT_LOCAL is set.
+func DarwinMountType(fsType string, local bool) telemetry.MountType {
 	switch {
 	case strings.HasPrefix(fsType, "nfs"):
 		return telemetry.MountTypeNASNFS
@@ -39,6 +40,8 @@ func DarwinFSType(fsType string) telemetry.MountType {
 		return telemetry.MountTypeNASSMB
 	case fsType == "":
 		return ""
+	case !local:
+		return telemetry.MountTypeNASOther
 	default:
 		return telemetry.MountTypeLocalDisk
 	}

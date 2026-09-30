@@ -67,7 +67,9 @@ func totalMemoryGB() int {
 }
 
 // localMountType inspects /proc/self/mountinfo to classify the filesystem backing
-// the given local path: "nas-nfs", "nas-smb", or "local-disk". Returns "" when
+// the given local path: "nas-nfs", "nas-smb", "nas-other" (for example Lustre,
+// CephFS, or network FUSE mounts), "vm-share" (WSL drives or VM shared folders),
+// or "local-disk". Returns "" when
 // the mount table cannot be read or the path cannot be resolved (caller falls
 // back to "local-disk").
 func localMountType(path string) telemetry.MountType {

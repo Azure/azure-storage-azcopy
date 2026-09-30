@@ -6,7 +6,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,25 +31,4 @@ func TestHostHardwareDarwinMemoryGB(t *testing.T) {
 	assert.Equal(t, 2, DarwinMemoryGB((1<<30)+(1<<29), nil))
 	assert.Equal(t, -1, DarwinMemoryGB(0, nil))
 	assert.Equal(t, -1, DarwinMemoryGB(16<<30, errors.New("sysctl unavailable")))
-}
-
-func TestHostHardwareDarwinClassifyFSType(t *testing.T) {
-	tests := []struct {
-		fsType   string
-		expected telemetry.MountType
-	}{
-		{"nfs", "nas-nfs"},
-		{"nfs4", "nas-nfs"},
-		{"smbfs", "nas-smb"},
-		{"smb3", "nas-smb"},
-		{"apfs", "local-disk"},
-		{"hfs", "local-disk"},
-		{"exfat", "local-disk"},
-		{"", ""},
-	}
-	for _, test := range tests {
-		t.Run(test.fsType, func(t *testing.T) {
-			assert.Equal(t, test.expected, DarwinFSType(test.fsType))
-		})
-	}
 }

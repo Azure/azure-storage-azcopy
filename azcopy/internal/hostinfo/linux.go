@@ -53,21 +53,21 @@ func ParseLinuxMemoryGB(reader io.Reader) int {
 
 func LinuxMountTypeFromReader(path string, reader io.Reader) telemetry.MountType {
 	bestLength := -1
-	bestFSType := ""
+	bestFSType, bestSource := "", ""
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		mountPoint, fsType, ok := parseMountinfoLine(scanner.Text())
+		mountPoint, fsType, source, ok := parseMountinfoLine(scanner.Text())
 		if !ok {
 			continue
 		}
 		if pathHasMountPrefix(path, mountPoint) && len(mountPoint) > bestLength {
 			bestLength = len(mountPoint)
-			bestFSType = fsType
+			bestFSType, bestSource = fsType, source
 		}
 	}
 	_ = scanner.Err()
-	return classifyLinuxFSType(bestFSType)
+	return classifyLinuxMount(bestFSType, bestSource)
 }
 
 var mountinfoPathUnescaper = strings.NewReplacer(
@@ -78,18 +78,21 @@ var mountinfoPathUnescaper = strings.NewReplacer(
 )
 
 // Example: "36 35 98:0 / /mnt/nas\040share rw,noatime - nfs4 server:/export rw".
-// Returns: mountPoint="/mnt/nas share", fsType="nfs4", ok=true.
-func parseMountinfoLine(line string) (mountPoint, fsType string, ok bool) {
+// Returns: mountPoint="/mnt/nas share", fsType="nfs4", source="server:/export", ok=true.
+func parseMountinfoLine(line string) (mountPoint, fsType, source string, ok bool) {
 	separator := strings.Index(line, " - ")
 	if separator < 0 {
-		return "", "", false
+		return "", "", "", false
 	}
 	left := strings.Fields(line[:separator])
 	right := strings.Fields(line[separator+len(" - "):])
 	if len(left) < 5 || len(right) < 1 {
-		return "", "", false
+		return "", "", "", false
 	}
-	return mountinfoPathUnescaper.Replace(left[4]), right[0], true
+	if len(right) > 1 {
+		source = mountinfoPathUnescaper.Replace(right[1])
+	}
+	return mountinfoPathUnescaper.Replace(left[4]), right[0], source, true
 }
 
 func pathHasMountPrefix(path, mountPoint string) bool {
@@ -97,6 +100,13 @@ func pathHasMountPrefix(path, mountPoint string) bool {
 		return true
 	}
 	return strings.HasPrefix(path, mountPoint+"/")
+}
+
+func classifyLinuxMount(fsType, source string) telemetry.MountType {
+	if fsType == "fuse" && linuxNetworkFUSESources[source] {
+		return telemetry.MountTypeNASOther
+	}
+	return classifyLinuxFSType(fsType)
 }
 
 func classifyLinuxFSType(fsType string) telemetry.MountType {
@@ -107,7 +117,24 @@ func classifyLinuxFSType(fsType string) telemetry.MountType {
 		return telemetry.MountTypeNASNFS
 	case fsType == "cifs" || strings.HasPrefix(fsType, "smb"):
 		return telemetry.MountTypeNASSMB
+	case linuxOtherNetworkFSTypes[fsType]:
+		return telemetry.MountTypeNASOther
+	case linuxVMShareFSTypes[fsType]:
+		return telemetry.MountTypeVMShare
 	default:
 		return telemetry.MountTypeLocalDisk
 	}
 }
+
+// FUSE types are listed individually because local FUSE mounts (fuseblk, fuse-overlayfs) are common.
+var linuxOtherNetworkFSTypes = map[string]bool{
+	"lustre": true, "ceph": true, "glusterfs": true, "beegfs": true, "gpfs": true, "afs": true,
+	"fuse.blobfuse": true, "fuse.blobfuse2": true, "fuse.sshfs": true, "fuse.s3fs": true,
+	"fuse.gcsfuse": true, "fuse.rclone": true, "fuse.glusterfs": true, "fuse.ceph-fuse": true,
+}
+
+// Folders shared with the VM host: WSL drives and other 9p or virtiofs shares, VirtualBox, and VMware.
+var linuxVMShareFSTypes = map[string]bool{"9p": true, "virtiofs": true, "vboxsf": true, "fuse.vmhgfs-fuse": true}
+
+// BlobFuse sets fsname without a subtype, so libfuse mounts it as plain "fuse" with this source.
+var linuxNetworkFUSESources = map[string]bool{"blobfuse": true, "blobfuse2": true}

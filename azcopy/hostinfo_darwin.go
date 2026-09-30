@@ -23,6 +23,8 @@
 package azcopy
 
 import (
+	"path/filepath"
+
 	hostinfointernal "github.com/Azure/azure-storage-azcopy/v10/azcopy/internal/hostinfo"
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"golang.org/x/sys/unix"
@@ -47,13 +49,19 @@ func totalMemoryGB() int {
 }
 
 // localMountType classifies the filesystem backing a local macOS path as
-// "nas-nfs", "nas-smb", or "local-disk" using statfs(2)'s f_fstypename. Returns
-// "" when statfs fails (caller falls back to "local-disk").
+// "nas-nfs", "nas-smb", "nas-other" (any other non-local mount, such as AFP,
+// WebDAV, or macFUSE), or "local-disk" using statfs(2). Returns "" when statfs
+// fails (caller falls back to "local-disk").
 func localMountType(path string) telemetry.MountType {
+	// statfs follows symlinks, so a symlink is classified by the directory that contains it.
+	var link unix.Stat_t
+	if unix.Lstat(path, &link) == nil && link.Mode&unix.S_IFMT == unix.S_IFLNK {
+		path = filepath.Dir(path)
+	}
 	var st unix.Statfs_t
 	if err := unix.Statfs(path, &st); err != nil {
 		return ""
 	}
 	fsType := unix.ByteSliceToString(st.Fstypename[:])
-	return hostinfointernal.DarwinFSType(fsType)
+	return hostinfointernal.DarwinMountType(fsType, st.Flags&unix.MNT_LOCAL != 0)
 }

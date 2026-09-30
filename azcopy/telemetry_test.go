@@ -72,8 +72,8 @@ func TestSourceMountType(t *testing.T) {
 	a.Equal(telemetry.MountTypeCloudAzure, sourceMountType(common.ELocation.Blob(), ""))
 	a.Equal(telemetry.MountTypeCloudS3, sourceMountType(common.ELocation.S3(), ""))
 	a.Equal(telemetry.MountTypeCloudGCS, sourceMountType(common.ELocation.GCP(), ""))
-	// A local path that cannot be classified falls back to local-disk (never empty).
-	a.Equal(telemetry.MountTypeLocalDisk, sourceMountType(common.ELocation.Local(), "this-path-does-not-exist-xyz"))
+	// A missing path is classified by the mount it would be on, and the temp directory is local.
+	a.Equal(telemetry.MountTypeLocalDisk, sourceMountType(common.ELocation.Local(), filepath.Join(t.TempDir(), "missing")))
 }
 
 func TestMountProbePath(t *testing.T) {

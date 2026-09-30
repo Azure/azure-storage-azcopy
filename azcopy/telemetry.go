@@ -821,7 +821,7 @@ func mountTypeForLocation(loc common.Location) telemetry.MountType {
 
 // sourceMountType refines mountTypeForLocation for local sources by inspecting
 // the OS mount table to distinguish network-attached storage from local disk:
-// "nas-nfs" | "nas-smb" | "local-disk". For remote locations it defers to the
+// "nas-nfs" | "nas-smb" | "nas-other" | "vm-share" | "local-disk". For remote locations it defers to the
 // coarse classification. localPath is ignored for non-local sources.
 func sourceMountType(loc common.Location, localPath string) telemetry.MountType {
 	if loc != common.ELocation.Local() {
