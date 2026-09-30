@@ -35,11 +35,11 @@ func runHostHardwarePlatformChecks(t *testing.T) {
 	var minimumPassed int
 	switch runtime.GOOS {
 	case "linux":
-		pattern = "^TestHostHardwareLinux"
-		minimumPassed = 7
+		pattern = "^(TestHostHardwareLinux|TestAzurePublicCloudAssetTagFile)"
+		minimumPassed = 8
 	case "windows":
-		pattern = "^TestHostHardwareWindows"
-		minimumPassed = 4
+		pattern = "^(TestHostHardwareWindows|TestAzurePublicCloudFromFirmware)"
+		minimumPassed = 5
 	case "darwin":
 		pattern = "^TestHostHardwareDarwin"
 		minimumPassed = 4
@@ -94,6 +94,7 @@ func (*HostHardwareSuite) Scenario_NativeProbes(svm *ScenarioVariationManager) {
 	if runtime.GOOS == "windows" || runtime.GOARCH == "amd64" || runtime.GOARCH == "386" {
 		svm.Assert("CPU model should be available on supported E2E agents", Empty{Invert: true}, hardware.CPUModel)
 	}
+	svm.Log("Azure public-cloud VM detected by local firmware: %t", azcopy.ProbeAzureVM())
 
 	root := svm.t.TempDir()
 	svm.Assert("temporary directory should be on a local disk", Equal{}, "local-disk", azcopy.LocalMountType(root))
