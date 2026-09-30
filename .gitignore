@@ -344,6 +344,7 @@ venv*
 
 #json create files
 *.json
+!/ev2/telemetry/ServiceGroupRoot/**/*.json
 
 # go files
 *.mod

@@ -4,7 +4,7 @@
 // (the only supported type now that classic App Insights is retired) bound to a
 // dedicated Log Analytics workspace. Two environments are expected:
 //   - test : fed only by the E2E pipeline (synthetic telemetry)
-//   - prod : fed by released AzCopy builds (real telemetry)
+//   - prod : fed by released AzCopy builds; deployed through Ev2 (ev2/telemetry)
 
 @description('Deployment environment. Drives resource names and is stamped as a tag.')
 @allowed([
@@ -30,18 +30,19 @@ param dailyQuotaGb string = '10'
 @description('Optional object ID of the E2E workload identity. When provided, grants only the read/query roles required by telemetry validation.')
 param e2eQueryPrincipalId string = ''
 
+@description('Additional tags required by the target subscription, for example policy-enforced tags.')
+param extraTags object = {}
+
 var workspaceName = '${baseName}-${environmentName}-law'
 var appInsightsName = '${baseName}-${environmentName}-ai'
 var logAnalyticsReaderRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '73c42c96-874c-492b-b04d-ab87d138a893')
 var readerRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
 
-var commonTags = {
+var commonTags = union(extraTags, {
   service: 'azcopy-telemetry'
   environment: environmentName
   managedBy: 'bicep'
-  Mover: 'Dev'
-  team: 'Discovery'
-}
+})
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: workspaceName
