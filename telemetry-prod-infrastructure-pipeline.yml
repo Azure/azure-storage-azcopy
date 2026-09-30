@@ -74,6 +74,8 @@ extends:
         displayName: 'PROD: Managed SDP'
         dependsOn: Build_Ev2_Artifacts
         templateContext:
+          # Same Approval Service configuration as the Storage Mover RP (ob_release_servicetreeid).
+          serviceTreeId: c88bf702-9a3e-4962-a15d-dbc3c3a8f42f
           cloud: Public
           isProduction: true
           approval:
@@ -91,7 +93,6 @@ extends:
                 serviceRootPath: ServiceGroupRoot
                 rolloutSpecPath: RolloutSpec.json
                 stageMapName: Microsoft.Azure.SDP.Standard
-                # Service presence for this service group is only eastus.
-                select: regions(*)
+                select: regions(eastus)
                 skipRegistrationIfExists: true
                 validateOnly: ${{ parameters.validateOnly }}
