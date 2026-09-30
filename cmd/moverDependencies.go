@@ -242,6 +242,10 @@ func (raw *rawSyncCmdArgs) SetFollowSymlinks(followSymlinks bool) {
 	raw.followSymlinks = followSymlinks
 }
 
+func (raw *rawSyncCmdArgs) SetPreserveSymlinks(preserveSymlinks bool) {
+	raw.preserveSymlinks = preserveSymlinks
+}
+
 func (raw *rawSyncCmdArgs) SetMd5ValidationOption(md5ValidationOption string) {
 	raw.md5ValidationOption = md5ValidationOption
 }
@@ -325,7 +329,12 @@ type RawMoverSyncCmdArgs struct {
 	FromTo                  string
 	Recursive               bool
 	ExcludeRegex            string
+	// FollowSymlinks and PreserveSymlinks mirror the two bools on the internal
+	// rawSyncCmdArgs. They are mutually exclusive: setting both to true is rejected
+	// by the underlying cook() -> SymlinkHandlingType.Determine path. Leave both
+	// false to skip symlinks entirely.
 	FollowSymlinks          bool
+	PreserveSymlinks        bool
 	DeleteDestination       string
 	PreservePOSIXProperties bool
 	PreservePermissions     bool
@@ -367,6 +376,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		recursive:               args.Recursive,
 		excludeRegex:            args.ExcludeRegex,
 		followSymlinks:          args.FollowSymlinks,
+		preserveSymlinks:        args.PreserveSymlinks,
 		deleteDestination:       args.DeleteDestination,
 		preservePOSIXProperties: args.PreservePOSIXProperties,
 		preservePermissions:     args.PreservePermissions,
