@@ -36,6 +36,11 @@ extends:
   template: v1/1ES.Official.PipelineTemplate.yml@1esPipelines
   parameters:
     serviceTreeId: c88bf702-9a3e-4962-a15d-dbc3c3a8f42f
+    # Default for jobs without their own pool (the Ev2 release job); 1ES PT rejects Microsoft-hosted agents.
+    pool:
+      name: azcopy-pool
+      image: windows2022-1espt
+      os: windows
     featureFlags:
       # Same as build-1es-pipeline.yaml; az bicep downloads the Bicep CLI on first use.
       disableNetworkIsolation: true
