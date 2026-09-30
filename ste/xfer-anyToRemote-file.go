@@ -217,11 +217,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 			srcRQ := srcURL.Query()
 
 			if len(srcRQ["sharesnapshot"]) == 0 && len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 {
-				err_msg := "Transfer source and destination are the same, which would cause data loss. Aborting transfer."
-				jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
-				jptm.SetErrorMessage(err_msg)
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+				failTransferBeforeStart(jptm, info, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", nil)
 				return
 			}
 		}
@@ -263,10 +259,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	// step 2a. Create sender
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
-		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
-		jptm.SetErrorMessage(err.Error())
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.ReportTransferDone()
+		failTransferBeforeStart(jptm, info, err.Error(), err)
 		return
 	}
 
@@ -285,16 +278,14 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 
 	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
-		jptm.SetErrorMessage(err.Error())
 		if errors.Is(err, common.ErrS3ArchiveObjectNotRestored) {
+			jptm.SetErrorMessage(err.Error())
 			jptm.LogAtLevelForCurrentTransfer(common.LogWarning, err.Error())
 			jptm.SetStatus(common.ETransferStatus.SkippedArchiveNotRestored())
 			jptm.ReportTransferDone()
 			return
 		}
-		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.ReportTransferDone()
+		failTransferBeforeStart(jptm, info, err.Error(), err)
 		return
 	}
 
@@ -314,11 +305,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		exists, dstLmt, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
-			err_msg := "Could not check destination file existence. " + existenceErr.Error()
-			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
-			jptm.SetErrorMessage(err_msg)
-			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
-			jptm.ReportTransferDone()
+			// is a real failure, not just a SkippedFileAlreadyExists, in this case
+			failTransferBeforeStart(jptm, info, "Could not check destination file existence. "+existenceErr.Error(), existenceErr)
 			return
 		}
 		if exists {
@@ -361,10 +349,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 				suffix = " See --" + common.BackupModeFlagName + " flag if you need to read all files regardless of their permissions"
 			}
 			err_msg := "Couldn't open source. " + err.Error() + suffix
-			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
-			jptm.SetErrorMessage(err_msg)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
+			failTransferBeforeStart(jptm, info, err_msg, err)
 			return
 		}
 		defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
@@ -381,11 +366,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		!useSourceChangeAccessCondition(jptm) {
 		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
-			err_msg := "Couldn't get source's last modified time-" + err.Error()
-			jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
-			jptm.SetErrorMessage(err_msg)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
+			failTransferBeforeStart(jptm, info, "Couldn't get source's last modified time-"+err.Error(), common.NewSourceError(err))
 			return
 		}
 
@@ -407,19 +388,15 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 					lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 					lmt.Unix(),
 					lmt.Sub(scheduledTime).Seconds())
-				jptm.LogSendError(info.Source, info.Destination, errorMsg, 0)
-				jptm.SetErrorMessage(errorMsg)
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+				failTransferBeforeStart(jptm, info, errorMsg,
+					common.NewCodedError(common.TransferErrorCodeSourceModifiedBeforeTransfer, errorMsg))
 				return
 			}
 		} else {
 			if !lmt.Equal(jptm.LastModifiedTime()) {
 				err_msg := fmt.Sprintf("File modified since transfer scheduled. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt)
-				jptm.LogSendError(info.Source, info.Destination, err_msg, 0)
-				jptm.SetErrorMessage(err_msg)
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+				failTransferBeforeStart(jptm, info, err_msg,
+					common.NewCodedError(common.TransferErrorCodeSourceModifiedBeforeTransfer, err_msg))
 				return
 			}
 		}
@@ -432,10 +409,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.LockDestination())
 	err = jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
-		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
-		jptm.SetErrorMessage(err.Error())
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.ReportTransferDone()
+		failTransferBeforeStart(jptm, info, err.Error(), err)
 		return
 	}
 
@@ -686,7 +660,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
+				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", common.NewSourceError(err))
 				return
 			}
 
@@ -710,7 +684,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 						lmt.Unix(),
 						lmt.Sub(scheduledTime).Seconds())
 					jptm.Log(common.LogError, errorMsg)
-					jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+					jptm.FailActiveSend("epilogueWithCleanupSendToRemote",
+						common.NewCodedError(common.TransferErrorCodeSourceModifiedDuringTransfer, "source modified during transfer"))
 				}
 			} else {
 				if !lmt.Equal(jptm.LastModifiedTime()) {
@@ -719,12 +694,14 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 					common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
 					mismatchErrMsg := "source modified during transfer"
+					mismatchErr := common.NewCodedError(common.TransferErrorCodeSourceModifiedDuringTransfer, mismatchErrMsg)
 					if !lmt.IsZero() && lmt.Before(time.Unix(0, 0)) {
 						mismatchErrMsg = fmt.Sprintf("source has an unsupported timestamp (before 1970): %v", lmt)
+						mismatchErr = errors.New(mismatchErrMsg)
 					}
 
 					jptm.Log(common.LogError, fmt.Sprintf("%s. Enumeration %v, current %v", mismatchErrMsg, jptm.LastModifiedTime(), lmt))
-					jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New(mismatchErrMsg))
+					jptm.FailActiveSend("epilogueWithCleanupSendToRemote", mismatchErr)
 				}
 			}
 		}

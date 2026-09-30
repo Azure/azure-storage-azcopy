@@ -433,6 +433,21 @@ type InitResourceTraverserOptions struct {
 	// same storage IOPS budget as the transfer phase. Currently wired for Azure
 	// Files; nil means uncapped scanning (unchanged behavior).
 	ScanPacer common.IOPSPacer
+
+	// ReportListOfFilesEntryErrors, with ListOfFiles and ErrorChannel set,
+	// sends every list entry that cannot be enumerated to ErrorChannel as a
+	// ListEntryErrorInfo instead of skipping it with a log line. A blob entry
+	// whose properties cannot be read for any reason other than not found is
+	// such an error, rather than being treated as a virtual directory. The
+	// reported error wraps the underlying error, so a storage service error
+	// can be recovered with errors.As. Used by XDM.
+	ReportListOfFilesEntryErrors bool
+
+	// FailOnSingleBlobLookupError makes a blob traverser return an error when
+	// reading the properties of the blob it points at fails for any reason
+	// other than not found. Set by the list traverser for its entries when
+	// ReportListOfFilesEntryErrors is on.
+	FailOnSingleBlobLookupError bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers

@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -34,9 +35,49 @@ type listTraverser struct {
 	listReader              <-chan string
 	recursive               bool
 	childTraverserGenerator childTraverserGenerator
+
+	// When set, entries that cannot be enumerated are sent here instead of
+	// being skipped with a log line; see
+	// InitResourceTraverserOptions.ReportListOfFilesEntryErrors.
+	entryErrorChannel chan<- TraverserErrorItemInfo
+	location          common.Location
+	ctx               context.Context
 }
 
 type childTraverserGenerator func(childPath string) (ResourceTraverser, error)
+
+// ListEntryErrorInfo reports a list-of-files entry that could not be
+// enumerated. Err wraps the underlying error.
+type ListEntryErrorInfo struct {
+	EntryPath string
+	Err       error
+	Loc       common.Location
+}
+
+var _ TraverserErrorItemInfo = ListEntryErrorInfo{}
+
+func (e ListEntryErrorInfo) FullPath() string            { return e.EntryPath }
+func (e ListEntryErrorInfo) Name() string                { return e.EntryPath }
+func (e ListEntryErrorInfo) Size() int64                 { return 0 }
+func (e ListEntryErrorInfo) LastModifiedTime() time.Time { return time.Time{} }
+func (e ListEntryErrorInfo) IsDir() bool                 { return false }
+func (e ListEntryErrorInfo) ErrorMessage() error         { return e.Err }
+func (e ListEntryErrorInfo) Location() common.Location   { return e.Loc }
+
+// skipEntry handles an entry that could not be enumerated: reported on
+// entryErrorChannel when set, otherwise skipped with logMsg. The send blocks
+// so no failure is dropped; the consumer must drain the channel until
+// Traverse returns.
+func (l *listTraverser) skipEntry(childPath string, err error, logMsg string) {
+	if l.entryErrorChannel == nil {
+		glcm.Info(logMsg)
+		return
+	}
+	select {
+	case l.entryErrorChannel <- ListEntryErrorInfo{EntryPath: childPath, Err: err, Loc: l.location}:
+	case <-l.ctx.Done():
+	}
+}
 
 // There is no impact to a list traverser returning false because a list traverser points directly to relative paths.
 func (l *listTraverser) IsDirectory(bool) (bool, error) {
@@ -56,7 +97,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		//   2. a directory entity that needs to be scanned
 		childTraverser, err := l.childTraverserGenerator(childPath)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
+			l.skipEntry(childPath, err, fmt.Sprintf("Skipping %s due to error %s", childPath, err))
 			continue
 		}
 		// listTraverser will only ever execute on the source
@@ -82,7 +123,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
+			l.skipEntry(childPath, err, fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
 		}
 	}
 
@@ -95,6 +136,11 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 
 	if listChan == nil {
 		panic("list of files channel must not be nil")
+	}
+
+	reportEntryErrors := options.ReportListOfFilesEntryErrors && options.ErrorChannel != nil
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
@@ -130,6 +176,8 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			GetPropertiesInFrontend: options.GetPropertiesInFrontend,
 			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
 			PreserveBlobTags:        options.PreserveBlobTags,
+
+			FailOnSingleBlobLookupError: reportEntryErrors,
 		})
 		if err != nil {
 			return nil, err
@@ -137,9 +185,15 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 		return traverser, nil
 	}
 
-	return &listTraverser{
+	t := &listTraverser{
 		listReader:              listChan,
 		recursive:               recursive,
 		childTraverserGenerator: traverserGenerator,
+		location:                resourceLocation,
+		ctx:                     ctx,
 	}
+	if reportEntryErrors {
+		t.entryErrorChannel = options.ErrorChannel
+	}
+	return t
 }

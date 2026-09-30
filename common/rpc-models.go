@@ -317,6 +317,20 @@ type TransferDetail struct {
 	TransferSize       uint64
 	ErrorCode          int32  `json:",string"`
 	ErrorMessage       string `json:",string"`
+
+	// ServiceErrorCode is the storage service error code (x-ms-error-code)
+	// of the request that failed the transfer, or a TransferErrorCode*
+	// value when AzCopy itself failed it. Empty when unknown. Only set on
+	// failures reported live by the job's status manager, not on transfers
+	// rebuilt from plan files.
+	ServiceErrorCode string `json:",omitempty"`
+
+	// SourceErrorCode is the error code the source reported when the
+	// failure came from the source: x-ms-copy-source-error-code of a
+	// server-side copy that failed with CannotVerifyCopySource, or the
+	// error code of a failed request made directly to the source. Same
+	// availability as ServiceErrorCode.
+	SourceErrorCode string `json:",omitempty"`
 }
 
 type CancelPauseResumeResponse struct {

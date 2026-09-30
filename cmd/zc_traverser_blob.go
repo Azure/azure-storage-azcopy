@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -72,6 +73,9 @@ type blobTraverser struct {
 
 	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
 	isSyncDestination bool
+
+	// failOnLookupError: see InitResourceTraverserOptions.FailOnSingleBlobLookupError.
+	failOnLookupError bool
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
@@ -292,6 +296,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	blobProperties, isBlob, isDirStub, blobName, err := t.getPropertiesIfSingleBlob()
 
 	var respErr *azcore.ResponseError
+	if err != nil && t.failOnLookupError &&
+		!(errors.As(err, &respErr) && respErr.StatusCode == http.StatusNotFound) {
+		return fmt.Errorf("cannot get properties of blob %s: %w", blobURLParts.BlobName, err)
+	}
+
 	if errors.As(err, &respErr) {
 		errorBlobInfo := ErrorBlobInfo{
 			BlobPath: blobURLParts.BlobName,
@@ -781,6 +790,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:          opts.IsSyncDestination,
+		failOnLookupError:           opts.FailOnSingleBlobLookupError,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive

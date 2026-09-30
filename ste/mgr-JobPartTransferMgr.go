@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,6 +51,7 @@ type IJobPartTransferMgr interface {
 	TransferStatusIgnoringCancellation() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
+	SetServiceErrorCodes(serviceCode, sourceCode string)
 	SetErrorMessage(errorMessage string)
 	SetNumberOfChunks(numChunks uint32)
 	SetActionAfterLastChunk(f func())
@@ -236,6 +238,13 @@ type jobPartTransferMgr struct {
 	transferInfo *TransferInfo
 
 	actionAfterLastChunk func()
+
+	// Error codes of the failure that ended the transfer (see
+	// SetServiceErrorCodes). Kept in memory only; the plan file stores just
+	// the HTTP status and message.
+	errorCodesLock   sync.Mutex
+	serviceErrorCode string
+	sourceErrorCode  string
 
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
@@ -705,6 +714,24 @@ func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
 	jptm.jobPartPlanTransfer.SetErrorCode(errorCode, false)
 }
 
+// SetServiceErrorCodes records the error codes of the failure that ended the
+// transfer; see common.TransferDetail. Like SetErrorCode, the first non-empty
+// codes set are kept.
+func (jptm *jobPartTransferMgr) SetServiceErrorCodes(serviceCode, sourceCode string) {
+	jptm.errorCodesLock.Lock()
+	defer jptm.errorCodesLock.Unlock()
+	if jptm.serviceErrorCode == "" && jptm.sourceErrorCode == "" {
+		jptm.serviceErrorCode = serviceCode
+		jptm.sourceErrorCode = sourceCode
+	}
+}
+
+func (jptm *jobPartTransferMgr) serviceErrorCodes() (serviceCode, sourceCode string) {
+	jptm.errorCodesLock.Lock()
+	defer jptm.errorCodesLock.Unlock()
+	return jptm.serviceErrorCode, jptm.sourceErrorCode
+}
+
 // ErrorMessage gets the error message of transfer for given job.
 func (jptm *jobPartTransferMgr) ErrorMessage() string {
 	return jptm.jobPartPlanTransfer.ErrorMessage()
@@ -875,6 +902,8 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
+		_, serviceErrorCode, sourceErrorCode := common.TransferFailureCodes(err)
+		jptm.SetServiceErrorCodes(serviceErrorCode, sourceErrorCode)
 		jptm.SetErrorMessage(fullMsg)
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
@@ -1022,6 +1051,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	}
 
 	// Update Status Manager
+	serviceErrorCode, sourceErrorCode := jptm.serviceErrorCodes()
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
@@ -1029,6 +1059,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
 		ErrorMessage:       jptm.ErrorMessage(),
+		ServiceErrorCode:   serviceErrorCode,
+		SourceErrorCode:    sourceErrorCode,
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
