@@ -706,6 +706,8 @@ type SyncEnumerator struct {
 	// there is flexibility in which side we scan first, it could be either the source or the destination
 	primaryTraverser   ResourceTraverser
 	secondaryTraverser ResourceTraverser
+	primaryObserver    ObjectProcessor
+	secondaryObserver  ObjectProcessor
 
 	// the results from the primary traverser would be stored here
 	objectIndexer *ObjectIndexer
@@ -724,13 +726,33 @@ type SyncEnumerator struct {
 
 func NewSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *ObjectIndexer,
 	filters []ObjectFilter, comparator ObjectProcessor, finalize func() error) *SyncEnumerator {
+	return NewSyncEnumeratorWithObservers(primaryTraverser, secondaryTraverser, indexer, filters, comparator, finalize, nil, nil)
+}
+
+func NewSyncEnumeratorWithObservers(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *ObjectIndexer,
+	filters []ObjectFilter, comparator ObjectProcessor, finalize func() error,
+	primaryObserver, secondaryObserver ObjectProcessor) *SyncEnumerator {
 	return &SyncEnumerator{
 		primaryTraverser:   primaryTraverser,
 		secondaryTraverser: secondaryTraverser,
+		primaryObserver:    primaryObserver,
+		secondaryObserver:  secondaryObserver,
 		objectIndexer:      indexer,
 		filters:            filters,
 		objectComparator:   comparator,
 		finalize:           finalize,
+	}
+}
+
+func observeThen(observer, processor ObjectProcessor) ObjectProcessor {
+	if observer == nil {
+		return processor
+	}
+	return func(object StoredObject) error {
+		if err := observer(object); err != nil {
+			return err
+		}
+		return processor(object)
 	}
 }
 
@@ -748,7 +770,7 @@ func (e *SyncEnumerator) Enumerate() (err error) {
 	}
 
 	// enumerate the primary resource and build lookup map
-	err = e.primaryTraverser.Traverse(NoPreProccessor, e.objectIndexer.Store, e.filters)
+	err = e.primaryTraverser.Traverse(NoPreProccessor, observeThen(e.primaryObserver, e.objectIndexer.Store), e.filters)
 	handleAcceptableErrors()
 	if err != nil {
 		return err
@@ -758,7 +780,7 @@ func (e *SyncEnumerator) Enumerate() (err error) {
 	// they will be passed to the object comparator
 	// which can process given objects based on what's already indexed
 	// note: transferring can start while scanning is ongoing
-	err = e.secondaryTraverser.Traverse(NoPreProccessor, e.objectComparator, e.filters)
+	err = e.secondaryTraverser.Traverse(NoPreProccessor, observeThen(e.secondaryObserver, e.objectComparator), e.filters)
 	handleAcceptableErrors()
 	if err != nil {
 		return
