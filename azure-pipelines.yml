@@ -241,6 +241,12 @@ jobs:
 
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
+          directory: 'telemetry'
+          coverage_name: 'telemetry'
+          isMutexSet: variables['isMutexSet']
+
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
           directory: 'traverser'
           coverage_name: 'traverser'
           isMutexSet: variables['isMutexSet']
