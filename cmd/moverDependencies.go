@@ -920,6 +920,7 @@ func OpenScanningLogger() {
 func CloseScanningLogger() {
 	if azcopyScanningLogger != nil {
 		azcopyScanningLogger.CloseLog()
+		azcopyScanningLogger = nil
 	}
 }
 

@@ -252,6 +252,11 @@ type jobsAdmin struct {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
+	return NewJobPartPlanFileName(jobID, partNumber)
+}
+
+// NewJobPartPlanFileName does not require an initialized jobs administrator.
+func NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
 	return ste.JobPartPlanFileName(fmt.Sprintf(ste.JobPartPlanFileNameFormat, jobID.String(), partNumber, ste.DataSchemaVersion))
 }
 

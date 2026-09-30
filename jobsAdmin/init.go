@@ -23,9 +23,11 @@ package jobsAdmin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	//"strings"
 	"sync"
 	"time"
@@ -98,10 +100,62 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 var ExecuteNewCopyJobPartOrder =
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+func(order common.CopyJobPartOrderRequest) (response common.CopyJobPartOrderResponse) {
+	planOnly := order.PlanOnly
+	var planErr error
+	if planOnly != nil {
+		defer func() {
+			// Native Create retains its panic contract for validation/write errors.
+			if recovered := recover(); recovered != nil {
+				if cause, ok := recovered.(error); ok {
+					planErr = fmt.Errorf("native plan creation: %w", cause)
+				} else {
+					planErr = fmt.Errorf("native plan creation: %v", recovered)
+				}
+			}
+			if planErr != nil {
+				if planOnly.ReportError != nil {
+					planOnly.ReportError(planErr)
+				}
+				response = common.CopyJobPartOrderResponse{ErrorMsg: common.CopyJobPartOrderErrorType(planErr.Error())}
+			}
+		}()
+		if planOnly.Context == nil || !filepath.IsAbs(planOnly.Directory) || common.AzcopyJobPlanFolder != "" {
+			planErr = errors.New("planner-only mode requires a context, absolute directory and unset AzcopyJobPlanFolder")
+			return
+		}
+		if planErr = context.Cause(planOnly.Context); planErr != nil {
+			return
+		}
+		if len(order.Transfers.List) == 0 {
+			return common.CopyJobPartOrderResponse{JobStarted: true}
+		}
+		if order.PartNum == math.MaxUint32 {
+			planErr = errors.New("planner-only part number overflow")
+			return
+		}
+	} else if JobsAdmin == nil {
+		return common.CopyJobPartOrderResponse{ErrorMsg: "STE jobs administrator is not initialized"}
+	}
 	// Get the file name for this Job Part's Plan
-	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                                                  // Convert the order to a plan file
+	jppfn := NewJobPartPlanFileName(order.JobID, order.PartNum)
+	if planOnly != nil {
+		jppfn = ste.JobPartPlanFileName(filepath.Join(planOnly.Directory, string(jppfn)))
+	}
+	createErr := jppfn.Create(order) // Both modes use the same native writer.
+	if planOnly != nil {
+		planErr = createErr
+		if planErr == nil && planOnly.OnPartCreated != nil {
+			planErr = planOnly.OnPartCreated(order.Transfers)
+		}
+		if planErr == nil {
+			planErr = context.Cause(planOnly.Context)
+		}
+		if planErr != nil {
+			return
+		}
+		return common.CopyJobPartOrderResponse{JobStarted: true}
+	}
 	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 	JobsAdmin.RegisterStatsMonitorIfNotDone()
 

@@ -41,6 +41,10 @@ type SyncEnumeratorOptions struct {
 
 	// SyncOrchOptions contains options for the sync orchestrator.
 	SyncOrchOptions *SyncOrchestratorOptions
+
+	// Nil retains normal fused execution through ExecuteNewCopyJobPartOrder.
+	PlanOnly        *common.PlanOnlyOptions
+	MaxBytesPerPart uint64 // Zero retains existing count-only batching.
 }
 
 func NewSyncDefaultEnumeratorOptions() *SyncEnumeratorOptions {
@@ -430,6 +434,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
+	copyJobTemplate.PlanOnly = enumeratorOptions.PlanOnly
+	transferScheduler.maxBytesPerPart = enumeratorOptions.MaxBytesPerPart
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
@@ -534,6 +540,7 @@ func GetSyncEnumeratorWithDestComparator(
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 	}
+	reportSyncDeletionErrors(destinationCleaner, enumeratorOptions.PlanOnly)
 	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
 	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobFSBlob() || cca.fromTo == common.EFromTo.FileFile()) {
@@ -608,6 +615,7 @@ func GetSyncEnumeratorWithSrcComparator(
 			if err != nil {
 				return err
 			}
+			reportSyncDeletionErrors(deleter, enumeratorOptions.PlanOnly)
 			deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
 		default:
 			deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
@@ -632,4 +640,18 @@ func GetSyncEnumeratorWithSrcComparator(
 	}
 
 	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
+}
+
+func reportSyncDeletionErrors(processor *interactiveDeleteProcessor, planOnly *common.PlanOnlyOptions) {
+	if planOnly == nil || planOnly.ReportError == nil {
+		return
+	}
+	deleter := processor.deleter
+	processor.deleter = func(object StoredObject) error {
+		err := deleter(object)
+		if err != nil {
+			planOnly.ReportError(err)
+		}
+		return err
+	}
 }
