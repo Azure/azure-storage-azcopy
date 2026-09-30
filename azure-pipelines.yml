@@ -204,6 +204,12 @@ jobs:
 
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
+          directory: 'azcopy/internal/hostinfo'
+          coverage_name: 'hostinfo'
+          isMutexSet: variables['isMutexSet']
+
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
           directory: 'cmd'
           coverage_name: 'cmd'
           isMutexSet: variables['isMutexSet']
