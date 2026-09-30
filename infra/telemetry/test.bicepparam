@@ -9,3 +9,8 @@ param retentionInDays = 90
 param dailyQuotaGb = '0.1'
 // Azure.azure-storage-azcopy pipeline workload identity.
 param e2eQueryPrincipalId = '28a5f214-22ad-42fc-833f-019f71f9bf60'
+// Mover=Dev is enforced by a Modify policy on the Corp subscription.
+param extraTags = {
+  Mover: 'Dev'
+  team: 'Discovery'
+}

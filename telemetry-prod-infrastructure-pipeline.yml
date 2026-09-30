@@ -1,0 +1,97 @@
+# Deploys the PROD AzCopy telemetry backend (Application Insights + Log Analytics)
+# through Ev2 Managed SDP. Test resources are deployed separately; see infra/telemetry.
+trigger: none
+pr: none
+
+parameters:
+  - name: validateOnly
+    displayName: 'Ev2 validation-only rollout (no resource changes)'
+    type: boolean
+    default: true
+  - name: rolloutType
+    displayName: 'SDP rollout type'
+    type: string
+    default: normal
+    values:
+      - normal
+      - emergency
+      - globaloutage
+  - name: managedValidationOverrideDuration
+    displayName: 'Managed validation override duration (ISO 8601)'
+    type: string
+    default: PT24H
+  - name: icmIncidentId
+    displayName: 'IcM incident ID (required for globaloutage)'
+    type: number
+    default: 0
+
+resources:
+  repositories:
+    - repository: 1esPipelines
+      type: git
+      name: 1ESPipelineTemplates/1ESPipelineTemplates
+      ref: refs/tags/release
+
+extends:
+  template: v1/1ES.Official.PipelineTemplate.yml@1esPipelines
+  parameters:
+    serviceTreeId: c88bf702-9a3e-4962-a15d-dbc3c3a8f42f
+    featureFlags:
+      # Same as build-1es-pipeline.yaml; az bicep downloads the Bicep CLI on first use.
+      disableNetworkIsolation: true
+    sdp:
+      ev2ManagedSdpRolloutConfig:
+        rolloutType: ${{ parameters.rolloutType }}
+        managedValidationOverrideDuration: ${{ parameters.managedValidationOverrideDuration }}
+        icmIncidentId: ${{ parameters.icmIncidentId }}
+    sdl:
+      sourceAnalysisPool:
+        name: azcopy-pool
+        image: windows2022-1espt
+        os: windows
+    stages:
+      - stage: Build_Ev2_Artifacts
+        displayName: 'Build Ev2 service artifacts'
+        jobs:
+          - job: Package
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/ev2
+                  artifactName: azcopy-telemetry-ev2
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+
+              - pwsh: ./ev2/telemetry/package.ps1 -OutputDirectory '$(Build.ArtifactStagingDirectory)/ev2' -Version '$(Build.BuildNumber)'
+                displayName: 'Compile Bicep and stage Ev2 service group root'
+
+      - stage: PROD_Managed_SDP
+        displayName: 'PROD: Managed SDP'
+        dependsOn: Build_Ev2_Artifacts
+        templateContext:
+          cloud: Public
+          isProduction: true
+          approval:
+            workflow: approvalService
+        jobs:
+          - job: PROD_Managed_SDP
+            displayName: 'PROD_Managed_SDP'
+            templateContext:
+              type: releaseJob
+              workflow: ev2-ra
+              inputs:
+                - input: pipelineArtifact
+                  artifactName: azcopy-telemetry-ev2
+              ev2:
+                serviceRootPath: ServiceGroupRoot
+                rolloutSpecPath: RolloutSpec.json
+                stageMapName: Microsoft.Azure.SDP.Standard
+                # Service presence for this service group is only eastus.
+                select: regions(*)
+                skipRegistrationIfExists: true
+                validateOnly: ${{ parameters.validateOnly }}

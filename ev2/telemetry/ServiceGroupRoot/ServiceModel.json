@@ -1,0 +1,34 @@
+{
+  "$schema": "https://ev2schema.azure.net/schemas/2020-04-01/RegionAgnosticServiceModel.json",
+  "contentVersion": "1.0.0.0",
+  "serviceMetadata": {
+    "serviceIdentifier": "c88bf702-9a3e-4962-a15d-dbc3c3a8f42f",
+    "serviceGroup": "Microsoft.Azure.Storage.StorageMover.AzCopyTelemetry",
+    "serviceGroupSpecificationPath": "ServiceGroupSpecification.json",
+    "displayName": "AzCopy Telemetry",
+    "environment": "Prod",
+    "tenantId": "33e01921-4d64-4f8c-a055-5bdaffd5e33d"
+  },
+  "subscriptionProvisioning": {
+    "rolloutParametersPath": "Parameters\\SubscriptionProvisioning.RolloutParameters.json"
+  },
+  "serviceResourceGroupDefinitions": [
+    {
+      "name": "AzCopyTelemetry",
+      "subscriptionKey": "AzCopyTelemetryProd",
+      "azureResourceGroupName": "azcopy-telemetry-prod-rg",
+      "serviceResourceDefinitions": [
+        {
+          "name": "AzCopyTelemetryResources",
+          "composedOf": {
+            "arm": {
+              "templatePath": "Templates\\AzCopyTelemetry.Template.json",
+              "parametersPath": "Parameters\\AzCopyTelemetry.Parameters.json",
+              "deploymentLevel": "ResourceGroup"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
