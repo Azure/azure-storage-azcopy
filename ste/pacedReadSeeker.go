@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"io"
+	"sync"
 )
 
 // pacedReadSeeker implements read/seek/close with pacing. (Formerly in file pacer-lite)
@@ -36,6 +37,9 @@ type pacedReadSeeker struct {
 
 	body io.Reader // Seeking is required to support retries
 	p    pacer
+
+	readSeekMu     sync.Mutex
+	seekGeneration uint64
 }
 
 func newPacedRequestBody(ctx context.Context, requestBody io.ReadSeeker, p pacer) io.ReadSeekCloser {
@@ -54,11 +58,21 @@ func newPacedResponseBody(ctx context.Context, responseBody io.ReadCloser, p pac
 
 func (prs *pacedReadSeeker) Read(p []byte) (int, error) {
 	requestedCount := len(p)
+	prs.readSeekMu.Lock()
+	generation := prs.seekGeneration
+	prs.readSeekMu.Unlock()
 
 	// blocks until we are allowed to process the bytes
 	err := prs.p.RequestTrafficAllocation(prs.ctx, int64(requestedCount))
 	if err != nil {
 		return 0, err
+	}
+
+	prs.readSeekMu.Lock()
+	defer prs.readSeekMu.Unlock()
+	if generation != prs.seekGeneration {
+		prs.p.UndoRequest(int64(requestedCount))
+		return 0, io.ErrClosedPipe
 	}
 
 	// process them
@@ -73,7 +87,13 @@ func (prs *pacedReadSeeker) Read(p []byte) (int, error) {
 
 // Seeking is required to support retries
 func (prs *pacedReadSeeker) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
-	return prs.body.(io.ReadSeeker).Seek(offset, whence)
+	prs.readSeekMu.Lock()
+	defer prs.readSeekMu.Unlock()
+	offsetFromStart, err = prs.body.(io.ReadSeeker).Seek(offset, whence)
+	if err == nil {
+		prs.seekGeneration++
+	}
+	return
 }
 
 // pacedReadSeeker supports Close but the underlying stream may not; if it does, Close will close it.
