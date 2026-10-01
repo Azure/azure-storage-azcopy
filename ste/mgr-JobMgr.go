@@ -618,6 +618,7 @@ func (jm *jobMgr) ResetFailedTransfersCount() {
 	summaryResp := jm.ListJobSummary()
 	summaryResp.TransfersFailed = 0
 	summaryResp.FailedTransfers = []common.TransferDetail{}
+	summaryResp.FailedTransferErrorCodeCounts = nil
 	summaryResp.TotalBytesExpected = totalBytesExpected
 
 	jm.ResurrectSummary(summaryResp)
