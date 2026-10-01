@@ -141,15 +141,15 @@ type JobDimensions struct {
 	DestType                  string
 	SourceProtocol            string // "local" | "https" | "s3" | "gcs"
 	SourceMountType           string // "nas-smb" | "nas-nfs" | "local-disk" | "cloud-azure" | ...
-	SourceStorageAccount      string
+	SourceStorageAccount      string // public-cloud Azure accounts only; empty elsewhere
 	SourceScope               string // service | container | share | bucket | object-or-prefix | local-* | stream | benchmark
-	SourceEndpointKind        string // "public" | "private-endpoint"; hostname classification only
+	SourceEndpointKind        string // "public" | "private-endpoint" | "unknown"; hostname classification only
 	DestProtocol              string
-	DestStorageAccount        string
+	DestStorageAccount        string // public-cloud Azure accounts only; empty elsewhere
 	DestScope                 string
-	DestEndpointKind          string // "public" | "private-endpoint"
-	SourceCloudType           string // Azure environment: "public" | "gov" | "china" | "germany"; empty for non-Azure
-	DestCloudType             string // Azure environment: "public" | "gov" | "china" | "germany"; empty for non-Azure
+	DestEndpointKind          string // "public" | "private-endpoint" | "unknown"
+	SourceCloudType           string // "public" | "usgov" | "china" | "ussec" | "usnat" | "bleu" | "delos" | "govsg" | "unknown"; empty for non-Azure
+	DestCloudType             string // same values as SourceCloudType
 	SourceAuthMechanism       string // "OAuthToken" | "Anonymous" | "SharedKey" | ...
 	DestAuthMechanism         string // "OAuthToken" | "Anonymous" | "SharedKey" | ...
 	BenchmarkMode             string // upload | download
