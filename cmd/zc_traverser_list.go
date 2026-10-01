@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -46,6 +47,9 @@ type listTraverser struct {
 
 type childTraverserGenerator func(childPath string) (ResourceTraverser, error)
 
+// listEntryWarn logs list entries that matched nothing; replaced in tests.
+var listEntryWarn = WarnStdoutAndScanningLog
+
 // ListEntryErrorInfo reports a list-of-files entry that could not be
 // enumerated. Err wraps the underlying error.
 type ListEntryErrorInfo struct {
@@ -67,7 +71,7 @@ func (e ListEntryErrorInfo) Location() common.Location   { return e.Loc }
 // skipEntry handles an entry that could not be enumerated: reported on
 // entryErrorChannel when set, otherwise skipped with logMsg. The send blocks
 // so no failure is dropped; the consumer must drain the channel until
-// Traverse returns.
+// Traverse returns. It gives up once ctx is canceled.
 func (l *listTraverser) skipEntry(childPath string, err error, logMsg string) {
 	if l.entryErrorChannel == nil {
 		glcm.Info(logMsg)
@@ -84,19 +88,29 @@ func (l *listTraverser) IsDirectory(bool) (bool, error) {
 	return false, nil
 }
 
-// To kill the traverser, close() the channel under it.
+// To kill the traverser, close() the channel under it, or cancel its context,
+// which makes Traverse return the context's error.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
 func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	// read a channel until it closes to get a list of objects
+	var emptyEntries int64
 
 	childPath, ok := <-l.listReader
 	for ; ok; childPath, ok = <-l.listReader {
+		// Stop on cancellation, rather than enumerating (and reporting the
+		// cancellation errors of) every remaining entry.
+		if ctxErr := l.ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 
 		// fetch an appropriate traverser, and go through the child path, which could be
 		//   1. a single entity
 		//   2. a directory entity that needs to be scanned
 		childTraverser, err := l.childTraverserGenerator(childPath)
 		if err != nil {
+			if ctxErr := l.ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			l.skipEntry(childPath, err, fmt.Sprintf("Skipping %s due to error %s", childPath, err))
 			continue
 		}
@@ -121,12 +135,29 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 		preProcessorForThisChild := preprocessor.FollowedBy(childPreProcessor)
 
-		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
+		var found int64
+		countingProcessor := func(object StoredObject) error {
+			atomic.AddInt64(&found, 1)
+			return processor(object)
+		}
+
+		err = childTraverser.Traverse(preProcessorForThisChild, countingProcessor, filters)
 		if err != nil {
+			if ctxErr := l.ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			l.skipEntry(childPath, err, fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
+		} else if l.entryErrorChannel != nil && atomic.LoadInt64(&found) == 0 {
+			// Most likely deleted since the list was made, but a wrong path
+			// (e.g. encoding) looks the same, so leave a trace.
+			emptyEntries++
+			listEntryWarn(fmt.Sprintf("List entry %s matched nothing on the source (not found, or excluded by filters); skipping", childPath))
 		}
 	}
 
+	if emptyEntries > 0 {
+		listEntryWarn(fmt.Sprintf("%d list entries matched nothing on the source and were skipped", emptyEntries))
+	}
 	return nil
 }
 
