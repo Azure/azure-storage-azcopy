@@ -318,24 +318,28 @@ type TransferDetail struct {
 	ErrorCode          int32  `json:",string"`
 	ErrorMessage       string `json:",string"`
 
-	// ExtendedErrorCode is the storage service error code (x-ms-error-code)
-	// of the request that failed the transfer, or a TransferErrorCode*
-	// value when AzCopy itself failed it. Empty when unknown. Only set on
-	// failures reported live by the job's status manager, not on transfers
-	// rebuilt from plan files.
+	// The fields below let callers classify a failure without parsing
+	// ErrorMessage. They are set only on failures reported live, not on
+	// transfers rebuilt from plan files.
+
+	// ExtendedErrorCode is the failed request's x-ms-error-code, or an
+	// AzCopy.* code when AzCopy failed the transfer itself. Needed because
+	// the HTTP status alone is ambiguous (e.g. which 409).
 	ExtendedErrorCode string `json:",omitempty"`
 
-	// S2SSourceStatusCode is the HTTP status the source returned when the failure
-	// came from the source: x-ms-copy-source-status-code of a server-side
-	// copy that failed with CannotVerifyCopySource, or the status of a
-	// failed request made directly to the source. 0 otherwise. Same
-	// availability as ExtendedErrorCode.
+	// FailedRequestTarget is the account the failed request went to, if
+	// known. Needed because a code means different things on each side
+	// (e.g. BlobNotFound on the source vs. the destination).
+	FailedRequestTarget FailedRequestTarget `json:",omitempty"`
+
+	// S2SSourceStatusCode is x-ms-copy-source-status-code from a server-side
+	// copy that failed with CannotVerifyCopySource. Needed because ErrorCode
+	// is the destination's status, not the source's.
 	S2SSourceStatusCode int32 `json:",omitempty"`
 
-	// S2SSourceExtendedErrorCode is the error code the source returned, from the
-	// same response as S2SSourceStatusCode: x-ms-copy-source-error-code of a
-	// server-side copy, or the x-ms-error-code of a direct source request.
-	// Same availability as ExtendedErrorCode.
+	// S2SSourceExtendedErrorCode is x-ms-copy-source-error-code from the same
+	// response. Needed because ExtendedErrorCode only says the copy source
+	// failed, not why.
 	S2SSourceExtendedErrorCode string `json:",omitempty"`
 }
 

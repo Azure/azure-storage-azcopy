@@ -903,7 +903,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
-		jptm.SetTransferErrorCodes(common.TransferFailureCodes(err))
+		jptm.SetTransferErrorCodes(common.TransferFailureCodesFor(err, jptm.Info().Source, jptm.Info().Destination))
 		jptm.SetErrorMessage(fullMsg)
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
@@ -1060,6 +1060,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		ErrorCode:                  jptm.ErrorCode(),
 		ErrorMessage:               jptm.ErrorMessage(),
 		ExtendedErrorCode:          errorCodes.ExtendedErrorCode,
+		FailedRequestTarget:        errorCodes.FailedRequestTarget,
 		S2SSourceStatusCode:        errorCodes.S2SSourceStatusCode,
 		S2SSourceExtendedErrorCode: errorCodes.S2SSourceExtendedErrorCode,
 	})

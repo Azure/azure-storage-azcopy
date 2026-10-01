@@ -9,7 +9,7 @@ import (
 // codes of err, which may be nil, the same way failActiveTransfer does for
 // failures after that point.
 func failTransferBeforeStart(jptm IJobPartTransferMgr, info *TransferInfo, errMsg string, err error) {
-	codes := common.TransferFailureCodes(err)
+	codes := common.TransferFailureCodesFor(err, info.Source, info.Destination)
 	jptm.LogSendError(info.Source, info.Destination, errMsg, int(codes.StatusCode))
 	jptm.SetErrorCode(codes.StatusCode)
 	jptm.SetTransferErrorCodes(codes)
