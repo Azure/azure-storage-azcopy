@@ -144,6 +144,13 @@ func (*mockedLifecycleManager) E2EEnableAwaitAllowOpenFiles(_ bool) {
 	// not implemented in mocked version
 }
 
+// SanitizeLogMessage returns the message unchanged. The real lifecycleMgr strips
+// SAS tokens and other secrets via its log sanitizer; tests don't exercise that
+// path, so a pass-through keeps assertions simple.
+func (*mockedLifecycleManager) SanitizeLogMessage(msg string) string {
+	return msg
+}
+
 func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []string) {
 	close(channel)
 	for line := range channel {
