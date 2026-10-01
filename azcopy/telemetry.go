@@ -24,8 +24,11 @@
 package azcopy
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -33,6 +36,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -43,6 +48,10 @@ const (
 	telemetrySchemaVersion = "1"
 )
 
+// telemetryConnectionString is empty until a later integration layer configures it.
+// AZCOPY_TELEMETRY_CONNECTION_STRING overrides it at runtime.
+const telemetryConnectionString = ""
+
 const (
 	// envTelemetryConnectionString overrides the embedded connection string.
 	envTelemetryConnectionString = "AZCOPY_TELEMETRY_CONNECTION_STRING"
@@ -51,16 +60,159 @@ const (
 	// envE2ETelemetryRunID optionally correlates telemetry emitted by one E2E
 	// pipeline matrix leg. It is unset in normal AzCopy usage.
 	envE2ETelemetryRunID = "AZCOPY_E2E_TELEMETRY_RUN_ID"
-	// The shorter shutdown drain can cancel an in-flight send before this deadline.
+	// The exit flush can cancel a send before this deadline.
 	telemetrySendTimeout = 5 * time.Second
 	// telemetryFlushTimeout is the maximum telemetry may add to process exit.
-	telemetryFlushTimeout    = 4 * time.Second
-	telemetryMaxPendingSends = 4
+	telemetryFlushTimeout = 5 * time.Second
 	// installationIDFileName stores the anonymous, per-install identifier.
 	installationIDFileName         = "installation_id"
 	installationIDRenameRetryDelay = 10 * time.Millisecond
 	installationIDRenameAttempts   = 100
 )
+
+// telemetryAgent owns the optional telemetry reporter and cached resource
+// attributes. Its report and flush methods are no-ops when the agent is nil or disabled.
+type telemetryAgent struct {
+	enabled      bool
+	stopped      atomic.Bool
+	reporter     *telemetry.Reporter
+	resource     telemetry.ResourceAttributes
+	startedSends sync.Map
+	dispatchMu   sync.Mutex
+	pending      map[chan struct{}]context.CancelFunc
+	idle         chan struct{}
+	sendTimeout  time.Duration
+}
+
+// clientTelemetry builds a client's telemetry agent on first use.
+type clientTelemetry struct {
+	enabled bool
+	once    sync.Once
+	agent   atomic.Pointer[telemetryAgent]
+}
+
+// get returns the client's agent; a nil handle yields a disabled agent.
+func (t *clientTelemetry) get() *telemetryAgent {
+	if t == nil {
+		return &telemetryAgent{}
+	}
+	t.once.Do(func() {
+		t.agent.Store(initializeTelemetryAgent(func() *telemetryAgent { return newTelemetryAgent(t.enabled) }))
+	})
+	return t.agent.Load()
+}
+
+func initializeTelemetryAgent(create func() *telemetryAgent) (agent *telemetryAgent) {
+	defer func() {
+		if recover() != nil {
+			common.LogToJobLogWithPrefix("telemetry: disabled for this process after initialization panic", common.LogWarning)
+			agent = &telemetryAgent{}
+		}
+	}()
+	return create()
+}
+
+// FlushTelemetry gives outstanding best-effort telemetry one bounded chance to
+// complete before process exit.
+func (c *Client) FlushTelemetry() {
+	if c.telemetry != nil {
+		c.telemetry.agent.Load().flush(telemetryFlushTimeout)
+	}
+}
+
+func newTelemetryAgent(enabled bool) *telemetryAgent {
+	a := &telemetryAgent{}
+	if !enabled || strings.EqualFold(os.Getenv(envDisableTelemetry), "true") {
+		return a
+	}
+	conn := configuredTelemetryConnectionString(os.Getenv, telemetryConnectionString)
+	if conn == "" {
+		return a
+	}
+	a.reporter = telemetry.NewReporter(telemetry.Config{
+		ConnectionString: conn,
+	})
+	a.resource = buildResourceAttributes()
+	a.enabled = true
+	return a
+}
+
+func configuredTelemetryConnectionString(getenv func(string) string, embedded string) string {
+	conn := strings.TrimSpace(getenv(envTelemetryConnectionString))
+	if conn == "" {
+		conn = strings.TrimSpace(embedded)
+	}
+	if conn == "" || strings.Contains(strings.ToLower(conn), "instrumentationkey=00000000-0000-0000-0000-000000000000") {
+		return ""
+	}
+	return conn
+}
+
+// ReportCommandInvoked emits a single command.invoked telemetry event for the
+// given canonical command path. It is intended for commands that do not emit
+// paired job-attempt start/finish events. It is best-effort and a no-op when
+// telemetry is disabled.
+func (c *Client) ReportCommandInvoked(command, runID string, options telemetry.OptionAttributes) {
+	c.telemetry.get().reportCommand(command, runID, newTelemetryInvocationID(), options)
+}
+
+// reportStarted emits a job.started event asynchronously (best-effort). It never
+// blocks the caller and never surfaces errors to the user.
+func (a *telemetryAgent) reportStarted(dims telemetry.JobDimensions, runID, invocationID string, start time.Time) {
+	if !a.isActive() {
+		return
+	}
+	evt := telemetry.JobStartedEvent{
+		Resource:     a.resource,
+		Dimensions:   dims,
+		JobID:        runID,
+		InvocationID: invocationID,
+		Timestamp:    start,
+	}
+	key := startedSendKey(runID, invocationID)
+	sendComplete := a.dispatch(evt, nil)
+	if sendComplete == nil {
+		return
+	}
+	a.startedSends.Store(key, sendComplete)
+	go func() {
+		<-sendComplete
+		a.startedSends.CompareAndDelete(key, sendComplete)
+	}()
+}
+
+// reportFinished queues job.finished after its matching job.started send. The
+// process-wide flush provides the bounded delivery opportunity before exit.
+func (a *telemetryAgent) reportFinished(evt telemetry.JobFinishedEvent) {
+	if !a.isActive() {
+		return
+	}
+	var startedComplete <-chan struct{}
+	if sendComplete, ok := a.startedSends.LoadAndDelete(startedSendKey(evt.JobID, evt.InvocationID)); ok {
+		startedComplete = sendComplete.(chan struct{})
+	}
+	a.dispatch(evt, startedComplete)
+}
+
+func startedSendKey(jobID, invocationID string) string {
+	return jobID + "\x00" + invocationID
+}
+
+// reportCommand queues a single command.invoked event without delaying command
+// execution. Best-effort; no-op when disabled.
+func (a *telemetryAgent) reportCommand(command, runID, invocationID string, options telemetry.OptionAttributes) {
+	if !a.isActive() {
+		return
+	}
+	a.dispatch(telemetry.CommandInvokedEvent{
+		Resource:     a.resource,
+		Command:      command,
+		Options:      options.Clone(),
+		JobID:        runID,
+		InvocationID: invocationID,
+		Timestamp:    time.Now(),
+	}, nil)
+}
 
 func newTelemetryInvocationID() string {
 	buf := make([]byte, 16)
@@ -69,6 +221,128 @@ func newTelemetryInvocationID() string {
 		return ""
 	}
 	return hex.EncodeToString(buf)
+}
+
+func (a *telemetryAgent) shouldCollectSourceShape() bool {
+	return a.isActive()
+}
+
+func (a *telemetryAgent) isActive() bool {
+	return a != nil && a.enabled && !a.stopped.Load()
+}
+
+func (a *telemetryAgent) stopAfterDeliveryFailure() bool {
+	a.dispatchMu.Lock()
+	defer a.dispatchMu.Unlock()
+	if !a.stopped.CompareAndSwap(false, true) {
+		return false
+	}
+	for _, cancel := range a.pending {
+		cancel()
+	}
+	return true
+}
+
+func (a *telemetryAgent) dispatch(evt telemetry.MetricEvent, waitFor <-chan struct{}) chan struct{} {
+	if !a.isActive() {
+		return nil
+	}
+	a.dispatchMu.Lock()
+	if !a.isActive() {
+		a.dispatchMu.Unlock()
+		return nil
+	}
+	if a.pending == nil {
+		a.pending = make(map[chan struct{}]context.CancelFunc)
+	}
+	if len(a.pending) == 0 {
+		a.idle = make(chan struct{})
+	}
+	timeout := a.sendTimeout
+	if timeout <= 0 {
+		timeout = telemetrySendTimeout
+	}
+	dispatchTimeout := timeout
+	if waitFor != nil {
+		dispatchTimeout += timeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dispatchTimeout)
+	complete := make(chan struct{})
+	a.pending[complete] = cancel
+	a.dispatchMu.Unlock()
+	go func() {
+		defer func() {
+			cancel()
+			a.dispatchMu.Lock()
+			close(complete)
+			delete(a.pending, complete)
+			if len(a.pending) == 0 {
+				close(a.idle)
+			}
+			a.dispatchMu.Unlock()
+		}()
+		if waitFor != nil {
+			select {
+			case <-waitFor:
+			case <-ctx.Done():
+				return
+			}
+		}
+		if ctx.Err() == nil {
+			sendContext, sendCancel := context.WithTimeout(ctx, timeout)
+			defer sendCancel()
+			a.sendSafely(sendContext, evt)
+		}
+	}()
+	return complete
+}
+
+func (a *telemetryAgent) flush(timeout time.Duration) {
+	if a == nil || !a.enabled {
+		return
+	}
+	a.dispatchMu.Lock()
+	if len(a.pending) == 0 {
+		a.dispatchMu.Unlock()
+		return
+	}
+	complete := a.idle
+	a.dispatchMu.Unlock()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-complete:
+	case <-timer.C:
+		a.dispatchMu.Lock()
+		for _, cancel := range a.pending {
+			cancel()
+		}
+		a.dispatchMu.Unlock()
+	}
+}
+
+func (a *telemetryAgent) sendSafely(ctx context.Context, evt telemetry.MetricEvent) {
+	defer func() {
+		if recover() != nil {
+			common.LogToJobLogWithPrefix("telemetry: dropped event after send panic", common.LogWarning)
+		}
+	}()
+	if !a.isActive() || ctx.Err() != nil {
+		return
+	}
+	if err := a.reporter.ReportEvent(ctx, evt); err != nil {
+		// The exit flush or an earlier delivery failure cancelled this send.
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return
+		}
+		if telemetry.IsDeliveryFailure(err) {
+			if a.stopAfterDeliveryFailure() {
+				common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: disabled for this process after delivery failure sending %s: %v", evt.EventName(), err), common.LogWarning)
+			}
+			return
+		}
+		common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: failed to send %s: %v", evt.EventName(), err), common.LogWarning)
+	}
 }
 
 func buildResourceAttributes() telemetry.ResourceAttributes {

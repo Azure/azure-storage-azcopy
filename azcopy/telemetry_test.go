@@ -22,9 +22,12 @@ package azcopy
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -709,6 +712,15 @@ func TestNewTelemetryInvocationID(t *testing.T) {
 	assert.NotEqual(t, first, second)
 }
 
+func TestShouldCollectSourceShape(t *testing.T) {
+	assert.False(t, (*telemetryAgent)(nil).shouldCollectSourceShape())
+	assert.False(t, (&telemetryAgent{}).shouldCollectSourceShape())
+	assert.True(t, (&telemetryAgent{enabled: true}).shouldCollectSourceShape())
+	stopped := &telemetryAgent{enabled: true}
+	stopped.stopped.Store(true)
+	assert.False(t, stopped.shouldCollectSourceShape())
+}
+
 func TestBuildResourceAttributesSchemaVersion(t *testing.T) {
 	t.Setenv(common.EEnvironmentVariable.UserDir().Name, t.TempDir())
 	resource := buildResourceAttributes()
@@ -723,6 +735,257 @@ func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
 
 	t.Setenv(envE2ETelemetryRunID, "   ")
 	assert.Empty(t, buildResourceAttributes().E2ETestRunID)
+}
+
+func TestConfiguredTelemetryConnectionString(t *testing.T) {
+	assert.Empty(t, telemetryConnectionString)
+	noEnv := func(string) string { return "" }
+	assert.Equal(t, telemetryConnectionString, configuredTelemetryConnectionString(noEnv, telemetryConnectionString))
+	assert.Equal(t, telemetryConnectionString, configuredTelemetryConnectionString(func(string) string { return " \t " }, telemetryConnectionString))
+	assert.Empty(t, configuredTelemetryConnectionString(func(string) string {
+		return "InstrumentationKey=00000000-0000-0000-0000-000000000000"
+	}, telemetryConnectionString))
+	assert.Equal(t, "InstrumentationKey=override;IngestionEndpoint=https://example.test/", configuredTelemetryConnectionString(func(string) string {
+		return " InstrumentationKey=override;IngestionEndpoint=https://example.test/ "
+	}, telemetryConnectionString))
+
+	assert.Empty(t, configuredTelemetryConnectionString(noEnv, ""))
+	assert.Empty(t, configuredTelemetryConnectionString(noEnv, "InstrumentationKey=00000000-0000-0000-0000-000000000000"))
+	assert.Equal(t, "InstrumentationKey=build-time", configuredTelemetryConnectionString(noEnv, "InstrumentationKey=build-time"))
+	assert.Equal(t, "InstrumentationKey=runtime", configuredTelemetryConnectionString(func(name string) string {
+		if name == envTelemetryConnectionString {
+			return "InstrumentationKey=runtime"
+		}
+		return ""
+	}, "InstrumentationKey=build-time"))
+}
+
+func TestTelemetryDisabledByDefault(t *testing.T) {
+	t.Setenv(envTelemetryConnectionString, "InstrumentationKey=test;IngestionEndpoint=https://example.test/")
+	t.Setenv(envDisableTelemetry, "false")
+
+	agent := (&clientTelemetry{enabled: ClientOptions{}.EnableTelemetry}).get()
+	assert.False(t, agent.enabled)
+	assert.Nil(t, agent.reporter)
+	assert.Empty(t, agent.resource.InstallationID)
+}
+
+func TestTelemetryEnabledByClientOption(t *testing.T) {
+	t.Setenv(common.EEnvironmentVariable.UserDir().Name, t.TempDir())
+	t.Setenv(envTelemetryConnectionString, "InstrumentationKey=test;IngestionEndpoint=https://example.test/")
+	t.Setenv(envDisableTelemetry, "false")
+
+	agent := (&clientTelemetry{enabled: true}).get()
+	assert.True(t, agent.enabled)
+	assert.NotNil(t, agent.reporter)
+}
+
+func TestTelemetryEmbeddedDefaultHonorsOptOut(t *testing.T) {
+	t.Setenv(envTelemetryConnectionString, "")
+	t.Setenv(envDisableTelemetry, "true")
+	agent := newTelemetryAgent(true)
+	assert.False(t, agent.enabled)
+	assert.Nil(t, agent.reporter)
+	assert.Empty(t, agent.resource.InstallationID)
+
+	t.Setenv(envDisableTelemetry, "false")
+	agent = newTelemetryAgent(false)
+	assert.False(t, agent.enabled)
+	assert.Nil(t, agent.reporter)
+	assert.Empty(t, agent.resource.InstallationID)
+}
+
+func TestTelemetryBuildsUseEmbeddedDefault(t *testing.T) {
+	for _, path := range []string{
+		"../azurePipelineTemplates/build_linux.yml",
+		"../azurePipelineTemplates/build_windows.yml",
+		"../azurePipelineTemplates/build_macos.yml",
+		"../.github/workflows/build_m1.yml",
+	} {
+		contents, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(contents), "go build", path)
+		assert.NotContains(t, string(contents), "azcopy.telemetryConnectionString", path)
+		assert.NotContains(t, string(contents), "AZCOPY_TELEMETRY_CONNECTION_STRING_PROD", path)
+	}
+}
+
+func TestDisabledAgentIsNoop(t *testing.T) {
+	client := &failurePolicyClient{}
+	disabled := failureTestAgent(client)
+	disabled.enabled = false
+	stopped := failureTestAgent(client)
+	stopped.stopped.Store(true)
+	assert.NotPanics(t, func() {
+		for _, agent := range []*telemetryAgent{nil, disabled, stopped} {
+			agent.reportStarted(telemetry.JobDimensions{}, "id", "invocation", time.Now())
+			agent.reportFinished(telemetry.JobFinishedEvent{JobID: "id", InvocationID: "invocation"})
+			agent.reportCommand("list", "id", "invocation", telemetry.OptionAttributes{})
+			agent.flush(time.Second)
+		}
+		var zero Client
+		zero.ReportCommandInvoked("list", "id", telemetry.OptionAttributes{})
+		zero.FlushTelemetry()
+	})
+	assert.Nil(t, disabled.pending)
+	assert.Nil(t, stopped.pending)
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	assert.Empty(t, client.bodies)
+}
+
+type orderedTelemetryClient struct {
+	mu           sync.Mutex
+	eventNames   []string
+	firstEntered chan struct{}
+	releaseFirst chan struct{}
+}
+
+func (c *orderedTelemetryClient) Do(req *http.Request) (*http.Response, error) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	eventName := ""
+	for _, candidate := range []string{"azcopy.job.started", "azcopy.job.finished"} {
+		if strings.Contains(string(body), candidate) {
+			eventName = candidate
+			break
+		}
+	}
+
+	c.mu.Lock()
+	c.eventNames = append(c.eventNames, eventName)
+	callNumber := len(c.eventNames)
+	c.mu.Unlock()
+	if callNumber == 1 {
+		close(c.firstEntered)
+		<-c.releaseFirst
+	}
+
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestFinishedTelemetryWaitsForStartedDelivery(t *testing.T) {
+	client := &orderedTelemetryClient{
+		firstEntered: make(chan struct{}),
+		releaseFirst: make(chan struct{}),
+	}
+	agent := &telemetryAgent{
+		enabled: true,
+		reporter: telemetry.NewReporter(telemetry.Config{
+			ConnectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000001;IngestionEndpoint=https://example.test",
+			HTTPClient:       client,
+		}),
+	}
+	const jobID = "job"
+	const invocationID = "invocation"
+	agent.reportStarted(telemetry.JobDimensions{}, jobID, invocationID, time.Now())
+	<-client.firstEntered
+
+	finishedReturned := make(chan struct{})
+	go func() {
+		agent.reportFinished(telemetry.JobFinishedEvent{
+			JobID:        jobID,
+			InvocationID: invocationID,
+			EndTimestamp: time.Now(),
+		})
+		close(finishedReturned)
+	}()
+	select {
+	case <-finishedReturned:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("reportFinished blocked on telemetry delivery")
+	}
+
+	client.mu.Lock()
+	assert.Equal(t, []string{"azcopy.job.started"}, client.eventNames)
+	client.mu.Unlock()
+
+	close(client.releaseFirst)
+	agent.flush(time.Second)
+
+	client.mu.Lock()
+	assert.Equal(t, []string{"azcopy.job.started", "azcopy.job.finished"}, client.eventNames)
+	client.mu.Unlock()
+}
+
+type blockingTelemetryClient struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (c *blockingTelemetryClient) Do(*http.Request) (*http.Response, error) {
+	c.once.Do(func() { close(c.entered) })
+	<-c.release
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func newBlockingTelemetryAgent(client *blockingTelemetryClient) *telemetryAgent {
+	return &telemetryAgent{
+		enabled: true,
+		reporter: telemetry.NewReporter(telemetry.Config{
+			ConnectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000001;IngestionEndpoint=https://example.test",
+			HTTPClient:       client,
+		}),
+	}
+}
+
+func TestCommandTelemetryDoesNotDelayCommandExecution(t *testing.T) {
+	client := &blockingTelemetryClient{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	agent := newBlockingTelemetryAgent(client)
+
+	commandReturned := make(chan struct{})
+	go func() {
+		agent.reportCommand("list", "job", "invocation", telemetry.OptionAttributes{})
+		close(commandReturned)
+	}()
+	select {
+	case <-commandReturned:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("reportCommand blocked on telemetry delivery")
+	}
+	<-client.entered
+
+	close(client.release)
+	agent.flush(time.Second)
+}
+
+func TestTelemetryFlushHasSingleBoundedExitBudget(t *testing.T) {
+	client := &blockingTelemetryClient{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	agent := newBlockingTelemetryAgent(client)
+	agent.reportStarted(telemetry.JobDimensions{}, "job", "invocation", time.Now())
+	<-client.entered
+	agent.reportFinished(telemetry.JobFinishedEvent{
+		JobID:        "job",
+		InvocationID: "invocation",
+		EndTimestamp: time.Now(),
+	})
+
+	startedAt := time.Now()
+	agent.flush(40 * time.Millisecond)
+	elapsed := time.Since(startedAt)
+	assert.GreaterOrEqual(t, elapsed, 30*time.Millisecond)
+	assert.Less(t, elapsed, 200*time.Millisecond)
+
+	close(client.release)
+	agent.flush(time.Second)
 }
 
 func telemetryResourceForTest() telemetry.ResourceAttributes {
