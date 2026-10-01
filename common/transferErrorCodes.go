@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -40,8 +41,8 @@ func NewCodedError(code, msg string) error {
 }
 
 // SourceError marks an error returned by a request made directly to a
-// transfer's source, so TransferFailureCodes reports its code as the
-// source's.
+// transfer's source, so TransferFailureCodes reports its status and code as
+// the source's.
 type SourceError struct {
 	Err error
 }
@@ -57,30 +58,59 @@ func NewSourceError(err error) error {
 	return &SourceError{Err: err}
 }
 
+// TransferErrorCodes are the codes of the failure that ended a transfer, as
+// reported in the matching TransferDetail fields.
+type TransferErrorCodes struct {
+	// StatusCode is the HTTP status of the failed request; 0 if none.
+	StatusCode int32
+
+	// ExtendedErrorCode is the failed request's x-ms-error-code, or a
+	// TransferErrorCode* value when AzCopy itself failed the transfer.
+	ExtendedErrorCode string
+
+	// S2SStatusCode and S2SExtendedErrorCode are the HTTP status and error
+	// code the source returned, when the failure came from the source.
+	S2SStatusCode        int32
+	S2SExtendedErrorCode string
+}
+
+// IsZero reports whether no codes are set.
+func (c TransferErrorCodes) IsZero() bool {
+	return c == TransferErrorCodes{}
+}
+
 // TransferFailureCodes extracts the HTTP status and error codes of err, as
 // recorded for a failed transfer in TransferDetail. A storage service error
-// yields its status and x-ms-error-code, and a source error code: the copy
-// source's (x-ms-copy-source-error-code) for CannotVerifyCopySource, or the
-// error's own code when err is a SourceError. A CodedError yields its AzCopy
-// code. Anything else, including nil, yields zero values.
-func TransferFailureCodes(err error) (httpStatus int32, serviceCode, sourceCode string) {
+// yields its status and x-ms-error-code, plus the source's status and code:
+// x-ms-copy-source-status-code and x-ms-copy-source-error-code for
+// CannotVerifyCopySource, or the error's own when err is a SourceError. A
+// CodedError yields its AzCopy code. Anything else, including nil, yields
+// zero values.
+func TransferFailureCodes(err error) TransferErrorCodes {
+	var codes TransferErrorCodes
+
 	var respErr *azcore.ResponseError
 	if errors.As(err, &respErr) {
-		httpStatus = int32(respErr.StatusCode)
-		serviceCode = respErr.ErrorCode
+		codes.StatusCode = int32(respErr.StatusCode)
+		codes.ExtendedErrorCode = respErr.ErrorCode
 		var srcErr *SourceError
 		switch {
-		case serviceCode == string(bloberror.CannotVerifyCopySource) && respErr.RawResponse != nil:
-			sourceCode = respErr.RawResponse.Header.Get("x-ms-copy-source-error-code")
+		case codes.ExtendedErrorCode == string(bloberror.CannotVerifyCopySource) && respErr.RawResponse != nil:
+			header := respErr.RawResponse.Header
+			codes.S2SExtendedErrorCode = header.Get("x-ms-copy-source-error-code")
+			if status, parseErr := strconv.ParseInt(header.Get("x-ms-copy-source-status-code"), 10, 32); parseErr == nil {
+				codes.S2SStatusCode = int32(status)
+			}
 		case errors.As(err, &srcErr):
-			sourceCode = serviceCode
+			codes.S2SStatusCode = codes.StatusCode
+			codes.S2SExtendedErrorCode = codes.ExtendedErrorCode
 		}
-		return
+		return codes
 	}
 
 	var codedErr *CodedError
 	if errors.As(err, &codedErr) {
-		serviceCode = codedErr.Code
+		codes.ExtendedErrorCode = codedErr.Code
 	}
-	return
+	return codes
 }

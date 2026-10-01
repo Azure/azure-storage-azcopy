@@ -9,10 +9,10 @@ import (
 // codes of err, which may be nil, the same way failActiveTransfer does for
 // failures after that point.
 func failTransferBeforeStart(jptm IJobPartTransferMgr, info *TransferInfo, errMsg string, err error) {
-	httpStatus, serviceCode, sourceCode := common.TransferFailureCodes(err)
-	jptm.LogSendError(info.Source, info.Destination, errMsg, int(httpStatus))
-	jptm.SetErrorCode(httpStatus)
-	jptm.SetServiceErrorCodes(serviceCode, sourceCode)
+	codes := common.TransferFailureCodes(err)
+	jptm.LogSendError(info.Source, info.Destination, errMsg, int(codes.StatusCode))
+	jptm.SetErrorCode(codes.StatusCode)
+	jptm.SetTransferErrorCodes(codes)
 	jptm.SetErrorMessage(errMsg)
 	jptm.SetStatus(common.ETransferStatus.Failed())
 	jptm.ReportTransferDone()

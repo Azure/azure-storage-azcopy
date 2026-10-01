@@ -202,7 +202,7 @@ func (t *testJobPartTransferManager) SetErrorCode(errorCode int32) {
 	panic("implement me")
 }
 
-func (t *testJobPartTransferManager) SetServiceErrorCodes(serviceCode, sourceCode string) {}
+func (t *testJobPartTransferManager) SetTransferErrorCodes(codes common.TransferErrorCodes) {}
 
 func (t *testJobPartTransferManager) SetErrorMessage(errorMessage string) {}
 
