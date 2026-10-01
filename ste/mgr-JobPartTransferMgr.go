@@ -1059,8 +1059,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
 		ErrorMessage:       jptm.ErrorMessage(),
-		ServiceErrorCode:   serviceErrorCode,
-		SourceErrorCode:    sourceErrorCode,
+		ExtendedErrorCode:  serviceErrorCode,
+		S2SSourceErrorCode: sourceErrorCode,
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())

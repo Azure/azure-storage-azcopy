@@ -8,7 +8,7 @@ import (
 )
 
 // AzCopy-defined transfer failure codes, reported in
-// TransferDetail.ServiceErrorCode when AzCopy itself fails a transfer rather
+// TransferDetail.ExtendedErrorCode when AzCopy itself fails a transfer rather
 // than a storage service request. The "AzCopy." prefix keeps them apart from
 // storage service error codes.
 const (
