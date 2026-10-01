@@ -44,21 +44,21 @@ func TestTransferFailureCodes(t *testing.T) {
 			err: &azcore.ResponseError{StatusCode: 404, ErrorCode: "CannotVerifyCopySource",
 				RawResponse: &http.Response{StatusCode: 404, Header: copySourceHeader}},
 			want: TransferErrorCodes{StatusCode: 404, ExtendedErrorCode: "CannotVerifyCopySource",
-				S2SStatusCode: 404, S2SExtendedErrorCode: "BlobNotFound"},
+				S2SSourceStatusCode: 404, S2SSourceExtendedErrorCode: "BlobNotFound"},
 		},
 		{
 			name: "copy source status differs from destination status",
 			err: &azcore.ResponseError{StatusCode: 403, ErrorCode: "CannotVerifyCopySource",
 				RawResponse: &http.Response{StatusCode: 403, Header: copySourceAuthHeader}},
 			want: TransferErrorCodes{StatusCode: 403, ExtendedErrorCode: "CannotVerifyCopySource",
-				S2SStatusCode: 401, S2SExtendedErrorCode: "InvalidAuthenticationInfo"},
+				S2SSourceStatusCode: 401, S2SSourceExtendedErrorCode: "InvalidAuthenticationInfo"},
 		},
 		{
 			name: "copy source status unparsable",
 			err: &azcore.ResponseError{StatusCode: 404, ErrorCode: "CannotVerifyCopySource",
 				RawResponse: &http.Response{StatusCode: 404, Header: badStatusHeader}},
 			want: TransferErrorCodes{StatusCode: 404, ExtendedErrorCode: "CannotVerifyCopySource",
-				S2SExtendedErrorCode: "BlobNotFound"},
+				S2SSourceExtendedErrorCode: "BlobNotFound"},
 		},
 		{
 			name: "azcopy coded error",
@@ -69,7 +69,7 @@ func TestTransferFailureCodes(t *testing.T) {
 			name: "source request error",
 			err:  NewSourceError(&azcore.ResponseError{StatusCode: 404, ErrorCode: "BlobNotFound"}),
 			want: TransferErrorCodes{StatusCode: 404, ExtendedErrorCode: "BlobNotFound",
-				S2SStatusCode: 404, S2SExtendedErrorCode: "BlobNotFound"},
+				S2SSourceStatusCode: 404, S2SSourceExtendedErrorCode: "BlobNotFound"},
 		},
 		{
 			name: "destination not found is not a source code",

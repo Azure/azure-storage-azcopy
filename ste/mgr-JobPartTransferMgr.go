@@ -1053,15 +1053,15 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	// Update Status Manager
 	errorCodes := jptm.transferErrorCodes()
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
-		Dst:                  jptm.Info().Destination,
-		IsFolderProperties:   jptm.Info().IsFolderPropertiesTransfer(),
-		TransferStatus:       jptm.jobPartPlanTransfer.TransferStatus(),
-		TransferSize:         uint64(jptm.Info().SourceSize),
-		ErrorCode:            jptm.ErrorCode(),
-		ErrorMessage:         jptm.ErrorMessage(),
-		ExtendedErrorCode:    errorCodes.ExtendedErrorCode,
-		S2SStatusCode:        errorCodes.S2SStatusCode,
-		S2SExtendedErrorCode: errorCodes.S2SExtendedErrorCode,
+		Dst:                        jptm.Info().Destination,
+		IsFolderProperties:         jptm.Info().IsFolderPropertiesTransfer(),
+		TransferStatus:             jptm.jobPartPlanTransfer.TransferStatus(),
+		TransferSize:               uint64(jptm.Info().SourceSize),
+		ErrorCode:                  jptm.ErrorCode(),
+		ErrorMessage:               jptm.ErrorMessage(),
+		ExtendedErrorCode:          errorCodes.ExtendedErrorCode,
+		S2SSourceStatusCode:        errorCodes.S2SSourceStatusCode,
+		S2SSourceExtendedErrorCode: errorCodes.S2SSourceExtendedErrorCode,
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())

@@ -325,18 +325,18 @@ type TransferDetail struct {
 	// rebuilt from plan files.
 	ExtendedErrorCode string `json:",omitempty"`
 
-	// S2SStatusCode is the HTTP status the source returned when the failure
+	// S2SSourceStatusCode is the HTTP status the source returned when the failure
 	// came from the source: x-ms-copy-source-status-code of a server-side
 	// copy that failed with CannotVerifyCopySource, or the status of a
 	// failed request made directly to the source. 0 otherwise. Same
 	// availability as ExtendedErrorCode.
-	S2SStatusCode int32 `json:",omitempty"`
+	S2SSourceStatusCode int32 `json:",omitempty"`
 
-	// S2SExtendedErrorCode is the error code the source returned, from the
-	// same response as S2SStatusCode: x-ms-copy-source-error-code of a
+	// S2SSourceExtendedErrorCode is the error code the source returned, from the
+	// same response as S2SSourceStatusCode: x-ms-copy-source-error-code of a
 	// server-side copy, or the x-ms-error-code of a direct source request.
 	// Same availability as ExtendedErrorCode.
-	S2SExtendedErrorCode string `json:",omitempty"`
+	S2SSourceExtendedErrorCode string `json:",omitempty"`
 }
 
 type CancelPauseResumeResponse struct {

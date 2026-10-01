@@ -68,10 +68,10 @@ type TransferErrorCodes struct {
 	// TransferErrorCode* value when AzCopy itself failed the transfer.
 	ExtendedErrorCode string
 
-	// S2SStatusCode and S2SExtendedErrorCode are the HTTP status and error
+	// S2SSourceStatusCode and S2SSourceExtendedErrorCode are the HTTP status and error
 	// code the source returned, when the failure came from the source.
-	S2SStatusCode        int32
-	S2SExtendedErrorCode string
+	S2SSourceStatusCode        int32
+	S2SSourceExtendedErrorCode string
 }
 
 // IsZero reports whether no codes are set.
@@ -97,13 +97,13 @@ func TransferFailureCodes(err error) TransferErrorCodes {
 		switch {
 		case codes.ExtendedErrorCode == string(bloberror.CannotVerifyCopySource) && respErr.RawResponse != nil:
 			header := respErr.RawResponse.Header
-			codes.S2SExtendedErrorCode = header.Get("x-ms-copy-source-error-code")
+			codes.S2SSourceExtendedErrorCode = header.Get("x-ms-copy-source-error-code")
 			if status, parseErr := strconv.ParseInt(header.Get("x-ms-copy-source-status-code"), 10, 32); parseErr == nil {
-				codes.S2SStatusCode = int32(status)
+				codes.S2SSourceStatusCode = int32(status)
 			}
 		case errors.As(err, &srcErr):
-			codes.S2SStatusCode = codes.StatusCode
-			codes.S2SExtendedErrorCode = codes.ExtendedErrorCode
+			codes.S2SSourceStatusCode = codes.StatusCode
+			codes.S2SSourceExtendedErrorCode = codes.ExtendedErrorCode
 		}
 		return codes
 	}
