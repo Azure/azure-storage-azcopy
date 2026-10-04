@@ -1,10 +1,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"os"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 func init() {
@@ -66,5 +67,7 @@ func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentit
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

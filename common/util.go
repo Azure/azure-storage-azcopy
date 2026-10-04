@@ -211,12 +211,12 @@ func GetServiceClientForLocation(loc Location,
 		if cred != nil {
 			o.FileRequestIntent = to.Ptr(fileservice.ShareTokenIntentBackup)
 			fsc, err = fileservice.NewClient(resourceURL, cred, o)
-			
-			if (enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true") {
+
+			if enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get() == "true" {
 				// Recorded so the GetShareStats poller can authenticate against this
 				// account when its caller has no credential to pass down.
-				RegisterShareStatsCredential(fileURLParts.Host, cred)								
-			}			
+				RegisterShareStatsCredential(fileURLParts.Host, cred)
+			}
 		} else {
 			fsc, err = fileservice.NewClientWithNoCredential(resourceURL, o)
 		}
@@ -385,16 +385,4 @@ func IsSystemContainer(containerName string) bool {
 		}
 	}
 	return false
-}
-
-// this is a global variable so that we can use it in traversal phase
-var isNFSCopy bool
-
-func SetNFSFlag(isNFS bool) {
-	// SetNFSFlag sets the global isNFSCopy variable to the given value
-	isNFSCopy = isNFS
-}
-
-func IsNFSCopy() bool {
-	return isNFSCopy
 }

@@ -107,7 +107,7 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	// discard the OK, we just want to nil these out if they are not scopedauthenticators
 	targetAuth, _ := targetCred.(cred.ScopedAuthenticator)
@@ -360,6 +360,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			} // Adding uint32 max is effectively subtracting 1
 		}
 
+		var folderTrackerKey string
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
 			// register the folder!
 			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(JPPTCompatibleFolderCreationTracker); ok {
@@ -372,7 +373,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 					dst = uri.String()
 				}
 
-				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, plan.PartNum, t)
+				folderTrackerKey = dst
 			}
 		}
 
@@ -385,6 +387,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jobPartMgr:          jpm,
 			jobPartPlanTransfer: jppt,
 			transferIndex:       t,
+			folderTrackerKey:    folderTrackerKey,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
 			// TODO: insert the factory func interface in jptm.

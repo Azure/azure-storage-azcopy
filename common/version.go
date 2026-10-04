@@ -2,7 +2,7 @@ package common
 
 import "github.com/Azure/azure-storage-azcopy/v10/common/enum"
 
-const AzcopyVersion = "10.30.0"
+const AzcopyVersion = "10.30.1"
 const UserAgent = "AzCopy/" + AzcopyVersion
 const S3ImportUserAgent = "S3Import " + UserAgent
 const GCPImportUserAgent = "GCPImport " + UserAgent

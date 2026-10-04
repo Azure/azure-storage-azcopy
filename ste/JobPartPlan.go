@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 19
+const DataSchemaVersion common.Version = 20
 
 const (
 	CustomHeaderMaxBytes  = 256
@@ -109,6 +109,8 @@ type JobPartPlanHeader struct {
 	PermanentDeleteOption common.PermanentDeleteOption
 
 	RehydratePriority common.RehydratePriorityType
+
+	SymlinkHandling common.SymlinkHandlingType
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

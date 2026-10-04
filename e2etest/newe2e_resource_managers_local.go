@@ -292,7 +292,6 @@ func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
 
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
-	a.AssertNow("Object must be file to have content", Equal{})
 	if properties.EntityType != l.entityType {
 		l.entityType = properties.EntityType
 	}
@@ -306,8 +305,10 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 			a.NoError("Close file", err)
 		}(f)
 
-		_, err = io.Copy(f, body.Reader())
-		a.NoError("Write file", err)
+		if body != nil {
+			_, err = io.Copy(f, body.Reader())
+			a.NoError("Write file", err)
+		}
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
 		if !os.IsExist(err) {
@@ -359,10 +360,20 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	a.HelperMarker().Helper()
-	stats, err := os.Stat(l.getWorkingPath())
-	if err != nil { // Prevent nil dereferences
-		a.NoError("failed to get stat", err)
-		return ObjectProperties{}
+	var stats fs.FileInfo
+	var err error
+	if l.entityType == common.EEntityType.Symlink() {
+		stats, err = os.Lstat(l.getWorkingPath())
+		if err != nil { // Prevent nil dereferences
+			a.NoError("failed to get stat", err)
+			return ObjectProperties{}
+		}
+	} else {
+		stats, err = os.Stat(l.getWorkingPath())
+		if err != nil { // Prevent nil dereferences
+			a.NoError("failed to get stat", err)
+			return ObjectProperties{}
+		}
 	}
 	lmt := ternary.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{

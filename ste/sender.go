@@ -22,13 +22,12 @@ package ste
 
 import (
 	"errors"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -106,6 +105,9 @@ func (f folderPropertiesNotOverwroteInCreation) Error() string {
 // ///////////////////////////////////////////////////////////////////////////////////////////////
 type symlinkSender interface {
 	SendSymlink(linkData string) error
+	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
+	// the lmt is returned if the file exists
+	RemoteFileExists() (bool, time.Time, error)
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error)

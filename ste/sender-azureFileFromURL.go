@@ -125,7 +125,11 @@ func (s *urlToAzureFileCopier) GenerateCopyMetadata(id common.ChunkID) chunkFunc
 		info := s.jptm.Info()
 		var err error
 
-		if common.IsNFSCopy() {
+		if s.jptm.FromTo() == common.EFromTo.FileNFSFileSMB() || s.jptm.FromTo() == common.EFromTo.FileSMBFileNFS() {
+			if _, _, err = s.getPropertiesForCrossProtocolTransfer(); err != nil {
+				return
+			}
+		} else if s.jptm.FromTo().IsNFS() {
 			_, err = s.addNFSPermissionsToHeaders(info, s.getFileClient().URL())
 			if err != nil {
 				s.jptm.FailActiveSend("Setting file permissions", err)
@@ -160,31 +164,10 @@ func (s *urlToAzureFileCopier) GenerateCopyMetadata(id common.ChunkID) chunkFunc
 				if err != nil {
 					return nil, err
 				}
-				if common.IsNFSCopy() {
-					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
-						HTTPHeaders: &s.headersToApply,
-						NFSProperties: &file.NFSProperties{
-							CreationTime:  s.nfsPropertiesToApply.CreationTime,
-							LastWriteTime: s.nfsPropertiesToApply.LastWriteTime,
-							FileMode:      s.nfsPropertiesToApply.FileMode,
-							Owner:         s.nfsPropertiesToApply.Owner,
-							Group:         s.nfsPropertiesToApply.Group,
-						},
-					})
-					if err != nil {
-						s.jptm.FailActiveSend("Applying final attribute settings", err)
-						return nil, err
-					}
-				} else {
-					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
-						HTTPHeaders:   &s.headersToApply,
-						Permissions:   &s.permissionsToApply,
-						SMBProperties: &s.smbPropertiesToApply,
-					})
-					if err != nil {
-						s.jptm.FailActiveSend("Applying final attribute settings", err)
-						return nil, err
-					}
+				resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, s.buildSetHTTPHeadersOptions())
+				if err != nil {
+					s.jptm.FailActiveSend("Applying final attribute settings", err)
+					return nil, err
 				}
 				return resp, nil
 			},

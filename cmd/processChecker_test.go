@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"testing"
@@ -9,70 +10,98 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func processCheckerTestDirectory(t *testing.T) string {
+	t.Helper()
+	directory, err := os.MkdirTemp(".", "process-checker-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		assert.NoError(t, os.RemoveAll(directory))
+	})
+	return directory
+}
+
 func Test_WarnMultipleProcesses(t *testing.T) {
 	a := assert.New(t)
-	err := os.Mkdir("temp", 0777) // Temp dir to simulate .azcopy dir
-	pidsDir := path.Join("temp", "pids")
-	defer func() {
-		err := os.RemoveAll("temp")
-		if err != nil {
-			return
-		}
-	}() // Cleanup
-	a.NoError(err)
+	directory := processCheckerTestDirectory(t)
+	pidsDir := path.Join(directory, "pids")
+	currentPid := os.Getpid()
+	mockLCM := mockedLifecycleManager{infoLog: make(chan string, 50)}
+	originalLCM := glcm
+	glcm = &mockLCM
+	t.Cleanup(func() { glcm = originalLCM })
 
-	WarnMultipleProcesses("temp", 1)
+	WarnMultipleProcesses(directory, currentPid)
 
-	pid1 := path.Join(pidsDir, "1.pid")
-	_, err = os.Stat(pid1)
+	currentPidPath := path.Join(pidsDir, fmt.Sprintf("%d.pid", currentPid))
+	_, err := os.Stat(currentPidPath)
 	a.NoError(err, "first .pid file should exist")
+	a.NoError(os.WriteFile(path.Join(pidsDir, "0.pid"), nil, 0644))
 
-	// Act
-	WarnMultipleProcesses("temp", 2) // Additional AzCopy process
+	WarnMultipleProcesses(directory, currentPid)
 
-	dirEntry, _ := os.ReadDir(pidsDir)
-	// Check only one file
-	a.Equal(2, len(dirEntry), "Should contain 2 .pid files")
+	dirEntry, err := os.ReadDir(pidsDir)
+	a.NoError(err)
+	a.Len(dirEntry, 1, "Should contain only the current process's .pid file")
+	a.Empty(mockLCM.GatherAllLogs(mockLCM.infoLog), "The current or stale process must not trigger a warning")
 }
 
 // Test_MultipleProcessWithMockedLCM validates warn messages are logged when there's multiple AzCopy instances
 func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	a := assert.New(t)
 
-	// Arrange
-	tempDir, err := os.MkdirTemp("", "temp")
+	directory := processCheckerTestDirectory(t)
+	pidsDir := path.Join(directory, "pids")
+	err := os.MkdirAll(pidsDir, 0777)
 	a.NoError(err)
-	defer func(path string) { // Cleanup temp dir
-		err := os.RemoveAll(path)
-		if err != nil {
-			return
-		}
-	}(tempDir)
 
-	pidsDir := path.Join(tempDir, "pids")
-	err = os.MkdirAll(pidsDir, 0777)
-	a.NoError(err)
-	fakePidPath := path.Join(pidsDir, "123.pid") // Simulate multiple process
-	fakePidFile, err := os.Create(fakePidPath)
-	a.NoError(err)
-	err = fakePidFile.Close()
-	if err != nil {
-		return
+	otherPid := os.Getppid()
+	if !isProcessRunning(otherPid) {
+		t.Skip("parent process is not available")
 	}
+	otherPidPath := path.Join(pidsDir, fmt.Sprintf("%d.pid", otherPid))
+	a.NoError(os.WriteFile(otherPidPath, nil, 0644))
 
-	// set up interceptor
-	mockedRPC := interceptor{}
-	mockLCM := mockedLifecycleManager{warnLog: make(chan string, 50)}
+	mockLCM := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockLCM.SetOutputFormat(common.EOutputFormat.Text()) // text format
-	mockedRPC.init()
+	originalLCM := glcm
 	glcm = &mockLCM
+	t.Cleanup(func() { glcm = originalLCM })
 
 	// Act
-	WarnMultipleProcesses(tempDir, 456)
+	WarnMultipleProcesses(directory, os.Getpid())
 
 	// Assert
-	errorMessages := mockLCM.GatherAllLogs(mockLCM.warnLog) // check mocked LCM warnLogs
-	if errorMessages != nil {
-		a.Equal(common.ERR_MULTIPLE_PROCESSES, errorMessages[0])
+	a.Equal([]string{common.WARN_MULTIPLE_PROCESSES}, mockLCM.GatherAllLogs(mockLCM.infoLog))
+}
+
+func Test_CleanUpStalePids(t *testing.T) {
+	a := assert.New(t)
+
+	directory := processCheckerTestDirectory(t)
+	pidsDir := path.Join(directory, "pids")
+	err := os.MkdirAll(pidsDir, 0777)
+	a.NoError(err)
+
+	currentPidFile := fmt.Sprintf("%d.pid", os.Getpid())
+	for _, fileName := range []string{"0.pid", "-1.pid", "invalid.pid", currentPidFile} {
+		a.NoError(os.WriteFile(path.Join(pidsDir, fileName), nil, 0644))
 	}
+
+	// Act
+	a.NoError(cleanupStalePidFiles(pidsDir, os.Getpid()))
+
+	dirEntry, err := os.ReadDir(pidsDir)
+	a.NoError(err)
+	if a.Len(dirEntry, 1, "Should remove stale and invalid PID files but retain the current process") {
+		a.Equal(currentPidFile, dirEntry[0].Name())
+	}
+}
+
+func Test_IsProcessRunning(t *testing.T) {
+	a := assert.New(t)
+	a.True(isProcessRunning(os.Getpid()))
+	a.False(isProcessRunning(0))
+	a.False(isProcessRunning(-1))
 }

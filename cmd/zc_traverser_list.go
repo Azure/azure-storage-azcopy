@@ -113,16 +113,19 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 		traverser, err := InitResourceTraverser(source, resourceLocation, ctx, InitResourceTraverserOptions{
 			DestResourceType: nil,
 
-			Credential:           options.Credential,
-			IncrementEnumeration: options.IncrementEnumeration,
+			Credential:                  options.Credential,
+			IncrementEnumeration:        options.IncrementEnumeration,
+			IncrementEnumerationFailure: options.IncrementEnumerationFailure,
+			IncrementNotTransferred:     options.IncrementNotTransferred,
 
 			ListOfVersionIDs: nil,
-			ErrorChannel:     nil,
+			ErrorChannel:     options.ErrorChannel,
 
 			CpkOptions: options.CpkOptions,
 
 			PreservePermissions: options.PreservePermissions,
 			SymlinkHandling:     options.SymlinkHandling,
+			HardlinkHandling:    options.HardlinkHandling,
 			SyncHashType:        options.SyncHashType,
 			TrailingDotOption:   options.TrailingDotOption,
 
@@ -130,6 +133,9 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			GetPropertiesInFrontend: options.GetPropertiesInFrontend,
 			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
 			PreserveBlobTags:        options.PreserveBlobTags,
+			FromTo:                  options.FromTo,
+			ScanPacer:               options.ScanPacer,
+			IsSyncDestination:       options.IsSyncDestination,
 		})
 		if err != nil {
 			return nil, err

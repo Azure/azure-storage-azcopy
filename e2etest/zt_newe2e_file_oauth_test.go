@@ -33,7 +33,9 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 			},
 		})
 
-	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{}, true)
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 	ValidateDoesNotContainError(svm, stdout,
 		[]string{"S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported",
 			"S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
@@ -77,7 +79,9 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 				BlobType: pointerTo(blobType),
 			},
 		})
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, true)
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManager) {
@@ -95,5 +99,7 @@ func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManage
 				FromTo:    pointerTo(common.EFromTo.FileBlob()),
 			},
 		})
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, true)
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

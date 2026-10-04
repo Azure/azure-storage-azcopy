@@ -119,19 +119,22 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			switch entityType {
 			case common.EEntityType.File(), common.EEntityType.Hardlink():
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+				if entityType == common.EEntityType.Hardlink() && cca.fromTo.IsNFS() && hardlinkHandling == common.SkipHardlinkHandlingType {
+					atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
+				}
 			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 			case common.EEntityType.Symlink():
-				if common.IsNFSCopy() {
+				if cca.fromTo.IsNFS() && symlinkOption == common.ESymlinkHandlingType.Skip() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			case common.EEntityType.Other():
-				if common.IsNFSCopy() {
+				if cca.fromTo.IsNFS() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 				}
@@ -167,6 +170,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 		SymlinkHandling:         cca.symlinkHandling,
+		FromTo:                  cca.fromTo,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 
 			switch entityType {
@@ -212,7 +216,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverserOptions := InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 			} else if entityType == common.EEntityType.Folder() {
@@ -231,6 +235,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		FromTo:                  cca.fromTo,
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
 		IsSyncDestination:       true,
 		SymlinkHandling:         cca.symlinkHandling,
@@ -388,7 +393,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
+	if cca.fromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
@@ -407,10 +412,10 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
+	if cca.fromTo.To().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To().IsFile()),
 		}
 	}
 

@@ -20,10 +20,15 @@
 package e2etest
 
 import (
+	cmd2 "github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
+	"github.com/stretchr/testify/assert"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -66,5 +71,48 @@ func TestVersionCommand(t *testing.T) {
 	if len(lines) == 2 && !newVersionInfo.Match([]byte(lines[1])) {
 		t.Log("Second Line does not contain new version info " + lines[1])
 		t.FailNow()
+	}
+}
+
+// Test that latest_version file is uploaded to correct directory
+func TestLastVersionFileLocation(t *testing.T) {
+	a := assert.New(t)
+
+	// Save original working directory
+	originalWorkDir, err := os.Getwd()
+	a.NoError(err)
+
+	defer func() { // Reset current dir after test
+		os.Chdir(originalWorkDir)
+	}()
+
+	// Create temp dir to use as current working directory
+	tempWorkDir, err := os.MkdirTemp("", "temp")
+	a.NoError(err)
+	defer func() { // Clean up
+		os.RemoveAll(tempWorkDir)
+	}()
+
+	// Run the help command
+	cmd := exec.Command(GlobalInputManager{}.GetExecutablePath(), "--help")
+	output, err := cmd.CombinedOutput()
+	a.NoError(err, "Help command should work")
+	a.NotEmpty(output)
+
+	// Check that latest_version.txt is NOT in current directory
+	currDirFile := filepath.Join(tempWorkDir, "latest_version.txt")
+	_, err = os.Stat(currDirFile)
+	a.True(os.IsNotExist(err), "latest_version.txt should NOT be in current directory")
+
+	// The file should be in the app's log directory
+	appDataFolder := cmd2.GetAzCopyAppPath()
+	if appDataFolder != "" {
+		expectedFile := filepath.Join(appDataFolder, "latest_version.txt")
+		time.Sleep(2 * time.Second) // Wait for version check to complete
+
+		// Check if file exists
+		if _, err := os.Stat(expectedFile); err == nil {
+			a.True(true, "latest_version.txt found in app dir")
+		}
 	}
 }

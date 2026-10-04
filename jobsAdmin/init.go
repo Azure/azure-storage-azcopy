@@ -55,12 +55,11 @@ func ToFixed(num float64, precision int) float64 {
 
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
-	
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 	file2FileCopy := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
-	common.LogToJobLogWithPrefix(fmt.Sprintf("file2FileCopy=%s", file2FileCopy), common.LogInfo)	
+	common.LogToJobLogWithPrefix(fmt.Sprintf("file2FileCopy=%s", file2FileCopy), common.LogInfo)
 	common.GetLifecycleMgr().Info(fmt.Sprintf("file2FileCopy=%s", file2FileCopy))
-	
+
 	// Register the Azure Files stats source factory for Files-to-Files scenarios
 	// when proactive stats polling is enabled
 	if file2FileCopy == "true" {
@@ -75,7 +74,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
-	
+
 	// if we've a custom mime map
 	if path := enum.EEnvironmentVariable.MimeMapping().Get(); path != "" {
 		data, err := os.ReadFile(path)
@@ -138,7 +137,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		ScheduleTransfers: true,
 	}
 	jm.AddJobPart(args)
-
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
 		IsFinalPart:             order.IsFinalPart,

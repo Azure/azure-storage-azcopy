@@ -290,6 +290,9 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       credManager,
 	})
+	if err != nil {
+		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("failed to get source credentials: %w", err)
+	}
 
 	dstCredInfo, err = GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
 		Context:            ctx,
@@ -299,6 +302,9 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       credManager,
 	})
+	if err != nil {
+		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("failed to get destination credentials: %w", err)
+	}
 
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
@@ -316,7 +322,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 
 	var fileSrcClientOptions any
-	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
+	if fromTo.From().IsFile() {
 		fileSrcClientOptions = &common.FileClientOptions{
 			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
@@ -328,9 +334,9 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	dstOptions := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, dstCredInfo.TokenCredential)
 	var fileClientOptions any
-	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
+	if fromTo.To().IsFile() {
 		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From().IsFile(),
 			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
 		}
 	}

@@ -74,20 +74,20 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy        AzCopyVerb = "copy"
-	AzCopyVerbSync        AzCopyVerb = "sync"
-	AzCopyVerbRemove      AzCopyVerb = "remove"
-	AzCopyVerbList        AzCopyVerb = "list"
-	AzCopyVerbLogin       AzCopyVerb = "login"
-	AzCopyVerbLoginStatus AzCopyVerb = "login status"
-	AzCopyVerbLogout      AzCopyVerb = "logout"
-	AzCopyVerbJobsList    AzCopyVerb = "jobs list"
-	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
-	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
-	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
-	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
+	AzCopyVerbCopy          AzCopyVerb = "copy"
+	AzCopyVerbSync          AzCopyVerb = "sync"
+	AzCopyVerbRemove        AzCopyVerb = "remove"
+	AzCopyVerbList          AzCopyVerb = "list"
+	AzCopyVerbLogin         AzCopyVerb = "login"
+	AzCopyVerbLoginStatus   AzCopyVerb = "login status"
+	AzCopyVerbLogout        AzCopyVerb = "logout"
+	AzCopyVerbJobsList      AzCopyVerb = "jobs list"
+	AzCopyVerbJobsResume    AzCopyVerb = "jobs resume"
+	AzCopyVerbJobsClean     AzCopyVerb = "jobs clean"
+	AzCopyVerbJobsRemove    AzCopyVerb = "jobs remove"
+	AzCopyVerbJobsShow      AzCopyVerb = "jobs show"
 	AzCopyVerbSetProperties AzCopyVerb = "set-properties"
-	AzCopyVerbMake         AzCopyVerb = "make"
+	AzCopyVerbMake          AzCopyVerb = "make"
 )
 
 type AzCopyTarget interface {
@@ -185,9 +185,10 @@ type AzCopyEnvironment struct {
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
 	// as the fields are automatically controlled.
-	ParentContext *AzCopyEnvironmentContext
-	EnvironmentId *uint
-	RunCount      *uint
+	ParentContext          *AzCopyEnvironmentContext
+	EnvironmentId          *uint
+	RunCount               *uint
+	AzcopyConcurrencyValue *string `env:"AZCOPY_CONCURRENCY_VALUE"`
 }
 
 type KeyringEntry struct {
@@ -470,11 +471,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = JobsListFlags{}
 			case AzCopyVerbJobsShow:
 				commandSpec.Flags = JobsShowFlags{}
-		case AzCopyVerbSetProperties:
-			commandSpec.Flags = SetPropertiesFlags{}
-		case AzCopyVerbMake:
-			commandSpec.Flags = MakeFlags{}
-		default:
+			case AzCopyVerbSetProperties:
+				commandSpec.Flags = SetPropertiesFlags{}
+			case AzCopyVerbMake:
+				commandSpec.Flags = MakeFlags{}
+			default:
 				commandSpec.Flags = GlobalFlags{}
 			}
 		}
