@@ -33,8 +33,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/pkg/errors"
 
@@ -365,7 +365,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 		}
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.entityType)
+			t.incrementEnumerationCounter(storedObject.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		err := processIfPassedFilters(filters, storedObject, processor)
@@ -397,7 +397,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			blobURLParts.ContainerName,
 		)
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.Folder())
+			t.incrementEnumerationCounter(common.EEntityType.Folder(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		err := processIfPassedFilters(filters, storedObject, processor)
@@ -627,10 +627,10 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 		if t.incrementEnumerationCounter != nil {
 			if UseSyncOrchestrator && !object.isVirtualPrefix {
-				t.incrementEnumerationCounter(object.entityType)
+				t.incrementEnumerationCounter(object.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			} else if !UseSyncOrchestrator {
 				// XDM: Retaining the old behavior but this seems like a bug.
-				t.incrementEnumerationCounter(common.EEntityType.File())
+				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
 		}
 
@@ -747,7 +747,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 			}
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File())
+				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
 
 			processErr := processIfPassedFilters(filters, storedObject, processor)
@@ -780,7 +780,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       ternary.DerefOrZero(ternary.FirstOrZero(blobOpts).isDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
-		isSyncDestination:          opts.IsSyncDestination,
+		isSyncDestination:           opts.IsSyncDestination,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive

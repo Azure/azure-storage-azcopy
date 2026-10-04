@@ -235,6 +235,8 @@ type jobPartTransferMgr struct {
 
 	transferInfo *TransferInfo
 
+	folderTrackerKey string
+
 	actionAfterLastChunk func()
 
 	/*
@@ -1019,6 +1021,11 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	//    to the jobPartManager anyway (as it Feb 2019)
 	if atomic.SwapUint32(&jptm.atomicCompletionIndicator, 1) != 0 {
 		panic("cannot report the same transfer done twice")
+	}
+
+	// Publishing completion can unmap this part, so release every tracker reference first.
+	if jptm.folderTrackerKey != "" {
+		jptm.GetFolderCreationTracker().StopTracking(jptm.folderTrackerKey)
 	}
 
 	// Update Status Manager

@@ -1,5 +1,5 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.2'
+  AZCOPY_GOLANG_VERSION: '1.25.4'
 
 parameters:
   - name: publish_to_m1_container
@@ -968,14 +968,14 @@ extends:
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMarinerArm64
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
+                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
 
 
       - ${{ if eq(parameters.post_release, true) }}:
@@ -1012,6 +1012,15 @@ extends:
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
                     displayName: 'List Artifacts'
 
+                  - script: |
+                      set -e
+                      for package in "$(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/"*.rpm; do
+                        marinerPackage="${package/.x86_64.rpm/-cm2.x86_64.rpm}"
+                        marinerPackage="${marinerPackage/.arm64.rpm/-cm2.arm64.rpm}"
+                        mv "$package" "$marinerPackage"
+                      done
+                    displayName: 'Give Mariner packages distinct release asset names'
+
                   - task: GithubRelease@1
                     inputs:
                       githubConnection: 'azcopy-github-connection'
@@ -1034,7 +1043,7 @@ extends:
                         $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
                       assetUploadMode: replace
 
-      - ${{ if eq(parameters.publish_artifacts, true) }}:
+      - ${{ if or(eq(parameters.publish_artifacts, true), eq(parameters.test_pmc_connection, true)) }}:
           - stage: PublishArtifacts
             dependsOn:
               - AzCopyVersion
@@ -1068,18 +1077,6 @@ extends:
                       pip install pmc-cli
                       echo '##vso[task.prependpath]$(HOME)/.local/bin'
                     displayName: 'Install pmc-cli'
-
-                  - task: DownloadSecureFile@1
-                    name: pmcCertificate
-                    displayName: 'Download pmc pem file'
-                    inputs:
-                      secureFile: 'azstorage-devex-kv-blobfuse-release-pmc1-10102025.pem'
-
-                  - task: DownloadSecureFile@1
-                    name: settings
-                    displayName: 'Download settings.toml file'
-                    inputs:
-                      secureFile: 'settings.toml'
 
                   - task: AzureCLI@2
                     displayName: 'Test PMC installation'

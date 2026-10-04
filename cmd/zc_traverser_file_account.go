@@ -93,6 +93,11 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 			IncrementEnumeration:    t.opts.IncrementEnumeration,
 			TrailingDotOption:       t.opts.TrailingDotOption,
 			HardlinkHandling:        t.opts.HardlinkHandling,
+			SymlinkHandling:         t.opts.SymlinkHandling,
+			FromTo:                  t.opts.FromTo,
+			ErrorChannel:            t.opts.ErrorChannel,
+			ScanPacer:               t.opts.ScanPacer,
+			IsSyncDestination:       t.opts.IsSyncDestination,
 		})
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))

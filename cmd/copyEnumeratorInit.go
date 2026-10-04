@@ -22,7 +22,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -99,14 +98,24 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
 		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		StripTopDir:             cca.StripTopDir,
+		HardlinkHandling:        cca.hardlinks,
+		FromTo:                  cca.FromTo,
 
 		ExcludeContainers: cca.excludeContainer,
-		IncrementEnumeration: func(entityType common.EntityType) {
-			if common.IsNFSCopy() {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
+			if cca.FromTo.IsNFS() {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
-					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					switch symlinkOption {
+					case common.ESymlinkHandlingType.Skip():
+						atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					}
+				} else if entityType == common.EEntityType.Hardlink() {
+					switch hardlinkHandling {
+					case common.SkipHardlinkHandlingType:
+						atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
+					}
 				}
 			} else if cca.FromTo.From() == common.ELocation.S3() {
 				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
@@ -419,6 +428,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 		ExcludeContainers: cca.excludeContainer,
 		HardlinkHandling:  cca.hardlinks,
 		IsSyncDestination: skipDestShareStats,
+		FromTo:            cca.FromTo,
 	})
 
 	if err != nil {
@@ -636,17 +646,9 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	}
 	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-	var targetCheck bool
-	if buildmode.IsMover {
-		// XDM: AutoEncoding for Local->FileNFS is not required as NFS target supports these characters in file names.
-		// Ideally this should be the default behavior for all AzCopy builds, but this will be done post discussion with the team.
-		targetCheck = (loc == common.ELocation.File())
-	} else {
-		targetCheck = (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())
-	}
-
 	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && targetCheck) {
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
+		(!source && loc == common.ELocation.File()) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -657,7 +659,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
+		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {

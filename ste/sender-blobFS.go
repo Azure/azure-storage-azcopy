@@ -293,13 +293,12 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)
-	} else if adapter == nil {
-		return nil // No-op
+	} else if adapter != nil { // We don't need POSIX data to send a symlink.
+		common.AddStatToBlobMetadata(adapter, meta)
 	}
 
-	common.AddStatToBlobMetadata(adapter, meta)
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
+	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,
 		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
 		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,

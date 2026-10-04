@@ -123,7 +123,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink())
+	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink() || s.entityType == common.EEntityType.Symlink() || s.entityType == common.EEntityType.Other())
 }
 
 func (s *StoredObject) isSourceRootFolder() bool {
@@ -303,9 +303,9 @@ type filePropsProvider interface {
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
-		name:               name,
-		relativePath:       relativePath,
-		entityType:         entityType,
+		name:         name,
+		relativePath: relativePath,
+		entityType:   entityType,
 		// Normalize to UTC so the time references the shared time.UTC location instead of a
 		// per-blob fixedZone("GMT") allocated by the SDK's RFC1123 date parse. With millions of
 		// enumerated blobs buffered in the shuffle window, those per-blob zones added GBs of live heap.
@@ -385,16 +385,17 @@ func recommendHttpsIfNecessary(url url.URL) {
 	}
 }
 
-type enumerationCounterFunc func(entityType common.EntityType)
+type enumerationCounterFunc func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkOption common.HardlinkHandlingType)
 
-var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType) {}
+var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkoption common.HardlinkHandlingType) {
+}
 
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential           *cred.CredentialInfo // Required for most remote traversers
+	Credential                  *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
-	IncrementEnumerationFailure enumerationCounterFunc
+	IncrementEnumerationFailure func(common.EntityType)
 
 	ListOfFiles      <-chan string // Creates a list of files traverser
 	ListOfVersionIDs <-chan string // Used by Blob/DFS
@@ -420,8 +421,9 @@ type InitResourceTraverserOptions struct {
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
+	FromTo            common.FromTo
 
-	IncrementNotTransferred enumerationCounterFunc
+	IncrementNotTransferred func(common.EntityType)
 
 	// IsSyncDestination indicates this traverser targets the destination side of a job.
 	// Used to return specific not-found errors that the sync orchestrator handles gracefully,
@@ -448,11 +450,11 @@ func (o *InitResourceTraverserOptions) PerformChecks() error {
 	}
 
 	if o.IncrementEnumerationFailure == nil {
-		o.IncrementEnumerationFailure = enumerationCounterFuncNoop
+		o.IncrementEnumerationFailure = func(common.EntityType) {}
 	}
 
 	if o.IncrementNotTransferred == nil {
-		o.IncrementNotTransferred = enumerationCounterFuncNoop
+		o.IncrementNotTransferred = func(common.EntityType) {}
 	}
 
 	return nil
@@ -468,10 +470,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return nil, err
 	}
 
-	
 	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
 	file2FilesEnum := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
-	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
+	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS() && file2FilesEnum != "true" {
 		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
 	}
 

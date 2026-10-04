@@ -31,6 +31,7 @@ const (
 
 // Flags associated with copy and sync commands
 const (
+	RequestPriorityFlag        = "request-priority"
 	PreserveSMBInfoFlag        = "preserve-smb-info"
 	PreserveSMBPermissionsFlag = "preserve-smb-permissions"
 	PreservePermissionsFlag    = "preserve-permissions"

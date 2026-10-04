@@ -1,9 +1,10 @@
 package e2etest
 
 import (
+	"strconv"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strconv"
 )
 
 func init() {
@@ -38,7 +39,9 @@ func (s *BlobTestSuite) Scenario_UploadBlockBlobs(svm *ScenarioVariationManager)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobTestSuite) Scenario_UploadPageBlob(svm *ScenarioVariationManager) {
@@ -72,7 +75,9 @@ func (s *BlobTestSuite) Scenario_UploadPageBlob(svm *ScenarioVariationManager) {
 				Type: pointerTo(blob.BlobTypePageBlob),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobTestSuite) Scenario_SetPageBlobTier(svm *ScenarioVariationManager) {
@@ -108,7 +113,9 @@ func (s *BlobTestSuite) Scenario_SetPageBlobTier(svm *ScenarioVariationManager) 
 				BlockBlobAccessTier: pointerTo(tier.ToAccessTierType()),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobTestSuite) Scenario_UploadBlob(svm *ScenarioVariationManager) {
@@ -138,7 +145,9 @@ func (s *BlobTestSuite) Scenario_UploadBlob(svm *ScenarioVariationManager) {
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobTestSuite) Scenario_DownloadBlob(svm *ScenarioVariationManager) {
@@ -168,7 +177,9 @@ func (s *BlobTestSuite) Scenario_DownloadBlob(svm *ScenarioVariationManager) {
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationManager) {
@@ -202,5 +213,7 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

@@ -335,6 +335,8 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 
 	fileCount := 0
 	sawLinkTargetDir := false
+	// we just want To value as local
+	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		a.Nil(err)
 
@@ -351,6 +353,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 		return nil
 	},
 		WalkWithSymlinksOptions{
+			FromTo:                      fromTo,
 			SymlinkHandling:             common.ESymlinkHandlingType.Follow(),
 			HardlinkHandling:            common.EHardlinkHandlingType.Follow(),
 			IncrementEnumerationCounter: nil,
@@ -413,6 +416,8 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 	// Only 3 files should ever be found.
 	// This is because the symlink links back to the root dir
 	fileCount := 0
+	// we just want To value as local
+	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		a.Nil(err)
 
@@ -424,6 +429,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 		return nil
 	},
 		WalkWithSymlinksOptions{
+			FromTo:                      fromTo,
 			SymlinkHandling:             common.ESymlinkHandlingType.Follow(),
 			HardlinkHandling:            common.EHardlinkHandlingType.Follow(),
 			IncrementEnumerationCounter: nil,
@@ -450,6 +456,8 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 	// Only 6 files should ever be found.
 	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
 	fileCount := 0
+	// we just want To value as local
+	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		a.Nil(err)
 
@@ -461,6 +469,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 		return nil
 	},
 		WalkWithSymlinksOptions{
+			FromTo:                      fromTo,
 			SymlinkHandling:             common.ESymlinkHandlingType.Follow(),
 			HardlinkHandling:            common.EHardlinkHandlingType.Follow(),
 			IncrementEnumerationCounter: nil,
@@ -488,6 +497,8 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 	trySymlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink"), t)
 
 	fileCount := 0
+	// we just want To value as local
+	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		a.Nil(err)
 
@@ -499,6 +510,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 		return nil
 	},
 		WalkWithSymlinksOptions{
+			FromTo:                      fromTo,
 			SymlinkHandling:             common.ESymlinkHandlingType.Follow(),
 			HardlinkHandling:            common.EHardlinkHandlingType.Follow(),
 			IncrementEnumerationCounter: nil,
@@ -528,6 +540,8 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 	trySymlink(child, filepath.Join(root1, "tochild"), t)
 
 	fileCount := 0
+	// we just want To value as local
+	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
 		a.Nil(err)
 
@@ -539,6 +553,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 		return nil
 	},
 		WalkWithSymlinksOptions{
+			FromTo:                      fromTo,
 			SymlinkHandling:             common.ESymlinkHandlingType.Follow(),
 			HardlinkHandling:            common.EHardlinkHandlingType.Follow(),
 			IncrementEnumerationCounter: nil,

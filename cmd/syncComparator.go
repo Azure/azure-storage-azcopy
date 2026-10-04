@@ -134,7 +134,7 @@ func newSyncDestinationComparator(
 
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
 		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
-		 orchestratorOptions.fromTo.From() == common.ELocation.File())
+			orchestratorOptions.fromTo.From() == common.ELocation.File())
 
 	return comp
 }
@@ -350,7 +350,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare last write times with precision tolerance
-	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, common.IsNFSCopy()) {
+	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, f.orchestratorOptions.fromTo.IsNFS()) {
 		return true, true
 	}
 
@@ -384,7 +384,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		}
 	}
 
-	if common.IsNFSCopy() {
+	if f.orchestratorOptions.fromTo.IsNFS() {
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.
@@ -412,7 +412,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare change times with precision tolerance
-	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, common.IsNFSCopy()) {
+	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, f.orchestratorOptions.fromTo.IsNFS()) {
 		return false, true
 	}
 

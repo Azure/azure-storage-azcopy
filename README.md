@@ -139,6 +139,17 @@ You can change this default behaviour and overwrite files at the destination by 
 By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command.
 To learn more, see [Synchronize files](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-blobs-synchronize).
 
+## Job-plan compatibility for the M1 integration
+
+This integration writes schema version 20 job plans, including persisted symlink
+handling. Existing schema version 19 plans are not resumed by this build. Finish
+or resume those jobs using the binary that created them, or start a new job with
+this build. Do not rename old plan files to change their schema version.
+
+The embedded Mover sync API retains symlink following for local sources, including
+SMB and Blob destinations. The CLI sync flags retain upstream's NFS-specific
+symlink restrictions.
+
 ## How to contribute to AzCopy v10
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

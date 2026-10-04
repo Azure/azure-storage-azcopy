@@ -86,7 +86,6 @@ type nfsPropertyAwareDownloader interface {
 // nfsPermissionsAwareDownloader
 type nfsPermissionsAwareDownloader interface {
 	PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
-	PutNFSDefaultPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
 type downloaderFactory func(jptm IJobPartTransferMgr) (downloader, error)
