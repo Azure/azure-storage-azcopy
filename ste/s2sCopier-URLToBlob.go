@@ -22,10 +22,11 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -81,7 +82,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 
 			// I don't think it would ever reach here if the source URL failed to parse, but this is a sanity check.
 			if err != nil {
-				return nil, fmt.Errorf("Failed to parse URL %s in scheduler. Check sanity.", jptm.Info().Source)
+				return nil, fmt.Errorf("failed to parse URL %s in scheduler. Check sanity", jptm.Info().Source)
 			}
 
 			fileName := srcURL.Path

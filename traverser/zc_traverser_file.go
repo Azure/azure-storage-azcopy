@@ -456,24 +456,23 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	listErrPrefix := "cannot list files due to reason"
+	// Directory-level orchestration still needs child directories that do not
+	// match the file-name filter, even though this traverser is nonrecursive.
+	filterPfx := FilterSet(filters).GetEnumerationPreFilter(t.recursive || t.skipRootProperties)
 
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirectoryClient := dir.(*directory.Client)
-
-		var dirListOptions *directory.ListFilesAndDirectoriesOptions = nil
+		dirListOptions := &directory.ListFilesAndDirectoriesOptions{}
+		if filterPfx != "" {
+			dirListOptions.Prefix = &filterPfx
+		}
 		if t.includeExtendedInfo {
-			dirListOptions = &directory.ListFilesAndDirectoriesOptions{
-				Include: directory.ListFilesInclude{
-					Timestamps:    true,
-					ETag:          false,
-					PermissionKey: false,
-					Attributes:    false},
-				IncludeExtendedInfo: &t.includeExtendedInfo}
+			dirListOptions.Include = directory.ListFilesInclude{Timestamps: true}
+			dirListOptions.IncludeExtendedInfo = &t.includeExtendedInfo
 		}
 		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(dirListOptions)
-
 		var marker *string
 		for pager.More() {
 			lResp, err := common.WithNetworkRetry(

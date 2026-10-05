@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
@@ -16,13 +17,24 @@ var validatePreserveSMBPropertyOption = azcopy.ValidatePreserveSMBPropertyOption
 var areBothLocationsNFSAware = azcopy.AreBothLocationsNFSAware
 var areBothLocationsSMBAware = azcopy.AreBothLocationsSMBAware
 var performNFSSpecificValidation = azcopy.PerformNFSSpecificValidation
-var performSMBSpecificValidation = azcopy.PerformSMBSpecificValidation
 var validateHardlinksFlag = azcopy.ValidateHardlinksFlag
 var validateSymlinkFlag = azcopy.ValidateSymlinkFlag
 var isUnsupportedPlatformForNFS = azcopy.IsUnsupportedPlatformForNFS
 var validateProtocolCompatibility = azcopy.ValidateProtocolCompatibility
 var validateShareProtocolCompatibility = azcopy.ValidateShareProtocolCompatibility
 var getShareProtocolType = azcopy.GetShareProtocolType
+
+func performSMBSpecificValidation(fromTo common.FromTo, permissions common.PreservePermissionsOption,
+	preserveInfo, preservePOSIX bool, hardlinks common.HardlinkHandlingType, styles ...common.PosixPropertiesStyle) error {
+	if len(styles) > 1 {
+		return fmt.Errorf("at most one POSIX properties style may be supplied")
+	}
+	style := common.StandardPosixPropertiesStyle
+	if len(styles) == 1 {
+		style = styles[0]
+	}
+	return azcopy.PerformSMBSpecificValidationWithPOSIXStyle(fromTo, permissions, preserveInfo, preservePOSIX, style, hardlinks)
+}
 
 func GetPreserveInfoFlagDefault(_ *cobra.Command, fromTo common.FromTo) bool {
 	return azcopy.GetPreserveInfoDefault(fromTo)

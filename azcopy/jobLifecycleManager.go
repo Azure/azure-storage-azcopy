@@ -392,6 +392,7 @@ func (j *jobLifecycleManager) cancelJob(jobID common.JobID) error {
 	if jobsAdmin.JobsAdmin == nil {
 		return errors.New("storage transfer engine is not initialized")
 	}
+	j.handler.Info("Canceling job started")
 	resp := jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Cancelling(), j)
 	if !resp.CancelledPauseResumed {
 		if manager, ok := jobsAdmin.JobsAdmin.JobMgr(jobID); ok {

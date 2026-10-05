@@ -114,7 +114,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 	// 1. Try to replace period with hyphen.
 	// Note: there should be no '.' adjacent to '-'.
 	if hasPeriod {
-		resolvedName = strings.Replace(orgBucketName, ".", "-", -1)
+		resolvedName = strings.ReplaceAll(orgBucketName, ".", "-")
 	}
 
 	// 2. Try to replace consecutive hyphen with -[number]-.
@@ -131,13 +131,14 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 			}
 
 			// Found byte that doesn't indicate '-'
-			if consecutiveHyphenCount == 0 {
+			switch consecutiveHyphenCount {
+			case 0:
 				// current char is non '-', and no preceding '-', directly write the char to buffer.
 				buffer.WriteByte(charAtI)
-			} else if consecutiveHyphenCount == 1 {
+			case 1:
 				buffer.WriteString("-")
 				buffer.WriteByte(charAtI)
-			} else { // consecutiveHyphenCount > 1
+			default: // consecutiveHyphenCount > 1
 				buffer.WriteString("-")
 				buffer.WriteString(strconv.Itoa(consecutiveHyphenCount))
 				buffer.WriteString("-")
@@ -187,10 +188,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) addSuffix(name string) s
 	resolvedName := fmt.Sprintf(suffixPattern, name, count)
 	// S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number,
 	// so the loop should finish soon.
-	for {
-		if !s3Resolver.hasCollision(resolvedName) {
-			break
-		}
+	for s3Resolver.hasCollision(resolvedName) {
 
 		if count > 999 {
 			// Currently, S3 has 100 for buckets' number per S3 account by default.

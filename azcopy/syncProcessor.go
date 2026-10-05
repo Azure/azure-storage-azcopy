@@ -296,7 +296,7 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 		switch target {
 		case common.ELocation.Blob():
 			bsc, _ := sc.BlobServiceClient()
-			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(objectPath)
+			var blobClient = bsc.NewContainerClient(b.containerName).NewBlobClient(objectPath)
 
 			objURL, err = b.getObjectURL(blobClient.URL())
 			if err != nil {

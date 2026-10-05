@@ -50,7 +50,7 @@ type appendBlobSenderBase struct {
 	// When sending local data, they are computed based on
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply common.Metadata
+	metadataToApply *common.SafeMetadata
 	blobTagsToApply common.BlobTags
 
 	sip ISourceInfoProvider
@@ -87,13 +87,15 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 	}
 
 	return &appendBlobSenderBase{
-		jptm:                   jptm,
-		destAppendBlobClient:   destAppendBlobClient,
-		chunkSize:              chunkSize,
-		numChunks:              numChunks,
-		pacer:                  pacer,
-		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata,
+		jptm:                 jptm,
+		destAppendBlobClient: destAppendBlobClient,
+		chunkSize:            chunkSize,
+		numChunks:            numChunks,
+		pacer:                pacer,
+		headersToApply:       props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		metadataToApply: &common.SafeMetadata{
+			Metadata: props.SrcMetadata.Clone(),
+		},
 		blobTagsToApply:        props.SrcBlobTags,
 		sip:                    srcInfoProvider,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
@@ -159,7 +161,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	}
 	_, err := s.destAppendBlobClient.Create(s.jptm.Context(), &appendblob.CreateOptions{
 		HTTPHeaders:  &s.headersToApply,
-		Metadata:     s.metadataToApply,
+		Metadata:     s.metadataToApply.Metadata,
 		Tags:         blobTags,
 		CPKInfo:      s.jptm.CpkInfo(),
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),

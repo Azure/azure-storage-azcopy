@@ -25,7 +25,9 @@ package sddl
 
 import (
 	"encoding/binary"
+	"math"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +35,68 @@ import (
 
 // Real-world SDDL from a lab system with a callback ACE (XA) and inherited ACEs.
 const realWorldSDDL = `O:S-1-5-21-2127521184-1604012920-1887927527-5560896G:DUD:AI(XA;;0x1200a9;;;AU;(Member_of{SID(S-1-5-21-72051607-1745760036-109187956-363937)}))(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;FA;;;S-1-5-21-2127521184-1604012920-1887927527-5560896)(A;ID;0x1200a9;;;BU)`
+
+func TestMaliciousRelativeSDDLCrashPrevented(t *testing.T) {
+	a := assert.New(t)
+	craftedDescriptor := SECURITY_DESCRIPTOR_RELATIVE{
+		Revision: SDDL_REVISION,
+		Sbz1:     0,
+		Control:  SE_SELF_RELATIVE,
+		Data:     [0]BYTE{},
+	}
+	type testTargets struct {
+		testName    string
+		offset      *DWORD
+		offsetValue DWORD
+		controlFlag SECURITY_DESCRIPTOR_CONTROL
+		siFlags     SECURITY_INFORMATION
+	}
+	maliciousOffsetSID := DWORD(math.MaxUint32 - unsafe.Sizeof(SID{}) + 1)
+	maliciousOffsetACL := DWORD(math.MaxUint32 - unsafe.Sizeof(ACL{}) + 1)
+	fieldsToTest := []testTargets{
+		{"DACL", &craftedDescriptor.OffsetDacl, maliciousOffsetACL, SE_DACL_PRESENT | SE_SELF_RELATIVE, DACL_SECURITY_INFORMATION},
+		{"SACL", &craftedDescriptor.OffsetSacl, maliciousOffsetACL, SE_SACL_PRESENT | SE_SELF_RELATIVE, SACL_SECURITY_INFORMATION},
+		{"Owner", &craftedDescriptor.OffsetOwner, maliciousOffsetSID, SE_SELF_RELATIVE, OWNER_SECURITY_INFORMATION},
+		{"Group", &craftedDescriptor.OffsetGroup, maliciousOffsetSID, SE_SELF_RELATIVE, GROUP_SECURITY_INFORMATION},
+	}
+	for _, v := range fieldsToTest {
+		originalOffset := *v.offset
+		originalControl := craftedDescriptor.Control
+		*v.offset = v.offsetValue
+		craftedDescriptor.Control = v.controlFlag
+		panicked, err := func() (panicked any, err error) {
+			defer func() { panicked = recover() }()
+			descData := ([]byte)(unsafe.Slice((*byte)(unsafe.Pointer(&craftedDescriptor)), unsafe.Sizeof(craftedDescriptor)))
+			err = sdRelativeIsValid(descData, v.siFlags)
+			return
+		}()
+		*v.offset = originalOffset
+		craftedDescriptor.Control = originalControl
+		a.Nil(panicked, "%s panicked", v.testName)
+		a.NotNil(err, "%s should have returned an error", v.testName)
+		if err != nil {
+			a.Contains(err.Error(), "must lie within sd", "%s error wasn't as expected", v.testName)
+		}
+	}
+	craftedDescriptor = SECURITY_DESCRIPTOR_RELATIVE{
+		Revision:   SDDL_REVISION,
+		Sbz1:       0,
+		Control:    SE_SELF_RELATIVE | SE_DACL_PRESENT,
+		OffsetDacl: maliciousOffsetACL,
+		Data:       [0]BYTE{},
+	}
+	panicked, err := func() (panicked any, err error) {
+		defer func() { panicked = recover() }()
+		descData := ([]byte)(unsafe.Slice((*byte)(unsafe.Pointer(&craftedDescriptor)), unsafe.Sizeof(craftedDescriptor)))
+		_, err = getDaclString(descData)
+		return
+	}()
+	a.Nil(panicked, "getDaclString panicked")
+	a.NotNil(err, "getDaclString should error")
+	if err != nil {
+		a.Contains(err.Error(), "points outside Security Descriptor of size", "getDaclString error wasn't what was expected")
+	}
+}
 
 // =============================================================================
 // sidToString / stringToSid — used by SecurityDescriptorToString and

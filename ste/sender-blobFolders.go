@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
@@ -20,7 +21,7 @@ type blobFolderSender struct {
 	destinationClient *blockblob.Client // We'll treat all folders as block blobs
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
-	metadataToApply   common.Metadata
+	metadataToApply   *common.SafeMetadata
 	headersToApply    blob.HTTPHeaders
 	blobTagsToApply   common.BlobTags
 }
@@ -42,9 +43,11 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
-		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		blobTagsToApply:   props.SrcBlobTags,
+		metadataToApply: &common.SafeMetadata{
+			Metadata: props.SrcMetadata.Clone(),
+		}, // We're going to modify it, so we should clone it.
+		headersToApply:  props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		blobTagsToApply: props.SrcBlobTags,
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
@@ -69,7 +72,20 @@ func (b *blobFolderSender) setDatalakeACLs() {
 		b.jptm.FailActiveSend("Getting source client", err)
 		return
 	}
-	dstDatalakeClient := dsc.NewFileSystemClient(b.jptm.Info().DstContainer).NewFileClient(b.jptm.Info().DstFilePath)
+	fileSystemClient := dsc.NewFileSystemClient(b.jptm.Info().DstContainer)
+	if b.jptm.Info().DstFilePath == "" {
+		// We cannot set ACLs with an empty file path
+		// https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-access-control#can-i-set-the-acl-of-a-container
+		dstDirectoryDatalakeClient := fileSystemClient.NewDirectoryClient("/")
+		_, err = dstDirectoryDatalakeClient.SetAccessControl(b.jptm.Context(),
+			&directory.SetAccessControlOptions{ACL: acl})
+		if err != nil {
+			b.jptm.FailActiveSend("Setting Root Directory ACL", err)
+			return
+		}
+		return
+	}
+	dstDatalakeClient := fileSystemClient.NewFileClient(b.jptm.Info().DstFilePath)
 	_, err = dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
@@ -86,12 +102,12 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	}
 
 	// do not set folder flag as it's invalid to modify a folder with
-	delete(b.metadataToApply, "hdi_isfolder")
-	delete(b.metadataToApply, "Hdi_isfolder")
+	delete(b.metadataToApply.Metadata, "hdi_isfolder")
+	delete(b.metadataToApply.Metadata, "Hdi_isfolder")
 	// TODO : Here should we undo delete "Hdi_isfolder" too?
 
 	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
-	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply,
+	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply.Metadata,
 		&blob.SetMetadataOptions{
 			CPKInfo:      b.jptm.CpkInfo(),
 			CPKScopeInfo: b.jptm.CpkScopeInfo(),
@@ -131,12 +147,24 @@ func (b *blobFolderSender) SetContainerACL() error {
 		b.jptm.FailActiveSend("Getting source client", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
 	}
-	dstDatalakeClient := dsc.NewFileSystemClient(b.jptm.Info().DstContainer).NewFileClient(b.jptm.Info().DstFilePath)
+	dstFileSystemClient := dsc.NewFileSystemClient(b.jptm.Info().DstContainer)
 
-	_, err = dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
-	if err != nil {
-		b.jptm.FailActiveSend("Putting ACLs", err)
-		return folderPropertiesSetInCreation{} // standard completion will detect failure
+	if b.jptm.Info().DstFilePath == "" {
+		dstDirectoryDatalakeClient := dstFileSystemClient.NewDirectoryClient("/")
+		_, err = dstDirectoryDatalakeClient.SetAccessControl(b.jptm.Context(), &directory.SetAccessControlOptions{ACL: acl})
+		if err != nil {
+			b.jptm.FailActiveSend("Setting Root Directory ACL", err)
+			return folderPropertiesSetInCreation{} // standard completion will detect failure
+		}
+
+	} else {
+		dstDatalakeClient := dstFileSystemClient.NewFileClient(b.jptm.Info().DstFilePath)
+
+		_, err = dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+		if err != nil {
+			b.jptm.FailActiveSend("Putting ACLs", err)
+			return folderPropertiesSetInCreation{} // standard completion will detect failure
+		}
 	}
 
 	return folderPropertiesSetInCreation{} // standard completion will handle the rest
@@ -188,12 +216,12 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		}
 	}
 
-	// TODO (gapra): figure out better way to deal with hdi_isfolder metadata key capitalization
-	if b.metadataToApply["Hdi_isfolder"] != nil {
-		b.metadataToApply["Hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
-	} else {
-		b.metadataToApply["hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
+	// Always set this metadata in lower case while creating directories
+	if b.metadataToApply.Metadata["Hdi_isfolder"] != nil {
+		delete(b.metadataToApply.Metadata, "Hdi_isfolder")
 	}
+	b.metadataToApply.Metadata["hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
+
 	err = b.getExtraProperties()
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
@@ -210,7 +238,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		_, err := b.destinationClient.Upload(b.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 			&blockblob.UploadOptions{
 				HTTPHeaders:  &b.headersToApply,
-				Metadata:     b.metadataToApply,
+				Metadata:     b.metadataToApply.Metadata,
 				Tags:         blobTags,
 				CPKInfo:      b.jptm.CpkInfo(),
 				CPKScopeInfo: b.jptm.CpkScopeInfo(),

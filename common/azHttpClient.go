@@ -39,10 +39,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
-// GlobalHTTPClient is the process-wide HTTP client used by AzCopy when initialized via InitGlobalHTTPClient.
+// GlobalHTTPClient is the process-owned data-plane client. An embedded host may
+// supply it before the first InitGlobalHTTPClient or GetGlobalHTTPClient call.
+// After initialization, callers must not replace it or close its shared transport.
 var (
 	GlobalHTTPClient     *http.Client
-	globalHTTPClientOnce sync.Once
+	globalHTTPClientOnce = new(sync.Once)
 )
 
 const (
@@ -179,21 +181,41 @@ func newShardedTransport(maxConnsPerHost int) *ShardedTransport {
 	return st
 }
 
-// GetGlobalHTTPClient initializes and returns the process-global HTTP client exactly once.
-// Subsequent calls return the same client. The logger function, if provided on the first call,
-// will be invoked with status messages.
-func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
+// InitGlobalHTTPClient initializes the process-owned HTTP client exactly once.
+// NewClient passes the STE concurrency-derived limit before starting the engine.
+// With no limit, the existing embedded-client defaults apply. A preinstalled host
+// client takes precedence. Later calls never reconfigure the shared transport.
+func InitGlobalHTTPClient(maxIdleConnsPerHost ...int) *http.Client {
+	return initGlobalHTTPClient(nil, maxIdleConnsPerHost...)
+}
+
+// GetGlobalHTTPClient preserves lazy initialization for embedded callers and
+// accepts the legacy optional logger. Explicit startup initialization is preferred.
+func GetGlobalHTTPClient(loggers ...ILoggerResetable) *http.Client {
+	var logger ILoggerResetable
+	if len(loggers) > 0 {
+		logger = loggers[0]
+	}
+	return initGlobalHTTPClient(logger)
+}
+
+func initGlobalHTTPClient(logger ILoggerResetable, maxIdleConnsPerHost ...int) *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		if useHighPerfNetworkPath() {
-			const maxConnsPerHost = 1024
-			shardedTransport := newShardedTransport(maxConnsPerHost)
-			client := &http.Client{
-				Transport: shardedTransport,
-			}
-			GlobalHTTPClient = client
+		if GlobalHTTPClient != nil {
+			return
+		}
+		var idleLimit int
+		if len(maxIdleConnsPerHost) > 0 {
+			idleLimit = maxIdleConnsPerHost[0]
+		} else {
+			idleLimit = GetMaxIdleConnsPerHost()
+		}
+		client := buildGlobalHTTPClient(idleLimit)
+		GlobalHTTPClient = client
+		if shardedTransport, ok := client.Transport.(*ShardedTransport); ok {
 			msg := fmt.Sprintf(
 				"GetGlobalHTTPClient: SHARDED_TRANSPORT_V6 initialized %p shards=%d MaxConnsPerHost=%d HTTP1.1_ONLY",
-				client, len(shardedTransport.transports), maxConnsPerHost)
+				client, len(shardedTransport.transports), shardedTransport.transports[0].MaxConnsPerHost)
 			fmt.Fprintln(os.Stderr, msg)
 			if logger != nil {
 				logger.Log(LogError, msg)
@@ -201,22 +223,6 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 			return
 		}
 
-		const concurrentDialsPerCpu = 10
-		client := &http.Client{
-			Transport: &http.Transport{
-				Proxy:                  GlobalProxyLookup,
-				MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
-				MaxIdleConns:           0,
-				MaxIdleConnsPerHost:    GetMaxIdleConnsPerHost(),
-				IdleConnTimeout:        180 * time.Second,
-				TLSHandshakeTimeout:    10 * time.Second,
-				ExpectContinueTimeout:  1 * time.Second,
-				DisableKeepAlives:      false,
-				DisableCompression:     true,
-				MaxResponseHeaderBytes: 0,
-			},
-		}
-		GlobalHTTPClient = client
 		if logger != nil {
 			if tr, ok := client.Transport.(*http.Transport); ok {
 				logger.Log(LogError, // XDM: This is error level on purpose as we want to make sure it is seen in the logs
@@ -229,6 +235,28 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 		}
 	})
 	return GlobalHTTPClient
+}
+
+func buildGlobalHTTPClient(maxIdleConnsPerHost int) *http.Client {
+	if useHighPerfNetworkPath() {
+		// The high-performance profile retains its independent per-shard ceiling.
+		return &http.Client{Transport: newShardedTransport(1024)}
+	}
+	const concurrentDialsPerCpu = 10
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy:                  GlobalProxyLookup,
+			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
+			MaxIdleConns:           0,
+			MaxIdleConnsPerHost:    maxIdleConnsPerHost,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     true,
+			MaxResponseHeaderBytes: 0,
+		},
+	}
 }
 
 // This is a code duplication of GetMainPoolSize in ste/concurrency.go
@@ -367,11 +395,14 @@ func dumpConnStats() {
 }
 
 // NewTracingTransport wraps an existing policy.Transporter and injects an httptrace.ClientTrace to
-// collect aggregated connection reuse metrics (per label). A periodic dumper is started once.
+// collect aggregated connection reuse metrics (per label). A periodic dumper is started once,
+// using the logger supplied on the FIRST call; loggers passed to later calls are ignored.
 //
-// Usage: replace the Transport field of an *http.Client with the result of this function.
-// Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace
-// This will log connection stats every minute using the provided logger.
+// Note: *http.Client satisfies policy.Transporter, so it can be passed directly. Typical usage:
+//
+//	common.NewTracingTransport(common.GetGlobalHTTPClient(), "createClientOptions", logger)
+//
+// Connection stats are logged every httpTraceTickerInterval using the captured logger.
 func NewTracingTransport(inner policy.Transporter, label string, logger ILoggerResetable) policy.Transporter {
 	connStatsLoggerOnce.Do(func() {
 		if logger != nil {
@@ -385,14 +416,13 @@ func NewTracingTransport(inner policy.Transporter, label string, logger ILoggerR
 			}
 		}()
 	})
-	return &traceTransport{inner: inner, label: label, logger: logger}
+	return &traceTransport{inner: inner, label: label}
 }
 
 // traceTransport implements policy.Transporter using the wrapped transport's Do method.
 type traceTransport struct {
-	inner  policy.Transporter
-	label  string
-	logger ILoggerResetable
+	inner policy.Transporter
+	label string
 }
 
 func (t *traceTransport) Do(req *http.Request) (*http.Response, error) {

@@ -256,7 +256,7 @@ func createNewAzureFile(c asserter, sc *share.Client, prefix string) (fc *sharef
 }
 
 func newNullFolderCreationTracker() ste.FolderCreationTracker {
-	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil, common.EFromTo.Unknown())
 }
 
 func getFileShareClient(c asserter) *share.Client {

@@ -427,7 +427,7 @@ func createNewShare(a *assert.Assertions, fsc *fileservice.Client) (sc *share.Cl
 }
 
 func generateParentsForShareFile(a *assert.Assertions, fileClient *sharefile.Client, shareClient *share.Client) {
-	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil, common.EFromTo.Unknown())
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, shareClient, t)
 	a.Nil(err)
 }

@@ -57,7 +57,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return err
 	}
 
-	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && cooked.blobTags != "" {
+	if (cooked.FromTo.To() != common.ELocation.Blob() && cooked.FromTo != common.EFromTo.BlobNone() && cooked.FromTo == common.EFromTo.BlobFSNone()) && cooked.blobTags != "" {
 		return errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(cooked.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
@@ -102,9 +102,9 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 			return err
 		}
 	} else {
-		if err := azcopy.PerformSMBSpecificValidation(
+		if err := azcopy.PerformSMBSpecificValidationWithPOSIXStyle(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
 			return err
 		}
 

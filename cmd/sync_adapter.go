@@ -115,6 +115,7 @@ func (cca *cookedSyncCmdArgs) librarySyncOptions(enumeratorOptions *SyncEnumerat
 		IncludeDirectoryStubs:      cca.includeDirectoryStubs,
 		PreserveInfo:               &cca.preserveInfo,
 		PreservePosixProperties:    cca.preservePOSIXProperties,
+		PosixPropertiesStyle:       cca.posixPropertiesStyle,
 		ForceIfReadOnly:            cca.forceIfReadOnly,
 		BlockSizeMB:                cca.blockSizeMB,
 		PutBlobSizeMB:              cca.putBlobSizeMB,

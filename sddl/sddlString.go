@@ -100,7 +100,8 @@ func (a *ACLList) PortableString() string {
 				output += ";"
 			}
 
-			if k == 5 {
+			switch k {
+			case 5:
 				// This section is a lone SID, so we can make a call to windows and translate it.
 				tx, err := translateSID(strings.TrimSpace(s))
 
@@ -109,7 +110,7 @@ func (a *ACLList) PortableString() string {
 				} else {
 					output += tx
 				}
-			} else if k == 6 {
+			case 6:
 				// This section will potentially have SIDs unless it's not a conditional ACE.
 				// They're identifiable as they're inside a literal SID container. ex "SID(S-1-1-0)"
 
@@ -196,7 +197,7 @@ func (a *ACLList) PortableString() string {
 				}
 
 				output += s
-			} else {
+			default:
 				output += s
 			}
 		}

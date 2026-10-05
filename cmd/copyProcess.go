@@ -91,7 +91,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 				// provide clear warning if user uses old (obsolete) format by mistake
 				if headerLineNum <= 1 {
-					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+					cleanedLine := strings.ReplaceAll(strings.ReplaceAll(v, " ", ""), "\t", "")
 					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
 					if cleanedLine == "{" && headerLineNum == 0 {
 						firstLineIsCurlyBrace = true
@@ -194,7 +194,7 @@ func (cooked *CookedCopyCmdArgs) prepareCopyProperties() error {
 		if cooked.FromTo.IsNFS() {
 			// Skip logging this msg for cross-protocol transfers
 			// because --preserve-permissions flag is not applicable.
-			if !(cooked.FromTo == common.EFromTo.FileSMBFileNFS() || cooked.FromTo == common.EFromTo.FileNFSFileSMB()) {
+			if cooked.FromTo != common.EFromTo.FileSMBFileNFS() && cooked.FromTo != common.EFromTo.FileNFSFileSMB() {
 				glcm.Info(azcopy.PreserveNFSPermissionsDisabledMsg)
 			}
 		} else {
@@ -237,7 +237,8 @@ func (cooked *CookedCopyCmdArgs) ToCopyOptions() (azcopy.CopyOptions, error) {
 		PreservePermissions:      cooked.preservePermissions.IsTruthy(),
 		PreserveOwner:            &cooked.preserveOwner, PreserveInfo: &cooked.preserveInfo,
 		PreservePosixProperties: cooked.preservePOSIXProperties, AsSubDir: &cooked.asSubdir,
-		Symlinks: cooked.SymlinkHandling, Hardlinks: cooked.hardlinks, BackupMode: cooked.backupMode,
+		PosixPropertiesStyle: cooked.posixPropertiesStyle,
+		Symlinks:             cooked.SymlinkHandling, Hardlinks: cooked.hardlinks, BackupMode: cooked.backupMode,
 		PutMd5: cooked.putMd5, CheckMd5: cooked.md5ValidationOption, CheckLength: cooked.CheckLength,
 		S2SPreserveProperties: &preserveProperties, S2SPreserveAccessTier: &preserveTier,
 		S2SDetectSourceChanged:      cooked.s2sSourceChangeValidation,
