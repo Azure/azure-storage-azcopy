@@ -54,6 +54,7 @@ var OutputLevel OutputVerbosity
 var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
+var disableTelemetry bool
 
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
@@ -193,7 +194,16 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]"
-		return Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID)
+		glcm.RegisterCloseFunc(func() { Client.FlushTelemetry() })
+		if err := Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID); err != nil {
+			return err
+		}
+		// copy, sync, and jobs resume report their own job attempts; other commands send one command.invoked event.
+		command := commandTelemetryName(cmd)
+		if command != "" && !commandUsesJobAttemptTelemetry(command) && !commandExcludedFromTelemetry(command) {
+			Client.ReportCommandInvoked(command, Client.CurrentJobID.String(), telemetryOptions(cmd))
+		}
+		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
@@ -216,7 +226,12 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 	glcm.SetOutputFormat(outputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 	jobsAdmin.BenchmarkResults = isBench
-	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps, TrustedSuffixes: TrustedSuffixes, LogLevel: &LogLevel})
+	Client, err = azcopy.NewClient(azcopy.ClientOptions{
+		CapMbps:         CapMbps,
+		TrustedSuffixes: TrustedSuffixes,
+		LogLevel:        &LogLevel,
+		EnableTelemetry: !disableTelemetry,
+	})
 	// Run MessagHandler to process messages from Input Watcher
 	if jobsAdmin.JobsAdmin != nil {
 		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
@@ -349,6 +364,10 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
+
+	rootCmd.PersistentFlags().BoolVar(&disableTelemetry, "disable-telemetry", false,
+		"Opt out of sending usage telemetry, including Azure Storage account names and pseudonymous installation and job identifiers. "+
+			"\n It can also be disabled by setting the AZCOPY_DISABLE_TELEMETRY environment variable to 'true'.")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
