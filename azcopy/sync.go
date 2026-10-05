@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -75,6 +76,7 @@ type SyncOptions struct {
 	commandString                    string
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 	dryrunDeleteHandler              ObjectDeleter
+	telemetryOptions                 telemetry.OptionAttributes
 }
 
 type SyncHandler interface {
@@ -116,6 +118,10 @@ func (s *SyncOptions) SetInternalOptions(dryrun, deleteDestinationFileIfNecessar
 	s.dryrunDeleteHandler = dryrunDeleteHandler
 	s.deleteDestinationFileIfNecessary = deleteDestinationFileIfNecessary
 	s.commandString = cmd
+}
+
+func (s *SyncOptions) SetTelemetryOptions(options telemetry.OptionAttributes) {
+	s.telemetryOptions = options.Clone()
 }
 
 func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (SyncResult, error) {
