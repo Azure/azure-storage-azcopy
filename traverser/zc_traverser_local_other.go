@@ -36,14 +36,16 @@ func IsSymbolicLink(fileInfo os.FileInfo) bool {
 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
 }
 
-// LogHardLinkIfDefaultPolicy logs a warning if the given file is a hard link and the specified
-// hardlink handling policy is set to default hard links behaviour(follow).
-func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.HardlinkHandlingType) {
-	if !IsHardlink(fileInfo) || hardlinkHandling != common.DefaultHardlinkHandlingType {
-		return
+func getInodeString(fileInfo os.FileInfo) string {
+	stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return ""
 	}
+	return strconv.FormatUint(uint64(stat.Dev), 10) + ":" + strconv.FormatUint(stat.Ino, 10)
+}
 
-	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
-	inodeStr := strconv.FormatUint(stat.Ino, 10)
-	logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandling)
+func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, handling common.HardlinkHandlingType) {
+	if IsHardlink(fileInfo) && handling == common.DefaultHardlinkHandlingType {
+		logNFSLinkWarning(fileInfo.Name(), getInodeString(fileInfo), false, handling)
+	}
 }

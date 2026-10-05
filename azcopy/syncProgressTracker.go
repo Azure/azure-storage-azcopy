@@ -255,11 +255,19 @@ func (spt *syncProgressTracker) getDestinationFilesScanned() uint64 {
 	return atomic.LoadUint64(&spt.atomicDestinationFilesScanned)
 }
 
-func (spt *syncProgressTracker) incDestEnumeration(entityType common.EntityType, _ common.SymlinkHandlingType, _ common.HardlinkHandlingType) {
+func (spt *syncProgressTracker) incDestEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 	if entityType == common.EEntityType.File() {
 		atomic.AddUint64(&spt.atomicDestinationFilesScanned, 1)
 	} else if entityType == common.EEntityType.Folder() {
 		atomic.AddUint64(&spt.atomicDestinationFoldersScanned, 1)
+	} else if entityType == common.EEntityType.Symlink() {
+		if symlinkOption == common.ESymlinkHandlingType.Preserve() {
+			atomic.AddUint64(&spt.atomicDestinationFilesScanned, 1)
+		}
+	} else if entityType == common.EEntityType.Hardlink() {
+		if hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+			atomic.AddUint64(&spt.atomicDestinationFilesScanned, 1)
+		}
 	}
 }
 
@@ -288,6 +296,10 @@ func (spt *syncProgressTracker) setScanningComplete() {
 
 func (spt *syncProgressTracker) getSkippedSymlinkCount() uint32 {
 	return atomic.LoadUint32(&spt.atomicSkippedSymlinkCount)
+}
+
+func (spt *syncProgressTracker) incrementSkippedSymlinkCount() {
+	atomic.AddUint32(&spt.atomicSkippedSymlinkCount, 1)
 }
 
 func (spt *syncProgressTracker) getSkippedSpecialFileCount() uint32 {

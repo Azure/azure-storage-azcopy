@@ -26,6 +26,7 @@ func (jm *jobMgr) RequestCancellation() {
 		}
 	}
 	jm.cancel()
+	jm.dispatchHardlinkParts(jm.hardlinkGate.cancel())
 }
 
 // CancelAndDrain requires enumeration and dispatch producers to be joined first.

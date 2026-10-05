@@ -139,7 +139,7 @@ func (s *SyncOptions) SetInternalOptions(dryrun, deleteDestinationFileIfNecessar
 	s.commandString = cmd
 }
 
-func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (SyncResult, error) {
+func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (result SyncResult, err error) {
 	// Input
 	if ctx == nil {
 		return SyncResult{}, fmt.Errorf("a context is required for sync")
@@ -204,11 +204,10 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	if manager == nil {
 		manager = c.GetCredentialManager()
 	}
-	s, err := newSyncer(ctx, jobID, src, dest, opts, manager)
+	s, err = newSyncer(ctx, jobID, src, dest, opts, manager)
 	if err != nil {
 		return SyncResult{}, err
 	}
-
 	s.logger = scanningLogger
 	mgr := NewJobLifecycleManager(syncHandler, jobLogger)
 	cleanupAllowed := false
@@ -217,6 +216,11 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 			return
 		}
 		mgr.Stop()
+		if closeErr := s.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+			retainResources = true
+			return
+		}
 		if cleanupAllowed && !opts.RetainJobState && !s.opts.dryrun && s.spt.firstPartOrdered() {
 			jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 		}
@@ -270,7 +274,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	finalSummary.SkippedHardlinkCount = s.spt.getSkippedHardlinkCount()
 	finalSummary.SkippedArchiveFileCount = s.spt.GetEnumerationStats().SkippedArchiveFileCount
 
-	result := SyncResult{
+	result = SyncResult{
 		MoverSyncStats:           s.spt.Stats(),
 		SourceFilesScanned:       s.spt.getSourceFilesScanned(),
 		DestinationFilesScanned:  s.spt.getDestinationFilesScanned(),
@@ -290,11 +294,22 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 }
 
 type syncer struct {
-	logger    common.ILoggerResetable
-	processor *CopyTransferProcessor
-	opts      *cookedSyncOptions
-	srp       *remoteProvider
-	spt       *syncProgressTracker
+	logger     common.ILoggerResetable
+	processor  *CopyTransferProcessor
+	opts       *cookedSyncOptions
+	srp        *remoteProvider
+	spt        *syncProgressTracker
+	inodeStore *common.InodeStore
+}
+
+// Close releases any resources held by the syncer, including the inode store.
+func (s *syncer) Close() error {
+	if s == nil || s.inodeStore == nil {
+		return nil
+	}
+	err := s.inodeStore.Close()
+	s.inodeStore = nil
+	return err
 }
 
 func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, manager cred.Manager) (s *syncer, err error) {
@@ -311,5 +326,16 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 		return nil, err
 	}
 	progressTracker := newSyncProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
-	return &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker}, nil
+	s = &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker}
+	if cookedOpts.hardlinks == common.PreserveHardlinkHandlingType {
+		if cookedOpts.dryrun {
+			s.inodeStore, err = common.NewTemporaryInodeStore()
+		} else {
+			s.inodeStore, err = common.NewInodeStoreForNewJob(jobID)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize inode store: %w", err)
+		}
+	}
+	return s, nil
 }

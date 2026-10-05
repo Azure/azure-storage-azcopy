@@ -108,8 +108,13 @@ type StoredObject struct {
 
 	// For SMB, this is last write time and change time.
 	// For NFS, this is populated from POSIX properties - posix_ctime, modtime
-	LastWriteTime time.Time
-	ChangeTime    time.Time
+	LastWriteTime      time.Time
+	ChangeTime         time.Time
+	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
+	Inode              string // opaque per-root, per-side key into the job's inode store
+	FileID             string // original filesystem/service identity, before root namespacing
+	inodePath          *string
+	hardlinkedSymlink  bool
 }
 
 func (s *StoredObject) IsMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -161,7 +166,7 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 	case common.EEntityType.Symlink():
 		return sht == common.ESymlinkHandlingType.Preserve()
 	case common.EEntityType.Hardlink():
-		return pho == common.EHardlinkHandlingType.Follow()
+		return pho == common.EHardlinkHandlingType.Follow() || pho == common.EHardlinkHandlingType.Preserve()
 	case common.EEntityType.Other():
 		return false
 	default:
@@ -200,9 +205,32 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 
 // Returns a func that only calls inner if StoredObject isCompatibleWithFpo
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an ObjectProcessor)
-func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor) ObjectProcessor {
+type FpoAwareProcessorOptions struct {
+	SymlinkHandling  common.SymlinkHandlingType
+	HardlinkHandling common.HardlinkHandlingType
+}
+
+// NewFpoAwareProcessorWithLinks applies explicit link policies without changing
+// the legacy two-argument processor's skip-symlink/follow-hardlink defaults.
+func NewFpoAwareProcessorWithLinks(fpo common.FolderPropertyOption, inner ObjectProcessor,
+	symlinks common.SymlinkHandlingType, hardlinks common.HardlinkHandlingType) ObjectProcessor {
+	return NewFpoAwareProcessor(fpo, inner, FpoAwareProcessorOptions{
+		SymlinkHandling: symlinks, HardlinkHandling: hardlinks,
+	})
+}
+
+func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor, options ...FpoAwareProcessorOptions) ObjectProcessor {
+	settings := FpoAwareProcessorOptions{
+		SymlinkHandling:  common.ESymlinkHandlingType.Skip(),
+		HardlinkHandling: common.EHardlinkHandlingType.Follow(),
+	}
+	if len(options) > 0 {
+		settings = options[0]
+	}
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
+
+		// We pass in the user provided symbolic and hardlink handling. For hardlink, the default handling is Follow
+		if s.isCompatibleWithEntitySettings(fpo, settings.SymlinkHandling, settings.HardlinkHandling) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -243,6 +271,7 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 		BlobVersionID:      s.BlobVersionID,
 		BlobTags:           s.BlobTags,
 		BlobSnapshotID:     s.BlobSnapshotID,
+		TargetHardlinkFile: s.TargetHardlinkFile,
 	}
 
 	if preserveBlobTier {
@@ -302,10 +331,20 @@ type filePropsProvider interface {
 	FileID() string
 }
 
+type NFSMetadataContext struct {
+	TargetHardlinkFile string
+	Inode              string
+	FileID             string
+	inodePath          *string
+	hardlinkedSymlink  bool
+}
+
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func NewStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time,
-	size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
+func NewStoredObject(morpher objectMorpher, name string,
+	relativePath string, entityType common.EntityType, lmt time.Time,
+	size int64, props contentPropsProvider, blobProps blobPropsProvider,
+	meta common.Metadata, containerName string, nfsOptions ...*NFSMetadataContext) StoredObject {
 	obj := StoredObject{
 		Name:               name,
 		RelativePath:       relativePath,
@@ -327,6 +366,14 @@ func NewStoredObject(morpher objectMorpher, name string, relativePath string, en
 		LeaseStatus:   blobProps.LeaseStatus(),
 		LeaseState:    blobProps.LeaseState(),
 		LeaseDuration: blobProps.LeaseDuration(),
+	}
+
+	if len(nfsOptions) > 0 && nfsOptions[0] != nil {
+		obj.TargetHardlinkFile = nfsOptions[0].TargetHardlinkFile
+		obj.Inode = nfsOptions[0].Inode
+		obj.FileID = nfsOptions[0].FileID
+		obj.inodePath = nfsOptions[0].inodePath
+		obj.hardlinkedSymlink = nfsOptions[0].hardlinkedSymlink
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
@@ -427,6 +474,8 @@ type InitResourceTraverserOptions struct {
 	HardlinkHandling  common.HardlinkHandlingType
 	FromTo            common.FromTo
 	IncludeRoot       bool
+	BasePath          string // full traversal root, retained when creating child traversers
+	InodeStore        *common.InodeStore
 
 	IncrementNotTransferred func(common.EntityType)
 
@@ -450,6 +499,9 @@ type ResourceTraverserTemplate struct {
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
+	if o.HardlinkHandling == common.EHardlinkHandlingType.Preserve() && o.InodeStore == nil {
+		return errors.New("hardlink preservation requires an inode store")
+	}
 	if o.IncrementEnumeration == nil {
 		o.IncrementEnumeration = enumerationCounterFuncNoop
 	}

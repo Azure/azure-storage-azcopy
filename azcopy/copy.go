@@ -166,7 +166,7 @@ func (c *CopyOptions) SetCookedCredentialCallback(callback func(cred.CredentialI
 }
 
 // Copy copies the contents from source to destination.
-func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (CopyResult, error) {
+func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (result CopyResult, err error) {
 	if ctx == nil {
 		return CopyResult{}, fmt.Errorf("a context is required for copy")
 	}
@@ -227,7 +227,6 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		common.LogPathFolder = ""
 	}
 
-	var t *transferExecutor
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	if opts.S3CredentialProvider != nil {
 		ctx = context.WithValue(ctx, "customS3Creds", opts.S3CredentialProvider)
@@ -240,6 +239,14 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 	if err != nil {
 		return CopyResult{}, err
 	}
+	defer func() {
+		if keepJobLoggerOpen {
+			return
+		}
+		if closeErr := t.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close inode store: %w", closeErr))
+		}
+	}()
 
 	// handle from/to pipe
 	if t.opts.fromTo.IsRedirection() {
@@ -261,6 +268,11 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 				return
 			}
 			mgr.Stop()
+			if closeErr := t.Close(); closeErr != nil {
+				keepJobLoggerOpen = true
+				err = errors.Join(err, fmt.Errorf("failed to close inode store; job resources retained: %w", closeErr))
+				return
+			}
 			if cleanupAllowed && !opts.RetainJobState && !t.opts.dryrun && t.tpt.firstPartOrdered() {
 				jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 			}
@@ -340,10 +352,21 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 }
 
 type transferExecutor struct {
-	opts      *CookedTransferOptions
-	trp       *remoteProvider
-	tpt       *transferProgressTracker
-	processor *CopyTransferProcessor
+	opts       *CookedTransferOptions
+	trp        *remoteProvider
+	tpt        *transferProgressTracker
+	processor  *CopyTransferProcessor
+	inodeStore *common.InodeStore
+}
+
+// Close releases resources held by the transferExecutor, including the inode store.
+func (t *transferExecutor) Close() error {
+	if t == nil || t.inodeStore == nil {
+		return nil
+	}
+	err := t.inodeStore.Close()
+	t.inodeStore = nil
+	return err
 }
 
 func (t *transferExecutor) cancelAndDrain(cancel context.CancelFunc, jobID common.JobID, drain func(context.Context, common.JobID) error) error {
@@ -393,6 +416,20 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 	}
 
 	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo, loggers...)
+	store, err := newCopyInodeStore(jobID, cookedOpts.hardlinks, cookedOpts.dryrun)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
+	}
 
-	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker}, nil
+	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
+}
+
+func newCopyInodeStore(jobID common.JobID, hardlinks common.HardlinkHandlingType, dryrun bool) (*common.InodeStore, error) {
+	if hardlinks != common.EHardlinkHandlingType.Preserve() {
+		return nil, nil
+	}
+	if dryrun {
+		return common.NewTemporaryInodeStore()
+	}
+	return common.NewInodeStoreForNewJob(jobID)
 }

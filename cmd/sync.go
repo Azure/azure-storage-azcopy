@@ -951,6 +951,7 @@ Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
 Number of Archive/Glacier Objects Skipped: %v
+Number of Hardlinks Transferred: %v
 Number of Hardlinks Converted: %v
 Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
@@ -971,8 +972,9 @@ Final Job Status: %v%s%s
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
 		summary.SkippedArchiveFileCount,
+		summary.HardlinksTransferCount,
 		summary.HardlinksConvertedCount,
-		summary.SkippedHardlinkCount,
+		summary.SkippedHardlinkCount+summary.HardlinksSkipped,
 		summary.TotalBytesTransferred,
 		summary.TotalBytesEnumerated,
 		summary.JobStatus,
@@ -1004,6 +1006,7 @@ Number of Deletions at Destination: ............ %12v
 Number of Symbolic Links Skipped: .............. %12v
 Number of Special Files Skipped: ............... %12v
 Number of Archive/Glacier Objects Skipped: ..... %12v
+Number of Hardlinks Transferred: ............... %12v
 Number of Hardlinks Converted: ................. %12v
 Number of Hardlinks Skipped: ................... %12v
 ------------------------------------------------------------
@@ -1040,8 +1043,9 @@ Final Job Status: .............................. %12v
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
 		summary.SkippedArchiveFileCount,
+		summary.HardlinksTransferCount,
 		summary.HardlinksConvertedCount,
-		summary.SkippedHardlinkCount,
+		summary.SkippedHardlinkCount+summary.HardlinksSkipped,
 
 		atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired),
 		atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired),
@@ -1304,7 +1308,10 @@ func init() {
 
 	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. "+
 		"\n This flag is only applicable when the source is NFS file share or the destination is NFS file share. "+
-		"\n Available options: skip, preserve, follow (default 'follow').")
+		"\n Available options: skip, preserve, follow (default 'follow'). "+
+		"\n Preserve requires standard indexed sync and is not supported with Mover orchestration or streaming merge-join. "+
+		"\n Preserving hardlink relationships can unlink and recreate destination paths even with --delete-destination=false. "+
+		"\n Local downloads may break out-of-scope links because files are replaced using a temporary file and rename.")
 
 	{ // Separate out hidden flags to improve readability
 		// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used

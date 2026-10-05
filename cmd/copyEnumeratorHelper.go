@@ -6,15 +6,22 @@ import (
 )
 
 func copyCommandProcessor(order *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) *azcopy.CopyTransferProcessor {
+	if cca.compatibilityProcessor != nil && cca.compatibilityOrder == order {
+		return cca.compatibilityProcessor
+	}
 	first := func(started bool) {
 		if started && !cca.dryrunMode {
 			cca.waitUntilJobCompletion(false)
 		}
 	}
 	final := func() { cca.isEnumerationComplete = true }
-	return azcopy.NewCopyTransferProcessor(true, order, azcopy.NumOfFilesPerDispatchJobPart,
+	order.JobProcessingMode = azcopy.GetJobProcessingMode(cca.FromTo)
+	order.HardlinkHandlingType = cca.hardlinks
+	cca.compatibilityOrder = order
+	cca.compatibilityProcessor = azcopy.NewCopyTransferProcessor(true, order, azcopy.NumOfFilesPerDispatchJobPart,
 		cca.Source, cca.Destination, first, final, cca.s2sPreserveAccessTier.Value(),
 		cca.dryrunMode, dryrunNewCopyJobPartOrder)
+	return cca.compatibilityProcessor
 }
 
 func addTransfer(order *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {

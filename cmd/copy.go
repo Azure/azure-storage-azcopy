@@ -633,6 +633,8 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 
 // represents the processed copy command input from the user
 type CookedCopyCmdArgs struct {
+	compatibilityProcessor *azcopy.CopyTransferProcessor
+	compatibilityOrder     *common.CopyJobPartOrderRequest
 	// from arguments
 	Source      common.ResourceString
 	Destination common.ResourceString
@@ -1307,7 +1309,8 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
-		"False by default. Follow symbolic links when uploading from local file system.")
+		"False by default. Follow symbolic links when uploading from local file system.\n"+
+			"If neither --follow-symlinks nor --preserve-symlinks is set, symlinks are skipped.")
 
 	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "",
 		"Include only those files were modified before or on the given date/time. \n "+
@@ -1584,7 +1587,9 @@ func init() {
 		"Specifies how hardlinks should be handled. "+
 			"\n This flag is only applicable when downloading from an Azure NFS file share, uploading "+
 			"to an Azure Files NFS share, or performing service-to-service copies involving Azure Files NFS. \n"+
-			"\n Supported options are 'follow' (default), which copies hardlinks as regular files, and 'skip'.")
+			"\n Supported options are 'follow' (default), which copies hardlinks as regular files, 'skip', and 'preserve'."+
+			"\n 'preserve' requires Linux-local/NFS or NFS-to-NFS transfers and maintains hardlink relationships."+
+			"\n With 'preserve', existing destination entries may be unlinked and recreated even when --delete-destination-file is false.")
 
 	{ // Hidden flags
 		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+

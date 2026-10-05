@@ -120,6 +120,8 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		DstServiceClient:               t.trp.dstServiceClient,
 		DestinationRoot:                t.opts.destination,
 		SourceRoot:                     normalizedSource,
+		JobProcessingMode:              GetJobProcessingMode(t.opts.fromTo),
+		HardlinkHandlingType:           t.opts.hardlinks,
 	}
 
 	// Initialize the source traverser
@@ -153,6 +155,8 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		FromTo:                  t.opts.fromTo,
 
 		ExcludeContainers: t.opts.excludeContainers,
+		InodeStore:        t.inodeStore,
+		BasePath:          normalizedSource.Value,
 		IncrementEnumeration: func(entityType common.EntityType, symlinks common.SymlinkHandlingType, hardlinks common.HardlinkHandlingType) {
 			t.tpt.incEnumeration(entityType, symlinks, hardlinks)
 			if t.opts.fromTo.From() == common.ELocation.S3() && entityType == common.EEntityType.Other() {
@@ -354,6 +358,11 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		return transferScheduler.scheduleTransfer(srcRelPath, dstRelPath, object)
 	}
 	finalizer := func() error {
+		if t.inodeStore != nil {
+			if err := t.inodeStore.Flush(); err != nil {
+				return fmt.Errorf("failed to flush inode store: %w", err)
+			}
+		}
 		_, err := transferScheduler.DispatchFinalPart()
 		return err
 	}

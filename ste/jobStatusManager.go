@@ -37,6 +37,7 @@ type JobPartCreatedMsg struct {
 	SymlinkTransfers        uint32
 	HardlinksConvertedCount uint32
 	FilePropertyTransfers   uint32
+	HardlinksTransferCount  uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -152,6 +153,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 			js.HardlinksConvertedCount += msg.HardlinksConvertedCount
+			js.HardlinksTransferCount += msg.HardlinksTransferCount
 			jm.drainTracker.done(1)
 
 		case msg, ok := <-jstm.xferDone:
@@ -178,6 +180,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsFolderProperties {
 					js.FoldersCompleted++
 				}
+				if msg.IsHardlink {
+					js.HardlinksCompleted++
+				}
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += msg.TransferSize
 			case common.ETransferStatus.Failed(),
@@ -185,6 +190,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				common.ETransferStatus.BlobTierFailure():
 				if msg.IsFolderProperties {
 					js.FoldersFailed++
+				}
+				if msg.IsHardlink {
+					js.HardlinksFailed++
 				}
 				js.TransfersFailed++
 				if buildmode.HighPerf() {
@@ -196,6 +204,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				if msg.IsFolderProperties {
 					js.FoldersSkipped++
+				}
+				if msg.IsHardlink {
+					js.HardlinksSkipped++
 				}
 				js.TransfersSkipped++
 				if buildmode.HighPerf() {

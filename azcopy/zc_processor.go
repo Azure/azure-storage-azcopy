@@ -115,6 +115,7 @@ type copyTransferProcessor struct {
 	dryrunMode             bool
 	hardlinkHandlingType   common.HardlinkHandlingType
 
+	pendingHardlinks []common.CopyTransfer
 	//XDM: This is only essential when sync is through syncOrchestrator
 	syncTransferMutex sync.Mutex // mutex to synchronize access to the shuffle buffer
 	flushMutex        sync.Mutex // mutex to serialize flush operations (sendPartToSte uses shared copyJobTemplate)
@@ -168,6 +169,7 @@ func NewCopyTransferProcessor(isCopy bool, copyJobTemplate *common.CopyJobPartOr
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
+		hardlinkHandlingType:      copyJobTemplate.HardlinkHandlingType,
 		dryrunMode:                dryrunMode,
 		dispatchTemplate:          *copyJobTemplate,
 	}
@@ -308,15 +310,15 @@ func (s *copyTransferProcessor) AbortAndWait(ctx context.Context) error {
 	if ctx == nil {
 		return fmt.Errorf("a context is required to abort dispatch")
 	}
-	if s.dispatchCh == nil {
-		return nil
-	}
 	s.dispatchErrMutex.Lock()
 	s.dispatchAborted = true
 	if s.dispatchErr == nil {
 		s.dispatchErr = context.Canceled
 	}
 	s.dispatchErrMutex.Unlock()
+	if s.dispatchCh == nil {
+		return nil
+	}
 	s.startDispatchPipeline()
 	s.dispatchCloseOnce.Do(func() { close(s.dispatchCh) })
 	select {
@@ -494,6 +496,19 @@ func (s *copyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 
 // ScheduleTransfer accepts a prepared transfer for compatibility with command adapters.
 func (s *copyTransferProcessor) ScheduleTransfer(copyTransfer common.CopyTransfer) error {
+	if err := s.getDispatchError(); err != nil {
+		return err
+	}
+	if s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() &&
+		copyTransfer.EntityType == common.EEntityType.Hardlink() && copyTransfer.TargetHardlinkFile != "" {
+		if s.copyJobTemplate.JobProcessingMode != common.EJobProcessingMode.NFS() {
+			return errors.New("preserved hardlink transfers require NFS job processing mode")
+		}
+		s.syncTransferMutex.Lock()
+		s.pendingHardlinks = append(s.pendingHardlinks, copyTransfer)
+		s.syncTransferMutex.Unlock()
+		return nil
+	}
 	if !s.isCopy && traverser.UseSyncOrchestrator && useHighPerfSyncPath() && !s.dryrunMode {
 		if isShuffleEnabled() {
 			shuffleThreshold := getShuffleThresholdParts()
@@ -525,7 +540,7 @@ func (s *copyTransferProcessor) ScheduleTransfer(copyTransfer common.CopyTransfe
 			case common.EEntityType.Symlink():
 				s.shuffleBufferFileCounts.SymlinkTransferCount++
 			case common.EEntityType.Hardlink():
-				s.shuffleBufferFileCounts.HardlinksConvertedCount++
+				s.countHardlink(&s.shuffleBufferFileCounts)
 			case common.EEntityType.FileProperties():
 				s.shuffleBufferFileCounts.FilePropertyTransferCount++
 			}
@@ -583,7 +598,7 @@ func (s *copyTransferProcessor) ScheduleTransfer(copyTransfer common.CopyTransfe
 	case common.EEntityType.Symlink():
 		s.copyJobTemplate.Transfers.SymlinkTransferCount++
 	case common.EEntityType.Hardlink():
-		s.copyJobTemplate.Transfers.HardlinksConvertedCount++
+		s.countHardlink(&s.copyJobTemplate.Transfers)
 	case common.EEntityType.FileProperties():
 		s.copyJobTemplate.Transfers.FilePropertyTransferCount++
 	}
@@ -593,6 +608,16 @@ func (s *copyTransferProcessor) ScheduleTransfer(copyTransfer common.CopyTransfe
 
 func (s *copyTransferProcessor) SetHardlinkHandling(option common.HardlinkHandlingType) {
 	s.hardlinkHandlingType = option
+	s.copyJobTemplate.HardlinkHandlingType = option
+	s.dispatchTemplate.HardlinkHandlingType = option
+}
+
+func (s *copyTransferProcessor) countHardlink(transfers *common.Transfers) {
+	if s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+		transfers.HardlinksTransferCount++
+	} else {
+		transfers.HardlinksConvertedCount++
+	}
 }
 
 func (s *copyTransferProcessor) bufferedTransfers() int {
@@ -634,7 +659,7 @@ func (s *copyTransferProcessor) flushDirectBuffer() error {
 			case common.EEntityType.Symlink():
 				transfers.SymlinkTransferCount++
 			case common.EEntityType.Hardlink():
-				transfers.HardlinksConvertedCount++
+				s.countHardlink(&transfers)
 			case common.EEntityType.FileProperties():
 				transfers.FilePropertyTransferCount++
 			}
@@ -733,7 +758,7 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 			case common.EEntityType.Symlink():
 				transfers.SymlinkTransferCount++
 			case common.EEntityType.Hardlink():
-				transfers.HardlinksConvertedCount++
+				s.countHardlink(&transfers)
 			case common.EEntityType.FileProperties():
 				transfers.FilePropertyTransferCount++
 			}
@@ -768,7 +793,7 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 			case common.EEntityType.Symlink():
 				s.shuffleBufferFileCounts.SymlinkTransferCount++
 			case common.EEntityType.Hardlink():
-				s.shuffleBufferFileCounts.HardlinksConvertedCount++
+				s.countHardlink(&s.shuffleBufferFileCounts)
 			case common.EEntityType.FileProperties():
 				s.shuffleBufferFileCounts.FilePropertyTransferCount++
 			}
@@ -783,6 +808,9 @@ var NothingScheduledError = errors.New("no transfers were scheduled because no f
 var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err error) {
+	if s.isDispatchAborted() {
+		return false, context.Canceled
+	}
 	// Flush any remaining transfers before dispatching the final part
 	if !s.isCopy && traverser.UseSyncOrchestrator && useHighPerfSyncPath() && len(s.shuffleBuffer) > 0 {
 		s.flushMutex.Lock()
@@ -808,7 +836,7 @@ func (s *copyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err 
 				case common.EEntityType.Symlink():
 					transfers.SymlinkTransferCount++
 				case common.EEntityType.Hardlink():
-					transfers.HardlinksConvertedCount++
+					s.countHardlink(&transfers)
 				case common.EEntityType.FileProperties():
 					transfers.FilePropertyTransferCount++
 				}
@@ -835,7 +863,7 @@ func (s *copyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err 
 			case common.EEntityType.Symlink():
 				s.copyJobTemplate.Transfers.SymlinkTransferCount++
 			case common.EEntityType.Hardlink():
-				s.copyJobTemplate.Transfers.HardlinksConvertedCount++
+				s.countHardlink(&s.copyJobTemplate.Transfers)
 			case common.EEntityType.FileProperties():
 				s.copyJobTemplate.Transfers.FilePropertyTransferCount++
 			}
@@ -848,6 +876,35 @@ func (s *copyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err 
 	// The final part must be the last one sent to STE to signal job completion.
 	if err := s.waitForDispatchPipeline(); err != nil {
 		return false, err
+	}
+	if len(s.pendingHardlinks) > 0 {
+		// The engine's NFS phase gate waits for mixed transfers before scheduling these parts.
+		if len(s.copyJobTemplate.Transfers.List) > 0 {
+			s.copyJobTemplate.JobPartType = common.EJobPartType.Mixed()
+			resp := s.sendPartToSte()
+			if resp.ErrorMsg != "" {
+				return false, errors.New(string(resp.ErrorMsg))
+			}
+			s.copyJobTemplate.PartNum++
+			s.copyJobTemplate.Transfers = common.Transfers{}
+		}
+		s.copyJobTemplate.JobPartType = common.EJobPartType.Hardlink()
+		for len(s.pendingHardlinks) > s.numOfTransfersPerPart {
+			batch := append([]common.CopyTransfer(nil), s.pendingHardlinks[:s.numOfTransfersPerPart]...)
+			s.pendingHardlinks = s.pendingHardlinks[s.numOfTransfersPerPart:]
+			s.copyJobTemplate.Transfers = common.Transfers{
+				List: batch, HardlinksTransferCount: uint32(len(batch)),
+			}
+			resp := s.sendPartToSte()
+			if resp.ErrorMsg != "" {
+				return false, errors.New(string(resp.ErrorMsg))
+			}
+			s.copyJobTemplate.PartNum++
+		}
+		s.copyJobTemplate.Transfers = common.Transfers{
+			List: s.pendingHardlinks, HardlinksTransferCount: uint32(len(s.pendingHardlinks)),
+		}
+		s.pendingHardlinks = nil
 	}
 
 	var resp common.CopyJobPartOrderResponse

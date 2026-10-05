@@ -46,6 +46,7 @@ type ObjectDeleter func(rootPath string, target common.Location, object traverse
 func (s *syncer) newSyncTransferProcessor(
 	numOfTransfersPerPart int,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
+	copyJobTemplate.IsSyncJob = true
 	reportFirstPart := func(jobStarted bool) { s.spt.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
 	reportFinalPart := func() { s.spt.setScanningComplete() }
 
@@ -184,8 +185,10 @@ func (l localFileDeleter) Delete(rootPath string, _ common.Location, object trav
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
-	if object.EntityType == common.EEntityType.File() {
-		msg := "Deleting extra file: " + object.RelativePath
+	if object.EntityType == common.EEntityType.File() ||
+		object.EntityType == common.EEntityType.Hardlink() ||
+		object.EntityType == common.EEntityType.Symlink() {
+		msg := fmt.Sprintf("Deleting extra %s: %s", object.EntityType.String(), object.RelativePath)
 		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
@@ -282,7 +285,7 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 	}
 
 	sc := b.remoteClient
-	if object.EntityType == common.EEntityType.File() {
+	if object.EntityType == common.EEntityType.File() || object.EntityType == common.EEntityType.Hardlink() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		msg := "Deleting extra object: " + object.RelativePath
 		common.GetLifecycleMgr().Info(msg)

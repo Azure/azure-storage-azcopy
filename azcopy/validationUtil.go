@@ -393,6 +393,9 @@ func PerformNFSSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
+	if hardlinkHandling == nil {
+		return errors.New("hardlink handling option is required")
+	}
 	if err = ValidateHardlinksFlag(*hardlinkHandling, fromTo); err != nil {
 		return err
 	}
@@ -437,7 +440,6 @@ func PerformSMBSpecificValidationWithPOSIXStyle(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-
 	if len(hardlinkHandling) > 0 {
 		return ValidateHardlinksFlag(hardlinkHandling[0], fromTo)
 	}
@@ -568,8 +570,13 @@ var GetShareProtocolType = getShareProtocolType
 var AreBothLocationsPOSIXAware = areBothLocationsPOSIXAware
 
 func ValidateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo) error {
-	if option != common.EHardlinkHandlingType.Follow() && option != common.EHardlinkHandlingType.Skip() {
-		return fmt.Errorf("unsupported --hardlinks value %d: only follow and skip are supported", option)
+	if option != common.EHardlinkHandlingType.Follow() && option != common.EHardlinkHandlingType.Skip() &&
+		option != common.EHardlinkHandlingType.Preserve() {
+		return fmt.Errorf("unsupported --hardlinks value %d: only follow, skip, and preserve are supported", option)
+	}
+	if option == common.EHardlinkHandlingType.Preserve() &&
+		fromTo != common.EFromTo.LocalFileNFS() && fromTo != common.EFromTo.FileNFSLocal() && fromTo != common.EFromTo.FileNFSFileNFS() {
+		return errors.New("--hardlinks=preserve requires local Linux to/from Azure Files NFS, or NFS-to-NFS")
 	}
 	if !fromTo.IsNFS() {
 		return nil
@@ -582,6 +589,8 @@ func ValidateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.Fro
 	}
 	if option == common.EHardlinkHandlingType.Follow() {
 		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
+	} else if option == common.EHardlinkHandlingType.Preserve() {
+		common.GetLifecycleMgr().Warn("The --hardlinks option is set to 'preserve'. Existing destination hardlink entries may be deleted and recreated even when --delete-destination-file is false.")
 	}
 	return nil
 }
@@ -805,4 +814,12 @@ func validateListOfFilesFormat(f *os.File) error {
 	}
 
 	return nil
+}
+
+func GetJobProcessingMode(fromTo common.FromTo) common.JobProcessingMode {
+	if fromTo.IsNFS() {
+		return common.EJobProcessingMode.NFS()
+	} else {
+		return common.EJobProcessingMode.Mixed()
+	}
 }

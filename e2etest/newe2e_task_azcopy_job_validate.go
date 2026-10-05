@@ -359,7 +359,7 @@ func ValidatePlanFiles(sm *ScenarioVariationManager, stdOut AzCopyStdout, expect
 
 			_, _, blobType, blobTier,
 				propsInBackend, _, _, _, // DstLengthValidation, SourceChangeValidation, InvalidMetadataHandleOption
-				entityType, version, _, tags := plan.TransferSrcPropertiesAndMetadata(i) // missing snapshot ID
+				entityType, version, _, tags, _ := plan.TransferSrcPropertiesAndMetadataWithHardlink(i) // missing snapshot ID
 
 			errPrefix := fmt.Sprintf("object src: %s, dst: %s; ", src, dst)
 

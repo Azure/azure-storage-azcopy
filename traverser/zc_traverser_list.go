@@ -23,8 +23,9 @@ package traverser
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
@@ -91,6 +92,10 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 func newListTraverser(resource common.ResourceString, resourceLocation common.Location, ctx context.Context, options InitResourceTraverserOptions) ResourceTraverser {
 	listChan := options.ListOfFiles
 	recursive := options.Recursive
+	basePath := options.BasePath
+	if basePath == "" {
+		basePath = resource.Value
+	}
 
 	if listChan == nil {
 		panic("list of files channel must not be nil")
@@ -138,6 +143,8 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			FromTo:                  options.FromTo,
 			ScanPacer:               options.ScanPacer,
 			IsSyncDestination:       options.IsSyncDestination,
+			InodeStore:              options.InodeStore,
+			BasePath:                basePath,
 		})
 		if err != nil {
 			return nil, err
