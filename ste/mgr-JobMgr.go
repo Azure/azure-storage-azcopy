@@ -176,8 +176,8 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
-	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
-	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
+	getInMemoryTransitJobState() InMemoryTransitJobState
+	SetInMemoryTransitJobState(state InMemoryTransitJobState)
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
@@ -201,6 +201,7 @@ type IJobMgr interface {
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
+	GetJobErrorHandler() common.JobErrorHandler
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
@@ -214,9 +215,13 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool, errorHandlers ...common.JobErrorHandler) IJobMgr {
 
 	config := GetChannelSizeConfig()
+	var jobErrorHandler common.JobErrorHandler = common.GetLifecycleMgr()
+	if len(errorHandlers) > 0 && errorHandlers[0] != nil {
+		jobErrorHandler = errorHandlers[0]
+	}
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -285,6 +290,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter: fileCountLimiter,
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
+		jobErrorHandler:  jobErrorHandler,
 		isDaemon:         daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
@@ -450,9 +456,9 @@ type jobMgr struct {
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
-	inMemoryTransitJobState InMemoryTransitJobState
 	// list of transfer mentioned to include only then while resuming the job
-	include map[string]int
+	inMemoryTransitJobState InMemoryTransitJobState
+	include                 map[string]int
 	// list of transfer mentioned to exclude while resuming the job
 	exclude map[string]int
 
@@ -474,6 +480,7 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
+	jobErrorHandler     common.JobErrorHandler
 
 	// scheduler coordination: several scheduleJobPartsWorker goroutines run concurrently,
 	// so the one-time pool-sizer startup, the one-time pool-sizer shutdown signal, and the
@@ -932,17 +939,15 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 	}
 }
 
+func (jm *jobMgr) Context() context.Context { return jm.ctx }
+
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
 	return jm.inMemoryTransitJobState
 }
 
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// And the state should no more be changed inside STE module.
 func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }
-
-func (jm *jobMgr) Context() context.Context { return jm.ctx }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
 	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately
@@ -1417,6 +1422,10 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 
 func (jm *jobMgr) IsDaemon() bool {
 	return jm.isDaemon
+}
+
+func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jm.jobErrorHandler
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

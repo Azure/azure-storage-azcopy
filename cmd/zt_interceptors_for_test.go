@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -68,16 +69,16 @@ type mockedLifecycleManager struct {
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
 }
 
-func (m *mockedLifecycleManager) SetOutputVerbosity(mode common.OutputVerbosity) {
+func (m *mockedLifecycleManager) SetOutputVerbosity(mode OutputVerbosity) {
 }
 
-func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
+func (m *mockedLifecycleManager) Progress(o OutputBuilder) {
 	select {
-	case m.progressLog <- o(common.EOutputFormat.Text()):
+	case m.progressLog <- o(EOutputFormat.Text()):
 	default:
 	}
 }
-func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
+func (*mockedLifecycleManager) Init(OutputBuilder) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:
@@ -90,13 +91,13 @@ func (m *mockedLifecycleManager) Warn(msg string) {
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
+func (m *mockedLifecycleManager) Dryrun(o OutputBuilder) {
 	select {
 	case m.dryrunLog <- o(m.outputFormat):
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputMessageType) {
+func (m *mockedLifecycleManager) Output(o OutputBuilder, e OutputMessageType) {
 	select {
 	case m.infoLog <- o(m.outputFormat):
 	default:
@@ -105,9 +106,9 @@ func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputM
 func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
-func (m *mockedLifecycleManager) Exit(o common.OutputBuilder, e common.ExitCode) {
+func (m *mockedLifecycleManager) Exit(o OutputBuilder, e ExitCode) {
 	select {
-	case m.exitLog <- o(common.EOutputFormat.Text()):
+	case m.exitLog <- o(EOutputFormat.Text()):
 	default:
 	}
 }
@@ -117,10 +118,10 @@ func (m *mockedLifecycleManager) Error(msg string) {
 	default:
 	}
 }
-func (*mockedLifecycleManager) SurrenderControl()                               {}
-func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
-func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
-func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
+func (*mockedLifecycleManager) SurrenderControl()                        {}
+func (*mockedLifecycleManager) RegisterCloseFunc(func())                 {}
+func (mockedLifecycleManager) AllowReinitiateProgressReporting()         {}
+func (*mockedLifecycleManager) InitiateProgressReporting(WorkController) {}
 func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 	m.outputFormat = format
 }
@@ -164,10 +165,10 @@ func (*mockedLifecycleManager) SanitizeLogMessage(msg string) string {
 }
 
 type dummyProcessor struct {
-	record []StoredObject
+	record []traverser.StoredObject
 }
 
-func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
+func (d *dummyProcessor) process(storedObject traverser.StoredObject) (err error) {
 	d.record = append(d.record, storedObject)
 	return
 }
@@ -175,7 +176,7 @@ func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
 func (d *dummyProcessor) countFilesOnly() int {
 	n := 0
 	for _, x := range d.record {
-		if x.entityType == common.EEntityType.File() {
+		if x.EntityType == common.EEntityType.File() {
 			n++
 		}
 	}

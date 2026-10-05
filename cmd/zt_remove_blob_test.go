@@ -23,6 +23,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -31,12 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"log"
-	"net/url"
-	"os"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestRemoveSingleBlob(t *testing.T) {
@@ -540,7 +541,7 @@ func TestDryrunRemoveSingleBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -578,7 +579,7 @@ func TestDryrunRemoveBlobsUnderContainer(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -619,7 +620,7 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	mockedLcm.SetOutputFormat(EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input

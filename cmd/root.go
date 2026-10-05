@@ -41,6 +41,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	traversal "github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -51,9 +52,18 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
+var glcmSwapOnce = &sync.Once{}
+var messageHandlerOnce sync.Once
 var displayDeveloperOptions bool
-var OutputFormat common.OutputFormat
-var OutputLevel common.OutputVerbosity
+var OutputFormat outputFormatType
+var OutputLevel OutputVerbosity
+
+// SetOutputFormat keeps command response builders and the installed host's output format aligned.
+func SetOutputFormat(format outputFormatType) {
+	OutputFormat = format
+	glcm.SetOutputFormat(format)
+}
+
 var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
@@ -65,7 +75,6 @@ var SkipVersionCheck bool
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
-var azcopyScanningLogger common.ILoggerResetable
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
@@ -221,6 +230,12 @@ var rootCmd = &cobra.Command{
 func Initialize(resumeJobID common.JobID, isBench bool, warnMultipleProcesses ...bool) (err error) {
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+	// Run MessagHandler to process messages from Input Watcher
+	if jobsAdmin.JobsAdmin != nil {
+		messageHandlerOnce.Do(func() {
+			go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
+		})
+	}
 	if err != nil {
 		return err
 	}
@@ -230,7 +245,7 @@ func Initialize(resumeJobID common.JobID, isBench bool, warnMultipleProcesses ..
 	}
 
 	timeAtPrestart := time.Now()
-	glcm.SetOutputFormat(OutputFormat)
+	SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
@@ -255,7 +270,7 @@ func Initialize(resumeJobID common.JobID, isBench bool, warnMultipleProcesses ..
 		}
 
 	}
-	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	traversal.EnumerationParallelism, traversal.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -263,8 +278,8 @@ func Initialize(resumeJobID common.JobID, isBench bool, warnMultipleProcesses ..
 	// or after this job
 	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+		common.IncludeBeforeFlagName, traversal.IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+		common.IncludeAfterFlagName, traversal.IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	if buildmode.IsMover {
@@ -331,10 +346,6 @@ func ForceCollectGlobalCustomStats(id common.CustomStatsID) {
 	}
 }
 
-// hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
-var glcm = common.GetLifecycleMgr()
-var glcmSwapOnce = &sync.Once{}
-
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 
@@ -344,7 +355,7 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
@@ -202,9 +203,9 @@ type GlobalFlags struct {
 	CheckVersion     *bool    `flag:"check-version,default:false"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
-	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
-	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
-	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
+	OutputType  *common.OutputFormat `flag:"output-type,default:json"`
+	LogLevel    *common.LogLevel     `flag:"log-level,default:DEBUG"`
+	OutputLevel *cmd.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
 	DebugSkipFiles []string `flag:"debug-skip-files,serializer:SerializeDebugSkipFiles"`
 

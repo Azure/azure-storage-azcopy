@@ -23,17 +23,19 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -181,8 +183,8 @@ func TestDownloadAccount(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, "", ctx, InitResourceTraverserOptions{})
-	processor := func(object StoredObject) error {
+	blobTraverser := traverser.NewBlobAccountTraverser(rawBSC, "", ctx, traverser.InitResourceTraverserOptions{})
+	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
 		if ok {
@@ -190,12 +192,12 @@ func TestDownloadAccount(t *testing.T) {
 		}
 
 		// Append the container name to the relative path
-		relPath := "/" + object.ContainerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.RelativePath
 		relPaths = append(relPaths, relPath)
 
 		return nil
 	}
-	err := blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err := blobTraverser.Traverse(traverser.NoPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination
@@ -238,8 +240,8 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, container, ctx, InitResourceTraverserOptions{})
-	processor := func(object StoredObject) error {
+	blobTraverser := traverser.NewBlobAccountTraverser(rawBSC, container, ctx, traverser.InitResourceTraverserOptions{})
+	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
 		if ok {
@@ -247,11 +249,11 @@ func TestDownloadAccountWildcard(t *testing.T) {
 		}
 
 		// Append the container name to the relative path
-		relPath := "/" + object.ContainerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.RelativePath
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err = blobTraverser.Traverse(traverser.NoPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination
@@ -778,7 +780,7 @@ func TestDryrunCopyLocalToBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -825,7 +827,7 @@ func TestDryrunCopyBlobToBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -872,7 +874,7 @@ func TestDryrunCopyBlobToBlobJson(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	mockedLcm.SetOutputFormat(EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -926,7 +928,7 @@ func TestDryrunCopyS3toBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -974,7 +976,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input

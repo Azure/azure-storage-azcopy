@@ -150,6 +150,22 @@ The embedded Mover sync API retains symlink following for local sources, includi
 SMB and Blob destinations. The CLI sync flags retain upstream's NFS-specific
 symlink restrictions.
 
+## Mover traversal integration (M2)
+
+Resource enumeration, directory orchestration, indexing, comparison, and streaming
+merge-join synchronization live in the [traverser package](traverser).
+`RunSyncOrchestrator` receives job-scoped `SyncJob` configuration and a
+`SyncEnumerator` with transfer and finalization callbacks. Command parsing,
+credential resolution, deletion execution, job-part dispatch, and UI lifecycle
+remain with the caller. Traversal runtime counters, limits, cancellation, and
+merge-join tuning are isolated per invocation; caller options are copied.
+
+Existing Mover sync entry points in `cmd` delegate to the shared implementation.
+The `common.LifecycleMgr` contract and the exported `cmd.OutputFormat` value remain
+available for embedded hosts. No single-tenant OAuth manager is introduced.
+The `--include-root` flag controls root-property synchronization in addition to
+child objects. M1's job-plan schema 20 requirement continues to apply.
+
 ## How to contribute to AzCopy v10
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

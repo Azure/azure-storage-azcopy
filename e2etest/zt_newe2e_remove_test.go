@@ -5,6 +5,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -140,7 +141,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 				Recursive:   pointerTo(true),
 				FromTo:      pointerTo(common.EFromTo.FileTrash()),
 				GlobalFlags: GlobalFlags{
-					OutputType: pointerTo(common.EOutputFormat.Text()),
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
 				},
 			},
 			ShouldFail: true, // AzCopy should not continue operation
@@ -299,4 +300,46 @@ func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariation
 		validateObjectContent: true,
 	})
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
+}
+
+// Scenario_RemoveFilesWithSpecialChars validates that we correctly remove special chars and do not decode them prematurely
+func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariationManager) {
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
+		common.ELocation.File()})),
+		ResourceDefinitionContainer{})
+
+	fullList := []string{
+		"sample/sample%5C.json",
+		"test/test%5C.json",
+		"ex%5C",
+		"regular_file.txt",
+
+		// other encoded chars
+		"file%2Ffile.png",
+		"file/file.png",
+		"test/test%aC.json",
+		"test/test%25aC.json",
+	}
+	// create objs
+	for i := range len(fullList) {
+		obj := src.GetObject(svm, fullList[i], common.EEntityType.File())
+		obj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+	}
+
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbRemove,
+			Targets: []ResourceManager{src},
+			Flags: RemoveFlags{
+				Recursive: pointerTo(true),
+			},
+		})
+
+	if !svm.Dryrun() {
+		fileMap := make(map[string]ObjectProperties)
+		fileMap = src.ListObjects(svm, "", true)
+		svm.Assert("All files should be removed", Equal{}, len(fileMap), 0)
+		ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, ValidateResourceOptions{validateObjectContent: false})
+		ValidateDoesNotContainError(svm, stdOut, []string{"inconsistent path separators. Some are forward, some are back. This is not supported"})
+	}
 }

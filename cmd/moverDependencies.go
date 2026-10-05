@@ -914,13 +914,13 @@ func (cooked *CookedCopyCmdArgs) ToString() string {
 
 func OpenScanningLogger() {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 }
 
 func CloseScanningLogger() {
-	if azcopyScanningLogger != nil {
-		azcopyScanningLogger.CloseLog()
+	if common.AzcopyScanningLogger != nil {
+		common.AzcopyScanningLogger.CloseLog()
 	}
 }
 

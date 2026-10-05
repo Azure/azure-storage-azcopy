@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -171,18 +172,18 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = traverser.SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
-		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
+		cooked.source, err = traverser.SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(),
 		common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(),
 		common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(),
 		common.EFromTo.FileBlobFS(), common.EFromTo.FileNFSFileSMB(), common.EFromTo.FileSMBFileNFS():
-		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = traverser.SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
+		cooked.source, err = traverser.SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.S3Blob():
 		if buildmode.IsMover {
@@ -199,9 +200,9 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 
 	// Do this check separately so we don't end up with a bunch of code duplication when new src/dstn are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.src))}
+		cooked.source = common.ResourceString{Value: common.ToExtendedPath(traverser.CleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
+		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(traverser.CleanLocalPath(raw.dst))}
 	}
 
 	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
@@ -377,7 +378,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
 	}
 
-	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
+	if OutputLevel == EOutputVerbosity.Quiet() || OutputLevel == EOutputVerbosity.Essential() {
 		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
 			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", OutputLevel.String(), cooked.deleteDestination.String())
 		} else if cooked.dryrunMode {
@@ -393,10 +394,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
+		common.AzcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
@@ -413,7 +414,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 
 		if cooked.dryrunMode {
 			glcm.Dryrun(func(of common.OutputFormat) string {
-				if of == common.EOutputFormat.Json() {
+				if of == EOutputFormat.Json() {
 					var out struct {
 						Warn string `json:"warn"`
 					}
@@ -706,7 +707,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
+	glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -723,7 +724,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
@@ -761,13 +762,12 @@ type scanningProgressJsonTemplate struct {
 	FilesScannedAtDestination uint64
 }
 
-func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
-
-	lcm.Progress(func(format common.OutputFormat) string {
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughput float64) {
+	builder := func(format common.OutputFormat) string {
 		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
 		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
 
-		if format == common.EOutputFormat.Json() {
+		if format == EOutputFormat.Json() {
 			jsonOutputTemplate := scanningProgressJsonTemplate{
 				FilesScannedAtSource:      srcScanned,
 				FilesScannedAtDestination: dstScanned,
@@ -784,7 +784,15 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
-	})
+	}
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
+	}
+
+	lcm.Progress(builder)
 }
 
 func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSummaryResponse) string {
@@ -796,7 +804,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -810,7 +818,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		resetTransferLists := !buildmode.IsMover
 
 		summary = jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
-		lcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 
@@ -830,9 +837,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		cca.reportScanningProgress(lcm, throughput)
 		return
 	}
-
-	lcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	builder := func(format common.OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			return cca.getJsonOfSyncJobSummary(summary)
 		}
 
@@ -845,7 +851,15 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
 			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
-	})
+	}
+
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
+	}
+	lcm.Progress(builder)
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()
@@ -867,7 +881,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 
 		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+			if format == EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
 			}
 			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
@@ -879,9 +893,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				output = cca.GetDefaultOutputMessage(summary, screenStats, duration)
 			}
 
-			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-			if exists {
-				jobMan.Log(common.LogInfo, logStats+"\n"+output)
+			if jobsAdmin.JobsAdmin != nil {
+				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+				if exists {
+					jobMan.Log(common.LogInfo, logStats+"\n"+output)
+				}
 			}
 
 			return output
@@ -1106,13 +1122,13 @@ func init() {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()
@@ -1235,7 +1251,8 @@ func init() {
 			"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. "+
-		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
+		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs."+
+		"\n For persisting properties or permissions, use this flag in-tandem with respective preservation flag.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. "+
 		"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")

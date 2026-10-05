@@ -64,11 +64,11 @@ func init() {
 				if withStatus == common.EJobStatus.All() {
 					glcm.Exit(func(format common.OutputFormat) string {
 						return JobsCleanupSuccessMsg
-					}, common.EExitCode.Success())
+					}, EExitCode.Success())
 				} else {
 					glcm.Exit(func(format common.OutputFormat) string {
 						return fmt.Sprintf("Successfully removed jobs with status: %s.", withStatus)
-					}, common.EExitCode.Success())
+					}, EExitCode.Success())
 				}
 			} else {
 				glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))

@@ -47,11 +47,11 @@ type LCMMsgResp struct {
 type LCMMsg struct {
 	Req      *LCMMsgReq
 	Resp     *LCMMsgResp
-	respChan chan bool
+	RespChan chan bool
 }
 
 func NewLCMMsg() *LCMMsg {
-	return &LCMMsg{respChan: make(chan bool)}
+	return &LCMMsg{RespChan: make(chan bool)}
 }
 
 func (m *LCMMsg) SetRequest(req *LCMMsgReq) {
@@ -63,7 +63,7 @@ func (m *LCMMsg) SetResponse(resp *LCMMsgResp) {
 }
 
 func (m *LCMMsg) Reply() {
-	m.respChan <- true
+	m.RespChan <- true
 }
 
 ////////////////////////////////////////////////////////////////////////////////////

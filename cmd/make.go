@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -85,7 +86,7 @@ type cookedMakeCmdArgs struct {
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	resourceStringParts, err := SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
+	resourceStringParts, err := traverser.SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
 	if err != nil {
 		return err
 	}
@@ -220,7 +221,7 @@ func init() {
 
 			glcm.Exit(func(format common.OutputFormat) string {
 				return "Successfully created the resource."
-			}, common.EExitCode.Success())
+			}, EExitCode.Success())
 		},
 	}
 

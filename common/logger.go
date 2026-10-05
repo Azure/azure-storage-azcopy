@@ -26,14 +26,17 @@ import (
 	"log"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
+var AzcopyScanningLogger ILoggerResetable
 var AzcopyCurrentJobLogger ILoggerResetable
 
 // TODO: (gapra) I think this should actually be a function on the logger?
@@ -269,10 +272,6 @@ func NewDatalakeReadLogFunc(logger ILogger, fullUrl string) func(int32, error, d
 	}
 }
 
-func IsForceLoggingDisabled() bool {
-	return GetLifecycleMgr().IsForceLoggingDisabled()
-}
-
 type S3HTTPTraceLogger struct {
 	logger   ILogger
 	logLevel LogLevel
@@ -306,3 +305,20 @@ func Cause(err error) error {
 	}
 	return err
 }
+
+var disableSyslog bool
+
+func IsForceLoggingDisabled() bool {
+	return disableSyslog
+}
+
+func SetForceLogging() {
+	var err error
+	disableSyslog, err = strconv.ParseBool(enum.EEnvironmentVariable.DisableSyslog().Get())
+	if err != nil {
+		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
+		disableSyslog = false
+	}
+}
+
+func init() { SetForceLogging() }

@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -53,7 +54,7 @@ func TestLocalDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(StoredObject{relativePath: dstFileName})
+	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: dstFileName})
 	a.Nil(err)
 
 	// validate that the file no longer exists
@@ -90,7 +91,7 @@ func TestBlobDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(StoredObject{relativePath: blobName})
+	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: blobName})
 	a.Nil(err)
 
 	// validate that the blob was deleted
@@ -127,7 +128,7 @@ func TestFileDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(StoredObject{relativePath: fileName})
+	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: fileName})
 	a.Nil(err)
 
 	// validate that the file was deleted

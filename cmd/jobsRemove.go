@@ -58,7 +58,7 @@ func init() {
 			if err == nil {
 				glcm.Exit(func(format common.OutputFormat) string {
 					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
-				}, common.EExitCode.Success())
+				}, EExitCode.Success())
 			} else {
 				glcm.Error(err.Error())
 			}
