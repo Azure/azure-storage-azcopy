@@ -33,10 +33,67 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTelemetryDeliveryFailuresStopPipeline(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		client *failurePolicyClient
+	}{
+		{"transport error", &failurePolicyClient{failFirst: true}},
+		{"HTTP 400", &failurePolicyClient{status: 400}},
+		{"HTTP 401", &failurePolicyClient{status: 401}},
+		{"HTTP 403", &failurePolicyClient{status: 403}},
+		{"HTTP 500", &failurePolicyClient{status: 500}},
+		{"partial acceptance", &failurePolicyClient{status: 206, responseBody: `{"itemsReceived":1,"itemsAccepted":0,"errors":[{"index":0,"statusCode":400,"message":"private-canary"}]}`}},
+		{"malformed partial acceptance", &failurePolicyClient{status: 206, responseBody: "invalid"}},
+		{"HTTP 429", &failurePolicyClient{status: 429}},
+		{"HTTP 503", &failurePolicyClient{status: 503}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			agent := failureTestAgent(test.client)
+			tracker := newSourceShapeTracker(common.ELocation.Blob(), common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow())
+			tracker.isActive = agent.isActive
+			tracker.accountScope = true
+			object := traverser.StoredObject{EntityType: common.EEntityType.File(), ContainerName: "before", Size: 10}
+			require.NoError(t, tracker.recordScanned(object))
+			tracker.recordScheduled(object)
+			existing := agent.newAttempt(func() telemetry.JobDimensions { return telemetry.JobDimensions{} }, "existing", "existing-attempt", time.Now())
+			existing.summaryFn = func() (common.ListJobSummaryResponse, bool) {
+				t.Error("stopped recorder collected summary")
+				return common.ListJobSummaryResponse{}, false
+			}
+			agent.reportStarted(telemetry.JobDimensions{Command: "copy"}, "job", "attempt", time.Now())
+			agent.reportFinished(telemetry.JobFinishedEvent{JobID: "job", InvocationID: "attempt"})
+			agent.flush(time.Second)
+			require.False(t, agent.shouldCollectSourceShape(), "delivery failure must latch telemetry off")
+			existing.finish(nil)
+			object.ContainerName = "after"
+			require.NoError(t, tracker.recordScanned(object))
+			tracker.recordScheduled(object)
+			tracker.addScannedScope("after")
+			assert.Empty(t, tracker.snapshot())
+			assert.EqualValues(t, 1, tracker.objectCount)
+			assert.Len(t, tracker.scannedScope, 1)
+			assert.Len(t, tracker.touchedScope, 1)
+			collected := false
+			recorder := agent.newAttempt(func() telemetry.JobDimensions { collected = true; return telemetry.JobDimensions{} }, "next-job", "next-attempt", time.Now())
+			recorder.startEvent()
+			recorder.finish(nil)
+			agent.reportCommand("list", "command-job", "command-attempt", telemetry.OptionAttributes{})
+			agent.flush(time.Second)
+			assert.False(t, collected, "new attempts must not collect telemetry")
+			test.client.mu.Lock()
+			defer test.client.mu.Unlock()
+			require.Len(t, test.client.bodies, 1, "only the failed start may reach the endpoint")
+		})
+	}
+}
 
 type telemetryFailureTransport func(*http.Request) (*http.Response, error)
 
@@ -172,4 +229,23 @@ func TestTelemetryDeliveryFailureCancelsActiveRequests(t *testing.T) {
 	agent.reportCommand("list", "later-job", "later-attempt", telemetry.OptionAttributes{})
 	agent.flush(time.Second)
 	assert.EqualValues(t, 2, requests.Load())
+}
+
+func TestTelemetryHealthyEndpointKeepsPipelineActive(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		requests.Add(1)
+		response.WriteHeader(200)
+	}))
+	defer server.Close()
+	agent := &telemetryAgent{enabled: true, reporter: telemetry.NewReporter(telemetry.Config{ConnectionString: "InstrumentationKey=test;IngestionEndpoint=" + server.URL, HTTPClient: server.Client()})}
+	for _, attempt := range []string{"first", "second"} {
+		recorder := agent.newAttempt(func() telemetry.JobDimensions { return telemetry.JobDimensions{Command: "copy"} }, "job", attempt, time.Now())
+		recorder.startEvent()
+		recorder.finish(errors.New("transfer failed independently of telemetry"))
+		agent.flush(time.Second)
+	}
+	assert.True(t, agent.isActive())
+	assert.EqualValues(t, 4, requests.Load())
 }
