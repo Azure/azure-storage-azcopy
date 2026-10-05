@@ -299,7 +299,7 @@ func (a *AzCopyInteractiveStdout) Write(p []byte) (n int, err error) {
 
 	for _, v := range lines {
 		a.Messages = append(a.Messages, v)
-		a.asserter.Log(v)
+		a.asserter.Log("%s", v)
 	}
 
 	return

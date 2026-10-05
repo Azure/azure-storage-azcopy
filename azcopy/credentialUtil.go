@@ -38,7 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-	"github.com/minio/minio-go/v7/pkg/s3utils"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
@@ -372,9 +371,8 @@ func CheckAuthSafeForTarget(ct enum.CredentialType, resource, extraSuffixesAAD s
 			return fmt.Errorf("S3 access key authentication to %s is not enabled in AzCopy", resourceType.String())
 		}
 
-		// just check with minio. No need to have our own list of S3 domains, since minio effectively
-		// has that list already, we can't talk to anything outside that list because minio won't let us,
-		// and the parsing of s3 URL is non-trivial.  E.g. can't just look for the ending since
+		// Validate with the shared S3 URL parser, since parsing an S3 URL is non-trivial.
+		// E.g. can't just look for the ending since
 		// something like https://someApi.execute-api.someRegion.amazonaws.com is AWS but is a customer-
 		// written code, not S3.
 		ok := false
@@ -382,10 +380,9 @@ func CheckAuthSafeForTarget(ct enum.CredentialType, resource, extraSuffixesAAD s
 		u, err := url.Parse(resource)
 		if err == nil {
 			host = u.Host
-			parts, err := common.NewS3URLParts(*u) // strip any leading bucket name from URL, to get an endpoint we can pass to s3utils
+			parts, err := common.NewS3URLParts(*u)
 			if err == nil {
-				u, err := url.Parse("https://" + parts.Endpoint)
-				ok = err == nil && (s3utils.IsAmazonEndpoint(*u) || strings.HasSuffix(u.Host, common.GetS3CompatibleSuffix()))
+				ok = parts.IsAWSS3() || strings.HasSuffix(parts.Endpoint, common.GetS3CompatibleSuffix())
 			}
 		}
 

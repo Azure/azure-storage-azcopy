@@ -18,7 +18,9 @@ func localHardlinkTestRoot(t *testing.T) string {
 	root, err := os.MkdirTemp(".", "hardlink-local-")
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(root)) })
-	return root
+	absoluteRoot, err := filepath.Abs(root)
+	require.NoError(t, err)
+	return absoluteRoot
 }
 
 func TestLocalNFSPreserveHardlinksKeepsFullRootAndMetadata(t *testing.T) {

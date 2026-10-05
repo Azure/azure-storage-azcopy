@@ -74,6 +74,7 @@ const versionQueryParamKey = "versionId"
 const s3KeywordAmazonAWS = "amazonaws"
 const s3KeywordDualStack = "dualstack"
 const s3EssentialHostPart = "amazonaws.com"
+const s3ChinaHostPart = "amazonaws.com.cn"
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
@@ -122,6 +123,13 @@ func IsS3URL(u url.URL) bool {
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	suffix := GetS3CompatibleSuffix()
 	hostLower := strings.ToLower(host)
+
+	if suffix == s3EssentialHostPart &&
+		(strings.HasSuffix(hostLower, "."+s3ChinaHostPart) || hostLower == s3ChinaHostPart) {
+		if m := matchAWSHost(hostLower, s3ChinaHostPart); m != nil {
+			return m, true
+		}
+	}
 
 	// Dispatcher based on configured suffix (allows per-provider parsing differences)
 	switch {

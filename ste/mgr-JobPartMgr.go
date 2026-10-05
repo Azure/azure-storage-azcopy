@@ -119,17 +119,16 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	// discard the OK, we just want to nil these out if they are not scopedauthenticators
 	targetAuth, _ := targetCred.(cred.ScopedAuthenticator)
 	srcAuth, _ := srcCred.(cred.ScopedAuthenticator)
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy(),
+		NewTokenReauthPolicy(targetAuth, NewTokenReauthPolicyOptions{srcAuth})}
 
 	// newAzureFilesThrottlePolicy feeds Azure Files 429/503 responses into the
 	// per-share dual-resource controller's fast reactive path (no-op otherwise).
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(), newAzureFilesThrottlePolicy(),
-		NewTokenReauthPolicy(targetAuth, NewTokenReauthPolicyOptions{srcAuth}), // these will resolve to nil
-		NewSourceAuthPolicy(srcCred)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(), newAzureFilesThrottlePolicy(), NewSourceAuthPolicy(srcCred)}
 
 	retry.ShouldRetry = GetShouldRetry(&log)
 

@@ -34,6 +34,7 @@ require (
 	github.com/Azure/go-autorest/autorest/date v0.3.0
 	github.com/josephspurrier/goversioninfo v1.7.0
 	github.com/keybase/go-keychain v0.0.1
+	github.com/lescuer97/go-libsecret v0.0.0-20251130160347-067b741bcf5a
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/net v0.57.0

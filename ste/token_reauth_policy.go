@@ -133,7 +133,7 @@ func (d *tokenReauthPolicy) checkDestAuthFailure(err error, resp *http.Response,
 			bloberror.HasCode(respErr, bloberror.InvalidAuthenticationInfo) &&
 			len(respErr.RawResponse.Header.Values("WWW-Authenticate")) != 0
 		if needsReauth {
-			*debugCtx = context.WithValue(*debugCtx, srcReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
+			*debugCtx = context.WithValue(*debugCtx, destReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
 		}
 	}
 
@@ -163,7 +163,7 @@ func (d *tokenReauthPolicy) checkSourceAuthFailure(err error, resp *http.Respons
 		needsReauth = err == nil && bloberror.HasCode(respErr, bloberror.CannotVerifyCopySource)
 
 		if needsReauth {
-			*debugCtx = context.WithValue(*debugCtx, destReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
+			*debugCtx = context.WithValue(*debugCtx, srcReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
 		}
 	}
 

@@ -187,6 +187,45 @@ func TestS3URLParse(t *testing.T) {
 
 }
 
+func TestS3URLParseChinaEndpoints(t *testing.T) {
+	tests := []struct {
+		name       string
+		rawURL     string
+		endpoint   string
+		bucketName string
+		region     string
+	}{
+		{
+			name:       "virtual hosted",
+			rawURL:     "https://bucket.s3.cn-north-1.amazonaws.com.cn/object",
+			endpoint:   "s3.cn-north-1.amazonaws.com.cn",
+			bucketName: "bucket",
+			region:     "cn-north-1",
+		},
+		{
+			name:       "path style",
+			rawURL:     "https://s3.cn-north-1.amazonaws.com.cn/bucket/object",
+			endpoint:   "s3.cn-north-1.amazonaws.com.cn",
+			bucketName: "bucket",
+			region:     "cn-north-1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			u, err := url.Parse(test.rawURL)
+			assert.NoError(t, err)
+
+			parts, err := NewS3URLParts(*u)
+			assert.NoError(t, err)
+			assert.Equal(t, test.endpoint, parts.Endpoint)
+			assert.Equal(t, test.bucketName, parts.BucketName)
+			assert.Equal(t, test.region, parts.Region)
+			assert.True(t, parts.IsAWSS3())
+		})
+	}
+}
+
 func TestS3URLParseNegative(t *testing.T) {
 	a := assert.New(t)
 	u, _ := url.Parse("http://bucket.amazonawstypo.com")
