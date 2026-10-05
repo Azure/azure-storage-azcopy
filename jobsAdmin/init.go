@@ -511,6 +511,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
+				common.ETransferStatus.FolderExisted(),
 				common.ETransferStatus.Started(),
 				common.ETransferStatus.Restarted(),
 				common.ETransferStatus.Cancelled():
@@ -665,7 +666,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 			// will also be included.
 			if r.OfStatus != common.ETransferStatus.All() &&
 				((transferEntry.TransferStatus() != r.OfStatus) &&
-					!(r.OfStatus == common.ETransferStatus.Failed() && transferEntry.TransferStatus() <= common.ETransferStatus.Failed())) {
+					(r.OfStatus != common.ETransferStatus.Failed() || transferEntry.TransferStatus() > common.ETransferStatus.Failed())) {
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.

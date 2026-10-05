@@ -23,41 +23,33 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strconv"
 	"strings"
-	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Defines the retry policy rules
 var RetryStatusCodes RetryCodes
 
-var platformRetriedErrnos []syscall.Errno
-
 type RetryFunc = func(*http.Response, error) bool
 
-func IsOSErrors(err error, errnos ...syscall.Errno) bool {
-	if err == nil {
-		return false
-	}
-
-	for _, v := range errnos {
-		if errors.Is(err, v) ||
-			strings.Contains(strings.ToLower(err.Error()), strings.ToLower(v.Error())) {
-			return true
-		}
-	}
-
-	return false
-}
-
+// GetShouldRetry returns a RetryFunc that only returns false for errors we are certain should never be retried.
 func GetShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
 
 	return func(resp *http.Response, err error) bool {
+		// 1. If we received an error, retry by default.
+		// This includes transient network failures (e.g. connection resets),
+		// even if the underlying errno is wrapped or lost.
+		if err != nil {
+			return true
+		}
+
+		// 2. No error: evaluate response-based retry notification.
 		if resp != nil {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
@@ -98,12 +90,7 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 			}
 		}
 
-		// Check if we're in a retriable error defined by the OS specific file
-		if len(platformRetriedErrnos) > 0 &&
-			IsOSErrors(err, platformRetriedErrnos...) {
-			return true
-		}
-
+		// 3. No error and no retryable status code → do not retry
 		return false
 	}
 }

@@ -105,3 +105,45 @@ func Test_IsProcessRunning(t *testing.T) {
 	a.False(isProcessRunning(0))
 	a.False(isProcessRunning(-1))
 }
+
+// Test_NoPanicWarnMultipleProcesses verifies does not panic
+func Test_NoPanicWarnMultipleProcesses(t *testing.T) {
+	a := assert.New(t)
+	tempDir := processCheckerTestDirectory(t)
+	previousLogger, previousLCM := common.AzcopyCurrentJobLogger, glcm
+	logger := common.NewJobLogger(common.NewJobID(), common.LogInfo, t.TempDir(), "")
+	logger.OpenLog()
+	common.AzcopyCurrentJobLogger = logger
+	glcm = &mockedLifecycleManager{}
+	t.Cleanup(func() {
+		common.AzcopyCurrentJobLogger, glcm = previousLogger, previousLCM
+		logger.CloseLog()
+	})
+
+	// Act & Assert: should not panic
+	a.NotPanics(func() {
+		WarnMultipleProcesses(tempDir, os.Getpid())
+	})
+
+	// Verify pid file was still created
+	pidsDir := path.Join(tempDir, "pids")
+	dirEntry, err := os.ReadDir(pidsDir)
+	a.NoError(err)
+	a.Equal(1, len(dirEntry), "Should contain 1 .pid file")
+}
+
+// Test_NoPanicNilLoggerWarnMultipleProcesses tests we don't panic in the unlikely scenario logger is not set
+func Test_NoPanicNilLoggerWarnMultipleProcesses(t *testing.T) {
+	a := assert.New(t)
+	tempDir := processCheckerTestDirectory(t)
+	previousLogger, previousLCM := common.AzcopyCurrentJobLogger, glcm
+	common.AzcopyCurrentJobLogger = nil
+	glcm = &mockedLifecycleManager{}
+	t.Cleanup(func() {
+		common.AzcopyCurrentJobLogger, glcm = previousLogger, previousLCM
+	})
+
+	a.NotPanics(func() {
+		WarnMultipleProcesses(tempDir, os.Getpid())
+	})
+}

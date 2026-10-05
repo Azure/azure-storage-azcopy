@@ -56,29 +56,67 @@ For complete guidance, visit any of these articles on the docs.microsoft.com web
 
 :eight_spoked_asterisk: [AzCopy WiKi](https://github.com/Azure/azure-storage-azcopy/wiki)
 
+## Building this integration
+
+Use Go **1.26.6**, matching `go.mod` and the build pipelines. The retained Mover
+reflection APIs require this toolchain; the upstream Go 1.25 build settings are
+not sufficient.
+
+FIPS-labelled release jobs retain the upstream Microsoft Go build path and verify
+the selected Go version and Microsoft toolset identity before building. An ordinary Go 1.26.6 build defaults to
+`GOFIPS140=off`; selecting this toolchain alone is not a FIPS compliance claim.
+
 ## Supported Operations
 
 The general format of the AzCopy commands is: `azcopy [command] [arguments] --[flag-name]=[flag-value]`
 
 * `bench` - Runs a performance benchmark by uploading or downloading test data to or from a specified destination
 
-* `copy` - Copies source data to a destination location. The supported directions are:
-    - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
-    - Local File System <-> Azure Data Lake Storage (ADLS Gen2) (SAS, OAuth, or SharedKey authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Blob (SAS or OAuth authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
-    - Azure Files (SAS or OAuth authentication) -> Azure Files (SAS or OAuth authentication)
-    - Azure Files (SAS or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
-    - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
-    - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
+* `copy` - Copies source data to a destination location. The supported directions and forms of authorization are:
+    Source | Destination
+    --- | ---
+    Local | Azure Blob (Microsoft Entra ID or SAS)
+    Local | Azure Files SMB (Microsoft Entra ID or share/directory SAS)
+    Local | Azure Files NFS (Microsoft Entra ID or share/directory SAS)
+    Local | Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
+    Azure Blob (Microsoft Entra ID or SAS) | Local
+    Azure Files SMB (Microsoft Entra ID or share/directory SAS) | Local
+    Azure Files NFS (Microsoft Entra ID or share/directory SAS) | Local
+    Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key) | Local
+    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    AWS S3 (Access Key) | Azure Block Blob (Microsoft Entra ID or SAS)
+    Google Cloud Storage (Service Account Key) | Azure Block Blob (Microsoft Entra ID or SAS)
 
-* `sync` - Replicate source to the destination location. The supported directions are:
-    - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
+* `sync` - Replicate source to the destination location. The supported directions and forms of authorization are:
+    Source | Destination
+    --- | ---
+    Local | Azure Blob (Microsoft Entra ID or SAS)
+    Local | Azure File (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Local
+    Azure File (Microsoft Entra ID or SAS) | Local
+    Azure Blob (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Azure File (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure File (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
 
-* `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.
+  Local transfers involving NFS require Linux. Use the explicit NFS/SMB
+  `--from-to` values for NFS and cross-protocol transfers; permission preservation
+  is not supported across SMB and NFS.
+
+* `login` - Log in to Microsoft Entra ID to access Azure Storage resources.
 
 * `logout` - Log out to terminate access to Azure Storage resources.
 
@@ -139,12 +177,19 @@ You can change this default behaviour and overwrite files at the destination by 
 By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command.
 To learn more, see [Synchronize files](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-blobs-synchronize).
 
-## Job-plan compatibility for the M1 integration
+## Job-plan compatibility (M4)
 
-This integration writes schema version 20 job plans, including persisted symlink
-handling. Existing schema version 19 plans are not resumed by this build. Finish
-or resume those jobs using the binary that created them, or start a new job with
-this build. Do not rename old plan files to change their schema version.
+This integration writes **schema version 21** job plans. M4's AMLFS header
+offsets and persisted `FolderExisted`/`Restarted` values are incompatible with
+schema version 20.
+
+- Resume existing schema 20 jobs with the accepted **M3 binary**.
+- Resume existing schema 19 jobs with the older binary that created them.
+- Finish those jobs with their compatible binary, or start a new job with this
+  build. Do not rename old plan files to change their schema version.
+
+M1 introduced schema 20, including persisted symlink handling; M2 and M3 retained
+that format. M4 does not migrate or resume those older plan formats.
 
 The embedded Mover sync API retains symlink following for local sources, including
 SMB and Blob destinations. The CLI sync flags retain upstream's NFS-specific
@@ -164,7 +209,8 @@ Existing Mover sync entry points in `cmd` delegate to the shared implementation.
 The `common.LifecycleMgr` contract and the exported `cmd.OutputFormat` value remain
 available for embedded hosts. No single-tenant OAuth manager is introduced.
 The `--include-root` flag controls root-property synchronization in addition to
-child objects. M1's job-plan schema 20 requirement continues to apply.
+child objects. M2 retained M1's schema 20; the current M4 build uses schema 21 as
+described above.
 
 ## Library execution integration (M3)
 
@@ -177,7 +223,8 @@ including streaming merge-join and metadata-only comparisons.
 Library options can carry an explicit job ID and credential manager with separate
 source and destination credential names. `PreparedSync` supports callers that
 prepare and enumerate separately, and exposes an execution-state snapshot for
-legacy progress reporting. Job-plan schema 20 remains unchanged.
+legacy progress reporting. M3 retained job-plan schema 20; use the M3 binary for
+those plans after upgrading to this schema 21 build.
 
 Failure cleanup first stops enumeration and dispatch, then waits for an engine
 work-completion barrier. If that bounded wait times out, the API returns a drain

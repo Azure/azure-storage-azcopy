@@ -193,6 +193,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		PreservePermissions:            s.opts.preservePermissions,
 		PreserveInfo:                   s.opts.preserveInfo,
 		PreservePOSIXProperties:        s.opts.preservePosixProperties,
+		PosixPropertiesStyle:           s.opts.posixPropertiesStyle,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,

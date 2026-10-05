@@ -754,3 +754,11 @@ func shouldQuietMessage(msgToOutput outputMessage, quietMode OutputVerbosity) bo
 		return false
 	}
 }
+
+// CancelFromStdinChannel returns a receive-only cancelChannel channel
+// watchInputs() will write to this same channel when canceled using std in with (--cancel-from-stdin flag)
+// This function is used by handlers to bridge stdin cancellation into the new context-based cancellation we introduced in v10.32
+// Only commands using the new Client.Copy/Sync/Resume flow use this method
+func (lcm *lifecycleMgr) CancelFromStdinChannel() <-chan os.Signal {
+	return lcm.cancelChannel
+}

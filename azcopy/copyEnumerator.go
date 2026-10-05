@@ -58,6 +58,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		if diff == "*" ||
 			diff == common.OS_PATH_SEPARATOR+"*" ||
 			diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+			// trim the /*
+			t.opts.source.Value = normalizedSource.Value
+			// set stripTopDir to true so that --list-of-files/--include-path play nice
 			t.opts.stripTopDir = true
 			t.opts.source = normalizedSource
 		}
@@ -104,6 +107,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		PreserveInfo:        t.opts.preserveInfo,
 		// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 		PreservePOSIXProperties:        t.opts.preservePosixProperties || t.opts.forceWrite == common.EOverwriteOption.PosixProperties(),
+		PosixPropertiesStyle:           t.opts.posixPropertiesStyle,
 		S2SGetPropertiesInBackend:      t.opts.s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      t.opts.s2sSourceChangeValidation,
 		DestLengthValidation:           t.opts.checkLength,
@@ -172,7 +176,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	// Check if the destination is a directory to correctly decide where our files land
 	isDestDir := isResourceDirectory(ctx, t.opts.destination, t.opts.fromTo.To(), t.trp.dstServiceClient, false, t.opts.trailingDot)
 	if t.opts.listOfVersionIds != nil &&
-		(!(t.opts.fromTo == common.EFromTo.BlobLocal() || t.opts.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+		((t.opts.fromTo != common.EFromTo.BlobLocal() && t.opts.fromTo != common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
 		return nil, errors.New("either source is not a blob or destination is not a local folder")
 	}
 
@@ -304,7 +308,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 
 	// folder transfer strategy
 	var folderMessage string
-	jobPartOrder.Fpo, folderMessage = NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters, t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null), t.opts.includeDirectoryStubs)
+	jobPartOrder.Fpo, folderMessage = NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters,
+		t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null),
+		t.opts.includeDirectoryStubs)
 	if !t.opts.dryrun {
 		common.GetLifecycleMgr().Info(folderMessage)
 	}

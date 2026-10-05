@@ -146,10 +146,11 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 		if err != nil {
 			common.LogToJobLogWithPrefix(
 				fmt.Sprintf("Azcopy could not clean up pids sub dir located in the app dir. It is used for tracking running jobs. "+
-					"You can safely delete pid files manually. Azcopy will recreate them as needed. Details:%s"+
+					"You can safely delete pid files manually. Azcopy will recreate them as needed. Details: %s"+
 					"\n The current job will continue as normal.", err.Error()), common.LogInfo)
 			return
 		}
+
 	})
 }
 

@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -179,6 +180,20 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// If the command is for resuming a job with a specific JobID,
+		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		var resumeJobID common.JobID
+		if cmd.Use == "resume [jobID]" {
+			// If no argument is passed then it is not valid
+			if len(args) != 1 {
+				return errors.New("this command requires jobId to be passed as argument")
+			}
+			resumeJobID, err = common.ParseJobID(args[0])
+			if err != nil {
+				return err
+			}
+		}
+
 		isBench := cmd.Use == "bench [destination]"
 
 		// We only care to warn about multiple AzCopy processes for commands sent to STE
@@ -191,7 +206,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]"
-		return initializeForCommand(isMigratedToLibrary, isBench, shouldWarn)
+		return initializeForCommand(isMigratedToLibrary, isBench, shouldWarn, resumeJobID)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
@@ -205,7 +220,8 @@ var rootCmd = &cobra.Command{
 				// don't wait too long
 			}
 		}
-		return nil
+		// Print out help command on just `azcopy`
+		return cmd.Help()
 	},
 }
 
@@ -214,8 +230,12 @@ func Initialize(resumeJobID common.JobID, isBench bool, warnMultipleProcesses ..
 	return initializeClient(resumeJobID, false, isBench, shouldWarn)
 }
 
-func initializeForCommand(isMigratedToLibrary, isBench, shouldWarn bool) error {
-	return initializeClient(common.JobID{}, isMigratedToLibrary, isBench, shouldWarn)
+func initializeForCommand(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobIDs ...common.JobID) error {
+	var resumeJobID common.JobID
+	if len(resumeJobIDs) > 0 {
+		resumeJobID = resumeJobIDs[0]
+	}
+	return initializeClient(resumeJobID, isMigratedToLibrary, isBench, shouldWarn)
 }
 
 func initializeClient(resumeJobID common.JobID, isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
@@ -233,21 +253,20 @@ func initializeClient(resumeJobID common.JobID, isMigratedToLibrary, isBench, sh
 		return err
 	}
 
+	Client.CurrentJobID = resumeJobID
+	if Client.CurrentJobID.IsEmpty() {
+		Client.CurrentJobID = common.NewJobID()
+	}
+	// This logger belongs to command initialization, not a later library execution.
+	jobLogger := common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+	jobLogger.OpenLog()
+	common.AzcopyCurrentJobLogger = jobLogger
+	glcm.RegisterCloseFunc(func() {
+		jobLogger.CloseLog()
+	})
+
 	if !isMigratedToLibrary {
-		Client.CurrentJobID = resumeJobID
-		if Client.CurrentJobID.IsEmpty() {
-			Client.CurrentJobID = common.NewJobID()
-		}
-
 		timeAtPrestart := time.Now()
-
-		jobLogger := common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
-		jobLogger.OpenLog()
-		common.AzcopyCurrentJobLogger = jobLogger
-		glcm.RegisterCloseFunc(func() {
-			jobLogger.CloseLog()
-		})
-
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
 		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
@@ -362,7 +381,7 @@ func InitializeAndExecute() {
 
 func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
-	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+	rootCmd.SetUsageTemplate(strings.ReplaceAll((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands"))
 
 	// the default value is set as -1 to differentiate from an input 3.
 	// if unspecified, the policy doesn't set the request headers, which will cause the service to default to 3.

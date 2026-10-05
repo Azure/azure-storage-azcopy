@@ -252,9 +252,13 @@ func StripTrailingWildcardOnRemoteSource(source string, location common.Location
 		return
 	}
 
-	// Trim the trailing /*.
+	// A nameless directory ends in "//"; remove only its wildcard, not a slash.
 	escapedPath := resourceURL.EscapedPath()
-	if strings.HasSuffix(escapedPath, "/*") {
+	if strings.HasSuffix(escapedPath, "//*") {
+		resourceURL.RawPath = strings.TrimSuffix(escapedPath, "*")
+		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "*")
+		stripTopDir = true
+	} else if strings.HasSuffix(escapedPath, "/*") {
 		resourceURL.RawPath = strings.TrimSuffix(escapedPath, "/*")
 		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
 		stripTopDir = true

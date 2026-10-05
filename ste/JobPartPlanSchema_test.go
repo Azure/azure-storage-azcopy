@@ -13,10 +13,12 @@ func TestM1JobPlanSchema(t *testing.T) {
 	name := func(version common.Version) JobPartPlanFileName {
 		return JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, jobID, 0, version))
 	}
-	_, _, err := name(19).Parse()
-	require.ErrorContains(t, err, "data schema version")
+	for _, legacy := range []common.Version{19, 20} {
+		_, _, err := name(legacy).Parse()
+		require.ErrorContains(t, err, "data schema version")
+	}
 
-	require.Equal(t, common.Version(20), DataSchemaVersion)
+	require.Equal(t, common.Version(21), DataSchemaVersion)
 	parsedID, part, err := name(DataSchemaVersion).Parse()
 	require.NoError(t, err)
 	require.Equal(t, jobID, parsedID)

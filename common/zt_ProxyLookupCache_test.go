@@ -149,5 +149,5 @@ func TestUseOfLookupMethodHasTimout(t *testing.T) {
 
 	fooRequest, _ := http.NewRequest("GET", "http://foo.com/a", nil)
 	tuple := pc.getProxyNoCache(fooRequest)
-	a.Equal(ProxyLookupTimeoutError, tuple.err)
+	a.Equal(ErrProxyLookupTimeout, tuple.err)
 }

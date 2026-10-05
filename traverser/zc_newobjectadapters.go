@@ -282,7 +282,7 @@ func (a shareFilePropertiesAdapter) LinkCount() int64 {
 }
 
 func (a shareFilePropertiesAdapter) FileID() string {
-	return ternary.IffNotNil(a.GetPropertiesResponse.ID, "")
+	return ternary.IffNotNil(a.ID, "")
 }
 
 type shareDirectoryPropertiesAdapter struct {
@@ -342,7 +342,7 @@ func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
 }
 
 func (a shareDirectoryPropertiesAdapter) FileID() string {
-	return ternary.IffNotNil(a.GetPropertiesResponse.ID, "")
+	return ternary.IffNotNil(a.ID, "")
 }
 
 type shareDirectoryFilePropertiesAdapter struct {

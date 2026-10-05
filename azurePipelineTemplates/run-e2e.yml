@@ -48,7 +48,7 @@ jobs:
       - bash: |
           npm install -g azurite
           mkdir azurite
-          azurite --silent --location azurite --debug azurite\debug.log &
+          azurite --silent --location azurite --skipApiVersionCheck --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
       # Running E2E Tests on AMD64
       - task: AzureCLI@2
@@ -62,15 +62,15 @@ jobs:
             if (-Not (Test-Path -Path "./coverage")) {
               New-Item -Path "./coverage" -ItemType Directory
             }
-            
+
             # Create log directory
             if (-Not (Test-Path -Path "${env:AZCOPY_E2E_LOG_OUTPUT}")) {
               New-Item -Path "${env:AZCOPY_E2E_LOG_OUTPUT}" -ItemType Directory
             }
-            
+
             # Print "Building executable"
             Write-Output "Building executable"
-            
+
             # Set platform-specific environment variables and tags
             $tags = ""
             $suffix = ""
@@ -98,7 +98,7 @@ jobs:
               Write-Error "Unsupported operating system"
               exit 1
             }
-            
+
             # Build the Go program
             if ('${{ parameters.test_cli_param }}' -like "*SWSyncTestSuite*") {
                 Write-Output "Building executable with sliding window and mover tags"
@@ -108,47 +108,47 @@ jobs:
             } else {
                 go build -cover -o $build_name
             }
-            
+
             # Az PS login
             Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
             $null = Get-AzAccessToken -AsSecureString
-            
+
             # Print "Running tests"
             Write-Output "Running tests"
-            
+
             # Run tests and pipe output to test.txt
             go test -timeout=2h -v ${{ parameters.test_cli_param }} ./e2etest | Tee-Object -FilePath test.txt
-            
+
             # Save the exit code from the previous command
             $exitCode = $LASTEXITCODE
-            
+
             # Print the contents of test.txt
             # Get-Content test.txt
-            
+
             # Print "Generating junit report"
             Write-Output "Generating junit report"
-            
+
             # Pipe info in test.txt to go-junit-report and save output to report.xml
             Get-Content test.txt | & "$(go env GOPATH)/bin/go-junit-report" > "${display_name}_report.xml"
-            
+
             # Print "Formatting coverage directory to legacy txt format"
             Write-Output "Formatting coverage directory to legacy txt format"
-            
+
             # Format coverage data to text format
             go tool covdata textfmt -i=coverage -o "${display_name}_coverage.txt"
-            
+
             # Print "Formatting coverage to json format"
             Write-Output "Formatting coverage to json format"
-            
+
             # Convert coverage.txt to coverage.json
             & "$(go env GOPATH)/bin/gocov$suffix" convert "${display_name}_coverage.txt" > "${display_name}_coverage.json"
-            
+
             # Print "Formatting coverage to xml format"
             Write-Output "Formatting coverage to xml format"
-            
+
             # Convert coverage.json to coverage.xml
             Get-Content "${display_name}_coverage.json" | & "$(go env GOPATH)/bin/gocov-xml$suffix" > "${display_name}_coverage.xml"
-            
+
             # Return the exit code from step 5
             exit $exitCode
         env:

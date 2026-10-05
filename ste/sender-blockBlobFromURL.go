@@ -22,13 +22,12 @@ package ste
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -200,7 +199,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		options := &blockblob.UploadBlobFromURLOptions{
 			HTTPHeaders:                    &c.headersToApply,
-			Metadata:                       c.metadataToApply,
+			Metadata:                       c.metadataToApply.Metadata,
 			Tier:                           destBlobTier,
 			Tags:                           blobTags,
 			CPKInfo:                        c.jptm.CpkInfo(),

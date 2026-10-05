@@ -126,6 +126,10 @@ type rawCopyCmdArgs struct {
 	preserveSMBInfo bool
 	// Opt-in flag to persist additional POSIX properties
 	preservePOSIXProperties bool
+	// Opt-in flag to specify the style of POSIX properties. Used in-tandem with preservePosixProperties.
+	// Default is "standard"
+	// Using "amlfs" style will preserve properties to be compatible with Azure Managed Lustre File System
+	posixPropertiesStyle string
 	// Opt-in flag to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
@@ -308,6 +312,10 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 
 	err = opts.S2SHandleInvalidateMetadata.Parse(raw.s2sInvalidMetadataHandleOption)
 	if err != nil {
+		return opts, err
+	}
+
+	if err = opts.PosixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
 		return opts, err
 	}
 
@@ -541,12 +549,15 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && azcopy.AreBothLocationsSMBAware(cooked.FromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+		if err = cooked.posixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+			return cooked, err
+		}
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.FromTo)
 	}
 
-	// TODO: Figure out this preservePermissinos stuff
+	// TODO: Figure out this preservePermissions stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
 		cooked.IncludeDirectoryStubs = true
@@ -589,6 +600,8 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	return cooked, nil
 }
 
+// cook preserves the legacy Mover command model; copy execution adapts to Client.Copy.
+// Remove, benchmark, and set-properties also prepare arguments through this method.
 func (raw rawCopyCmdArgs) cook() (cooked CookedCopyCmdArgs, err error) {
 	if cooked, err = raw.toOptions(); err != nil {
 		return cooked, err
@@ -615,6 +628,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
+	raw.posixPropertiesStyle = common.StandardPosixPropertiesStyle.String()
 }
 
 // represents the processed copy command input from the user
@@ -708,6 +722,10 @@ type CookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the POSIX properties ...
 	preservePOSIXProperties bool
+
+	// Specifies the style of POSIX properties preserved.
+	// Supported options: 'standard' (default) & 'amlfs' (Azure Managed Lustre File System)
+	posixPropertiesStyle common.PosixPropertiesStyle
 
 	// Whether to enable Windows special privileges
 	backupMode bool
@@ -1270,10 +1288,10 @@ func init() {
 			if opts, err = raw.toCopyOptions(cmd); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
-			// Create a context that can be cancelled by Ctrl-C
+			opts.JobID = Client.CurrentJobID
+			// Bridge both signal and stdin cancellation without a second progress loop.
 			ctx, cancel := WithJobCancellation(context.Background())
 			defer cancel()
-
 			_, err = Client.Copy(ctx, raw.src, raw.dst, opts)
 			if err != nil {
 				glcm.Error("Cannot perform copy due to error: " + err.Error() + getErrorCodeUrl(err))
@@ -1424,6 +1442,11 @@ func init() {
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
+			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
+			"\n This flag must be used in-tandem with --preserve-posix-properties.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
 		"Preserve symbolic links when performing copy operations involving NFS resources or blob storage. "+
