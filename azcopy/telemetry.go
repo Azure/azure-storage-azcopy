@@ -666,7 +666,10 @@ func (a *telemetryAgent) sendSafely(ctx context.Context, evt telemetry.MetricEve
 			return
 		}
 		common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: failed to send %s: %v", evt.EventName(), err), common.LogWarning)
+		return
 	}
+	// Send confirmations go to the job log; telemetry never writes to stdout or stderr.
+	common.LogToJobLogWithPrefix(fmt.Sprintf("telemetry: sent %s event to App Insights", evt.EventName()), common.LogInfo)
 }
 
 func buildResourceAttributes() telemetry.ResourceAttributes {
