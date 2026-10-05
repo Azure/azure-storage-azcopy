@@ -50,7 +50,7 @@ func TestM1MoverSymlinkFollowingRemainsAvailable(t *testing.T) {
 			rawCLI := getDefaultSyncRawInput(source, tt.dst)
 			rawCLI.fromTo = tt.fromTo.String()
 			rawCLI.followSymlinks = true
-			cliOptions, err := rawCLI.toOptions()
+			cliOptions, err := rawCLI.toCookedOptions()
 			require.NoError(t, err)
 			require.ErrorContains(t, cliOptions.validate(), "not applicable for sync")
 		})
@@ -76,7 +76,7 @@ func TestM1CrossProtocolPreservation(t *testing.T) {
 			raw.fromTo = fromTo.String()
 			raw.preserveInfo = true
 			raw.hardlinks = common.DefaultHardlinkHandlingType.String()
-			cooked, err := raw.toOptions()
+			cooked, err := raw.toCookedOptions()
 			require.NoError(t, err)
 			require.Equal(t, fromTo, cooked.fromTo)
 			require.True(t, cooked.preserveInfo)

@@ -43,6 +43,7 @@ type LoginNewTokenOptions struct {
 	ClientSecret    string
 
 	SaveCredential bool
+	Nickname       string
 }
 
 func NewLoginNewTokenOptions(loginType enum.AutoLoginType) LoginNewTokenOptions {

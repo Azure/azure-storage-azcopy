@@ -18,17 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -84,7 +86,7 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 	}
 
 	for i, t := range tests {
-		err := checkAuthSafeForTarget(t.ct, t.resource, t.extraSuffixesAAD, t.resourceType)
+		err := CheckAuthSafeForTarget(t.ct, t.resource, t.extraSuffixesAAD, t.resourceType)
 		a.Equal(t.expectedOK, err == nil, "Failed on test %d for resource %s", i, t.resource)
 	}
 }
@@ -92,53 +94,98 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 func TestManagedDiskCredentialPropagatesCPKError(t *testing.T) {
 	t.Setenv(enum.EEnvironmentVariable.CPKEncryptionKey().Name, "")
 	t.Setenv(enum.EEnvironmentVariable.CPKEncryptionKeySHA256().Name, "")
+	cpkOptions := common.CpkOptions{CpkInfo: true, IsSourceEncrypted: true}
+	if _, err := cpkOptions.GetCPKInfo(); err == nil {
+		t.Fatal("fixture must reject missing CPK keys before constructing a request")
+	}
+	// A cancelled context also prevents network activity if the validation regresses.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
 	_, err := getBlobCredInfo(common.ResourceString{
-		Value: "https://md-example.blob.core.windows.net/container/blob",
-		SAS:   "sig=example",
+		Value: "https://md-unit-test.invalid/container/blob",
+		SAS:   "sig=not-a-credential",
 	}, GetTargetCredInfoOptions{
-		Context:    context.Background(),
-		CpkOptions: common.CpkOptions{CpkInfo: true},
+		Context:    ctx,
+		CpkOptions: cpkOptions,
 	})
 	assert.ErrorContains(t, err, "failed to fetch cpk encryption key")
 }
 
-/*
- * This function tests that common.isPublic routine is works fine.
- * Two cases are considered, a blob is public or a container is public.
- */
-func TestIsPublic(t *testing.T) {
-	// TODO: Migrate this test to mocked UT.
-	t.Skip("Public access is sometimes turned off due to organization policy. This test should ideally be migrated to a mocked UT.")
+type namedTestToken string
 
-	a := assert.New(t)
-	ctx, _ := context.WithTimeout(context.TODO(), 5*time.Minute)
-	bsc := getBlobServiceClient()
-	ctr, _ := getContainerClient(a, bsc)
-	defer ctr.Delete(ctx, nil)
+func (token namedTestToken) GetToken(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return azcore.AccessToken{Token: string(token), ExpiresOn: time.Now().Add(time.Hour)}, nil
+}
 
-	publicAccess := container.PublicAccessTypeContainer
+type namedTestManager struct {
+	cred.Manager
+	requested []string
+	login     cred.LoginNewTokenOptions
+	deleted   string
+}
 
-	// Create a public container
-	_, err := ctr.Create(ctx, &container.CreateOptions{Access: &publicAccess})
-	a.Nil(err)
+func (manager *namedTestManager) GetCredentials(nickname string, _ context.Context) (azcore.TokenCredential, error) {
+	manager.requested = append(manager.requested, nickname)
+	return namedTestToken(nickname), nil
+}
 
-	// verify that container is public
-	public, err := isPublic(ctx, ctr.URL(), common.CpkOptions{})
-	a.NoError(err)
-	a.True(public)
+func (manager *namedTestManager) DoLogin(opts cred.LoginNewTokenOptions, _ context.Context) (azcore.TokenCredential, error) {
+	manager.login = opts
+	return namedTestToken(opts.Nickname), nil
+}
 
-	publicAccess = container.PublicAccessTypeBlob
-	_, err = ctr.SetAccessPolicy(ctx, &container.SetAccessPolicyOptions{Access: &publicAccess})
-	a.Nil(err)
+func (manager *namedTestManager) DeleteCredentials(nickname string) bool {
+	manager.deleted = nickname
+	return true
+}
 
-	// Verify that blob is public.
-	bb, _ := getBlockBlobClient(a, ctr, "")
-	_, err = bb.UploadBuffer(ctx, []byte("I'm a block blob."), nil)
-	a.Nil(err)
+func TestNamedCredentialsRemainIndependent(t *testing.T) {
+	t.Setenv(enum.EEnvironmentVariable.CredentialType().Name, "")
+	oldForced := stashedEnvCredType
+	stashedEnvCredType = ""
+	t.Cleanup(func() { stashedEnvCredType = oldForced })
+	manager := &namedTestManager{}
+	for _, nickname := range []string{"source-tenant", "destination-tenant"} {
+		info, err := GetTargetCredInfo(common.ResourceString{Value: "https://account.file.core.windows.net/share/file"},
+			common.ELocation.File(), GetTargetCredInfoOptions{
+				Context: context.Background(), PreferredTokenName: nickname, TokenManager: manager,
+			})
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.Equal(t, enum.ECredentialType.OAuthToken(), info.CredentialType)
+		token, err := info.TokenCredential.GetToken(context.Background(), policy.TokenRequestOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, nickname, token.Token)
+	}
+	assert.Equal(t, []string{"source-tenant", "destination-tenant"}, manager.requested)
+}
 
-	public, err = isPublic(ctx, bb.URL(), common.CpkOptions{})
-	a.NoError(err)
-	a.True(public)
+func TestClientCredentialManagerOverride(t *testing.T) {
+	original := GetCredentialManager
+	t.Cleanup(func() { GetCredentialManager = original })
+	first := &namedTestManager{}
+	second := &namedTestManager{}
+	GetCredentialManager = func() cred.Manager { return first }
+	client := Client{}
+	assert.Same(t, first, client.GetCredentialManager())
+	GetCredentialManager = func() cred.Manager { return second }
+	assert.Same(t, second, client.GetCredentialManager())
+	injected := Client{credentialManager: first}
+	assert.Same(t, first, injected.GetCredentialManager())
+}
 
+func TestNamedLoginLogoutDelegateToManager(t *testing.T) {
+	manager := &namedTestManager{}
+	client := Client{credentialManager: manager}
+	_, err := client.Login(LoginOptions{
+		LoginType: enum.EAutoLoginType.SPN(), CredentialName: "destination", PersistToken: true,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "destination", manager.login.Nickname)
+	assert.True(t, manager.login.SaveCredential)
+	_, err = client.Logout(LogoutOptions{Nickname: "destination"})
+	assert.NoError(t, err)
+	assert.Equal(t, "destination", manager.deleted)
 }

@@ -1,6 +1,41 @@
 package common
 
-import "sync"
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+)
+
+type jobCancellationRequestsKey struct{}
+
+type jobCancellationRequests struct {
+	requests <-chan struct{}
+	cancel   context.CancelFunc
+	enabled  *atomic.Bool
+}
+
+// WithJobCancellationRequests allows interactive hosts to request cancellation before
+// cancelling the job context, so declining an incomplete-enumeration prompt is meaningful.
+func WithJobCancellationRequests(ctx context.Context, requests <-chan struct{}, cancel context.CancelFunc) context.Context {
+	return context.WithValue(ctx, jobCancellationRequestsKey{}, jobCancellationRequests{requests: requests, cancel: cancel, enabled: &atomic.Bool{}})
+}
+
+func JobCancellationRequests(ctx context.Context) (<-chan struct{}, context.CancelFunc) {
+	requests, _ := ctx.Value(jobCancellationRequestsKey{}).(jobCancellationRequests)
+	return requests.requests, requests.cancel
+}
+
+func SetJobCancellationRequestsEnabled(ctx context.Context, enabled bool) {
+	requests, _ := ctx.Value(jobCancellationRequestsKey{}).(jobCancellationRequests)
+	if requests.enabled != nil {
+		requests.enabled.Store(enabled)
+	}
+}
+
+func JobCancellationRequestsEnabled(ctx context.Context) bool {
+	requests, _ := ctx.Value(jobCancellationRequestsKey{}).(jobCancellationRequests)
+	return requests.enabled != nil && requests.enabled.Load()
+}
 
 // LifecycleMgr is the public Mover contract. The console implementation lives in cmd.
 type LifecycleMgr interface {

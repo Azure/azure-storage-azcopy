@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -67,7 +68,7 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
 		resourceURL:      *parsedURL,
-		resourceLocation: InferArgumentLocation(raw.resourceToCreate),
+		resourceLocation: azcopy.InferArgumentLocation(raw.resourceToCreate),
 		quota:            int32(raw.quota),
 		CredName:         raw.CredName,
 	}, nil

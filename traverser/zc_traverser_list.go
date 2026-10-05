@@ -117,6 +117,9 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			IncrementEnumeration:        options.IncrementEnumeration,
 			IncrementEnumerationFailure: options.IncrementEnumerationFailure,
 			IncrementNotTransferred:     options.IncrementNotTransferred,
+			Client:                      options.Client,
+			CredentialType:              options.CredentialType,
+			S3ClientManager:             options.S3ClientManager,
 
 			ListOfVersionIDs: nil,
 			ErrorChannel:     options.ErrorChannel,

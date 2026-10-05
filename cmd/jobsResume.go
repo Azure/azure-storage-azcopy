@@ -26,153 +26,114 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
-	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	aztraverser "github.com/Azure/azure-storage-azcopy/v10/traverser"
-
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
-// TODO the behavior of the resume command should be double-checked
-// TODO figure out how to merge resume job with copy
-// TODO the progress reporting code is almost the same as the copy command, the copy-paste should be avoided
-type resumeJobController struct {
-	// generated
-	jobID common.JobID
-
-	// variables used to calculate progress
-	// intervalStartTime holds the last time value when the progress summary was fetched
-	// the value of this variable is used to calculate the throughput
-	// it gets updated every time the progress summary is fetched
-	intervalStartTime        time.Time
-	intervalBytesTransferred uint64
-
-	// used to calculate job summary
-	jobStartTime time.Time
+func init() {
+	commandLineArgs := resumeCmdArgs{}
+	resumeCmd := &cobra.Command{
+		Use:        "resume [jobID]",
+		SuggestFor: []string{"resme", "esume", "resue"},
+		Short:      resumeJobsCmdShortDescription,
+		Long:       resumeJobsCmdLongDescription,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return errors.New("this command requires jobId to be passed as argument")
+			}
+			commandLineArgs.jobID = args[0]
+			glcm.EnableInputWatcher()
+			if cancelFromStdin {
+				glcm.EnableCancelFromStdIn()
+			}
+			return nil
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := commandLineArgs.process(); err != nil {
+				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err))
+				return
+			}
+			glcm.SurrenderControl()
+		},
+	}
+	jobsCmd.AddCommand(resumeCmd)
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.includeTransfer, "include", "", "Deprecated: transfer selection lists are obsolete; nonempty values are rejected.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.excludeTransfer, "exclude", "", "Deprecated: transfer selection lists are obsolete; nonempty values are rejected.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
+	AddSourceDestCredFlags(resumeCmd, &commandLineArgs.SrcCredName, &commandLineArgs.DstCredName)
 }
 
-// wraps call to lifecycle manager to wait for the job to complete
-// if blocking is specified to true, then this method will never return
-// if blocking is specified to false, then another goroutine spawns and wait out the job
-func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
-	// print initial message to indicate that the job is starting
-	// Output the log location if log-level is set to other then NONE
-	var logPathFolder string
-	if common.LogPathFolder != "" {
-		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
-	}
-	glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
-
-	// initialize the times necessary to track progress
-	cca.jobStartTime = time.Now()
-	cca.intervalStartTime = time.Now()
-	cca.intervalBytesTransferred = 0
-
-	// hand over control to the lifecycle manager if blocking
-	if blocking {
-		glcm.InitiateProgressReporting(cca)
-		glcm.SurrenderControl()
-	} else {
-		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca)
-	}
+type resumeCmdArgs struct {
+	jobID           string
+	includeTransfer string
+	excludeTransfer string
+	SourceSAS       string
+	DestinationSAS  string
+	SrcCredName     string
+	DstCredName     string
 }
 
-func (cca *resumeJobController) Cancel(lcm LifecycleMgr) {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+func (rca resumeCmdArgs) process() error {
+	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
+	ctx, cancel := WithJobCancellation(context.Background())
+	defer cancel()
+	handler := &cliResumeHandler{}
+	result, err := Client.ResumeJob(ctx, jobID, azcopy.ResumeJobOptions{
+		SourceSAS:       rca.SourceSAS,
+		DestinationSAS:  rca.DestinationSAS,
+		SrcCredName:     rca.SrcCredName,
+		DstCredName:     rca.DstCredName,
+		IncludeTransfer: parseTransfers(rca.includeTransfer),
+		ExcludeTransfer: parseTransfers(rca.excludeTransfer),
+		Handler:         handler,
+	})
+	if err != nil {
+		return fmt.Errorf("error resuming job %s: %w", jobID, err)
+	}
+	// Exit only after the library has completed its deferred cleanup.
+	handler.printResult(result)
+	return nil
 }
 
-// TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
+type cliResumeHandler struct{}
 
-	// When we do GetJobSummary, the transfers list objects are cleared.
-	// This is a problem for other client consumers like XDM
-	// XDM: Skipping the reset if it is mover
-	resetTransferLists := !buildmode.IsMover
+func (c cliResumeHandler) OnStart(ctx azcopy.JobContext) {
+	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
+	StartSystemStatsMonitorForJobID(ctx.JobID)
+}
 
-	// fetch a job status
-	summary := jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
-	jobDone := summary.JobStatus.IsJobDone()
-	totalKnownCount = summary.TotalTransfers
-
-	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Since(cca.jobStartTime) // report the total run time of the job
-
-	var computeThroughput = func() float64 {
-		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
-		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-
-		// reset the interval timer and byte count
-		cca.intervalStartTime = time.Now()
-		cca.intervalBytesTransferred = summary.BytesOverWire
-
-		return ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
-	}
-	throughput := computeThroughput()
-	builder := func(format common.OutputFormat) string {
+func (c cliResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
+	glcm.Progress(func(format common.OutputFormat) string {
 		if format == EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
+			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
-		} else {
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
-
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
+		return azcopy.GetCopyProgress(azcopy.CopyProgress(progress), false)
+	})
+}
+
+func (c cliResumeHandler) OnComplete(azcopy.ResumeJobResult) {}
+
+func (c cliResumeHandler) printResult(result azcopy.ResumeJobResult) {
+	exitCode := EExitCode.Success()
+	if result.TransfersFailed > 0 {
+		exitCode = EExitCode.Error()
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
-		if exists {
-			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	glcm.Exit(func(format common.OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(result.ListJobSummaryResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
 		}
-	}
-
-	glcm.Progress(builder)
-
-	if jobDone {
-		exitCode := EExitCode.Success()
-		if summary.TransfersFailed > 0 {
-			exitCode = EExitCode.Error()
-		}
-
-		lcm.Exit(func(format common.OutputFormat) string {
-			if format == EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(summary)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				return fmt.Sprintf(
-					`
+		return fmt.Sprintf(
+			`
 
 Job %s summary
 Elapsed Time (Minutes): %v
@@ -189,300 +150,29 @@ Number of Folder Transfers Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
-					summary.JobID.String(),
-					jobsAdmin.ToFixed(duration.Minutes(), 4),
-					summary.FileTransfers,
-					summary.FolderPropertyTransfers,
-					summary.SymlinkTransfers,
-					summary.TotalTransfers,
-					summary.TransfersCompleted-summary.FoldersCompleted,
-					summary.FoldersCompleted,
-					summary.TransfersFailed-summary.FoldersFailed,
-					summary.FoldersFailed,
-					summary.TransfersSkipped-summary.FoldersSkipped,
-					summary.FoldersSkipped,
-					summary.TotalBytesTransferred,
-					summary.JobStatus)
-			}
-		}, exitCode)
-	}
-
-	return
+			result.JobID.String(),
+			azcopy.ToFixed(result.ElapsedTime.Minutes(), 4),
+			result.FileTransfers,
+			result.FolderPropertyTransfers,
+			result.SymlinkTransfers,
+			result.TotalTransfers,
+			result.TransfersCompleted-result.FoldersCompleted,
+			result.FoldersCompleted,
+			result.TransfersFailed-result.FoldersFailed,
+			result.FoldersFailed,
+			result.TransfersSkipped-result.FoldersSkipped,
+			result.FoldersSkipped,
+			result.TotalBytesTransferred,
+			result.JobStatus)
+	}, exitCode)
 }
 
-func init() {
-	resumeCmdArgs := resumeCmdArgs{}
-
-	// resumeCmd represents the resume command
-	resumeCmd := &cobra.Command{
-		Use:        "resume [jobID]",
-		SuggestFor: []string{"resme", "esume", "resue"},
-		Short:      resumeJobsCmdShortDescription,
-		Long:       resumeJobsCmdLongDescription,
-		Args: func(cmd *cobra.Command, args []string) error {
-			// the resume command requires necessarily to have an argument
-			// resume jobId -- resumes all the parts of an existing job for given jobId
-
-			// If no argument is passed then it is not valid
-			if len(args) != 1 {
-				return errors.New("this command requires jobId to be passed as argument")
-			}
-			resumeCmdArgs.jobID = args[0]
-
-			glcm.EnableInputWatcher()
-			if cancelFromStdin {
-				glcm.EnableCancelFromStdIn()
-			}
-			return nil
-		},
-		Run: func(cmd *cobra.Command, args []string) {
-			err := resumeCmdArgs.process()
-			if err != nil {
-				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
-			}
-			glcm.Exit(nil, EExitCode.Success())
-		},
-	}
-
-	jobsCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
-		"Files should be separated by ';'.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
-		"Files should be separated by ';'.")
-	// oauth options
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
-
-	AddSourceDestCredFlags(resumeCmd, &resumeCmdArgs.SrcCredName, &resumeCmdArgs.DstCredName)
-}
-
-type resumeCmdArgs struct {
-	jobID           string
-	includeTransfer string
-	excludeTransfer string
-
-	SourceSAS      string
-	DestinationSAS string
-
-	// named credentials (bound to --src-cred / --dst-cred flags)
-	SrcCredName string
-	DstCredName string
-}
-
-func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
-	ctx context.Context,
-	fromTo common.FromTo,
-	source common.ResourceString,
-	destination common.ResourceString,
-) (srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcCredInfo, dstCredInfo cred.CredentialInfo, err error) {
-	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
-		rca.SourceSAS = "?" + rca.SourceSAS
-	}
-	if len(rca.DestinationSAS) > 0 && rca.DestinationSAS[0] != '?' {
-		rca.DestinationSAS = "?" + rca.DestinationSAS
-	}
-
-	source.SAS = rca.SourceSAS
-	destination.SAS = rca.DestinationSAS
-
-	credManager := GetCredentialManager()
-
-	srcCredInfo, err = GetTargetCredInfo(source, fromTo.From(), GetTargetCredInfoOptions{
-		Context:            ctx,
-		CanBePublic:        true,  // source can be public
-		SharedKeyAllowed:   false, // but not shared key
-		PreferredTokenName: rca.SrcCredName,
-		CpkOptions:         common.CpkOptions{},
-		TokenManager:       credManager,
-	})
-	if err != nil {
-		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("failed to get source credentials: %w", err)
-	}
-
-	dstCredInfo, err = GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
-		Context:            ctx,
-		CanBePublic:        false, // destination requires write access
-		SharedKeyAllowed:   false, // but not shared key
-		PreferredTokenName: rca.DstCredName,
-		CpkOptions:         common.CpkOptions{},
-		TokenManager:       credManager,
-	})
-	if err != nil {
-		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("failed to get destination credentials: %w", err)
-	}
-
-	var missingSAS []string
-	if fromTo.From().IsAzure() && source.SAS == "" {
-		if srcCredInfo.CredentialType == enum.ECredentialType.Unknown() {
-			missingSAS = append(missingSAS, "source-sas")
-		} else if srcCredInfo.CredentialType == enum.ECredentialType.Anonymous() {
-			public := false
-			if fromTo.From() == common.ELocation.Blob() {
-				public, err = isPublic(ctx, source.Value, common.CpkOptions{})
-				if err != nil {
-					return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, err
-				}
-			}
-			if !public {
-				missingSAS = append(missingSAS, "source-sas")
-			}
+func parseTransfers(arg string) map[string]int {
+	transfers := make(map[string]int)
+	for i, transfer := range strings.Split(arg, ";") {
+		if transfer != "" {
+			transfers[transfer] = i
 		}
 	}
-	if fromTo.To().IsAzure() && destination.SAS == "" &&
-		(dstCredInfo.CredentialType == enum.ECredentialType.Unknown() || dstCredInfo.CredentialType == enum.ECredentialType.Anonymous()) {
-		missingSAS = append(missingSAS, "destination-sas")
-	}
-	if len(missingSAS) > 0 {
-		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("the %s switch must be provided to resume the job", strings.Join(missingSAS, " and "))
-	}
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// Error for invalid JobId format
-		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
-
-	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	// We put the source into the target slot this time.
-	srcOptions := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
-	// Get job details from the STE
-	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobDetailsResponse.ErrorMsg != "" {
-		glcm.Error(getJobDetailsResponse.ErrorMsg)
-	}
-
-	var fileSrcClientOptions any
-	if fromTo.From().IsFile() {
-		fileSrcClientOptions = &common.FileClientOptions{
-			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
-		}
-	}
-	srcServiceClient, err = common.GetServiceClientForLocation(fromTo.From(), source, srcCredInfo.CredentialType, srcCredInfo.TokenCredential, &srcOptions, fileSrcClientOptions)
-	if err != nil {
-		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, err
-	}
-
-	dstOptions := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, dstCredInfo.TokenCredential)
-	var fileClientOptions any
-	if fromTo.To().IsFile() {
-		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From().IsFile(),
-			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
-		}
-	}
-	dstServiceClient, err = common.GetServiceClientForLocation(fromTo.To(), destination, dstCredInfo.CredentialType, dstCredInfo.TokenCredential, &dstOptions, fileClientOptions)
-	if err != nil {
-		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, err
-	}
-	return srcServiceClient, dstServiceClient, srcCredInfo, dstCredInfo, nil
-}
-
-// processes the resume command,
-// dispatches the resume Job order to the storage engine.
-func (rca resumeCmdArgs) process() error {
-	// parsing the given JobId to validate its format correctness
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// If parsing gives an error, hence it is not a valid JobId format
-		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
-
-	// if no logging, set this empty so that we don't display the log location
-	if LogLevel == common.LogNone {
-		common.LogPathFolder = ""
-	}
-
-	includeTransfer := make(map[string]int)
-	excludeTransfer := make(map[string]int)
-
-	// If the transfer has been provided with the include, parse the transfer list.
-	if len(rca.includeTransfer) > 0 {
-		// Split the Include Transfer using ';'
-		transfers := strings.Split(rca.includeTransfer, ";")
-		for index := range transfers {
-			if len(transfers[index]) == 0 {
-				// If the transfer provided is empty
-				// skip the transfer
-				// This is to handle the misplaced ';'
-				continue
-			}
-			includeTransfer[transfers[index]] = index
-		}
-	}
-	// If the transfer has been provided with the exclude, parse the transfer list.
-	if len(rca.excludeTransfer) > 0 {
-		// Split the Exclude Transfer using ';'
-		transfers := strings.Split(rca.excludeTransfer, ";")
-		for index := range transfers {
-			if len(transfers[index]) == 0 {
-				// If the transfer provided is empty
-				// skip the transfer
-				// This is to handle the misplaced ';'
-				continue
-			}
-			excludeTransfer[transfers[index]] = index
-		}
-	}
-
-	// Get fromTo info, so we can decide what's the proper credential type to use.
-	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobFromToResponse.ErrorMsg != "" {
-		glcm.Error(getJobFromToResponse.ErrorMsg)
-	}
-
-	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
-		getJobFromToResponse.FromTo.To() == common.ELocation.Benchmark() {
-		// Doesn't make sense to resume a benchmark job.
-		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
-		return errors.New("resuming benchmark jobs is not supported")
-	}
-
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// Initialize credential info.
-	// TODO: Replace context with root context
-	srcResourceString, err := aztraverser.SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
-	if err != nil {
-		return fmt.Errorf("failed to split source resource string: %w", err)
-	}
-	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := aztraverser.SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
-	if err != nil {
-		return fmt.Errorf("failed to split dest resource string: %w", err)
-	}
-	dstResourceString.SAS = rca.DestinationSAS
-
-	// Fetch service clients and do some primitive credential validation
-	srcServiceClient, dstServiceClient, srcCredInfo, dstCredInfo, err := rca.getSourceAndDestinationServiceClients(
-		ctx, getJobFromToResponse.FromTo,
-		srcResourceString,
-		dstResourceString,
-	)
-	if err != nil {
-		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
-	}
-
-	// Send resume job request.
-	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
-		JobID:            jobID,
-		SourceSAS:        rca.SourceSAS,
-		DestinationSAS:   rca.DestinationSAS,
-		SrcServiceClient: srcServiceClient,
-		DstServiceClient: dstServiceClient,
-		IncludeTransfer:  includeTransfer,
-		ExcludeTransfer:  excludeTransfer,
-		JobErrorHandler:  glcm,
-
-		// download is the only sort that uses the source as our target credential type
-		TargetCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsDownload(), srcCredInfo.CredentialType, dstCredInfo.CredentialType),
-		// s2s is the only case where we need to provide this info; upload is "anonymous", download source is target
-		S2SSourceCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsS2S(), srcCredInfo.CredentialType, enum.ECredentialType.Anonymous()),
-	})
-
-	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.Error(resumeJobResponse.ErrorMsg)
-	}
-
-	controller := resumeJobController{jobID: jobID}
-	controller.waitUntilJobCompletion(true)
-
-	return nil
+	return transfers
 }

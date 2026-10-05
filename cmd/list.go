@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	traverser2 "github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -245,7 +246,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
+	level, err := azcopy.DetermineLocationLevel(source.Value, cooked.location, true)
 	if err != nil {
 		return err
 	}
@@ -264,9 +265,27 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	// check if user wants to get version id
 	getVersionId := containsProperty(cooked.properties, VersionId)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, credentialInfo.TokenCredential)
+	var fileClientOptions any
+	if cooked.location.IsFile() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cooked.trailingDot.IsEnabled()}
+	}
+
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cooked.location,
+		source,
+		credentialInfo.CredentialType,
+		credentialInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
+	if err != nil {
+		return err
+	}
 
 	traverser, err := traverser2.InitResourceTraverser(source, cooked.location, ctx, traverser2.InitResourceTraverserOptions{
-		Credential: &credentialInfo,
+		Client:         targetServiceClient,
+		CredentialType: credentialInfo.CredentialType,
 
 		TrailingDotOption: cooked.trailingDot,
 
@@ -385,7 +404,7 @@ func (l AzCopyListObject) String() string {
 	return l.StringEncoding
 }
 
-func (cooked cookedListCmdArgs) newListObject(object traverser2.StoredObject, level LocationLevel) AzCopyListObject {
+func (cooked cookedListCmdArgs) newListObject(object traverser2.StoredObject, level azcopy.LocationLevel) AzCopyListObject {
 	path := getPath(object.ContainerName, object.RelativePath, level, object.EntityType)
 	contentLength := sizeToString(object.Size, cooked.MachineReadable)
 
@@ -502,7 +521,7 @@ func ByteSizeToString(size int64) string {
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
 }
 
-func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
+func getPath(containerName, relativePath string, level azcopy.LocationLevel, entityType common.EntityType) string {
 	builder := strings.Builder{}
 	if level == level.Service() {
 		builder.WriteString(containerName + "/")

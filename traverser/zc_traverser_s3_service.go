@@ -94,9 +94,14 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor Obje
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
 		credentialInfo := cred.CredentialInfo{CredentialType: enum.ECredentialType.S3AccessKey()}
+		if t.opts.Credential != nil {
+			credentialInfo = *t.opts.Credential
+		}
 
 		bucketTraverser, err := NewS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
-			Credential: &credentialInfo,
+			S3ClientManager: t.opts.S3ClientManager,
+			CredentialType:  enum.ECredentialType.S3AccessKey(),
+			Credential:      &credentialInfo,
 
 			Recursive: true,
 
@@ -133,6 +138,9 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor Obje
 }
 
 func NewS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
+	if opts.S3ClientManager == nil {
+		opts.S3ClientManager = &S3ClientManager{}
+	}
 	t = &s3ServiceTraverser{opts: opts, ctx: ctx}
 
 	var s3URLParts common.S3URLParts
@@ -151,12 +159,10 @@ func NewS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 
 	t.s3URL = s3URLParts
 
-	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
-		CredentialType: enum.ECredentialType.S3AccessKey(),
-		S3CredentialInfo: cred.S3CredentialInfo{
-			Endpoint:   t.s3URL.Endpoint,
-			BucketName: t.s3URL.BucketName,
-		},
-	}, common.CredentialOpOptions{LogError: common.GetLifecycleMgr().Error}, common.AzcopyScanningLogger)
+	info := cred.CredentialInfo{CredentialType: enum.ECredentialType.S3AccessKey()}
+	if opts.Credential != nil {
+		info = *opts.Credential
+	}
+	t.s3Client, err = opts.S3ClientManager.GetS3Client(ctx, s3URLParts, info)
 	return
 }

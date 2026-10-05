@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 
@@ -114,8 +113,6 @@ type CopyJobPartOrderRequest struct {
 	FromTo              FromTo
 	Fpo                 FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	SymlinkHandlingType SymlinkHandlingType
-	// list of blobTypes to exclude.
-	ExcludeBlobType []blob.BlobType
 
 	SourceRoot       ResourceString
 	DestinationRoot  ResourceString

@@ -21,35 +21,16 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/spf13/cobra"
 )
 
-type LoginOptions struct {
-	TenantID    string
-	AADEndpoint string
-	LoginType   enum.AutoLoginType
-
-	IdentityClientID   string
-	IdentityResourceID string
-
-	ApplicationID   string
-	CertificatePath string
-
-	CertificatePassword string
-	ClientSecret        string
-	PersistToken        bool
-
-	IdentityObjectID string
-
-	CredentialName string
-}
+type LoginOptions azcopy.LoginOptions
 
 var loginCmdArg = rawLoginArgs{tenantID: cred.DefaultTenantID}
 
@@ -171,9 +152,9 @@ type rawLoginArgs struct {
 }
 
 func (args rawLoginArgs) toOptions() (LoginOptions, error) {
-	loginType, ok := enum.EAutoLoginType.Parse(loginCmdArg.loginType)
+	loginType, ok := enum.EAutoLoginType.Parse(args.loginType)
 	if !ok {
-		return LoginOptions{}, errors.New("invalid login type: " + loginCmdArg.loginType)
+		return LoginOptions{}, errors.New("invalid login type: " + args.loginType)
 	}
 	return LoginOptions{
 		TenantID:           args.tenantID,
@@ -189,18 +170,8 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 }
 
 func (options LoginOptions) process() error {
-	opts := cred.NewLoginNewTokenOptions(options.LoginType)
-	opts.TenantID = options.TenantID
-	opts.AADEndpoint = options.AADEndpoint
-	opts.IdentityClientID = options.IdentityClientID
-	opts.IdentityObjectID = options.IdentityObjectID
-	opts.IdentityResourceID = options.IdentityResourceID
-	opts.ApplicationID = options.ApplicationID
-	opts.CertificateData = options.CertificatePath
-	opts.ClientSecret = ternary.Iff(options.ClientSecret != "", options.ClientSecret, options.CertificatePassword)
-	opts.SaveCredential = true
-
-	_, err := GetCredentialManager().DoLogin(opts, context.Background())
+	options.PersistToken = true
+	_, err := Client.Login(azcopy.LoginOptions(options))
 	if err != nil {
 		return err
 	}
@@ -225,4 +196,8 @@ func (options LoginOptions) process() error {
 	}
 
 	return nil
+}
+
+func RunLogin(options LoginOptions) error {
+	return options.process()
 }

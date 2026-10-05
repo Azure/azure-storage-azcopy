@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -121,23 +122,24 @@ type rawSyncCmdArgs struct {
 	// is allowlisted for the feature OR the MOVER_SYNC_MJ env var is set (the mover
 	// combines both into this single flag; azcopy does not read any enablement env var itself).
 	useStreamingMergeJoin bool
+	hashMetaDir           string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
 func validateURLIsNotServiceLevel(url string, location common.Location) error {
-	srcLevel, err := DetermineLocationLevel(url, location, true)
+	srcLevel, err := azcopy.DetermineLocationLevel(url, location, true)
 	if err != nil {
 		return err
 	}
 
-	if srcLevel == ELocationLevel.Service() {
+	if srcLevel == azcopy.ELocationLevel.Service() {
 		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
 	}
 
 	return nil
 }
 
-func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
+func (raw rawSyncCmdArgs) toCookedOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked = cookedSyncCmdArgs{
 		dryrunMode:                       raw.dryrun,
 		blockSizeMB:                      raw.blockSizeMB,
@@ -155,6 +157,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		includeRoot:                      raw.includeRoot,
 		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
 		allowLocalSymlinkFollowing:       raw.allowLocalSymlinkFollowing,
+		hashMetaDir:                      ternary.Iff(raw.hashMetaDir != "", raw.hashMetaDir, common.LocalHashDir),
 
 		SrcCredName: raw.SrcCredName,
 		DstCredName: raw.DstCredName,
@@ -173,24 +176,36 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
 		cooked.destination, err = traverser.SplitResourceString(raw.dst, cooked.fromTo.To())
-		common.PanicIfErr(err)
+		if err != nil {
+			return cooked, err
+		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
 		cooked.source, err = traverser.SplitResourceString(raw.src, cooked.fromTo.From())
-		common.PanicIfErr(err)
+		if err != nil {
+			return cooked, err
+		}
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(),
 		common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(),
 		common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(),
 		common.EFromTo.FileBlobFS(), common.EFromTo.FileNFSFileSMB(), common.EFromTo.FileSMBFileNFS():
 		cooked.destination, err = traverser.SplitResourceString(raw.dst, cooked.fromTo.To())
-		common.PanicIfErr(err)
+		if err != nil {
+			return cooked, err
+		}
 		cooked.source, err = traverser.SplitResourceString(raw.src, cooked.fromTo.From())
-		common.PanicIfErr(err)
+		if err != nil {
+			return cooked, err
+		}
 	case common.EFromTo.S3Blob():
 		if buildmode.IsMover {
 			cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
-			common.PanicIfErr(err)
+			if err != nil {
+				return cooked, err
+			}
 			cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
-			common.PanicIfErr(err)
+			if err != nil {
+				return cooked, err
+			}
 		} else {
 			return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 		}
@@ -228,6 +243,12 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	// parse the attribute filter patterns
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
+	cooked.hardlinks = common.DefaultHardlinkHandlingType
+	if raw.hardlinks != "" {
+		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
+			return cooked, err
+		}
+	}
 
 	// NFS/SMB arg processing
 	if cooked.fromTo.IsNFS() {
@@ -238,9 +259,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.fromTo)
-		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
-			return cooked, err
-		}
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
@@ -260,7 +278,8 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	default: // no need to put a hash of any kind.
 	}
 
-	if err = common.LocalHashStorageMode.Parse(raw.localHashStorageMode); err != nil {
+	cooked.localHashStorageMode = common.LocalHashStorageMode
+	if err = cooked.localHashStorageMode.Parse(raw.localHashStorageMode); err != nil {
 		return cooked, err
 	}
 
@@ -294,7 +313,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 
 // validates and transform raw input into cooked input
 func (raw *rawSyncCmdArgs) cook() (cooked cookedSyncCmdArgs, err error) {
-	if cooked, err = raw.toOptions(); err != nil {
+	if cooked, err = raw.toCookedOptions(); err != nil {
 		return cooked, err
 	}
 	if err = cooked.validate(); err != nil {
@@ -322,15 +341,15 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		}
 	}
 
-	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+	if err = azcopy.ValidateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
 		return err
 	}
 
-	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
+	if err = azcopy.ValidateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
 		return err
 	}
 
-	if err = validateSymlinkHandlingMode(cooked.symlinkHandling, cooked.fromTo); err != nil {
+	if err = azcopy.ValidateSymlinkHandlingMode(cooked.symlinkHandling, cooked.fromTo); err != nil {
 		return err
 	}
 
@@ -359,11 +378,11 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		}
 	}
 
-	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
+	if err = azcopy.ValidatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return err
 	}
 
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
+	if err = azcopy.ValidateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
 		return err
 	}
 
@@ -393,50 +412,11 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 }
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
-	// set up the front end scanning logger
-	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	common.AzcopyScanningLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		common.AzcopyScanningLogger.CloseLog()
-	})
-
-	// if no logging, set this empty so that we don't display the log location
-	if LogLevel == common.LogNone {
-		common.LogPathFolder = ""
-	}
-
-	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
-	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
-	if cooked.fromTo == common.EFromTo.LocalFile() {
-
-		glcm.Warn(LocalToFileShareWarnMsg)
-		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
-
-		if cooked.dryrunMode {
-			glcm.Dryrun(func(of common.OutputFormat) string {
-				if of == EOutputFormat.Json() {
-					var out struct {
-						Warn string `json:"warn"`
-					}
-
-					out.Warn = LocalToFileShareWarnMsg
-					buf, _ := json.Marshal(out)
-					return string(buf)
-				}
-
-				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
-			})
-		}
-	}
-
-	// use the globally generated JobID
-	cooked.jobID = Client.CurrentJobID
-
-	cooked.blockSize, err = blockSizeInBytes(cooked.blockSizeMB)
+	cooked.blockSize, err = azcopy.BlockSizeInBytes(cooked.blockSizeMB)
 	if err != nil {
 		return err
 	}
-	cooked.putBlobSize, err = blockSizeInBytes(cooked.putBlobSizeMB)
+	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.putBlobSizeMB)
 	if err != nil {
 		return err
 	}
@@ -589,7 +569,10 @@ type cookedSyncCmdArgs struct {
 	useStreamingMergeJoin bool
 
 	// cancellation for sync orchestrator
-	orchestratorCancel context.CancelFunc
+	orchestratorCancel   context.CancelFunc
+	hashMetaDir          string
+	localHashStorageMode common.HashStorageMode
+	preparedSync         *azcopy.PreparedSync
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -597,6 +580,7 @@ func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
 }
 
 func (cca *cookedSyncCmdArgs) getDeletionCount() uint32 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint32(&cca.atomicDeletionCount)
 }
 
@@ -607,6 +591,7 @@ func (cca *cookedSyncCmdArgs) setFirstPartOrdered() {
 
 // firstPartOrdered returns the value of atomicFirstPartOrdered.
 func (cca *cookedSyncCmdArgs) firstPartOrdered() bool {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint32(&cca.atomicFirstPartOrdered) > 0
 }
 
@@ -617,41 +602,49 @@ func (cca *cookedSyncCmdArgs) setScanningComplete() {
 
 // scanningComplete returns the value of atomicScanningStatus.
 func (cca *cookedSyncCmdArgs) scanningComplete() bool {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
 }
 
 // GetSourceFilesScanned returns files scanned at source.
 func (cca *cookedSyncCmdArgs) GetSourceFoldersScanned() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicSourceFoldersScanned)
 }
 
 // GetSourceFilesTransferredNotRequired returns number of files not changed, hence require no transfer.
 func (cca *cookedSyncCmdArgs) GetSourceFilesTransferredNotRequired() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired)
 }
 
 // GetSourceFoldersTransferredNotRequired returns number of folders not changed, hence require no transfer.
 func (cca *cookedSyncCmdArgs) GetSourceFoldersTransferredNotRequired() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired)
 }
 
 // GetSourceFilesScanned returns files scanned at source.
 func (cca *cookedSyncCmdArgs) GetSourceFilesScanned() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicSourceFilesScanned)
 }
 
 // GetDestinationFilesScanned returns files scanned at destination.
 func (cca *cookedSyncCmdArgs) GetDestinationFilesScanned() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
 }
 
 // GetDestinationFoldersScanned returns folders scanned at destination.
 func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 }
 
 // GetSkippedArchiveFileCount returns the number of archive/glacier storage class objects skipped during scanning.
 func (cca *cookedSyncCmdArgs) GetSkippedArchiveFileCount() uint64 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint64(&cca.atomicSkippedArchiveFileCount)
 }
 
@@ -672,28 +665,34 @@ func (cca *cookedSyncCmdArgs) IncrementDestinationFolderEnumerationSkipped() {
 }
 
 func (cca *cookedSyncCmdArgs) GetSourceFolderEnumerationFailed() uint64 {
+	cca.refreshPreparedStats()
 	return cca.atomicSourceFolderEnumerationFailed.Load()
 }
 
 func (cca *cookedSyncCmdArgs) GetSourceFileEnumerationFailed() uint64 {
+	cca.refreshPreparedStats()
 	return cca.atomicSourceFileEnumerationFailed.Load()
 }
 
 func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationFailed() uint64 {
+	cca.refreshPreparedStats()
 	return cca.atomicDestinationFolderEnumerationFailed.Load()
 }
 
 func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationSkipped() uint64 {
+	cca.refreshPreparedStats()
 	return cca.atomicDestinationFolderEnumerationSkipped.Load()
 }
 
 // GetSymlinkSkipped returns the number of symbolic links skipped during sync.
 func (cca *cookedSyncCmdArgs) GetSymlinkSkipped() uint32 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 }
 
 // GetSpecialFileSkipped returns the number of special files skipped during sync.
 func (cca *cookedSyncCmdArgs) GetSpecialFileSkipped() uint32 {
+	cca.refreshPreparedStats()
 	return atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
 }
 
@@ -725,8 +724,9 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
+	cca.refreshPreparedStats()
 	// prompt for confirmation, except when enumeration is complete
-	if !cca.isEnumerationComplete {
+	if !cca.scanningComplete() {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
 			"cancelling the job at this point means it cannot be resumed.",
 			common.PromptDetails{
@@ -745,12 +745,14 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 		if UseSyncOrchestrator {
 			cca.LogIncompleteEnumerationOutputMessage()
 
-			if cca.orchestratorCancel != nil {
-				cca.orchestratorCancel()
-			}
 		}
 	}
 
+	if cca.preparedSync != nil {
+		cca.preparedSync.Cancel()
+	} else if cca.orchestratorCancel != nil {
+		cca.orchestratorCancel()
+	}
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
 		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
@@ -780,7 +782,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughpu
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", azcopy.ToFixed(throughput, 4))
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
@@ -805,6 +807,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
+	cca.refreshPreparedStats()
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -822,13 +825,18 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 		totalKnownCount = summary.TotalTransfers
 
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(azcopy.Base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 		throughput = ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
 		// reset the interval timer and byte count
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
+	} else if cca.scanningComplete() {
+		summary.JobID = cca.jobID
+		summary.JobStatus = common.EJobStatus.Completed()
+		summary.PercentComplete = 100
+		jobDone = true
 	}
 
 	// first part not dispatched, and we are still scanning
@@ -850,7 +858,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
+			summary.TotalTransfers, perfString, azcopy.ToFixed(throughput, 4), diskString)
 	}
 
 	if jobsAdmin.JobsAdmin != nil {
@@ -908,30 +916,19 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 }
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	enumerator, err := cca.InitEnumerator(ctx, NewSyncDefaultEnumeratorOptions())
+	ctx, cancel := WithJobCancellation(ctx)
+	cca.orchestratorCancel = cancel
+	defer cancel()
+	source, destination, err := cca.syncResourceStrings()
 	if err != nil {
 		return err
 	}
-
-	// trigger the progress reporting
-	if !cca.dryrunMode {
-		cca.waitUntilJobCompletion(false)
-	}
-
-	// trigger the enumeration
-	if UseSyncOrchestrator {
-		err = CustomSyncHandler(cca, enumerator, ctx)
-	} else {
-		err = enumerator.Enumerate()
-	}
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err = Client.Sync(ctx, source, destination, cca.librarySyncOptions(NewSyncDefaultEnumeratorOptions()))
+	return err
 }
 
 func (cca *cookedSyncCmdArgs) GetDefaultOutputMessage(summary common.ListJobSummaryResponse, screenStats string, duration time.Duration) string {
+	cca.refreshPreparedStats()
 	return fmt.Sprintf(
 		`
 Job %s Summary
@@ -957,7 +954,7 @@ Final Job Status: %v%s%s
 		summary.JobID.String(),
 		atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 		atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-		jobsAdmin.ToFixed(duration.Minutes(), 4),
+		azcopy.ToFixed(duration.Minutes(), 4),
 		summary.FileTransfers,
 		summary.FolderPropertyTransfers,
 		summary.SymlinkTransfers,
@@ -978,6 +975,7 @@ Final Job Status: %v%s%s
 }
 
 func (cca *cookedSyncCmdArgs) GetElaborateOutputMessage(summary common.ListJobSummaryResponse, screenStats string, duration time.Duration) string {
+	cca.refreshPreparedStats()
 	return fmt.Sprintf(
 		`============================================================
 Job %s Summary
@@ -1022,7 +1020,7 @@ Final Job Status: .............................. %12v
 		atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 		atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
 		atomic.LoadUint64(&cca.atomicDestinationFoldersScanned),
-		jobsAdmin.ToFixed(duration.Minutes(), 4),
+		azcopy.ToFixed(duration.Minutes(), 4),
 
 		summary.FileTransfers,
 		summary.FolderPropertyTransfers,
@@ -1056,6 +1054,7 @@ Final Job Status: .............................. %12v
 }
 
 func (cca *cookedSyncCmdArgs) LogIncompleteEnumerationOutputMessage() {
+	cca.refreshPreparedStats()
 	fmt.Printf(
 		`%s============================================================
 Job Enumeration %s Summary
@@ -1078,7 +1077,7 @@ Destination Folders Skipped During Enumeration: %13v
 		atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 		atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
 		atomic.LoadUint64(&cca.atomicDestinationFoldersScanned),
-		jobsAdmin.ToFixed(time.Since(cca.jobStartTime).Minutes(), 4),
+		azcopy.ToFixed(time.Since(cca.jobStartTime).Minutes(), 4),
 
 		cca.atomicSourceFolderEnumerationFailed.Load(),
 		cca.atomicSourceFileEnumerationFailed.Load(),
@@ -1149,7 +1148,7 @@ func init() {
 
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, azcopy.PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
@@ -1257,7 +1256,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. "+
 		"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 
-	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` "+
+	syncCmd.PersistentFlags().StringVar(&raw.hashMetaDir, "hash-meta-dir", common.LocalHashDir, "When using `--local-hash-storage-mode=HiddenFiles` "+
 		"\n you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
 
 	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode", common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; "+
@@ -1283,7 +1282,7 @@ func init() {
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
-	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, azcopy.PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB or Data Lake Storage to Data Lake Storage)"+
 		"and permissions between aware resources(Linux to Azure Files NFS). "+
 		"\nFor accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned "+

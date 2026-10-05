@@ -36,6 +36,12 @@ parameters:
     displayName: 'Test PMC Connection without Publishing Artifacts to Linux Repos'
     type: boolean
     default: false
+
+  - name: remove_packages
+    displayName: 'Remove Linux Packages'
+    type: string
+    default: ''
+
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -984,7 +990,10 @@ extends:
               - AzCopyVersion
               - VerifyArtifacts
             jobs:
-              - job: Job
+              - job: ReleaseJob
+                templateContext:
+                  type: releaseJob
+                  isProduction: true
                 pool:
                   name: azcopy-pool
                   image: ubuntu22-1espt
@@ -1002,11 +1011,23 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
-                  - task : DownloadPipelineArtifact@2
-                    displayName: 'Download Linux, Windows, Mac Build Artifacts'
+                  - task: 1ES.DownloadPipelineArtifact@1
+                    displayName: 'Download Windows Build Artifacts'
                     inputs:
-                      itemPattern: 'azcopy-*-signed/**'
-                      downloadPath: $(Build.ArtifactStagingDirectory)
+                      artifactName: 'azcopy-windows-signed'
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-windows-signed
+
+                  - task: 1ES.DownloadPipelineArtifact@1
+                    displayName: 'Download Linux Build Artifacts'
+                    inputs:
+                      artifactName: 'azcopy-linux-signed'
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-linux-signed
+
+                  - task: 1ES.DownloadPipelineArtifact@1
+                    displayName: 'Download Mac Build Artifacts'
+                    inputs:
+                      artifactName: 'azcopy-mac-signed'
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-mac-signed
 
                   - script: |
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
@@ -1213,3 +1234,67 @@ extends:
                                 pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
                               fi
                             done < <(tail -n +3 ../packages.csv)
+
+      - ${{ if ne(parameters.remove_packages, '') }}:
+          - stage: RemovePackagesFromLinuxRepository
+            jobs:
+              - job: RemovePackages
+                timeoutInMinutes: 120
+                pool:
+                  name: azcopy-pool
+                  image: ubuntu22-1espt
+                  os: linux
+                variables:
+                  - group: AZCOPY_SECRET_VAULT
+                steps:
+                  - checkout: none
+
+                  - task: PipAuthenticate@1
+                    inputs:
+                      artifactFeeds: 'DevExGlobalFeed'
+                    displayName: 'Connect to PMC artifact'
+
+                  - script: |
+                      sudo apt-get clean
+                      sudo apt-get update --fix-missing
+                      sudo apt-get install -y jq
+                    displayName: 'Install Dependencies'
+
+                  - script: |
+                      pip install pmc-cli
+                      echo '##vso[task.prependpath]$(HOME)/.local/bin'
+                    displayName: 'Install pmc-cli'
+
+                  - task: AzureCLI@2
+                    displayName: 'Remove deb and rpm packages from the repository'
+                    inputs:
+                      addSpnToEnvironment: true
+                      azureSubscription: 'azcopy-release'
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      inlineScript: |
+                        set -euo pipefail
+                        if ! [[ "$REMOVE_PACKAGES_VERSION" =~ ^[a-zA-Z0-9._~-]+$ ]]; then
+                          echo "Error: remove_packages must be a non-empty package version."
+                          exit 1
+                        fi
+
+                        pmc_args=(--auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4")
+                        pmc --version
+                        pmc "${pmc_args[@]}" repo list --limit 1
+                        for package_type in deb rpm; do
+                          pkg_id_list=$(pmc "${pmc_args[@]}" package "$package_type" list --name azcopy --version "$REMOVE_PACKAGES_VERSION")
+                          package_ids=$(echo "$pkg_id_list" | jq -r '.results[].id')
+                          while IFS= read -r package_id; do
+                            [[ -n "$package_id" ]] || continue
+                            pkg_repo_names=$(pmc "${pmc_args[@]}" repo list --package "$package_id")
+                            repository_names=$(echo "$pkg_repo_names" | jq -r '.results[].name')
+                            while IFS= read -r repository_name; do
+                              [[ -n "$repository_name" ]] || continue
+                              pmc "${pmc_args[@]}" repo package update --remove-packages "$package_id" "$repository_name"
+                              pmc "${pmc_args[@]}" repo publish "$repository_name"
+                            done <<< "$repository_names"
+                          done <<< "$package_ids"
+                        done
+                    env:
+                      REMOVE_PACKAGES_VERSION: ${{ parameters.remove_packages }}

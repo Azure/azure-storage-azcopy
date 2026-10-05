@@ -420,6 +420,7 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	if cooked == nil {
 		return map[string]string{"<nil>": ""}
 	}
+	cooked.refreshPreparedStats()
 
 	result := make(map[string]string)
 

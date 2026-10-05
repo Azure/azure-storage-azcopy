@@ -25,6 +25,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -40,7 +41,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 
 	targetCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
 		Context:            ctx,
-		CanBePublic:        true,
+		CanBePublic:        false,
 		SharedKeyAllowed:   false,
 		PreferredTokenName: cca.DstCredName,
 		CpkOptions:         cca.CpkOptions,
@@ -53,9 +54,29 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the input for set-properties on File Storage")
 	}
 
+	cca.credentialInfo = targetCredInfo
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, targetCredInfo.TokenCredential)
+	var fileClientOptions any
+	if cca.FromTo.From().IsFile() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
+	}
+
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		cca.Source,
+		cca.credentialInfo.CredentialType,
+		targetCredInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
-		Credential: &targetCredInfo,
+		Client:         targetServiceClient,
+		CredentialType: cca.credentialInfo.CredentialType,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -89,39 +110,21 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 	filters = append(filters, excludePathFilters...)
 	filters = append(filters, includeSoftDelete...)
 
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	fpo, message := azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, targetCredInfo.TokenCredential)
-	var fileClientOptions any
-	if cca.FromTo.From().IsFile() {
-		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
-	}
-
-	targetServiceClient, err := common.GetServiceClientForLocation(
-		cca.FromTo.From(),
-		cca.Source,
-		targetCredInfo.CredentialType,
-		targetCredInfo.TokenCredential,
-		&options,
-		fileClientOptions,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	transferScheduler := setPropertiesTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		jobInitiated, err := transferScheduler.DispatchFinalPart()
 		if err != nil {
 			if cca.dryrunMode {
 				return nil
-			} else if err == NothingScheduledError {
+			} else if err == azcopy.NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return ErrNothingToRemove
 			}
@@ -139,5 +142,5 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 
 		return nil
 	}
-	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }
