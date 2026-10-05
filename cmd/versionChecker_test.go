@@ -21,14 +21,16 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVersionEquality(t *testing.T) {
@@ -213,6 +215,7 @@ func TestValidateCachedVersion2(t *testing.T) {
 }
 
 func TestGetGitHubLatestVersion(t *testing.T) {
+	t.Skip("This test breaks CI when we are about to release since we need to update the version before it is released to Github")
 	a := assert.New(t)
 	latestVersion, err := getGitHubLatestRemoteVersion()
 	a.NoError(err)
@@ -226,9 +229,9 @@ func TestGetGitHubLatestVersion(t *testing.T) {
 	versionVar, err := NewVersion(versionStr)
 	a.NoError(err)
 	a.NotNil(versionVar)
-	// Check if API response is newer or the same
-	sameOrLaterVersion := latestVersion.OlderThan(common.DerefOrZero(versionVar)) ||
-		latestVersion.EqualTo(common.DerefOrZero(versionVar))
+	// Check if version API response is newer or the same
+	sameOrLaterVersion := latestVersion.NewerThan(ternary.DerefOrZero(versionVar)) ||
+		latestVersion.EqualTo(ternary.DerefOrZero(versionVar))
 	a.True(sameOrLaterVersion)
 }
 
@@ -251,8 +254,8 @@ func TestGetGitHubLatestVersionWithMocking(t *testing.T) {
 	defer testServer.Close()
 
 	version, err := getGitHubLatestRemoteVersionWithURL(testServer.URL)
-	versionSegments := []int64{10, 29, 1} // Cast to match Version struct type
+	versionSegments := []int{10, 29, 1} // Cast to match Version struct type
 	a.NoError(err)
-	expected := version.segments
+	expected := version.Segments
 	a.Equal(expected, versionSegments)
 }

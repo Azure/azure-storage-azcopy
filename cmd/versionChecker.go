@@ -23,6 +23,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -30,7 +31,7 @@ import (
 )
 
 type Version struct {
-	segments []int64 // {10, 29, 1}
+	Segments []int // {10, 29, 1}
 	preview  bool
 	original string
 }
@@ -49,7 +50,7 @@ func NewVersion(raw string) (*Version, error) {
 		return nil, errors.New(standardError)
 	}
 
-	v := &Version{segments: make([]int64, 3), original: raw}
+	v := &Version{Segments: make([]int, 3), original: raw}
 	for i, str := range rawSegments {
 		if strings.Contains(str, "-") {
 			if i != 2 {
@@ -59,11 +60,11 @@ func NewVersion(raw string) (*Version, error) {
 			str = strings.Split(str, "-")[0]
 		}
 
-		val, err := strconv.ParseInt(str, 10, 64)
+		val, err := strconv.Atoi(str)
 		if err != nil {
 			return nil, errors.New("cannot version string")
 		}
-		v.segments[i] = val
+		v.Segments[i] = val
 	}
 
 	return v, nil
@@ -81,10 +82,10 @@ func (v Version) compare(v2 Version) int {
 
 	// compare the major/minor/patch version
 	// if v has a bigger number, it is newer
-	for i, num := range v.segments {
-		if num > v2.segments[i] {
+	for i, num := range v.Segments {
+		if num > v2.Segments[i] {
 			return 1
-		} else if num < v2.segments[i] {
+		} else if num < v2.Segments[i] {
 			return -1
 		}
 	}
@@ -121,6 +122,7 @@ func (v Version) EqualTo(v2 Version) bool {
 func (v Version) CacheRemoteVersion(remoteVer Version, filePath string) error {
 	if v.OlderThan(remoteVer) || v.EqualTo(remoteVer) {
 		expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
+		// make sure filepath is absolute filepath so WriteFile is not written to customers current directory
 		if err := os.WriteFile(filePath, []byte(remoteVer.original+","+expiry), 0666); err != nil {
 			return err
 		}
@@ -154,10 +156,12 @@ func ValidateCachedVersion(filePath string) (*Version, error) {
 // PrintOlderVersion prints out info messages that the newest version is available to download.
 func PrintOlderVersion(newest Version, local Version) {
 	if local.OlderThan(newest) {
-		executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
+		executablePathSegments := strings.Split(strings.ReplaceAll(os.Args[0], "\\", "/"), "/")
 		executableName := executablePathSegments[len(executablePathSegments)-1]
 
 		// output in info mode instead of stderr, as it was crashing CI jobs of some people
 		glcm.Info(executableName + " " + local.original + ": A newer version " + newest.original + " is available to download\n")
+	} else {
+		glcm.Info(fmt.Sprintf("Current AzCopy version %s is up to date\n", local.original))
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -39,7 +39,7 @@ type LocalURIOpts struct {
 
 type ResourceManager interface {
 	Location() common.Location
-	Level() cmd.LocationLevel
+	Level() azcopy.LocationLevel
 
 	// URI gets the resource "URI", either a local path or a remote URL.
 	// This should panic if things fail or make no sense, as a sanity check to the test author.

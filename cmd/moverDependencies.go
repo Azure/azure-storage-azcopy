@@ -383,32 +383,33 @@ type SyncCmdArgsInput struct {
 
 func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 	raw := rawSyncCmdArgs{
-		src:                     args.Src,
-		dst:                     args.Dst,
-		SrcCredName:             args.SrcCredName,
-		DstCredName:             args.DstCredName,
-		fromTo:                  args.FromTo,
-		recursive:               args.Recursive,
-		excludeRegex:            args.ExcludeRegex,
-		followSymlinks:          args.FollowSymlinks,
-		deleteDestination:       args.DeleteDestination,
-		preservePOSIXProperties: args.PreservePOSIXProperties,
-		preservePermissions:     args.PreservePermissions,
-		preserveSMBInfo:         args.PreserveSMBInfo,
-		preserveInfo:            args.PreserveInfo,
-		forceIfReadOnly:         args.ForceIfReadOnly,
-		md5ValidationOption:     args.Md5ValidationOption,
-		putMd5:                  args.PutMd5,
-		compareHash:             args.CompareHash,
-		localHashStorageMode:    args.LocalHashStorageMode,
-		hardlinks:               args.Hardlinks,
-		includeDirectoryStubs:   args.IncludeDirectoryStubs,
-		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
-		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
-		blobType:                args.BlobType.String(),
-		blockSizeMB:             args.BlockSizeMB,
-		blockBlobTier:           args.BlockBlobTier,
-		useStreamingMergeJoin:   args.UseStreamingMergeJoin,
+		src:                        args.Src,
+		dst:                        args.Dst,
+		SrcCredName:                args.SrcCredName,
+		DstCredName:                args.DstCredName,
+		fromTo:                     args.FromTo,
+		recursive:                  args.Recursive,
+		excludeRegex:               args.ExcludeRegex,
+		followSymlinks:             args.FollowSymlinks,
+		allowLocalSymlinkFollowing: true,
+		deleteDestination:          args.DeleteDestination,
+		preservePOSIXProperties:    args.PreservePOSIXProperties,
+		preservePermissions:        args.PreservePermissions,
+		preserveSMBInfo:            args.PreserveSMBInfo,
+		preserveInfo:               args.PreserveInfo,
+		forceIfReadOnly:            args.ForceIfReadOnly,
+		md5ValidationOption:        args.Md5ValidationOption,
+		putMd5:                     args.PutMd5,
+		compareHash:                args.CompareHash,
+		localHashStorageMode:       args.LocalHashStorageMode,
+		hardlinks:                  args.Hardlinks,
+		includeDirectoryStubs:      args.IncludeDirectoryStubs,
+		s2sPreserveAccessTier:      args.S2sPreserveAccessTier,
+		s2sPreserveBlobTags:        args.S2sPreserveBlobTags,
+		blobType:                   args.BlobType.String(),
+		blockSizeMB:                args.BlockSizeMB,
+		blockBlobTier:              args.BlockBlobTier,
+		useStreamingMergeJoin:      args.UseStreamingMergeJoin,
 	}
 	return raw.cook()
 }
@@ -419,6 +420,7 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	if cooked == nil {
 		return map[string]string{"<nil>": ""}
 	}
+	cooked.refreshPreparedStats()
 
 	result := make(map[string]string)
 
@@ -913,13 +915,13 @@ func (cooked *CookedCopyCmdArgs) ToString() string {
 
 func OpenScanningLogger() {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 }
 
 func CloseScanningLogger() {
-	if azcopyScanningLogger != nil {
-		azcopyScanningLogger.CloseLog()
+	if common.AzcopyScanningLogger != nil {
+		common.AzcopyScanningLogger.CloseLog()
 	}
 }
 

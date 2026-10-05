@@ -74,20 +74,20 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy        AzCopyVerb = "copy"
-	AzCopyVerbSync        AzCopyVerb = "sync"
-	AzCopyVerbRemove      AzCopyVerb = "remove"
-	AzCopyVerbList        AzCopyVerb = "list"
-	AzCopyVerbLogin       AzCopyVerb = "login"
-	AzCopyVerbLoginStatus AzCopyVerb = "login status"
-	AzCopyVerbLogout      AzCopyVerb = "logout"
-	AzCopyVerbJobsList    AzCopyVerb = "jobs list"
-	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
-	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
-	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
-	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
+	AzCopyVerbCopy          AzCopyVerb = "copy"
+	AzCopyVerbSync          AzCopyVerb = "sync"
+	AzCopyVerbRemove        AzCopyVerb = "remove"
+	AzCopyVerbList          AzCopyVerb = "list"
+	AzCopyVerbLogin         AzCopyVerb = "login"
+	AzCopyVerbLoginStatus   AzCopyVerb = "login status"
+	AzCopyVerbLogout        AzCopyVerb = "logout"
+	AzCopyVerbJobsList      AzCopyVerb = "jobs list"
+	AzCopyVerbJobsResume    AzCopyVerb = "jobs resume"
+	AzCopyVerbJobsClean     AzCopyVerb = "jobs clean"
+	AzCopyVerbJobsRemove    AzCopyVerb = "jobs remove"
+	AzCopyVerbJobsShow      AzCopyVerb = "jobs show"
 	AzCopyVerbSetProperties AzCopyVerb = "set-properties"
-	AzCopyVerbMake         AzCopyVerb = "make"
+	AzCopyVerbMake          AzCopyVerb = "make"
 )
 
 type AzCopyTarget interface {
@@ -148,6 +148,12 @@ type AzCopyCommand struct {
 	Stdout AzCopyStdout
 
 	ShouldFail bool
+
+	// AfterStart, if non-nil, is called after the azcopy process has been
+	// started but before Wait.  The callback receives the process's stdin
+	// pipe, which can be used to write commands (e.g. "cancel\n" when
+	// --cancel-from-stdin is enabled).
+	AfterStart func(stdin io.WriteCloser)
 }
 
 type AzCopyEnvironment struct {
@@ -185,9 +191,10 @@ type AzCopyEnvironment struct {
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
 	// as the fields are automatically controlled.
-	ParentContext *AzCopyEnvironmentContext
-	EnvironmentId *uint
-	RunCount      *uint
+	ParentContext          *AzCopyEnvironmentContext
+	EnvironmentId          *uint
+	RunCount               *uint
+	AzcopyConcurrencyValue *string `env:"AZCOPY_CONCURRENCY_VALUE"`
 }
 
 type KeyringEntry struct {
@@ -248,7 +255,7 @@ var RunAzCopyDefaultInheritEnvironment = map[string]bool{
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
-	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
+	env.InheritEnvironment = CloneMap(RunAzCopyDefaultInheritEnvironment)
 
 	return env.InheritEnvironment
 }
@@ -464,17 +471,19 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = LogoutFlags{}
 			case AzCopyVerbJobsClean:
 				commandSpec.Flags = JobsCleanFlags{}
+			case AzCopyVerbJobsResume:
+				commandSpec.Flags = JobsResumeFlags{}
 			case AzCopyVerbJobsRemove:
 				commandSpec.Flags = JobsRemoveFlags{}
 			case AzCopyVerbJobsList:
 				commandSpec.Flags = JobsListFlags{}
 			case AzCopyVerbJobsShow:
 				commandSpec.Flags = JobsShowFlags{}
-		case AzCopyVerbSetProperties:
-			commandSpec.Flags = SetPropertiesFlags{}
-		case AzCopyVerbMake:
-			commandSpec.Flags = MakeFlags{}
-		default:
+			case AzCopyVerbSetProperties:
+				commandSpec.Flags = SetPropertiesFlags{}
+			case AzCopyVerbMake:
+				commandSpec.Flags = MakeFlags{}
+			default:
 				commandSpec.Flags = GlobalFlags{}
 			}
 		}
@@ -603,6 +612,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	if isLaunchedByDebugger {
 		beginAzCopyDebugging(in)
+	}
+
+	if commandSpec.AfterStart != nil {
+		commandSpec.AfterStart(in)
 	}
 
 	err = command.Wait()

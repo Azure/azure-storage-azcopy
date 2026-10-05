@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 // MapFromTags Recursively builds a map[string]string from a reflect.val
@@ -200,17 +200,18 @@ type GlobalFlags struct {
 	CapMbps          *float64 `flag:"cap-mbps"`
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
 	SkipVersionCheck *bool    `flag:"skip-version-check,default:true"`
+	CheckVersion     *bool    `flag:"check-version,default:false"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
-	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
-	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
-	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
+	OutputType  *common.OutputFormat `flag:"output-type,default:json"`
+	LogLevel    *common.LogLevel     `flag:"log-level,default:DEBUG"`
+	OutputLevel *cmd.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
 	DebugSkipFiles []string `flag:"debug-skip-files,serializer:SerializeDebugSkipFiles"`
 
 	// TODO: handle prompting and input; WI#26475441
-	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
-	AwaitContinue *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
+	CancelFromStdin *bool `flag:"cancel-from-stdin"`
+	AwaitContinue   *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
 	//AwaitOpen       *bool `flag:"await-open"`
 
 	// TODO: Ongoing performance profiling work
@@ -308,17 +309,18 @@ type CopySyncCommonFlags struct {
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
-	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
 	SrcCred                 *string                      `flag:"src-cred"`
 	DstCred                 *string                      `flag:"dst-cred"`
+	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
+	FollowSymlinks          *bool                        `flag:"follow-symlinks"`
+	HardlinkType            *common.HardlinkHandlingType `flag:"hardlinks"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
 type CopyFlags struct {
 	CopySyncCommonFlags
 
-	FollowSymlinks  *bool                 `flag:"follow-symlinks"`
 	ListOfFiles     []string              `flag:"list-of-files,serializer:SerializeListingFile"`
 	Overwrite       *bool                 `flag:"overwrite"`
 	Decompress      *bool                 `flag:"decompress"`
@@ -337,9 +339,8 @@ type CopyFlags struct {
 	NoGuessMimeType *bool `flag:"no-guess-mime-type"`
 	PreserveLMT     *bool `flag:"preserve-last-modified-time"`
 
-	AsSubdir         *bool `flag:"as-subdir"`
-	PreserveOwner    *bool `flag:"preserve-owner"`
-	PreserveSymlinks *bool `flag:"preserve-symlinks"`
+	AsSubdir      *bool `flag:"as-subdir"`
+	PreserveOwner *bool `flag:"preserve-owner"`
 
 	// semi-related WIs for CheckLength present in GlobalFlags (WI#26475473, WI#26475441)
 	// goal would be to test the unhappy case of CheckLength=true by altering after enumeration time
@@ -443,6 +444,7 @@ type RemoveFlags struct {
 	TrailingDot     *common.TrailingDotOption     `flag:"trailing-dot"`
 	CPKByName       *string                       `flag:"cpk-by-name"`
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
+	ExcludePath     *string                       `flag:"exclude-path"`
 }
 
 type SetPropertiesFlags struct {
@@ -519,6 +521,12 @@ type JobsCleanFlags struct {
 	GlobalFlags
 
 	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsResumeFlags struct {
+	GlobalFlags
+	SourceSAS      *string `flag:"source-sas"`
+	DestinationSAS *string `flag:"destination-sas"`
 }
 
 type JobsRemoveFlags struct {

@@ -21,23 +21,52 @@
 package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"log"
 	"runtime"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
+const (
+	// Base10Mega For networking throughput in Mbps, (and only for networking), we divide by 1000*1000 (not 1024 * 1024) because
+	// networking is traditionally done in base 10 units (not base 2).
+	// E.g. "gigabit ethernet" means 10^9 bits/sec, not 2^30. So by using base 10 units
+	// we give the best correspondence to the sizing of the user's network pipes.
+	// See https://networkengineering.stackexchange.com/questions/3628/iec-or-si-units-binary-prefixes-used-for-network-measurement
+	// NOTE that for everything else in the app (e.g. sizes of files) we use the base 2 units (i.e. 1024 * 1024) because
+	// for RAM and disk file sizes, it is conventional to use the power-of-two-based units.
+	Base10Mega = 1000 * 1000
+)
+
+// It's not pretty that this one is read directly by credential util.
+// But doing otherwise required us passing it around in many places, even though really
+// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
+// it as a global
+var TrustedSuffixes string
+
 type Client struct {
-	CurrentJobID common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
+	CurrentJobID      common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
+	credentialManager cred.Manager
+	logLevel          common.LogLevel
 }
 
 type ClientOptions struct {
-	CapMbps float64
+	CapMbps           float64
+	TrustedSuffixes   string
+	LogLevel          *common.LogLevel
+	CredentialManager cred.Manager // Nil uses the current GetCredentialManager provider.
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
-	c := Client{}
+	c := Client{
+		logLevel:          ternary.IffNil(opts.LogLevel, common.LogInfo),
+		credentialManager: opts.CredentialManager,
+	}
+	TrustedSuffixes = opts.TrustedSuffixes
 	common.InitializeFolders()
 	configureGoMaxProcs()
 	// Perform os specific initialization
@@ -47,11 +76,28 @@ func NewClient(opts ClientOptions) (Client, error) {
 	}
 	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles)
+	// Initialize the process-wide HTTP client using the concurrency-derived idle-conn limit so
+	// the transport honors AZCOPY_CONCURRENCY_VALUE / auto-tuning, and so subsequent callers
+	// (JobMgr, traverser.CreateClientOptions, etc.) reuse the same configured client.
+	common.InitGlobalHTTPClient(concurrencySettings.MaxIdleConnections)
 	err = jobsAdmin.MainSTE(concurrencySettings, opts.CapMbps)
 	if err != nil {
 		return c, err
 	}
 	return c, nil
+}
+
+// GetCredentialManager returns the injected manager, or the current default provider.
+func (c Client) GetCredentialManager() cred.Manager {
+	if c.credentialManager != nil {
+		return c.credentialManager
+	}
+	return GetCredentialManager()
+}
+
+// GetLogLevel returns the log level of the client.
+func (c Client) GetLogLevel() common.LogLevel {
+	return c.logLevel
 }
 
 // Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
@@ -62,4 +108,10 @@ func configureGoMaxProcs() {
 	if isOnlyOne {
 		runtime.GOMAXPROCS(2)
 	}
+}
+
+// JobContext contains initialization context for a job.
+type JobContext struct {
+	JobID   common.JobID
+	LogPath string
 }

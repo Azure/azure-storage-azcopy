@@ -21,13 +21,12 @@
 package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go/v7"
+	"fmt"
 	"math"
 	"net/http"
-	"path"
-	"strings"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/v7"
 )
 
 // processOSSpecificInitialization changes the soft limit for filedescriptor for process
@@ -43,19 +42,25 @@ func processOSSpecificInitialization() (int, error) {
 	return effectivelyUnlimited, nil
 }
 
-// getAzCopyAppPath returns the path of Azcopy in local appdata.
-func getAzCopyAppPath() string {
-	userProfile := enum.EEnvironmentVariable.UserDir().Get()
-	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
-
-	return azcopyAppDataFolder
-}
-
 func init() {
 	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
 	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
-	transport, err := minio.DefaultTransport(true)
-	if err != nil {
-		transport.Proxy = common.GlobalProxyLookup
+	minioDefault := minio.DefaultTransport
+	minio.DefaultTransport = withMinioProxy(minioDefault)
+}
+
+func withMinioProxy(factory func(bool) (*http.Transport, error)) func(bool) (*http.Transport, error) {
+	return func(secure bool) (*http.Transport, error) {
+		basis, err := factory(secure)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize MinIO transport: %w", err)
+		}
+		if basis == nil {
+			return nil, fmt.Errorf("failed to initialize MinIO transport: factory returned nil")
+		}
+
+		basis.Proxy = common.GlobalProxyLookup
+
+		return basis, nil
 	}
 }

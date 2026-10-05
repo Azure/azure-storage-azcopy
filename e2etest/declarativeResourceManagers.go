@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -29,7 +30,8 @@ import (
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 	"net/url"
 	"os"
 	"path"
@@ -132,6 +134,7 @@ func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
 			fs:                      s.fs.allObjects(isSource),
 			defaultSize:             s.fs.defaultSize,
 			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	})
 }
@@ -144,8 +147,10 @@ func (r *resourceLocal) createFile(a asserter, o *testObject, s *scenario, isSou
 	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
 		dirPath: r.dirPath,
 		generateFromListOptions: generateFromListOptions{
-			fs:          []*testObject{o},
-			defaultSize: s.fs.defaultSize,
+			fs:                      []*testObject{o},
+			defaultSize:             s.fs.defaultSize,
+			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	})
 }
@@ -234,13 +239,15 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		rawSASURL:       *r.rawSasURL,
 		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
-			fs:          s.fs.allObjects(isSource),
-			defaultSize: s.fs.defaultSize,
-			accountType: r.accountType,
+			fs:                      s.fs.allObjects(isSource),
+			defaultSize:             s.fs.defaultSize,
+			accountType:             r.accountType,
+			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	}
 	if s.fromTo.IsDownload() {
-		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
+		options.cpkInfo, _ = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
 	if isSource {
@@ -276,13 +283,15 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 	options := &generateBlobFromListOptions{
 		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
-			fs:          []*testObject{o},
-			defaultSize: s.fs.defaultSize,
+			fs:                      []*testObject{o},
+			defaultSize:             s.fs.defaultSize,
+			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	}
 
 	if s.fromTo.IsDownload() || s.fromTo.IsDelete() {
-		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
+		options.cpkInfo, _ = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
 	options.compressToGZ = isSource && s.fromTo.IsDownload() && s.p.decompress
@@ -329,7 +338,7 @@ func (r *resourceBlobContainer) getVersions(a asserter, objectName string) []str
 
 	versions := &timestampSortable{
 		timestamps: make([]string, 0),
-		format:     cmd.ISO8601,
+		format:     traverser.ISO8601,
 		a:          a,
 	}
 
@@ -339,7 +348,7 @@ func (r *resourceBlobContainer) getVersions(a asserter, objectName string) []str
 
 		for _, v := range page.Segment.BlobItems {
 			if v.Name != nil && *v.Name == objectName && v.VersionID != nil {
-				_, err := time.Parse(cmd.ISO8601, *v.VersionID) // Make sure we can parse it
+				_, err := time.Parse(traverser.ISO8601, *v.VersionID) // Make sure we can parse it
 				a.AssertNoErr(err, "parsing timestamp "+*v.VersionID)
 
 				versions.timestamps = append(versions.timestamps, *v.VersionID)

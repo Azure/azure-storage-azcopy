@@ -21,8 +21,10 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConversions(t *testing.T) {
@@ -41,7 +43,7 @@ func TestConversions(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		actualBytes, err := blockSizeInBytes(d.floatMiB)
+		actualBytes, err := azcopy.BlockSizeInBytes(d.floatMiB)
 		if d.expectedErrorMsg != "" {
 			a.Equal(d.expectedErrorMsg, err.Error())
 		} else {

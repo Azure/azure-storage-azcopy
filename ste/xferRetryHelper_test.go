@@ -2,12 +2,13 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetShouldRetry(t *testing.T) {
@@ -50,8 +51,28 @@ func TestGetShouldRetry(t *testing.T) {
 		}
 	}
 
+	syscallErrnoTests := func(errs []error, retry bool) []*ResponseRetryPair {
+		out := make([]*ResponseRetryPair, len(errs)*2)
+
+		for k, v := range errs {
+			out[k*2] = ErrorTest(v, retry)
+			out[(k*2)+1] = ErrorTest(errors.New(v.Error()), retry)
+		}
+
+		return out
+	}
+
 	_ = ParseRules
 
+	retriedErrnos := []error{
+		syscall.ECONNRESET,    // connection reset by peer
+		syscall.ECONNREFUSED,  // connection refused
+		syscall.ECONNABORTED,  // software caused connection abort
+		syscall.ETIMEDOUT,     // connection timed out
+		syscall.EPIPE,         // broken pipe
+		syscall.EADDRINUSE,    // address already in use
+		syscall.EADDRNOTAVAIL, // address not available
+	}
 	matrix := []TestEntry{
 		{ // porting the original test in
 			Rules: nil,
@@ -70,13 +91,10 @@ func TestGetShouldRetry(t *testing.T) {
 		},
 		{
 			TestCond: func() bool {
-				return runtime.GOOS == "windows"
+				return runtime.GOOS == "windows" || runtime.GOOS == "darwin" || runtime.GOOS == "linux"
 			},
 			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
-			Tests: []*ResponseRetryPair{
-				ErrorTest(syscall.Errno(10054), true),
-				ErrorTest(errors.New("wsarecv: An existing connection was forcibly closed by the remote host."), true),
-			},
+			Tests: syscallErrnoTests(retriedErrnos, true),
 		},
 		{ // test full code removal
 			Rules: ParseRules("400; 500; -400"),

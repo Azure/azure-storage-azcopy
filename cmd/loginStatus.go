@@ -21,16 +21,12 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/spf13/cobra"
 )
@@ -43,70 +39,14 @@ type LoginStatusOptions struct {
 	Nickname          string
 }
 
-type LoginStatus struct {
-	Identities map[string]IdentityStatus
-}
-
-type IdentityStatus struct {
-	Valid       bool   `json:"valid"`
-	Error       error  `json:"error,omitempty"`
-	TenantID    string `json:"tenantID"`
-	AADEndpoint string `json:"AADEndpoint"`
-	AuthMethod  string `json:"authMethod"`
-}
+type LoginStatus = azcopy.LoginStatus
+type IdentityStatus = azcopy.IdentityStatus
 
 func (options LoginStatusOptions) process() LoginStatus {
-	manager := GetCredentialManager()
-
-	var creds []cred.TokenHeader
-
-	if options.NicknameSpecified {
-		nickname := options.Nickname
-		header, ok := manager.ProbeToken(nickname)
-		if !ok {
-			return LoginStatus{Identities: map[string]IdentityStatus{
-				nickname: {Valid: false, Error: errors.New("identity not found")},
-			}}
-		}
-
-		creds = []cred.TokenHeader{header}
-	} else {
-		var err error
-		creds, err = manager.ListCredentials()
-		if err != nil {
-			return LoginStatus{}
-		}
-	}
-
-	if len(creds) == 0 {
-		return LoginStatus{}
-	}
-
-	status := LoginStatus{
-		make(map[string]IdentityStatus),
-	}
-
-	for _, c := range creds {
-		result := IdentityStatus{
-			TenantID:    c.Tenant,
-			AADEndpoint: c.ActiveDirectoryEndpoint,
-			AuthMethod:  c.LoginType.String(),
-		}
-
-		if targetCred, err := manager.GetCredentials(c.Nickname, nil); err != nil {
-			result.Error = err
-		} else {
-			_, err = cred.NewScopedToken(targetCred, enum.ECredentialType.OAuthToken()).GetToken(context.Background(), policy.TokenRequestOptions{})
-			if err != nil {
-				result.Error = err
-			} else {
-				result.Valid = true
-			}
-		}
-
-		status.Identities[c.Nickname] = result
-	}
-
+	status, _ := Client.GetLoginStatus(azcopy.GetLoginStatusOptions{
+		NicknameSpecified: options.NicknameSpecified,
+		Nickname:          options.Nickname,
+	})
 	return status
 }
 

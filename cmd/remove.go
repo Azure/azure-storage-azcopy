@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -47,7 +48,7 @@ func init() {
 			raw.src = args[0]
 
 			if raw.fromTo == "" {
-				srcLocationType := InferArgumentLocation(raw.src)
+				srcLocationType := azcopy.InferArgumentLocation(raw.src)
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
@@ -87,14 +88,14 @@ func init() {
 				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
 			}
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform remove command due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()
@@ -110,6 +111,9 @@ func init() {
 		"\n Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
 	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. "+
 		"\n For example: *.jpg;*.pdf;exactName")
+	deleteCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
+		"This option does not support wildcard characters (*). "+
+		"\n Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
 	deleteCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+
 		"\n When deleting an Azure Files file or folder, force the deletion to work even if the existing object is has its read-only attribute set")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a text file which contains the list of files and directories to be deleted. "+

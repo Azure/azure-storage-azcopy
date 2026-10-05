@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 
@@ -100,6 +98,28 @@ type Transfers struct {
 	SymlinkTransferCount      uint32
 	HardlinksConvertedCount   uint32
 	FilePropertyTransferCount uint32
+	HardlinksTransferCount    uint32
+}
+
+// Clone creates a deep copy of the Transfers struct to avoid pointer reference issues
+func (t *Transfers) Clone() Transfers {
+	clone := Transfers{
+		TotalSizeInBytes:          t.TotalSizeInBytes,
+		FileTransferCount:         t.FileTransferCount,
+		FolderTransferCount:       t.FolderTransferCount,
+		SymlinkTransferCount:      t.SymlinkTransferCount,
+		HardlinksConvertedCount:   t.HardlinksConvertedCount,
+		HardlinksTransferCount:    t.HardlinksTransferCount,
+		FilePropertyTransferCount: t.FilePropertyTransferCount,
+	}
+
+	// Deep copy the slice of CopyTransfer
+	if t.List != nil {
+		clone.List = make([]CopyTransfer, len(t.List))
+		copy(clone.List, t.List) // Shallow copy for basic fields (usually sufficient)
+	}
+
+	return clone
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -115,17 +135,11 @@ type CopyJobPartOrderRequest struct {
 	FromTo              FromTo
 	Fpo                 FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	SymlinkHandlingType SymlinkHandlingType
-	// list of blobTypes to exclude.
-	ExcludeBlobType []blob.BlobType
 
 	SourceRoot       ResourceString
 	DestinationRoot  ResourceString
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-
-	//These clients are required only in S2S transfers from/to datalake
-	SrcDatalakeClient *datalake.Client
-	DstDatalakeClient *datalake.Client
 
 	Transfers      Transfers
 	LogLevel       LogLevel
@@ -135,6 +149,7 @@ type CopyJobPartOrderRequest struct {
 	PreservePermissions            PreservePermissionsOption
 	PreserveInfo                   bool
 	PreservePOSIXProperties        bool
+	PosixPropertiesStyle           PosixPropertiesStyle
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
@@ -150,6 +165,11 @@ type CopyJobPartOrderRequest struct {
 	S2SSourceCredentialType enum.CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
 	Provider                credentials.Provider //credential provider implementation for custom credential management
+	JobErrorHandler         JobErrorHandler
+	JobPartType             JobPartType       // Type of transfers this job part contains
+	IsSyncJob               bool              // Explicit operation identity; CommandString remains display-only.
+	JobProcessingMode       JobProcessingMode // Defines how job parts should be processed (Mixed or NFS)
+	HardlinkHandlingType    HardlinkHandlingType
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -229,7 +249,7 @@ type ListJobSummaryResponse struct {
 
 	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
 	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
-	// The name FolderPropertyTransfers is used to emphasise that is is only counting transferring the properties and existence of
+	// The name FolderPropertyTransfers is used to emphasize that it is only counting transferring the properties and existence of
 	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as
 	// FileTransfers.
 	FileTransfers           uint32 `json:",string"`
@@ -278,7 +298,12 @@ type ListJobSummaryResponse struct {
 	PerformanceAdvice       []PerformanceAdvice
 	IsCleanupJob            bool
 	SkippedSymlinkCount     uint32 `json:",string"`
-	HardlinksConvertedCount uint32 `json:",string"`
+	HardlinksConvertedCount uint32 `json:",string"` // Hardlinks converted count is only applicable for NFS transfers
+	HardlinksTransferCount  uint32 `json:",string"` // Hardlinks transfer count is only applicable for NFS transfers
+	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
+	HardlinksCompleted      uint32 `json:",string"` // Hardlinks completed count is only applicable for NFS transfers
+	HardlinksFailed         uint32 `json:",string"` // Hardlinks failed count is only applicable for NFS transfers
+	HardlinksSkipped        uint32 `json:",string"` // Hardlinks skipped count is only applicable for NFS transfers
 	SkippedSpecialFileCount uint32 `json:",string"`
 	SkippedArchiveFileCount uint64 `json:",string"`
 }
@@ -306,6 +331,7 @@ type ResumeJobRequest struct {
 	Provider                credentials.Provider
 	TargetCredentialType    enum.CredentialType
 	S2SSourceCredentialType enum.CredentialType
+	JobErrorHandler         JobErrorHandler
 }
 
 // represents the Details and details of a single transfer
@@ -313,6 +339,7 @@ type TransferDetail struct {
 	Src                string
 	Dst                string
 	IsFolderProperties bool
+	IsHardlink         bool
 	TransferStatus     TransferStatus
 	TransferSize       uint64
 	ErrorCode          int32  `json:",string"`

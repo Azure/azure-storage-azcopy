@@ -52,7 +52,7 @@ func TestRemoveSingleFile(t *testing.T) {
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileList[0])
 		raw := getDefaultRemoveRawInput(rawFileURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runOldCopyAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
 			// note that when we are targeting single files, the relative path is empty ("") since the root path already points to the file
@@ -91,7 +91,7 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 
 	expectedRemovals := scenarioHelper{}.addFoldersToList(fileList, includeRootInTransfers)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -105,7 +105,7 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(expectedRemovals), len(mockedRPC.transfers))
 
@@ -149,7 +149,7 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 	expectedDeletionMap[""] = 0 // add this one, because that's how dir1/dir2/dir3 appears, relative to the root (which itself)
 	expectedDeletions := scenarioHelper{}.convertMapKeysToList(expectedDeletionMap)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -164,7 +164,7 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(expectedDeletions), len(mockedRPC.transfers))
 
@@ -205,7 +205,7 @@ func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 	raw.include = includeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, filesToInclude, mockedRPC)
 	})
@@ -241,7 +241,7 @@ func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, fileList, mockedRPC)
 	})
@@ -284,7 +284,7 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, filesToInclude, mockedRPC)
 	})
@@ -329,7 +329,7 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 		scenarioHelper{}.addFoldersToList(filesUnderTopDir, false), // this is a directory in the list of files list, so it will be recursively processed. Don't include root of megadir itself
 		individualFilesList..., // these are individual files in the files list (so not recursively processed)
 	)
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -343,7 +343,7 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(expectedDeletions), len(mockedRPC.transfers))
 
@@ -410,7 +410,7 @@ func TestRemoveListOfFilesWithIncludeAndExclude(t *testing.T) {
 	listOfFiles = append(listOfFiles, filesToExclude...)
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -445,7 +445,7 @@ func TestRemoveSingleFileWithFromTo(t *testing.T) {
 		raw := getDefaultRemoveRawInput(rawFileURLWithSAS.String())
 		raw.fromTo = "FileTrash"
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runOldCopyAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
 			// note that when we are targeting single files, the relative path is empty ("") since the root path already points to the file
@@ -485,7 +485,7 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 
 	expectedRemovals := scenarioHelper{}.addFoldersToList(fileList, includeRootInTransfers)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -499,7 +499,7 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(expectedRemovals), len(mockedRPC.transfers))
 
@@ -544,7 +544,7 @@ func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 	expectedDeletionMap[""] = 0 // add this one, because that's how dir1/dir2/dir3 appears, relative to the root (which itself)
 	expectedDeletions := scenarioHelper{}.convertMapKeysToList(expectedDeletionMap)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -559,7 +559,7 @@ func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(expectedDeletions), len(mockedRPC.transfers))
 

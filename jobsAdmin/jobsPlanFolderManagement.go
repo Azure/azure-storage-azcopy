@@ -76,6 +76,12 @@ func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
 func DeleteAllJobFilesExceptCurrent(currentJobID common.JobID) (int, error) {
 	// get rid of the job plan files
 	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
+		if jobID, ok := inodeStoreJobID(s); ok {
+			return jobID != currentJobID
+		}
+		if strings.HasPrefix(s, "inodeStore-") {
+			return false
+		}
 		return strings.Contains(s, ".steV")
 	})
 	if err != nil {
@@ -83,6 +89,9 @@ func DeleteAllJobFilesExceptCurrent(currentJobID common.JobID) (int, error) {
 	}
 	// get rid of the logs
 	numLogFilesRemoved, err := removeFilesWithPredicate(common.LogPathFolder, func(s string) bool {
+		if strings.HasPrefix(s, "inodeStore-") {
+			return false
+		}
 		// Do not remove the current job's log file this will cause the cleanup job to fail.
 		if strings.Contains(s, currentJobID.String()) {
 			return false
@@ -98,6 +107,9 @@ func DeleteAllJobFilesExceptCurrent(currentJobID common.JobID) (int, error) {
 func RemoveSingleJobFiles(jobID common.JobID) (int, error) {
 	// get rid of the job plan files
 	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
+		if strings.HasPrefix(s, "inodeStore-") {
+			return s == fmt.Sprintf("inodeStore-%s.txt", jobID.String())
+		}
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
 			return true
 		}
@@ -111,6 +123,9 @@ func RemoveSingleJobFiles(jobID common.JobID) (int, error) {
 	// even though we only have 1 file right now, still scan the directory since we may change the
 	// way we name the logs in the future (with suffix or whatnot)
 	numLogFileRemoved, err := removeFilesWithPredicate(common.LogPathFolder, func(s string) bool {
+		if strings.HasPrefix(s, "inodeStore-") {
+			return false
+		}
 		if strings.Contains(s, jobID.String()) && strings.HasSuffix(s, ".log") {
 			return true
 		}
@@ -127,6 +142,19 @@ func RemoveSingleJobFiles(jobID common.JobID) (int, error) {
 	return numPlanFileRemoved + numLogFileRemoved, nil
 }
 
+func inodeStoreJobID(name string) (common.JobID, bool) {
+	const prefix, suffix = "inodeStore-", ".txt"
+	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+		return common.JobID{}, false
+	}
+	idText := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
+	id, err := common.ParseJobID(idText)
+	if err != nil || fmt.Sprintf("%s%s%s", prefix, id.String(), suffix) != name {
+		return common.JobID{}, false
+	}
+	return id, true
+}
+
 // remove all files whose names are approved by the predicate in the targetFolder
 func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) (int, error) {
 	count := 0
@@ -137,6 +165,9 @@ func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) 
 
 	// go through the files and return if any of them fail to be removed
 	for _, singleFile := range files {
+		if singleFile.IsDir() {
+			continue
+		}
 		if predicate(singleFile.Name()) {
 			err := os.Remove(path.Join(targetFolder, singleFile.Name()))
 			if err != nil {

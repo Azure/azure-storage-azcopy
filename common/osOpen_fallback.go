@@ -6,9 +6,7 @@
 package common
 
 import (
-	"fmt"
 	"os"
-	"syscall"
 )
 
 // NOTE: OSOpenFile not safe to use on directories on Windows. See comment on the Windows version of this routine
@@ -18,11 +16,4 @@ func OSOpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 
 func OSStat(name string) (os.FileInfo, error) {
 	return os.Stat(name)
-}
-
-func EnsureRunningAsRoot() error {
-	if syscall.Geteuid() != 0 {
-		return fmt.Errorf("must be run as root")
-	}
-	return nil
 }

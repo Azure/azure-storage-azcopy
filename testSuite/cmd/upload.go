@@ -105,6 +105,7 @@ func (u *testUploader) uploadToS3() {
 		if err != nil {
 			return err
 		}
+		defer f.Close()
 
 		s3URLPartsForFile, err := common.NewS3URLParts(t.destURL)
 		if err != nil {

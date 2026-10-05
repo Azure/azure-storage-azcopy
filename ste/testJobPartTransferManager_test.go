@@ -32,6 +32,13 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
+type noopJobErrorHandler struct {
+}
+
+func (j *noopJobErrorHandler) Error(_ string) {
+	// no-op
+}
+
 var _ IJobPartTransferMgr = &testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
@@ -63,7 +70,7 @@ func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 		t.fromTo.From(),
 		common.ResourceString{Value: t.info.Source},
 		t.S2SSourceCredentialInfo().CredentialType,
-		t.S2SSourceCredentialInfo().OAuthTokenInfo.TokenCredential,
+		t.S2SSourceCredentialInfo().TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -84,7 +91,7 @@ func (t *testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 		t.fromTo.To(),
 		common.ResourceString{Value: t.info.Destination},
 		t.CredentialInfo().CredentialType,
-		t.CredentialInfo().OAuthTokenInfo.TokenCredential,
+		t.CredentialInfo().TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -298,10 +305,6 @@ func (t *testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOptio
 	return NewClientOptions(retryOptions, telemetryOptions, httpClient, LogOptions{}, nil, nil)
 }
 
-func (t *testJobPartTransferManager) CredentialOpOptions() *common.CredentialOpOptions {
-	return nil
-}
-
 func (t *testJobPartTransferManager) FailActiveUpload(where string, err error) {
 	panic("implement me")
 }
@@ -444,4 +447,13 @@ func (t *testJobPartTransferManager) TransferIndex() (partNum, transferIndex uin
 
 func (t *testJobPartTransferManager) RestartedTransfer() bool {
 	return false
+}
+
+func (t *testJobPartTransferManager) GetJobErrorHandler() common.JobErrorHandler {
+	// TODO: actually implement me if ever wanting to test error handling
+	return &noopJobErrorHandler{}
+}
+
+func (t *testJobPartTransferManager) GetSourceRoot() string {
+	panic("implement me")
 }

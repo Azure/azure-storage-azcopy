@@ -178,7 +178,7 @@ func (s *MultitenancySuite) Scenario_E2ELoginTest(a *ScenarioVariationManager) {
 
 		ValidateResource(a, ccB, ResourceDefinitionContainer{
 			Objects: CombinedResourceMapping,
-		}, true)
+		}, ValidateResourceOptions{validateObjectContent: true})
 	}
 
 	if !(locationB == common.ELocation.File() && locationA != common.ELocation.File()) {
@@ -196,7 +196,7 @@ func (s *MultitenancySuite) Scenario_E2ELoginTest(a *ScenarioVariationManager) {
 
 		ValidateResource(a, ccA, ResourceDefinitionContainer{
 			Objects: CombinedResourceMapping,
-		}, true)
+		}, ValidateResourceOptions{validateObjectContent: true})
 	}
 }
 
@@ -295,7 +295,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialRemove(a *ScenarioVariationM
 
 	ValidateResource(a, obj, ResourceDefinitionObject{
 		ObjectShouldExist: pointerTo(false),
-	}, false)
+	}, ValidateResourceOptions{validateObjectContent: false})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialSetProperties(a *ScenarioVariationManager) {
@@ -347,7 +347,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialSetProperties(a *ScenarioVar
 				"mykey": pointerTo("myvalue"),
 			},
 		},
-	}, false)
+	}, ValidateResourceOptions{validateObjectContent: false})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialMake(a *ScenarioVariationManager) {
@@ -452,7 +452,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenUpload(a *ScenarioVaria
 		Objects: ObjectResourceMappingFlat{
 			"uploaded.txt": ResourceDefinitionObject{Body: body},
 		},
-	}, true)
+	}, ValidateResourceOptions{validateObjectContent: true})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialTokenDownload(a *ScenarioVariationManager) {
@@ -510,7 +510,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenDownload(a *ScenarioVar
 		Objects: ObjectResourceMappingFlat{
 			"downloaded.txt": ResourceDefinitionObject{Body: body},
 		},
-	}, true)
+	}, ValidateResourceOptions{validateObjectContent: true})
 }
 
 // runInitialWithDebugSkip runs a command with debug-skip-files to simulate job interruption,
@@ -628,7 +628,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenUploadResume(a *Scenari
 			"file1.txt": ResourceDefinitionObject{Body: body1},
 			"file2.txt": ResourceDefinitionObject{Body: body2},
 		},
-	}, true)
+	}, ValidateResourceOptions{validateObjectContent: true})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialTokenDownloadResume(a *ScenarioVariationManager) {
@@ -689,7 +689,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenDownloadResume(a *Scena
 			"file1.txt": ResourceDefinitionObject{Body: body1},
 			"file2.txt": ResourceDefinitionObject{Body: body2},
 		},
-	}, true)
+	}, ValidateResourceOptions{validateObjectContent: true})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialTokenS2SResume(a *ScenarioVariationManager) {
@@ -755,7 +755,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenS2SResume(a *ScenarioVa
 			"obj1.txt": ResourceDefinitionObject{Body: body1},
 			"obj2.txt": ResourceDefinitionObject{Body: body2},
 		},
-	}, true)
+	}, ValidateResourceOptions{validateObjectContent: true})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialTokenRemoveResume(a *ScenarioVariationManager) {
@@ -812,7 +812,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenRemoveResume(a *Scenari
 			"keep.txt":     ResourceDefinitionObject{Body: body1},
 			"toremove.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 		},
-	}, false)
+	}, ValidateResourceOptions{validateObjectContent: false})
 }
 
 func (s *MultitenancySuite) Scenario_NamedCredentialTokenSetPropertiesResume(a *ScenarioVariationManager) {
@@ -882,7 +882,7 @@ func (s *MultitenancySuite) Scenario_NamedCredentialTokenSetPropertiesResume(a *
 				},
 			},
 		},
-	}, false)
+	}, ValidateResourceOptions{validateObjectContent: false})
 }
 
 func resolveMultitenantAccount(a Asserter, location common.Location, name, hnsName string) (string, AccountType) {

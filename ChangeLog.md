@@ -1,6 +1,182 @@
 
 # Change Log
 
+## Version 10.32.6
+
+### Dependency updates
+
+1. github.com/cncf/xds/go v0.0.0-20251210132809-ee656c7534f5 -> v0.0.0-20260202195803-dba9d589def2
+2. github.com/envoyproxy/go-control-plane/envoy v1.36.0 -> v1.37.0
+3. github.com/envoyproxy/protoc-gen-validate v1.3.0 -> v1.3.3
+4. go.opentelemetry.io/contrib/detectors/gcp v1.40.0 -> v1.42.0
+5. go.opentelemetry.io/otel v1.40.0 -> v1.42.0
+6. go.opentelemetry.io/otel/metric v1.40.0 -> v1.42.0
+7. go.opentelemetry.io/otel/sdk v1.40.0 -> v1.42.0
+8. go.opentelemetry.io/otel/sdk/metric v1.40.0 -> v1.42.0
+9. go.opentelemetry.io/otel/trace v1.40.0 -> v1.42.0
+
+### Bug Fixes
+
+1. 10.32.5 was discovered to not be based upon 10.32.4 or 10.32.3-- this has been rectified, and changes are now consistent with prior patch releases.
+
+### New Features
+
+1. FIPS 140-3 compliant Linux builds are now available. [#3488](https://github.com/Azure/azure-storage-azcopy/pull/3488)
+
+## Version 10.32.5
+
+### Dependency updates
+
+1. Golang 1.25.8 -> 1.25.11
+2. golang.org/x/crypto v0.47.0 -> v0.53.0
+3. golang.org/x/net v0.49.0 -> v0.55.0
+4. golang.org/x/sync v0.19.0 -> v0.21.0
+5. golang.org/x/sys v0.40.0 -> v0.46.0
+6. Trivy dependency updated to v0.35.0 ([#3421](https://github.com/Azure/azure-storage-azcopy/pull/3421))
+
+### Bug Fixes
+
+1. Fixed a bug where `CreateFile` would fail with `InvalidProtocolHeader` when special bits in `x-ms-mode` are set. ([#3467](https://github.com/Azure/azure-storage-azcopy/pull/3467))
+
+
+### Code Improvements
+
+1. Centralized the HTTP client into a shared global instance. ([#3436](https://github.com/Azure/azure-storage-azcopy/pull/3436))
+
+2. AzCopy prints help text when running `azcopy` with no subcommands. ([#3485](https://github.com/Azure/azure-storage-azcopy/pull/3485))
+
+3. Ensured `GetProperties` and `SetProperties` calls are not on a pathless container root. ([#3453](https://github.com/Azure/azure-storage-azcopy/pull/3453))
+
+
+## Version 10.32.3
+
+### Dependency updates
+1. golang.org/x/crypto v0.47.0 -> v0.49.0
+2. golang.org/x/sync v0.19.0 -> v0.20.0
+3. golang.org/x/sys v0.40.0 -> v0.42.0
+4. golang.org/x/net v0.49.0 -> v0.52.0
+5. golang.org/x/text v0.33.0 -> v0.35.0
+6. google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 -> v0.0.0-20260319201613-d00831a3d3e7
+7. google.golang.org/grpc v1.79.1 -> v1.79.3
+
+### Vulnerability fixes
+1. Fixed an issue where a maliciously crafted SDDL could crash AzCopy on Linux.
+
+
+## Version 10.32.2
+
+### Dependency updates
+1. cloud.google.com/go/storage v1.45.0 -> v1.50.0
+2. Golang 1.24.13 -> 1.25.8
+3. Golangci-lint v1.64.8 -> v2.11.3
+
+### Bug Fixes
+1. Fixed a regression where the folder tracker would panic with pre-existing folders and `--overwrite=ifSourceNewer`. ([#3403](https://github.com/Azure/azure-storage-azcopy/pull/3403))
+2. Fixed a regression where cancellation was not working via stdin ([#3373](https://github.com/Azure/azure-storage-azcopy/issues/3373))
+3. Fixed a regression where we hit segfaults from logging to a nil logger in the process checker. ([#3384](https://github.com/Azure/azure-storage-azcopy/pull/3384))
+4. Fixed a race condition panic from concurrent access to a shared metadata resource by introducing thread safety. ([#3341](https://github.com/Azure/azure-storage-azcopy/pull/3341))
+5. Fixed a bug where `--posix-properties-style` was not being chained through the copy flow correctly. ([#3401](https://github.com/Azure/azure-storage-azcopy/pull/3401))
+6. Fixed a regression where using `--list-of-files` and `--include-pattern` no longer worked. ([#3389](https://github.com/Azure/azure-storage-azcopy/issues/3389))
+
+## Version 10.32.1
+
+### Dependency updates
+1.	Golang 1.24.11 -> 1.24.13
+
+## Version 10.32.0
+
+### New Features
+1. Added support for AMLFS style posix metadata. ([#3317](https://github.com/Azure/azure-storage-azcopy/pull/3317))
+
+### Bug Fixes
+1. Fixed a bug where hdi_isfolder metadata key would sometimes not be sent in all lowercase, resulting in unexpected behavior on the service side when fetching properties. ([#3312](https://github.com/Azure/azure-storage-azcopy/pull/3312))
+2. Fixed a typo in the `benchmark` command, to allow the `--put-md5` flag to work. ([#3324](https://github.com/Azure/azure-storage-azcopy/issues/3324))
+3. Fixed a bug where network errors would not be retried on. ([#3338](https://github.com/Azure/azure-storage-azcopy/pull/3338))
+4. Fixed a bug where unexpected requests would be logged in syslog. ([#3339](https://github.com/Azure/azure-storage-azcopy/pull/3339))
+5. Fixed a bug where pre-existing folders would be recreated. ([#3295](https://github.com/Azure/azure-storage-azcopy/pull/3295))
+
+### Documentation
+1. Updated README to clarify supported source-destination pairs and authorization mechanisms. ([#3213](https://github.com/Azure/azure-storage-azcopy/pull/3213))
+2. Updated format of wiki generated docs to improve readability. ([#3311](https://github.com/Azure/azure-storage-azcopy/pull/3311))
+
+### Breaking changes
+1. AzCopy download URLs starting with https://azcopyvnext-awgzd8g7aagqhzhe.b02.azurefd.net/ are no longer supported.
+   Please download AzCopy from the official GitHub Releases page instead.
+   If you rely on an older AzCopy version that is not available on GitHub, please open an issue in the AzCopy repository and request that it be added.
+
+## Version 10.32.0-preview.1
+
+### Bug Fixes
+1. Fixed a bug where throughput was not being displayed for copy and resume. ([#3271](https://github.com/Azure/azure-storage-azcopy/issues/3271))
+2. Fixed a bug where S3 and GCP transfers would panic. ([#3273](https://github.com/Azure/azure-storage-azcopy/issues/3273))
+
+### Code Improvements
+1. Refactored [copy](https://github.com/Azure/azure-storage-azcopy/pull/3310), [sync](https://github.com/Azure/azure-storage-azcopy/pull/3293), [resume](https://github.com/Azure/azure-storage-azcopy/pull/3289), [login, logout, login status](https://github.com/Azure/azure-storage-azcopy/pull/3266) business logic into the azcopy package.
+
+## Version 10.31.1
+
+### Dependency updates
+1.	Golang 1.24.6 -> 1.24.11
+2. golang.org/x/crypto 0.40.0 ->  0.45.0
+
+## Version 10.31.0
+
+### New Features
+1. `--include-root` flag now allows customers to preserve root properties when used in conjunction with `--preserve-XXXX` flags. ([#3163](https://github.com/Azure/azure-storage-azcopy/pull/3163))
+
+### Bug Fixes
+1. Fixed a bug to retry on various network errors. ([#3237](https://github.com/Azure/azure-storage-azcopy/pull/3237)) ([#3252](https://github.com/Azure/azure-storage-azcopy/pull/3252))
+2. Fixed a bug where remove would not work on paths with encoded characters. ([#2977](https://github.com/Azure/azure-storage-azcopy/issues/2977))
+3. Fixed a bug where jobs resume would not produce any output for previously failed jobs. ([#3103](https://github.com/Azure/azure-storage-azcopy/pull/3103))
+4. Fixed a bug where FileBlob transfers with EntraID on the source would pass the wrong service version. ([#3242](https://github.com/Azure/azure-storage-azcopy/issues/3242))
+
+### Code Improvements
+1. Refactored traverser related code into its own package. ([#3251](https://github.com/Azure/azure-storage-azcopy/pull/3251))
+2. Refactored OAuth token manager access to use a client-based pattern instead of global singleton access. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
+3. Removed unused code related to credential management. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
+4. Refactored Lifecycle UI code into the cmd package ([#3262](https://github.com/Azure/azure-storage-azcopy/pull/3262)).
+5. Error handling code is now injected into JobMgr, or appropriately bubbled upwards instead of using global LCM error handling. ([#3262](https://github.com/Azure/azure-storage-azcopy/pull/3262))
+
+## Version 10.31.0-preview.1
+
+### Dependency updates
+1.	Golang 1.24.4 -> 1.24.6 ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
+### New Features
+1. Azure Files NFS -> Azure Files SMB transfers.
+   - Transfer from Azure Files NFS to Azure Files SMB. (`--from-to=FileNFSFileSMB`)
+2. Azure Files SMB -> Azure Files NFS transfers.
+   - Transfer from Azure Files SMB to Azure Files NFS. (`--from-to=FileSMBFileNFS`)
+3. Symlink support for Azure Files NFS shares.
+   Introduced support for symbolic links in Azure Files NFS shares.
+   Symlinks can be preserved, skipped, or followed based on command-line flags.
+   - Preserve symlinks: `--preserve-symlinks=true`
+   - Skip symlinks: default behavior when flags are not provided
+   - Follow symlinks: `--follow-symlinks=true`
+4. Added a --check-version flag to make version checking an opt in feature. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
+
+### Bug Fixes
+1. Fixed a bug to retry on WSAETIMEDOUT on Windows. ([#3195](https://github.com/Azure/azure-storage-azcopy/pull/3195))
+2. Fixed a bug with the folder creation tracker which caused folder creation calls to happen more often than necessary. ([#3151](https://github.com/Azure/azure-storage-azcopy/pull/3151))
+3. Fixed a bug to redact x-ams-credential from logs. ([#3206](https://github.com/Azure/azure-storage-azcopy/pull/3206))
+4. Fixed a bug where powershell login would fail with older versions of Az.Accounts. ([#3191](https://github.com/Azure/azure-storage-azcopy/pull/3191))
+5. Fixed a bug where symlink direct targets would be handled as a file instead of a symlink. ([#3222](https://github.com/Azure/azure-storage-azcopy/pull/3222))
+
+### Breaking changes
+1. AzCopy no longer checks version by default. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
+
+## Version 10.30.1
+
+### Bug Fixes
+1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
+2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
+3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
+4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([PR #3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))([GH Issue #3176](https://github.com/Azure/azure-storage-azcopy/issues/3176))
+5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([PR #3186](https://github.com/Azure/azure-storage-azcopy/pull/3186)) ([GH Issue #3109](https://github.com/Azure/azure-storage-azcopy/issues/3109)) ([GH Issue #3156](https://github.com/Azure/azure-storage-azcopy/issues/3156)) ([GH Issue #3175](https://github.com/Azure/azure-storage-azcopy/issues/3175))
+
+### Dependency Updates
+1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
 ## Version 10.30.0
 ### Breaking changes
 1. For transfers involving Azure Files (NFS or SMB), AzCopy will not auto create file shares.

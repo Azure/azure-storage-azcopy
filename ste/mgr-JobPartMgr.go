@@ -76,9 +76,21 @@ type IJobPartMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
+	GetJobErrorHandler() common.JobErrorHandler
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
+//
+// Production data-plane code does NOT use this constructor; it uses the process-wide
+// client common.GetGlobalHTTPClient(), initialized once at startup from
+// ConcurrencySettings.MaxIdleConnections. See common/azHttpClient.go.
+//
+// This constructor is retained for tests (ste/sender-*_test.go,
+// ste/testJobPartTransferManager_test.go) and for the standalone testSuite/cmd
+// binary, all of which run outside the azcopy command and therefore cannot rely on
+// the global client being initialized. Tests want their own isolated transport so
+// they don't depend on package-level startup wiring from another package.
+//
 // We must minimize use of this, and instead maximize reuse of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
@@ -107,7 +119,7 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	// discard the OK, we just want to nil these out if they are not scopedauthenticators
 	targetAuth, _ := targetCred.(cred.ScopedAuthenticator)
@@ -167,7 +179,6 @@ type jobPartMgr struct {
 	dstServiceClient *common.ServiceClient
 
 	srcIsOAuth bool // true if source is authenticated via oauth
-	credOption *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
@@ -177,6 +188,8 @@ type jobPartMgr struct {
 	cachedJobID        common.JobID
 	cachedPartNum      PartNumber
 	cachedNumTransfers uint32
+	cachedJobPartType  common.JobPartType
+	cachedIsFinalPart  bool
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	httpHeaders common.ResourceHTTPHeaders
@@ -216,6 +229,7 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone      uint32
+	drainTracker             *jobWorkTracker
 	atomicTransfersCompleted uint32
 	atomicTransfersFailed    uint32
 	atomicTransfersSkipped   uint32
@@ -247,6 +261,9 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+	if jpm.drainTracker != nil {
+		defer jpm.drainTracker.done(1)
+	}
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0   // Reset the # of transfers done back to 0
 	jpm.atomicTransfersFailed = 0 // Resets the # transfers failed back to 0 during resume operation
@@ -270,16 +287,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			}
 		}()
 	}
-	if plan.PartNum == 0 && plan.NumTransfers == 0 {
-		/* This will wind down the transfer and report summary */
-		plan.SetJobStatus(common.EJobStatus.Completed())
+	if plan.NumTransfers == 0 {
+		plan.SetJobPartStatus(common.EJobStatus.Completed())
+		if jpm.cachedIsFinalPart {
+			jpm.jobMgr.ConfirmAllTransfersScheduled()
+		}
+		jpm.jobMgr.ReportJobPartDone(jobPartProgressInfo{
+			completionChan: jpm.closeOnCompletion,
+			partNum:        &jpm.cachedPartNum,
+		})
 		return
-	}
-
-	// get the list of include / exclude transfers
-	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
-	if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
-		panic("List of transfers is obsolete.")
 	}
 
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
@@ -335,8 +352,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.clientInfo()
-
 	// Cache IsFinalPart before the transfer loop, since plan memory may be unmapped
 	// by progressive cleanup after the last ReportTransferDone fires.
 	isFinalPart := plan.IsFinalPart
@@ -360,19 +375,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			} // Adding uint32 max is effectively subtracting 1
 		}
 
+		var folderTrackerKey string
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
 			// register the folder!
 			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(JPPTCompatibleFolderCreationTracker); ok {
 				if plan.FromTo.To().IsRemote() {
-					uri, err := url.Parse(dst)
-					common.PanicIfErr(err)
-					uri.RawPath = ""
-					uri.RawQuery = ""
-
-					dst = uri.String()
+					dst = normalizeFolderTrackerKey(dst)
 				}
 
-				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, plan.PartNum, t)
+				folderTrackerKey = dst
 			}
 		}
 
@@ -385,6 +397,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jobPartMgr:          jpm,
 			jobPartPlanTransfer: jppt,
 			transferIndex:       t,
+			folderTrackerKey:    folderTrackerKey,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
 			// TODO: insert the factory func interface in jptm.
@@ -434,19 +447,19 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		}
 		// ===== TEST KNOB
 		jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
-
-		// This sets the atomic variable atomicAllTransfersScheduled to 1
-		// atomicAllTransfersScheduled variables is used in case of resume job
-		// Since iterating the JobParts and scheduling transfer is independent
-		// a variable is required which defines whether last part is resumed or not
-		if isFinalPart {
-			jpm.jobMgr.ConfirmAllTransfersScheduled()
-		}
 	}
 
+	// This sets the atomic variable atomicAllTransfersScheduled to 1.
+	// It must be outside the transfer loop so that it is called even when
+	// every transfer in the final part was already Success (resume scenario).
+	// atomicAllTransfersScheduled is used in case of resume job:
+	// since iterating the JobParts and scheduling transfers is independent,
+	// a variable is required which defines whether the last part is resumed or not.
 	if isFinalPart {
+		jpm.jobMgr.ConfirmAllTransfersScheduled()
 		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
+
 }
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
@@ -455,17 +468,6 @@ func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 
 func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
-}
-
-func (jpm *jobPartMgr) clientInfo() {
-	jpm.credOption = &common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(common.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
-
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
@@ -568,7 +570,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 }
 
 func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
-	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+	cpkInfo, err := common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+	if err != nil {
+		jpm.GetJobErrorHandler().Error(err.Error())
+	}
+	return cpkInfo
 }
 
 func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
@@ -640,6 +646,9 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
 func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfersDone uint32) {
+	if jpm.drainTracker != nil {
+		defer jpm.drainTracker.done(1)
+	}
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 
@@ -737,6 +746,10 @@ func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 
 func (jpm *jobPartMgr) ResetFailedTransfersCount() {
 	atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
+}
+
+func (jpm *jobPartMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jpm.jobMgr.GetJobErrorHandler()
 }
 
 // TODO: Can we delete this method?

@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 19
+const DataSchemaVersion common.Version = 22
 
 const (
 	CustomHeaderMaxBytes  = 256
@@ -82,6 +82,8 @@ type JobPartPlanHeader struct {
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveInfo            bool
 	PreservePOSIXProperties bool
+	// PosixPropertiesStyle represents whether to use 'standard' or 'amlfs' style posix properties
+	PosixPropertiesStyle common.PosixPropertiesStyle
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
@@ -109,6 +111,11 @@ type JobPartPlanHeader struct {
 	PermanentDeleteOption common.PermanentDeleteOption
 
 	RehydratePriority common.RehydratePriorityType
+
+	SymlinkHandling  common.SymlinkHandlingType
+	HardlinkHandling common.HardlinkHandlingType
+	JobPartType      common.JobPartType // Type of transfers this job part contains
+	IsSyncJob        bool
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
@@ -189,6 +196,14 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier,
 	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags) {
+	h, metadata, blobType, blobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation,
+		s2sInvalidMetadataHandleOption, entityType, blobVersionID, blobSnapshotID, blobTags, _ =
+		jpph.TransferSrcPropertiesAndMetadataWithHardlink(transferIndex)
+	return
+}
+
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadataWithHardlink(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier,
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags, targetHardlinkFilePath string) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -254,6 +269,11 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		blobTags = common.ToCommonBlobTagsMap(blobTagsString)
 		offset += int64(t.SrcBlobTagsLength) //nolint:ineffassign
 	}
+	if t.TargetHardlinkFilePathLength != 0 {
+		targetHardlinkFilePath = jpph.getString(offset, t.TargetHardlinkFilePathLength)
+		offset += int64(t.TargetHardlinkFilePathLength) //nolint:ineffassign
+	}
+
 	return
 }
 
@@ -396,8 +416,9 @@ type JobPartPlanTransfer struct {
 	atomicErrorCode int32
 
 	// errorMessageLength represents the length of the error message for failed transfers.
-	errorMessageLength int32
-	errorMessage       [MaxErrorMessageLength]byte
+	errorMessageLength           int32
+	errorMessage                 [MaxErrorMessageLength]byte
+	TargetHardlinkFilePathLength int16 // Target hardlink file path at destination for NFS
 }
 
 // TransferStatus returns the transfer's status

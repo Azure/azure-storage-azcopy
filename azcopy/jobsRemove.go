@@ -38,13 +38,14 @@ type RemoveJobResult struct {
 
 // RemoveJob removes a job with the specified JobID.
 func (c Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err error) {
+	jobID := opts.JobID
 	result = RemoveJobResult{}
-	if opts.JobID.IsEmpty() {
+	if jobID.IsEmpty() {
 		return result, errors.New("remove job requires the JobID")
 	}
-	result.Count, err = jobsAdmin.RemoveSingleJobFiles(opts.JobID)
+	result.Count, err = jobsAdmin.RemoveSingleJobFiles(jobID)
 	if err != nil {
-		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", opts.JobID, err)
+		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", jobID, err)
 	}
 	return result, nil
 }

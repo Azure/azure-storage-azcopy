@@ -108,7 +108,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 		},
 	})
 
-	ValidateResource[ContainerResourceManager](a, dest, resourceSpec, true)
+	ValidateResource[ContainerResourceManager](a, dest, resourceSpec, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Finally, validate that we're actually storing the hash correctly.
 	// For this, we'll only validate the single hash we expected to conflict, because we already have the hash data for that.
@@ -179,7 +181,9 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 // Scenario_TestSyncDeleteDestinationIfNecessary tests that sync is
@@ -268,7 +272,9 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 				Body: dstData, // Validate we did not overwrite this one
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Note : For local sources, the hash is computed by a hashProcessor created in zc_traverser_local, so there is no way
@@ -343,7 +349,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeSourceHash(svm *ScenarioVariati
 	// All source, dest should match
 	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Only non skipped paths should be in plan file
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
@@ -429,7 +437,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeDestinationHash(svm *ScenarioVa
 	// All source, dest should match
 	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Only non skipped paths should be in plan file
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
@@ -544,5 +554,320 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 
 	ValidateResource(a, dst, ResourceDefinitionContainer{
 		Objects: srcMap,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
+}
+
+// Scenario_TestS2SBlobFSIncludeRootACLS validates root ACLs are included in transfer and
+// preserved on the destination
+func (s *SyncTestSuite) Scenario_TestS2SBlobFSIncludeRootACLS(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	// Use BlobFS (HNS) for ACLs we can validate
+	dstContainer := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.BlobFS()),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Destination root with a different ACL to observe the change after sync
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						BlobFSProperties: BlobFSProperties{
+							ACL: pointerTo("user::rwx,group::---,other::---"),
+						},
+					},
+				},
+				"root/file.txt": ResourceDefinitionObject{
+					Body: body,
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.File(),
+					},
+				},
+			},
+		},
+	)
+	if !svm.Dryrun() {
+		// Make sure LMT is in the past
+		time.Sleep(time.Second * 5)
+	}
+
+	srcContainer := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.BlobFS()),
+		ResourceDefinitionContainer{})
+	rootDir := "root"
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	srcObjResMan := make(map[string]ObjectResourceManager)
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+			BlobFSProperties: BlobFSProperties{
+				// grant all for group to make it observably different
+				ACL: pointerTo("user::rwx,group::rwx,other::---"),
+			},
+		},
+	}
+	srcObjResMan[rootDir] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[rootDir] = obj
+
+	// create one file under root so sync enumerates content
+	fileName := rootDir + "/file.txt"
+	fileObj := ResourceDefinitionObject{
+		ObjectName: pointerTo(fileName),
+		Body:       body,
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	}
+	srcObjResMan[fileName] = CreateResource[ObjectResourceManager](svm, srcContainer, fileObj)
+	srcObjs[fileName] = fileObj
+
+	includeRoot := NamedResolveVariation(svm, map[string]bool{
+		"|includeRoot=true":  true,
+		"|includeRoot=false": false,
+	})
+	if !includeRoot {
+		expectedRoot := srcObjs[rootDir]
+		expectedRoot.BlobFSProperties.ACL = pointerTo("user::rwx,group::---,other::---")
+		srcObjs[rootDir] = expectedRoot
+	}
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{ // Sync the directory to the directory
+			TryApplySpecificAuthType(srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+				EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}), // Need OAuth for full permissions to modify ACLs
+			TryApplySpecificAuthType(dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+				EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:           pointerTo(true),
+				PreservePermissions: pointerTo(true),
+			},
+			IncludeRoot: pointerTo(includeRoot),
+		},
+	})
+
+	// With include-root disabled, the destination root ACL must remain unchanged.
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+
+}
+
+// Scenario_TestFileLocalIncludeRootCreationTime checks that the creation time of the source is overwritten on the destination
+// when --include-root is set.
+func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	currTime := time.Now()
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	dst := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Destination root with a newer creation time to observe after sync
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						FileProperties: FileProperties{
+							FileCreationTime: pointerTo(currTime.Add(time.Second * 10)),
+						},
+					},
+				},
+				"root/file.txt": ResourceDefinitionObject{Body: body},
+			},
+		},
+	)
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{ObjectName: pointerTo("root"),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+			FileProperties: FileProperties{
+				FileCreationTime: pointerTo(currTime)}}}
+	srcObjs["root"] = obj
+	fileObj := ResourceDefinitionObject{ObjectName: pointerTo("root/file.txt"), Body: body}
+	srcObjs["root/file.txt"] = fileObj
+	src := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionContainer{})
+
+	// Create the root before its child so implicit parent creation cannot lose its properties.
+	CreateResource[ObjectResourceManager](svm, src, srcObjs["root"])
+	CreateResource[ObjectResourceManager](svm, src, srcObjs["root/file.txt"])
+
+	// Dont test Local->Local
+	if src.Location().IsLocal() && dst.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	// LocalLinux->File sync with preserveInfo is unsupported.
+	// Because Metadata, which is a DOS attribute that is tested here, is not supported on Linux
+	if src.Location().IsLocal() && runtime.GOOS == "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			// Sync the directory to the directory
+			src.GetObject(svm, "root", common.EEntityType.Folder()),
+			dst.GetObject(svm, "root", common.EEntityType.Folder()),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:           pointerTo(true),
+				PreservePermissions: pointerTo(true),
+				PreserveInfo:        pointerTo(true),
+			},
+			IncludeRoot: pointerTo(true),
+		},
+	})
+
+	// Validate that the destination root folder picked up the source creation time
+	ValidateResource[ContainerResourceManager](svm, dst, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"root": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					FileProperties: FileProperties{
+						FileCreationTime: pointerTo(currTime),
+					},
+				},
+			},
+			"root/file.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+		preserveInfo:          true,
+	})
+}
+
+// Scenario_TestFileLocalIncludeRootMetadata validates root metadata replacement
+// with include-root enabled and preservation of the destination root otherwise.
+func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioVariationManager) {
+	rootDir := "root"
+	includeRoot := ResolveVariation(svm, []bool{true, false})
+	dstLocation := ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.FileNFS()})
+	srcLocation := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File(), common.ELocation.FileNFS()})
+	fromTo := common.FromToValue(srcLocation, dstLocation)
+
+	createContainer := func(location common.Location, definition ResourceDefinitionContainer) ContainerResourceManager {
+		options := GetResourceOptions{}
+		if location == common.ELocation.FileNFS() {
+			options.PreferredAccount = pointerTo(PremiumFileShareAcct)
+			definition.Properties.FileContainerProperties.EnabledProtocols = pointerTo("NFS")
+		}
+		return CreateResource[ContainerResourceManager](svm, GetRootResource(svm, location, options), definition)
+	}
+
+	dstMetadata := common.Metadata{"Author": pointerTo("Wendi")}
+	dstContainer := createContainer(dstLocation,
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				rootDir: ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						Metadata:   dstMetadata,
+					},
+				},
+			},
+		})
+
+	if !svm.Dryrun() {
+		// Make sure the LMT is in the past
+		time.Sleep(time.Second * 10)
+	}
+
+	srcMetadata := common.Metadata{"Author": pointerTo("Wonw")}
+	if srcLocation.IsLocal() {
+		// Local sources do not carry Azure user metadata; including their root clears it.
+		srcMetadata = nil
+	}
+	srcContainer := createContainer(srcLocation, ResourceDefinitionContainer{})
+	rootObj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+			Metadata:   srcMetadata,
+		},
+	}
+	CreateResource[ObjectResourceManager](svm, srcContainer, rootObj)
+
+	fileName := rootDir + "/test1.txt"
+	fileObj := ResourceDefinitionObject{
+		ObjectName: pointerTo(fileName),
+		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+	}
+	CreateResource[ObjectResourceManager](svm, srcContainer, fileObj)
+
+	srcObjs := ObjectResourceMappingFlat{rootDir: rootObj, fileName: fileObj}
+	if !includeRoot {
+		expectedRoot := srcObjs[rootDir]
+		expectedRoot.Metadata = dstMetadata
+		srcObjs[rootDir] = expectedRoot
+	}
+	expectedAuthor := DerefOrZero(srcObjs[rootDir].Metadata["Author"])
+	unsupportedLocalNFS := fromTo == common.EFromTo.LocalFileNFS() && runtime.GOOS != "linux"
+	unsupportedLocalSMB := fromTo == common.EFromTo.LocalFile() && runtime.GOOS != "windows" && runtime.GOOS != "linux"
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbSync,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:    pointerTo(true),
+					PreserveInfo: pointerTo(true),
+					FromTo:       pointerTo(fromTo),
+				},
+				IncludeRoot: pointerTo(includeRoot),
+			},
+			ShouldFail: unsupportedLocalNFS || unsupportedLocalSMB,
+		})
+
+	if unsupportedLocalNFS {
+		ValidateContainsError(svm, stdOut, []string{"NFS upload is not supported on " + runtime.GOOS})
+		return
+	}
+	if unsupportedLocalSMB {
+		ValidateContainsError(svm, stdOut, []string{"persistence for up/downloads is supported only in Windows and Linux"})
+		return
+	}
+
+	if !svm.Dryrun() {
+		props := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).GetProperties(svm)
+		actualAuthor, hasAuthor := props.Metadata["Author"]
+		svm.Assert("root Author metadata presence must match include-root", Equal{}, hasAuthor, expectedAuthor != "")
+		svm.Assert("root Author metadata must match include-root", Equal{}, DerefOrZero(actualAuthor), expectedAuthor)
+	}
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

@@ -23,17 +23,19 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -74,9 +76,6 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Test inference of striptopdir
@@ -85,7 +84,7 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 	a.False(cooked.StripTopDir)
 
 	// Test and ensure only one file is being downloaded
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -112,7 +111,7 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 	a.True(cooked.StripTopDir)
 
 	// Test and ensure only 3 files get scheduled, nothing under the sub-directory
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(3, len(mockedRPC.transfers))
@@ -161,7 +160,7 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 	a.True(cooked.StripTopDir)
 
 	// Test and ensure only one file got scheduled
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -181,8 +180,8 @@ func TestDownloadAccount(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, "", ctx, InitResourceTraverserOptions{})
-	processor := func(object StoredObject) error {
+	blobTraverser := traverser.NewBlobAccountTraverser(rawBSC, "", ctx, traverser.InitResourceTraverserOptions{})
+	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
 		if ok {
@@ -190,12 +189,12 @@ func TestDownloadAccount(t *testing.T) {
 		}
 
 		// Append the container name to the relative path
-		relPath := "/" + object.ContainerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.RelativePath
 		relPaths = append(relPaths, relPath)
 
 		return nil
 	}
-	err := blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err := blobTraverser.Traverse(traverser.NoPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination
@@ -204,15 +203,12 @@ func TestDownloadAccount(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	raw := getDefaultCopyRawInput(rawBSC.URL(), dstDirName)
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		validateDownloadTransfersAreScheduled(a, "", "", relPaths, mockedRPC)
@@ -238,8 +234,8 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, container, ctx, InitResourceTraverserOptions{})
-	processor := func(object StoredObject) error {
+	blobTraverser := traverser.NewBlobAccountTraverser(rawBSC, container, ctx, traverser.InitResourceTraverserOptions{})
+	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
 		if ok {
@@ -247,11 +243,11 @@ func TestDownloadAccountWildcard(t *testing.T) {
 		}
 
 		// Append the container name to the relative path
-		relPath := "/" + object.ContainerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.RelativePath
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err = blobTraverser.Traverse(traverser.NoPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination
@@ -260,15 +256,12 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	raw := getDefaultCopyRawInput(rawBSC.NewContainerClient(container).URL(), dstDirName)
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		validateDownloadTransfersAreScheduled(a, "", "", relPaths, mockedRPC)
@@ -306,7 +299,7 @@ func TestDownloadSingleBlobToFile(t *testing.T) {
 		raw := getDefaultCopyRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 		// the file was created after the blob, so no sync should happen
-		runCopyAndVerify(a, raw, func(err error) {
+		runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			validateDownloadTransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
@@ -319,7 +312,7 @@ func TestDownloadSingleBlobToFile(t *testing.T) {
 		raw = getDefaultCopyRawInput(rawBlobURLWithSAS.String(), dstDirName)
 
 		// the file was created after the blob, so no sync should happen
-		runCopyAndVerify(a, raw, func(err error) {
+		runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			// verify explicitly since the source and destination names will be different:
@@ -350,9 +343,6 @@ func TestDownloadBlobContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -360,7 +350,7 @@ func TestDownloadBlobContainer(t *testing.T) {
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -374,7 +364,7 @@ func TestDownloadBlobContainer(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 		a.Zero(len(mockedRPC.transfers))
 	})
@@ -399,9 +389,6 @@ func TestDownloadBlobVirtualDirectory(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -409,7 +396,7 @@ func TestDownloadBlobVirtualDirectory(t *testing.T) {
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -425,7 +412,7 @@ func TestDownloadBlobVirtualDirectory(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 		a.Zero(len(mockedRPC.transfers))
 	})
@@ -456,9 +443,6 @@ func TestDownloadBlobContainerWithPattern(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -469,7 +453,7 @@ func TestDownloadBlobContainerWithPattern(t *testing.T) {
 	raw.recursive = true
 	raw.include = "*.pdf"
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -484,7 +468,7 @@ func TestDownloadBlobContainerWithPattern(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// only the top pdf should be included
@@ -517,9 +501,6 @@ func TestDownloadBlobContainerWithRegexInclude(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -530,7 +511,7 @@ func TestDownloadBlobContainerWithRegexInclude(t *testing.T) {
 	raw.recursive = true
 	raw.includeRegex = "es{4,}"
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -571,9 +552,6 @@ func TestDownloadBlobContainerWithMultRegexInclude(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -584,7 +562,7 @@ func TestDownloadBlobContainerWithMultRegexInclude(t *testing.T) {
 	raw.recursive = true
 	raw.includeRegex = "es{4,};^zxc"
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -623,9 +601,6 @@ func TestDownloadBlobContainerWithEmptyRegex(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -637,7 +612,7 @@ func TestDownloadBlobContainerWithEmptyRegex(t *testing.T) {
 	raw.includeRegex = ""
 	raw.excludeRegex = ""
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -670,9 +645,6 @@ func TestDownloadBlobContainerWithRegexExclude(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -683,7 +655,7 @@ func TestDownloadBlobContainerWithRegexExclude(t *testing.T) {
 	raw.recursive = true
 	raw.excludeRegex = "es{4,}"
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that only blobsTo
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -724,9 +696,6 @@ func TestDownloadBlobContainerWithMultRegexExclude(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -737,7 +706,7 @@ func TestDownloadBlobContainerWithMultRegexExclude(t *testing.T) {
 	raw.recursive = true
 	raw.excludeRegex = "es{4,};o(g)"
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -774,11 +743,8 @@ func TestDryrunCopyLocalToBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -787,7 +753,7 @@ func TestDryrunCopyLocalToBlob(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -821,11 +787,8 @@ func TestDryrunCopyBlobToBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -835,7 +798,7 @@ func TestDryrunCopyBlobToBlob(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -868,11 +831,8 @@ func TestDryrunCopyBlobToBlobJson(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	mockedLcm.SetOutputFormat(EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -882,7 +842,7 @@ func TestDryrunCopyBlobToBlobJson(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -922,11 +882,8 @@ func TestDryrunCopyS3toBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -936,7 +893,7 @@ func TestDryrunCopyS3toBlob(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -970,11 +927,8 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -984,7 +938,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -1065,7 +1019,7 @@ func TestListOfVersions(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.listOfVersionIDs = file.Name()
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -1116,7 +1070,7 @@ func TestListOfVersionsNegative(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.listOfVersionIDs = file.Name()
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Error(err)
 	})
 }

@@ -21,9 +21,12 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -89,11 +92,7 @@ func (u *azureFileUploader) Epilogue() {
 			}
 
 			u.headersToApply.ContentMD5 = md5Hash
-			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders:   &u.headersToApply,
-				Permissions:   &u.permissionsToApply,
-				SMBProperties: &u.smbPropertiesToApply,
-			})
+			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, u.buildSetHTTPHeadersOptions())
 			return err
 		})
 	}
@@ -104,7 +103,11 @@ func (s *azureFileUploader) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
 		info := s.jptm.Info()
 		var err error
 
-		if common.IsNFSCopy() {
+		if s.jptm.FromTo() == common.EFromTo.FileNFSFileSMB() || s.jptm.FromTo() == common.EFromTo.FileSMBFileNFS() {
+			if _, _, err = s.getPropertiesForCrossProtocolTransfer(); err != nil {
+				return
+			}
+		} else if s.jptm.FromTo().IsNFS() {
 			_, err = s.addNFSPermissionsToHeaders(info, s.getFileClient().URL())
 			if err != nil {
 				s.jptm.FailActiveSend("Setting file permissions", err)
@@ -139,31 +142,10 @@ func (s *azureFileUploader) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
 				if err != nil {
 					return nil, err
 				}
-				if common.IsNFSCopy() {
-					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
-						HTTPHeaders: &s.headersToApply,
-						NFSProperties: &file.NFSProperties{
-							CreationTime:  s.nfsPropertiesToApply.CreationTime,
-							LastWriteTime: s.nfsPropertiesToApply.LastWriteTime,
-							FileMode:      s.nfsPropertiesToApply.FileMode,
-							Owner:         s.nfsPropertiesToApply.Owner,
-							Group:         s.nfsPropertiesToApply.Group,
-						},
-					})
-					if err != nil {
-						s.jptm.FailActiveSend("Applying final attribute settings", err)
-						return nil, err
-					}
-				} else {
-					resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
-						HTTPHeaders:   &s.headersToApply,
-						Permissions:   &s.permissionsToApply,
-						SMBProperties: &s.smbPropertiesToApply,
-					})
-					if err != nil {
-						s.jptm.FailActiveSend("Applying final attribute settings", err)
-						return nil, err
-					}
+				resp, err = s.getFileClient().SetHTTPHeaders(s.ctx, s.buildSetHTTPHeadersOptions())
+				if err != nil {
+					s.jptm.FailActiveSend("Applying final attribute settings", err)
+					return nil, err
 				}
 				return resp, nil
 			},
@@ -175,4 +157,208 @@ func (s *azureFileUploader) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
 			return
 		}
 	})
+}
+
+// SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
+func (u *azureFileUploader) SendSymlink(linkData string) error {
+
+	jptm := u.jptm
+	info := jptm.Info()
+	if !jptm.FromTo().IsNFS() {
+		return nil
+	}
+
+	createSymlinkOptions := &file.CreateSymbolicLinkOptions{
+		Metadata: u.metadataToApply,
+	}
+
+	stage, err := u.addNFSPropertiesToHeaders(info)
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+
+	stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+	createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
+		CreationTime:  u.nfsPropertiesToApply.CreationTime,
+		LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+		Owner:         u.nfsPropertiesToApply.Owner,
+		Group:         u.nfsPropertiesToApply.Group,
+		FileMode:      u.nfsPropertiesToApply.FileMode,
+	}
+
+	err = DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
+		func() error {
+			_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
+			return err
+		},
+		u.getFileClient(),
+		u.shareClient,
+		u.pacer,
+		u.jptm)
+
+	// if still failing, give up
+	if err != nil {
+		jptm.FailActiveUpload("Creating symlink", err)
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
+	return nil
+}
+
+// DoWithCreateSymlinkOnAzureFilesNFS tries to create a symlink, with retry logic
+// for parent not found and resource already exists.
+func DoWithCreateSymlinkOnAzureFilesNFS(
+	ctx context.Context,
+	action func() error,
+	client *file.Client,
+	shareClient *share.Client,
+	pacer pacer,
+	jptm IJobPartTransferMgr,
+) error {
+	// try the action
+	err := action()
+
+	// did fail because parent is missing?
+	if fileerror.HasCode(err, fileerror.ParentNotFound) {
+		jptm.Log(common.LogInfo,
+			fmt.Sprintf("%s: %s \nAzCopy will create parent directories for the symlink.",
+				fileerror.ParentNotFound, err.Error()))
+
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx,
+			client, shareClient, jptm.GetFolderCreationTracker())
+		if err != nil {
+			jptm.FailActiveUpload("Creating parent directory", err)
+			return err
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because item already exists on the destination?
+	// The destination object can be a symlink, file or directory.
+	// If it's a symlink or a file, we will delete it try creating symlink.
+	// If it's a directory, we will fail.
+	if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete and recreate the symlink.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		// destination symlink already exists we try to delete the destination symlink
+		_, delErr := client.Delete(ctx, nil)
+		if delErr != nil {
+			jptm.FailActiveUpload("Deleting existing symlink", delErr)
+			return delErr
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because resource type mismatch?
+	// This can happen if the destination is a file or a directory.
+	// We will delete the destination and try creating the symlink.
+	// If the destination is a directory, the delete will fail and we will fail the transfer.
+	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
+				fileerror.ResourceTypeMismatch, err.Error()))
+
+		// destination can be a file
+		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+			// if this fails it means the destination is a directory
+			// we don't support deleting a directory here because it can be recursive and dangerous
+			// so we fail the transfer
+			// customer can manually delete the destination directory and rerun the transfer
+			jptm.FailActiveUpload("Deleting existing resource", delErr)
+			return delErr
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	return err
+}
+
+// DoWithCreateHardlinkOnAzureFilesNFS tries to create a hardlink, with retry logic
+// for parent not found and resource already exists.
+func DoWithCreateHardlinkOnAzureFilesNFS(
+	ctx context.Context,
+	action func() error,
+	client *file.Client,
+	shareClient *share.Client,
+	pacer pacer,
+	jptm IJobPartTransferMgr,
+) error {
+	// try the action
+	err := action()
+
+	// did fail because parent is missing?
+	if fileerror.HasCode(err, fileerror.ParentNotFound) {
+		jptm.Log(common.LogInfo,
+			fmt.Sprintf("%s: %s \nAzCopy will create parent directories for the hardlink.",
+				fileerror.ParentNotFound, err.Error()))
+
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx,
+			client, shareClient, jptm.GetFolderCreationTracker())
+		if err != nil {
+			jptm.FailActiveUpload("Creating parent directory", err)
+			return err
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because item already exists on the destination?
+	// The destination object can be a hardlink, file or directory.
+	// If it's a hardlink or a file, we will delete it try creating hardlink.
+	// If it's a directory, we will fail.
+	if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete and recreate the hardlink.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		// destination hardlink already exists we try to delete the destination hardlink
+		_, delErr := client.Delete(ctx, nil)
+		if delErr != nil {
+			jptm.FailActiveUpload("Deleting existing hardlink", delErr)
+			return delErr
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because resource type mismatch?
+	// This can happen if the destination is a file or a directory.
+	// We will delete the destination and try creating the hardlink.
+	// If the destination is a directory, the delete will fail and we will fail the transfer.
+	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
+				fileerror.ResourceTypeMismatch, err.Error()))
+
+		// destination can be a file
+		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+			// if this fails it means the destination is a directory
+			// we don't support deleting a directory here because it can be recursive and dangerous
+			// so we fail the transfer
+			// customer can manually delete the destination directory and rerun the transfer
+			jptm.FailActiveUpload("Deleting existing resource", delErr)
+			return delErr
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	return err
 }

@@ -317,34 +317,79 @@ func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceIn
 	return nil
 }
 
-// PutNFSDefaultPermissions sets default ownership and permissions for NFS shares
-// when no explicit NFS permissions are provided by the source.
-// Default: 0755 for directories, 0644 for files. Owner/group set to root (UID 0, GID 0).
-func (a *azureFilesDownloader) PutNFSDefaultPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
-	const (
-		defaultFileMode = 0644
-		defaultDirMode  = 0755
-		defaultUID      = 0 // root
-		defaultGID      = 0 // root
-	)
-
-	// Determine file mode based on entity type
-	var mode os.FileMode
-	if txInfo.EntityType == common.EEntityType.Folder() {
-		mode = defaultDirMode
-	} else {
-		mode = defaultFileMode
+func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newFileSourceInfoProvider(jptm)
+	if err != nil {
+		return err
+	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // Azure Files implements this.
+	symlinkInfo, err := symsip.ReadLink()
+	if err != nil {
+		return err
 	}
 
-	// Set ownership
-	if err := os.Chown(txInfo.Destination, defaultUID, defaultGID); err != nil {
-		return fmt.Errorf("failed to set owner/group for %s: %w", txInfo.Destination, err)
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
+
+	return err
+}
+
+func (a *azureFilesDownloader) CreateHardlink() error {
+	info := a.jptm.Info()
+
+	// Derive the destination prefix by computing the current file's relative path
+	// within the source root, then stripping that suffix from the full local destination.
+	// This works correctly for both copy and sync, and handles StripTopDir automatically.
+	//
+	// Example (copy, no StripTopDir):
+	//   SrcFilePath  = "srcdir/subdir/link.txt"
+	//   sourceRoot   = ".../srcdir"  =>  srcRootDir = "srcdir"
+	//   fileRelPath  = "subdir/link.txt"
+	//   Destination  = "/local/dstdir/subdir/link.txt"
+	//   destPrefix   = "/local/dstdir/"
+	//   hardlink target path  = "/local/dstdir/subdir/anchor.txt"
+	targetHardlinkFullPath, err := computeDownloadHardlinkTarget(info, a.jptm)
+	if err != nil {
+		return err
+	}
+	if err := common.CreateParentDirectoryIfNotExist(info.Destination, a.jptm.GetFolderCreationTracker()); err != nil {
+		return err
+	}
+	return os.Link(targetHardlinkFullPath, info.Destination)
+}
+
+// computeDownloadHardlinkTarget computes the full local path for the target hardlink
+// when downloading (Azure Files NFS(remote) → Local). It parses the source root URL to derive
+// the current file's traversal-root-relative path, strips that suffix from the local
+// destination path to get the prefix, then joins with info.TargetHardlinkFilePath.
+func computeDownloadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) (string, error) {
+	sourceRootProvider, ok := jptm.(interface{ GetSourceRoot() string })
+	if !ok {
+		return "", fmt.Errorf("transfer manager does not expose a source root for preserved hardlinks")
+	}
+	srcRootURLParts, err := file.ParseURL(sourceRootProvider.GetSourceRoot())
+	if err != nil {
+		return "", fmt.Errorf("parsing source root URL: %w", err)
 	}
 
-	// Set permissions
-	if err := os.Chmod(txInfo.Destination, mode); err != nil {
-		return fmt.Errorf("failed to set permissions for %s: %w", txInfo.Destination, err)
+	srcRootDir := strings.TrimSuffix(srcRootURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.SrcFilePath, srcRootDir), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// Convert to local path separators and strip from the destination to get the prefix.
+	localFileRelPath := filepath.FromSlash(fileRelPath)
+
+	// Ensure that the destination path actually ends with the expected relative path.
+	if localFileRelPath != "" && !strings.HasSuffix(info.Destination, localFileRelPath) {
+		return "", fmt.Errorf("destination path %q does not end with expected relative path %q", info.Destination, localFileRelPath)
+	}
+	// Derive the destination prefix by removing the relative path suffix from the destination.
+	destPrefix := info.Destination
+	if localFileRelPath != "" {
+		destPrefix = info.Destination[:len(info.Destination)-len(localFileRelPath)]
 	}
 
-	return nil
+	// Join the prefix with the targetHardlinkFilePath traversal-root-relative path.
+	targetHardlinkFullPath := filepath.Join(destPrefix, filepath.FromSlash(info.TargetHardlinkFilePath))
+
+	return targetHardlinkFullPath, nil
 }

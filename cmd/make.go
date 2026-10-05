@@ -28,6 +28,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -66,7 +68,7 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
 		resourceURL:      *parsedURL,
-		resourceLocation: InferArgumentLocation(raw.resourceToCreate),
+		resourceLocation: azcopy.InferArgumentLocation(raw.resourceToCreate),
 		quota:            int32(raw.quota),
 		CredName:         raw.CredName,
 	}, nil
@@ -85,7 +87,7 @@ type cookedMakeCmdArgs struct {
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	resourceStringParts, err := SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
+	resourceStringParts, err := traverser.SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
 	if err != nil {
 		return err
 	}
@@ -220,7 +222,7 @@ func init() {
 
 			glcm.Exit(func(format common.OutputFormat) string {
 				return "Successfully created the resource."
-			}, common.EExitCode.Success())
+			}, EExitCode.Success())
 		},
 	}
 

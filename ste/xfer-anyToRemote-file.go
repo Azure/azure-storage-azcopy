@@ -232,7 +232,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 		anyToRemote_folder(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.FileProperties():
 		anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
-	case common.EEntityType.File(), common.EEntityType.Hardlink():
+	case common.EEntityType.File():
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
 			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 		} else {
@@ -240,6 +240,14 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 		}
 	case common.EEntityType.Symlink():
 		anyToRemote_symlink(jptm, info, pacer, senderFactory, sipf)
+	case common.EEntityType.Hardlink():
+		if jptm.Info().TargetHardlinkFilePath != "" {
+			anyToRemote_hardlink(jptm, info, pacer, senderFactory, sipf)
+		} else if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
+			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
+		} else {
+			anyToRemote_file(jptm, info, pacer, senderFactory, sipf)
+		}
 	}
 }
 
@@ -462,7 +470,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
 
-var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
+var errJobCancelledLocalPrefetch = errors.New("job was cancelled; Pre-fetching stopped")
 
 // Schedule all the send chunks.
 // For upload, we force preload of each chunk to memory, and we wait (block)
@@ -513,7 +521,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 
 		if srcInfoProvider.IsLocal() || isPrivateNetworkTransfer {
 			if jptm.WasCanceled() {
-				prefetchErr = jobCancelledLocalPrefetchErr
+				prefetchErr = errJobCancelledLocalPrefetch
 			} else {
 				// As long as the prefetch error is nil, we'll attempt a prefetch.
 				// Otherwise, the chunk reader didn't need to be made.

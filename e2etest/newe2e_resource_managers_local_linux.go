@@ -97,9 +97,17 @@ func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions Fi
 
 func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
 	filePath := l.getWorkingPath()
-	info, err := common.GetFileInformation(filePath, true)
+	info, err := common.GetFileInformation(filePath, true, l.getSymlinkHandlingForEntityType())
 	a.NoError("get file NFS props", err)
 	return ste.HandleInfo{info}
+}
+
+func (l LocalObjectResourceManager) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
+	// Hardlinks to symlinks must not follow their potentially dangling targets.
+	if l.EntityType() == common.EEntityType.Symlink() || l.EntityType() == common.EEntityType.Hardlink() {
+		return common.ESymlinkHandlingType.Preserve()
+	}
+	return common.ESymlinkHandlingType.Follow()
 }
 
 func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
@@ -108,7 +116,7 @@ func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPe
 		var stat unix.Statx_t
 
 		statxFlags := unix.AT_STATX_SYNC_AS_STAT
-		if l.EntityType() == common.EEntityType.Symlink() {
+		if l.EntityType() == common.EEntityType.Symlink() || l.EntityType() == common.EEntityType.Hardlink() {
 			statxFlags |= unix.AT_SYMLINK_NOFOLLOW
 		}
 		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -34,6 +35,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
+	raw.posixPropertiesStyle = common.EPosixPropertiesStyle.Standard().String()
 }
 
 func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
@@ -102,12 +104,12 @@ func init() {
 			//the resource to set properties of is set as src
 			raw.src = args[0]
 			// We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst
-			if src := InferArgumentLocation(raw.src); src == common.ELocation.BlobFS() {
+			if src := azcopy.InferArgumentLocation(raw.src); src == common.ELocation.BlobFS() {
 				raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
 				glcm.Info("Switching to use blob endpoint on source account.")
 			}
 
-			srcLocationType := InferArgumentLocation(raw.src)
+			srcLocationType := azcopy.InferArgumentLocation(raw.src)
 			if raw.fromTo == "" {
 				switch srcLocationType {
 				case common.ELocation.Blob():
@@ -143,7 +145,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 
 			if err != nil {
@@ -151,7 +153,7 @@ func init() {
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()

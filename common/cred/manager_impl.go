@@ -112,6 +112,7 @@ func (m *managerImpl) GetCredentials(nickname string, ctx context.Context) (azco
 
 func (m *managerImpl) DoLogin(opts LoginNewTokenOptions, ctx context.Context) (azcore.TokenCredential, error) {
 	result := opts.NewToken().(*token)
+	result.Nickname = opts.Nickname
 
 	cred, err := result.tokenImpl.getTokenCredential(result.Header(), ctx)
 	if err != nil {

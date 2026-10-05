@@ -2,20 +2,30 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 )
 
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	cooked.jobID = Client.CurrentJobID
+	if !cooked.FromTo.IsDelete() && !cooked.FromTo.IsSetProperties() {
+		// Copy owns its log lifetime in the library; remove and set-properties still use command progress.
+		return cooked.prepareCopyProperties()
+	}
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
+		common.AzcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
@@ -23,7 +33,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		common.LogPathFolder = ""
 	}
 
-	cooked.putBlobSize, err = blockSizeInBytes(cooked.PutBlobSizeMB)
+	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.PutBlobSizeMB)
 	if err != nil {
 		return err
 	}
@@ -50,11 +60,14 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	go func() {
 		defer close(listChan)
+		if f != nil {
+			defer f.Close()
+		}
 
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				warnIfHasWildcard(includeWarningOncer, paramName, v)
+				azcopy.WarnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -78,7 +91,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 				// provide clear warning if user uses old (obsolete) format by mistake
 				if headerLineNum <= 1 {
-					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+					cleanedLine := strings.ReplaceAll(strings.ReplaceAll(v, " ", ""), "\t", "")
 					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
 					if cleanedLine == "{" && headerLineNum == 0 {
 						firstLineIsCurlyBrace = true
@@ -118,6 +131,9 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	go func() {
 		defer close(versionsChan)
+		if filePtr != nil {
+			defer filePtr.Close()
+		}
 		addToChannel := func(v string) {
 			if len(v) > 0 {
 				versionsChan <- v
@@ -144,6 +160,15 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		cooked.ListOfVersionIDsChannel = versionsChan
 	}
 
+	return cooked.prepareCopyProperties()
+}
+
+func (cooked *CookedCopyCmdArgs) prepareCopyProperties() error {
+	var err error
+	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.PutBlobSizeMB)
+	if err != nil {
+		return err
+	}
 	cooked.CpkOptions = common.CpkOptions{
 		CpkScopeInfo: cooked.cpkByName,  // Setting CPK-N
 		CpkInfo:      cooked.cpkByValue, // Setting CPK-V
@@ -166,12 +191,126 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	}
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
-		if common.IsNFSCopy() {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+		if cooked.FromTo.IsNFS() {
+			// Skip logging this msg for cross-protocol transfers
+			// because --preserve-permissions flag is not applicable.
+			if cooked.FromTo != common.EFromTo.FileSMBFileNFS() && cooked.FromTo != common.EFromTo.FileNFSFileSMB() {
+				glcm.Info(azcopy.PreserveNFSPermissionsDisabledMsg)
+			}
 		} else {
-			glcm.Info(PreservePermissionsDisabledMsg)
+			glcm.Info(azcopy.PreservePermissionsDisabledMsg)
 		}
 	}
 
 	return nil
+}
+
+// ToCopyOptions adapts the public Mover command model to the library's execution options.
+func (cooked *CookedCopyCmdArgs) ToCopyOptions() (azcopy.CopyOptions, error) {
+	metadata, err := getMetadata(cooked.metadata)
+	if err != nil {
+		return azcopy.CopyOptions{}, err
+	}
+	preserveProperties := cooked.s2sPreserveProperties.Value()
+	preserveTier := cooked.s2sPreserveAccessTier.Value()
+	options := azcopy.CopyOptions{
+		Handler:                   cookedCopyHandler{cooked},
+		RetainJobState:            buildmode.IsMover,
+		SourceCredentialName:      cooked.SrcCredName,
+		DestinationCredentialName: cooked.DstCredName,
+		IncludeBefore:             cooked.IncludeBefore, IncludeAfter: cooked.IncludeAfter,
+		IncludePatterns: cooked.IncludePatterns, ExcludePatterns: cooked.ExcludePatterns,
+		IncludePaths: cooked.IncludePathPatterns, ExcludePaths: cooked.ExcludePathPatterns,
+		IncludeRegex: cooked.includeRegex, ExcludeRegex: cooked.excludeRegex,
+		IncludeAttributes: cooked.IncludeFileAttributes, ExcludeAttributes: cooked.ExcludeFileAttributes,
+		ExcludeContainers: cooked.excludeContainer, ExcludeBlobTypes: cooked.excludeBlobType,
+		Overwrite: cooked.ForceWrite, ForceIfReadOnly: cooked.ForceIfReadOnly,
+		AutoDecompress: cooked.autoDecompress, Recursive: cooked.Recursive, FromTo: cooked.FromTo,
+		BlockSizeMB:   float64(cooked.blockSize) / common.MegaByte,
+		PutBlobSizeMB: float64(cooked.putBlobSize) / common.MegaByte,
+		BlobType:      cooked.blobType, BlockBlobTier: cooked.blockBlobTier, PageBlobTier: cooked.pageBlobTier,
+		Metadata: metadata, BlobTags: cooked.blobTagsMap,
+		ContentType: cooked.contentType, ContentEncoding: cooked.contentEncoding,
+		ContentDisposition: cooked.contentDisposition, ContentLanguage: cooked.contentLanguage,
+		CacheControl: cooked.cacheControl, NoGuessMimeType: cooked.noGuessMimeType,
+		PreserveLastModifiedTime: cooked.preserveLastModifiedTime,
+		PreservePermissions:      cooked.preservePermissions.IsTruthy(),
+		PreserveOwner:            &cooked.preserveOwner, PreserveInfo: &cooked.preserveInfo,
+		PreservePosixProperties: cooked.preservePOSIXProperties, AsSubDir: &cooked.asSubdir,
+		PosixPropertiesStyle: cooked.posixPropertiesStyle,
+		Symlinks:             cooked.SymlinkHandling, Hardlinks: cooked.hardlinks, BackupMode: cooked.backupMode,
+		PutMd5: cooked.putMd5, CheckMd5: cooked.md5ValidationOption, CheckLength: cooked.CheckLength,
+		S2SPreserveProperties: &preserveProperties, S2SPreserveAccessTier: &preserveTier,
+		S2SDetectSourceChanged:      cooked.s2sSourceChangeValidation,
+		S2SHandleInvalidateMetadata: cooked.s2sInvalidMetadataHandleOption,
+		S2SPreserveBlobTags:         cooked.S2sPreserveBlobTags, ListOfVersionIds: cooked.ListOfVersionIDs,
+		IncludeDirectoryStubs: cooked.IncludeDirectoryStubs, DisableAutoDecoding: cooked.disableAutoDecoding,
+		TrailingDot: cooked.trailingDot, CpkByName: cooked.CpkOptions.CpkScopeInfo, CpkByValue: cooked.CpkOptions.CpkInfo,
+	}
+	options.SetInternalOptions(cooked.ListOfFiles, &cooked.s2sGetPropertiesInBackend,
+		cooked.dryrunMode, dryrunNewCopyJobPartOrder, cooked.deleteDestinationFileIfNecessary, cooked.commandString)
+	options.SetCookedOptions(cooked.jobID, cooked.ListOfFilesChannel, cooked.ListOfVersionIDsChannel, cooked.StripTopDir,
+		func(isDirectory bool) { cooked.IsSourceDir = isDirectory })
+	options.SetCookedCredentialCallback(func(_, destination cred.CredentialInfo) { cooked.credentialInfo = destination })
+	return options, nil
+}
+
+func (cooked *CookedCopyCmdArgs) processLibraryCopy() error {
+	options, err := cooked.ToCopyOptions()
+	if err != nil {
+		return err
+	}
+	source, destination := cooked.Source.Value, cooked.Destination.Value
+	if cooked.FromTo.From().IsRemote() {
+		source, err = cooked.Source.String()
+		if err != nil {
+			return err
+		}
+	}
+	if cooked.FromTo.To().IsRemote() {
+		destination, err = cooked.Destination.String()
+		if err != nil {
+			return err
+		}
+	}
+	ctx, cancel := WithJobCancellation(context.Background())
+	defer cancel()
+	_, err = Client.Copy(ctx, source, destination, options)
+	return err
+}
+
+type cookedCopyHandler struct{ cooked *CookedCopyCmdArgs }
+
+func (h cookedCopyHandler) OnStart(ctx azcopy.JobContext) {
+	h.cooked.jobID = ctx.JobID
+	StartSystemStatsMonitorForJobID(ctx.JobID)
+	h.cooked.jobStartTime = time.Now()
+	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, h.cooked.isCleanupJob, h.cooked.cleanupJobMessage))
+}
+
+func (h cookedCopyHandler) OnTransferProgress(progress azcopy.CopyProgress) {
+	h.cooked.updateLibraryCounters(progress.ListJobSummaryResponse)
+	cliCopyHandler{}.OnTransferProgress(progress)
+}
+
+func (h cookedCopyHandler) OnComplete(result azcopy.CopyResult) {
+	h.cooked.updateLibraryCounters(result.ListJobSummaryResponse)
+	h.cooked.isEnumerationComplete = true
+	if h.cooked.hasFollowup() {
+		exitCode := h.cooked.getSuccessExitCode()
+		if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() {
+			exitCode = EExitCode.Error()
+		}
+		h.cooked.launchFollowup(exitCode)
+		return
+	}
+	cliCopyHandler{}.OnComplete(result)
+}
+
+func (cooked *CookedCopyCmdArgs) updateLibraryCounters(summary common.ListJobSummaryResponse) {
+	cooked.isEnumerationComplete = summary.CompleteJobOrdered
+	atomic.StoreUint32(&cooked.atomicSkippedSymlinkCount, summary.SkippedSymlinkCount)
+	atomic.StoreUint32(&cooked.atomicSkippedSpecialFileCount, summary.SkippedSpecialFileCount)
+	atomic.StoreUint32(&cooked.atomicSkippedHardlinkCount, summary.SkippedHardlinkCount)
+	atomic.StoreUint64(&cooked.atomicSkippedArchiveFileCount, summary.SkippedArchiveFileCount)
 }

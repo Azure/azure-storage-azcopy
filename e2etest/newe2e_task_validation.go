@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
@@ -31,10 +34,9 @@ func ValidateTimePtr(a Asserter, name string, expected, real *time.Time) {
 	if expected == nil {
 		return
 	}
-	expectedTime := expected.UTC().Truncate(time.Second)
-	realTime := real.UTC().Truncate(time.Second)
-
-	a.Assert(name+" must match", Equal{Deep: true}, expectedTime, realTime)
+	diff := real.UTC().Sub(expected.UTC()).Abs()
+	withinRange := diff <= time.Second // Allow small difference for e2e testing
+	a.Assert(name+" must be within 1s of each other. LMT diff: "+diff.String(), Equal{}, withinRange, true)
 }
 
 func ValidateMetadata(a Asserter, expected, real common.Metadata) {
@@ -64,7 +66,7 @@ func ValidateTags(a Asserter, expected, real map[string]string) {
 	a.Assert("Tags must match", Equal{Deep: true}, expected, real)
 }
 
-func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateSkippedSymlinksCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
@@ -74,7 +76,6 @@ func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uin
 	if skippedSymlinkedCount != expected {
 		a.Error(fmt.Sprintf("expected skipped symlink count (%d) received count (%d)", expected, skippedSymlinkedCount))
 	}
-	return
 }
 
 func ValidateSkippedSpecialFileCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
@@ -90,7 +91,16 @@ func ValidateSkippedSpecialFileCount(a Asserter, stdOut AzCopyStdout, expected u
 	return
 }
 
-func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T], validateObjectContent bool) {
+type ValidateResourceOptions struct {
+	validateObjectContent bool
+	fromTo                common.FromTo
+	preservePermissions   bool
+	preserveInfo          bool
+	hardlinkHandling      common.HardlinkHandlingType
+}
+
+func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T],
+	validateOptions ValidateResourceOptions) {
 	a.AssertNow("Target resource and definition must not be null", Not{IsNil{}}, a, target, definition)
 	a.AssertNow("Target resource must be at a equal level to the resource definition", Equal{}, target.Level(), definition.DefinitionTarget())
 
@@ -98,12 +108,14 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		return
 	}
 
-	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
-		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+	definition.ApplyDefinition(a, target, map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		azcopy.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			cRes := manager.(ContainerResourceManager)
 
+			canonPathPrefix := cRes.Canon() + ": "
+
 			if !definition.ShouldExist() {
-				a.AssertNow("container must not exist", Equal{}, cRes.Exists(), false)
+				a.AssertNow(canonPathPrefix+"container must not exist", Equal{}, cRes.Exists(), false)
 				return
 			}
 
@@ -113,19 +125,21 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			ValidateMetadata(a, vProps.Metadata, cProps.Metadata)
 
 			if manager.Location() == common.ELocation.Blob() || manager.Location() == common.ELocation.BlobFS() {
-				ValidatePropertyPtr(a, "Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
+				ValidatePropertyPtr(a, canonPathPrefix+"Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
 			}
 
-			if manager.Location() == common.ELocation.File() || manager.Location() == common.ELocation.FileNFS() {
+			if manager.Location().IsFile() {
 				ValidatePropertyPtr(a, "Enabled protocols", vProps.FileContainerProperties.EnabledProtocols, cProps.FileContainerProperties.EnabledProtocols)
 				ValidatePropertyPtr(a, "RootSquash", vProps.FileContainerProperties.RootSquash, cProps.FileContainerProperties.RootSquash)
 				ValidatePropertyPtr(a, "AccessTier", vProps.FileContainerProperties.AccessTier, cProps.FileContainerProperties.AccessTier)
 				ValidatePropertyPtr(a, "Quota", vProps.FileContainerProperties.Quota, cProps.FileContainerProperties.Quota)
 			}
 		},
-		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+		azcopy.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
+
+			canonPathPrefix := objMan.Canon() + ": "
 
 			if !objDef.ShouldExist() {
 				a.Assert(fmt.Sprintf("object %s must not exist", objMan.ObjectName()), Equal{}, objMan.Exists(), false)
@@ -135,7 +149,14 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties
 
-			if validateObjectContent && (objMan.EntityType() == common.EEntityType.File() || objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
+			if validateOptions.validateObjectContent &&
+				(objMan.EntityType() == common.EEntityType.File() ||
+					// Only validate hardlink content when hardlinks aren't followed.
+					// When we follow a hardlink, we are essentially treating it as a copy, so the content should be the same as the source. However,
+					// if we preserve hardlinks, we are treating it as a link.
+					(objMan.EntityType() == common.EEntityType.Hardlink() && validateOptions.hardlinkHandling != common.PreserveHardlinkHandlingType)) &&
+				objDef.Body != nil {
+
 				objBody := objMan.Download(a)
 				validationBody := objDef.Body.Reader()
 
@@ -143,11 +164,11 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				valHash := md5.New()
 
 				_, err := io.Copy(objHash, objBody)
-				a.NoError("hash object body", err)
+				a.NoError(canonPathPrefix+"hash object body", err)
 				_, err = io.Copy(valHash, validationBody)
-				a.NoError("hash validation body", err)
+				a.NoError(canonPathPrefix+"hash validation body", err)
 
-				a.Assert("bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
+				a.Assert(canonPathPrefix+"bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
 			} else if objMan.EntityType() == common.EEntityType.Symlink() {
 				symlinkDest := objDef.SymlinkedFileName
 				if symlinkDest == "" && objDef.Body != nil {
@@ -158,7 +179,13 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 				if symlinkDest != "" {
 					linkData := objMan.ReadLink(a)
-					a.Assert("Symlink mismatch", Equal{}, symlinkDest, linkData)
+					if validateOptions.fromTo.From() == common.ELocation.FileNFS() || validateOptions.fromTo.To() == common.ELocation.FileNFS() {
+						decodedDest, err := url.PathUnescape(linkData)
+						a.NoError("decode symlink target", err)
+						symlinkDest = filepath.Base(symlinkDest)
+						linkData = filepath.Base(decodedDest)
+					}
+					a.Assert(canonPathPrefix+"Symlink mismatch", Equal{}, symlinkDest, linkData)
 				}
 			}
 
@@ -192,39 +219,59 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				}
 			}
 			// HTTP headers
-			ValidatePropertyPtr(a, "Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
-			ValidatePropertyPtr(a, "Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)
-			ValidatePropertyPtr(a, "Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
-			ValidatePropertyPtr(a, "Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
-			ValidatePropertyPtr(a, "Content type", vProps.HTTPHeaders.contentType, oProps.HTTPHeaders.contentType)
+			ValidatePropertyPtr(a, canonPathPrefix+"Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content type", vProps.HTTPHeaders.contentType, oProps.HTTPHeaders.contentType)
+			// Only validate when md5 is set & for remote resource locations
+			if len(vProps.HTTPHeaders.contentMD5) > 0 && !manager.Location().IsLocal() { // Local does not have HTTP headers
+				ValidatePropertyPtr(a, canonPathPrefix+"Content md5", pointerTo(vProps.HTTPHeaders.contentMD5), pointerTo(oProps.HTTPHeaders.contentMD5))
+			}
 
 			switch manager.Location() {
 			case common.ELocation.Blob():
-				ValidatePropertyPtr(a, "Blob type", vProps.BlobProperties.Type, oProps.BlobProperties.Type)
+				ValidatePropertyPtr(a, canonPathPrefix+"Blob type", vProps.BlobProperties.Type, oProps.BlobProperties.Type)
 				ValidateTags(a, vProps.BlobProperties.Tags, oProps.BlobProperties.Tags)
 				ValidatePropertyPtr(a, "Block blob access tier", vProps.BlobProperties.BlockBlobAccessTier, oProps.BlobProperties.BlockBlobAccessTier)
 				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
 			case common.ELocation.File(), common.ELocation.FileNFS():
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
-				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
-				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
-				if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil {
-					ValidateTimePtr(a, "NFS Creation Time", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
-					ValidateTimePtr(a, "NFS Last Write Time", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
+				if validateOptions.preserveInfo && validateOptions.fromTo == common.EFromTo.FileSMBFileNFS() { // SMB to NFS transfer
+					ValidateTimePtr(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
+				} else if validateOptions.preserveInfo && validateOptions.fromTo == common.EFromTo.FileNFSFileSMB() { // NFS to SMB transfer
+					ValidateTimePtr(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+
+				} else {
+					ValidateTimePtr(a, canonPathPrefix+"Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, canonPathPrefix+"Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+					if vProps.FileNFSProperties != nil {
+						ValidateTimePtr(a, canonPathPrefix+"NFS creation time", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+						ValidateTimePtr(a, canonPathPrefix+"NFS last write time", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+					}
 				}
-				if vProps.FileNFSPermissions != nil && oProps.FileNFSPermissions != nil {
-					ValidatePropertyPtr(a, "Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
-					ValidatePropertyPtr(a, "Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
-					ValidatePropertyPtr(a, "FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+				if vProps.FileNFSPermissions != nil {
+					ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
+					ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
+					// On Linux, symlink mode bits are mostly ignored by the kernel.
+					// By default, symlinks are created with 0777, and you cannot change
+					// their mode with chmod — the syscall always succeeds but doesn’t alter them.
+					if objMan.EntityType() != common.EEntityType.Symlink() {
+						ValidatePropertyPtr(a, canonPathPrefix+"FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+					}
 				}
 			case common.ELocation.BlobFS():
-				ValidatePropertyPtr(a, "Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
-				ValidatePropertyPtr(a, "Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
-				ValidatePropertyPtr(a, "Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
-				ValidatePropertyPtr(a, "ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
+				ValidatePropertyPtr(a, canonPathPrefix+"Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
+				ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
+				ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
+				ValidatePropertyPtr(a, canonPathPrefix+"ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
 			case common.ELocation.Local():
-				ValidateTimePtr(a, "Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
+				ValidateTimePtr(a, canonPathPrefix+"Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
 			}
 		},
 	})
@@ -250,15 +297,54 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateHardlinkedSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateHardlinksConvertedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
 
 	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
-	hardlinkedConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
-	if hardlinkedConvertedCount != expected {
-		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinkedConvertedCount))
+	hardlinksConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
+	if hardlinksConvertedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinksConvertedCount))
+	}
+	return
+}
+
+func ValidateHardlinksTransferCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	hardlinksTransferredCount := parsedStdout.FinalStatus.HardlinksTransferCount
+	if hardlinksTransferredCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink transferred count (%d) received count (%d)", expected, hardlinksTransferredCount))
+	}
+	return
+}
+
+func ValidateHardlinksSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	hardlinksSkippedCount := parsedStdout.FinalStatus.SkippedHardlinkCount
+	if hardlinksSkippedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink skipped count (%d) received count (%d)", expected, hardlinksSkippedCount))
+	}
+	return
+}
+
+func ValidateSymlinksTransferCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	symlinksTransferredCount := parsedStdout.FinalStatus.SymlinkTransfers
+	if symlinksTransferredCount != expected {
+		a.Error(fmt.Sprintf("expected symlink transferred count (%d) received count (%d)", expected, symlinksTransferredCount))
 	}
 	return
 }
@@ -560,4 +646,30 @@ func ValidateLogFileRetention(a Asserter, logsDir string, expectedLogFileToRetai
 		}
 	}
 	a.AssertNow("Expected job log files to be retained", Equal{}, cnt, expectedLogFileToRetain)
+}
+
+// ValidateThroughputOutput validates that throughput information is displayed in AzCopy output
+// This is a regression test for the v10.31.0 bug where throughput was hidden when it equaled 0
+func ValidateThroughputOutput(a Asserter, stdout AzCopyStdout) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	var foundThroughput bool
+	for _, line := range stdout.RawStdout() {
+		// Look for throughput display patterns:
+		// - "2-sec Throughput (Mb/s): X.XXXX" (normal display)
+		// - "Throughput (Mb/s)" (partial match for any throughput display)
+		if strings.Contains(line, "Throughput (Mb/s)") {
+			foundThroughput = true
+			break
+		}
+	}
+
+	if !foundThroughput {
+		fmt.Println("=== AzCopy Output for Throughput Validation ===")
+		fmt.Println(stdout.String())
+		fmt.Println("=== End AzCopy Output ===")
+		a.Error("throughput information not found in azcopy output - this may indicate a regression in throughput display")
+	}
 }

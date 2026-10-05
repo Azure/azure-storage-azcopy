@@ -19,7 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -76,10 +76,10 @@ func buildCanonForAzureResourceManager(manager ResourceManager) string {
 
 	out += "/" + manager.Location().String()
 
-	if manager.Level() >= cmd.ELocationLevel.Container() {
+	if manager.Level() >= azcopy.ELocationLevel.Container() {
 		out += "/" + parsedURI.ContainerName
 
-		if manager.Level() >= cmd.ELocationLevel.Object() {
+		if manager.Level() >= azcopy.ELocationLevel.Object() {
 			out += "/" + parsedURI.BlobName
 		}
 	}
@@ -150,8 +150,8 @@ func (b *BlobServiceResourceManager) Location() common.Location {
 	return common.ELocation.Blob()
 }
 
-func (b *BlobServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (b *BlobServiceResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Service()
 }
 
 func (b *BlobServiceResourceManager) ResourceClient() any {
@@ -353,8 +353,8 @@ func (b *BlobContainerResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (b *BlobContainerResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Container()
 }
 
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
@@ -475,6 +475,7 @@ type BlobObjectCreateOptions struct {
 
 func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectContentContainer, properties ObjectProperties, options *BlobObjectCreateOptions) {
 	a.HelperMarker().Helper()
+
 	opts := DerefOrZero(options)
 	blobProps := properties.BlobProperties
 
@@ -515,6 +516,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 
 	switch DerefOrZero(blobProps.Type) {
 	case "", blob.BlobTypeBlockBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		bodySize := body.Size()
 
@@ -523,8 +528,9 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			for ; bodySize >= common.MaxNumberOfBlocksPerBlob*blockSize; blockSize = 2 * blockSize {
 			}
 		}
-
-		_, err := b.Container.InternalClient.NewBlockBlobClient(b.Path).UploadStream(ctx, body.Reader(), &blockblob.UploadStreamOptions{
+		cpkInfo, err := opts.CpkOptions.GetCPKInfo()
+		a.NoError("get CPKInfo", err)
+		_, err = b.Container.InternalClient.NewBlockBlobClient(b.Path).UploadStream(ctx, body.Reader(), &blockblob.UploadStreamOptions{
 			BlockSize:               blockSize,
 			Concurrency:             runtime.NumCPU(),
 			TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
@@ -532,16 +538,22 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			Metadata:                properties.Metadata,
 			AccessTier:              blobProps.BlockBlobAccessTier,
 			Tags:                    blobProps.Tags,
-			CPKInfo:                 opts.CpkOptions.GetCPKInfo(),
+			CPKInfo:                 cpkInfo,
 			CPKScopeInfo:            opts.CpkOptions.GetCPKScopeInfo(),
 		})
 		a.NoError("Block blob upload", err)
 	case blob.BlobTypePageBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for PageBlob. (WI 28334208)
 		client := b.Container.InternalClient.NewPageBlobClient(b.Path)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultPageBlobChunkSize)
 		size := body.Size()
-		_, err := client.Create(
+		cpkInfo, err := opts.CpkOptions.GetCPKInfo()
+		a.NoError("get CPKInfo", err)
+		_, err = client.Create(
 			ctx,
 			size,
 			&pageblob.CreateOptions{
@@ -549,7 +561,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 				Metadata:     properties.Metadata,
 				Tier:         blobProps.PageBlobAccessTier,
 				HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
-				CPKInfo:      opts.CpkOptions.GetCPKInfo(),
+				CPKInfo:      cpkInfo,
 				CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
 			})
 		a.NoError("Page blob create", err)
@@ -575,7 +587,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 				blob.HTTPRange{Offset: offset, Count: int64(n)},
 				&pageblob.UploadPagesOptions{
 					TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
-					CPKInfo:                 opts.CpkOptions.GetCPKInfo(),
+					CPKInfo:                 cpkInfo,
 					CPKScopeInfo:            opts.CpkOptions.GetCPKScopeInfo(),
 				})
 			a.NoError("Page blob upload", err)
@@ -583,6 +595,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			blockIndex++
 		}
 	case blob.BlobTypeAppendBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for AppendBlob. (WI 28334208)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		size := body.Size()
@@ -594,10 +610,11 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		}
 
 		client := b.Container.InternalClient.NewAppendBlobClient(b.Path)
-
-		_, err := client.Create(ctx, &appendblob.CreateOptions{
+		cpkInfo, err := opts.CpkOptions.GetCPKInfo()
+		a.NoError("get CPKInfo", err)
+		_, err = client.Create(ctx, &appendblob.CreateOptions{
 			HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
-			CPKInfo:      opts.CpkOptions.GetCPKInfo(),
+			CPKInfo:      cpkInfo,
 			CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
 			Tags:         blobProps.Tags,
 			Metadata:     properties.Metadata,
@@ -625,7 +642,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 					AppendPosition: pointerTo(offset),
 					MaxSize:        pointerTo(offset + int64(n)),
 				},
-				CPKInfo:      opts.CpkOptions.GetCPKInfo(),
+				CPKInfo:      cpkInfo,
 				CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
 			})
 			a.NoError("Append blob upload", err)
@@ -751,8 +768,8 @@ func (b *BlobObjectResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (b *BlobObjectResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Object()
 }
 
 func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {

@@ -47,7 +47,10 @@ import (
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
@@ -319,7 +322,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertion
 
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(a *assert.Assertions, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
-		err := s3Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: ""})
+		err := s3Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
 		a.Nil(err)
 
 		s.generateObjects(a, s3Client, bucketName, objectList)
@@ -853,19 +856,56 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 	return false
 }
 
-func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, verifier func(err error)) {
+func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, mockDelete azcopy.ObjectDeleter, verifier func(err error)) {
 	// the simulated user input should parse properly
-	cooked, err := raw.cook()
-	a.Nil(err)
-
+	opts, err := raw.toOptions()
+	if err != nil {
+		verifier(err)
+		return
+	}
+	opts.SetInternalOptions(true, raw.deleteDestinationFileIfNecessary, "", mockTransfer, mockDelete)
+	// create the client if it is not already created
+	if jobsAdmin.JobsAdmin == nil {
+		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+		if err != nil {
+			verifier(err)
+			return
+		}
+	}
 	// the enumeration ends when process() returns
-	err = cooked.process()
+	_, err = Client.Sync(context.TODO(), raw.src, raw.dst, opts)
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)
 }
 
-func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(err error)) {
+func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, verifier func(err error)) {
+	// the simulated user input should parse properly
+	opts, err := raw.toCopyOptions(&cobra.Command{})
+	if err != nil {
+		verifier(err)
+		return
+	}
+	opts.SetInternalOptions(raw.listOfFilesToCopy, to.Ptr(raw.s2sGetPropertiesInBackend), true, mockTransfer, raw.deleteDestinationFileIfNecessary, "")
+	if !raw.s2sPreserveAccessTier {
+		opts.S2SPreserveAccessTier = to.Ptr(false)
+	}
+	// create the client if it is not already created
+	if jobsAdmin.JobsAdmin == nil {
+		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+		if err != nil {
+			verifier(err)
+			return
+		}
+	}
+	// the enumeration ends when process() returns
+	_, err = Client.Copy(context.TODO(), raw.src, raw.dst, opts)
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
+}
+
+func runOldCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
 	if err == nil {
@@ -936,6 +976,21 @@ func validateCopyTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool, 
 	}
 }
 
+func validateDeleteTransfersAreScheduled(a *assert.Assertions, expectedTransfers []string, mockedRPC interceptor) {
+	// validate that the right number of transfers were scheduled
+	a.Equal(len(expectedTransfers), len(mockedRPC.deletions))
+
+	// validate that the right transfers were sent
+	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
+	for _, transfer := range mockedRPC.deletions {
+		// look up the source from the expected transfers, make sure it exists
+		_, exists := lookupMap[transfer.RelativePath]
+		a.True(exists, transfer.Name)
+
+		delete(lookupMap, transfer.Name)
+	}
+}
+
 func validateRemoveTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
 
 	// validate that the right number of transfers were scheduled
@@ -973,6 +1028,7 @@ func getDefaultSyncRawInput(sra, dst string) rawSyncCmdArgs {
 		md5ValidationOption:  common.DefaultHashValidationOption.String(),
 		compareHash:          common.ESyncHashType.None().String(),
 		localHashStorageMode: common.EHashStorageMode.Default().String(),
+		hardlinks:            common.DefaultHardlinkHandlingType.String(),
 	}
 }
 
@@ -988,6 +1044,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		asSubdir:                       true,
+		hardlinks:                      common.DefaultHardlinkHandlingType.String(),
 	}
 }
 
@@ -1012,6 +1069,7 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
+		hardlinks:                      common.DefaultHardlinkHandlingType.String(),
 	}
 }
 
@@ -1019,7 +1077,7 @@ func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyC
 	fromTo := common.EFromTo.BlobNone()
 	srcURL, _ := url.Parse(src)
 
-	srcLocationType := InferArgumentLocation(src)
+	srcLocationType := azcopy.InferArgumentLocation(src)
 	switch srcLocationType {
 	case common.ELocation.Blob():
 		fromTo = common.EFromTo.BlobNone()

@@ -56,29 +56,67 @@ For complete guidance, visit any of these articles on the docs.microsoft.com web
 
 :eight_spoked_asterisk: [AzCopy WiKi](https://github.com/Azure/azure-storage-azcopy/wiki)
 
+## Building this integration
+
+Use Go **1.26.6**, matching `go.mod` and the build pipelines. The retained Mover
+reflection APIs require this toolchain; the upstream Go 1.25 build settings are
+not sufficient.
+
+FIPS-labelled release jobs retain the upstream Microsoft Go build path and verify
+the selected Go version and Microsoft toolset identity before building. An ordinary Go 1.26.6 build defaults to
+`GOFIPS140=off`; selecting this toolchain alone is not a FIPS compliance claim.
+
 ## Supported Operations
 
 The general format of the AzCopy commands is: `azcopy [command] [arguments] --[flag-name]=[flag-value]`
 
 * `bench` - Runs a performance benchmark by uploading or downloading test data to or from a specified destination
 
-* `copy` - Copies source data to a destination location. The supported directions are:
-    - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
-    - Local File System <-> Azure Data Lake Storage (ADLS Gen2) (SAS, OAuth, or SharedKey authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Blob (SAS or OAuth authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
-    - Azure Files (SAS or OAuth authentication) -> Azure Files (SAS or OAuth authentication)
-    - Azure Files (SAS or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
-    - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
-    - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
+* `copy` - Copies source data to a destination location. The supported directions and forms of authorization are:
+    Source | Destination
+    --- | ---
+    Local | Azure Blob (Microsoft Entra ID or SAS)
+    Local | Azure Files SMB (Microsoft Entra ID or share/directory SAS)
+    Local | Azure Files NFS (Microsoft Entra ID or share/directory SAS)
+    Local | Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
+    Azure Blob (Microsoft Entra ID or SAS) | Local
+    Azure Files SMB (Microsoft Entra ID or share/directory SAS) | Local
+    Azure Files NFS (Microsoft Entra ID or share/directory SAS) | Local
+    Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key) | Local
+    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    AWS S3 (Access Key) | Azure Block Blob (Microsoft Entra ID or SAS)
+    Google Cloud Storage (Service Account Key) | Azure Block Blob (Microsoft Entra ID or SAS)
 
-* `sync` - Replicate source to the destination location. The supported directions are:
-    - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
+* `sync` - Replicate source to the destination location. The supported directions and forms of authorization are:
+    Source | Destination
+    --- | ---
+    Local | Azure Blob (Microsoft Entra ID or SAS)
+    Local | Azure File (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Local
+    Azure File (Microsoft Entra ID or SAS) | Local
+    Azure Blob (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Azure File (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure File (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
 
-* `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.
+  Local transfers involving NFS require Linux. Use the explicit NFS/SMB
+  `--from-to` values for NFS and cross-protocol transfers; permission preservation
+  is not supported across SMB and NFS.
+
+* `login` - Log in to Microsoft Entra ID to access Azure Storage resources.
 
 * `logout` - Log out to terminate access to Azure Storage resources.
 
@@ -138,6 +176,98 @@ You can change this default behaviour and overwrite files at the destination by 
 
 By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command.
 To learn more, see [Synchronize files](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-blobs-synchronize).
+
+## Job-plan compatibility (Checkpoint 6)
+
+This integration writes **schema version 22** job plans, introduced in
+Checkpoint 5 for hardlink preservation and retained by Checkpoint 6.
+Older plan layouts cannot be resumed by this build.
+
+- Resume existing schema 21 jobs with the accepted **Checkpoint 4 binary**.
+- Resume existing schema 20 jobs with the accepted **Checkpoint 3 binary**.
+- Resume existing schema 19 jobs with the older binary that created them.
+- Finish those jobs with their compatible binary, or start a new job with this
+  build. Do not rename old plan files to change their schema version.
+
+Checkpoint 1 introduced schema 20, including persisted symlink handling;
+Checkpoints 2 and 3 retained that format. Checkpoint 4 introduced schema 21 for
+AMLFS header offsets and persisted `FolderExisted`/`Restarted` values.
+Checkpoint 6 does not migrate those older formats.
+
+The embedded Mover sync API retains symlink following for local sources, including
+SMB and Blob destinations. The CLI sync flags retain upstream's NFS-specific
+symlink restrictions.
+
+## Mover traversal integration (Checkpoint 2)
+
+Resource enumeration, directory orchestration, indexing, comparison, and streaming
+merge-join synchronization live in the [traverser package](traverser).
+`RunSyncOrchestrator` receives job-scoped `SyncJob` configuration and a
+`SyncEnumerator` with transfer and finalization callbacks. Command parsing,
+credential resolution, deletion execution, job-part dispatch, and UI lifecycle
+remain with the caller. Traversal runtime counters, limits, cancellation, and
+merge-join tuning are isolated per invocation; caller options are copied.
+
+Existing Mover sync entry points in `cmd` delegate to the shared implementation.
+The `common.LifecycleMgr` contract and the exported `cmd.OutputFormat` value remain
+available for embedded hosts. No single-tenant OAuth manager is introduced.
+The `--include-root` flag controls root-property synchronization in addition to
+child objects. Checkpoint 2 retained Checkpoint 1's schema 20; the current
+Checkpoint 6 build uses schema 22 as described above.
+
+## Library execution integration (Checkpoint 3)
+
+Copy, sync, login/logout and resume operations execute through the `azcopy`
+library. Existing Mover command entry points adapt options and progress callbacks
+to that same implementation; they do not maintain a second transfer executor.
+Mover sync continues to use the `traverser` directory orchestrator when requested,
+including streaming merge-join and metadata-only comparisons.
+
+Library options can carry an explicit job ID and credential manager with separate
+source and destination credential names. `PreparedSync` supports callers that
+prepare and enumerate separately, and exposes an execution-state snapshot for
+legacy progress reporting. Checkpoint 3 retained job-plan schema 20; use the
+Checkpoint 3 binary for those plans after upgrading to this schema 22 build.
+
+Prepared enumeration releases its inode-store resources when `Enumerate` finishes
+safely. Call `PreparedSync.Close` if preparation is abandoned before enumeration;
+it refuses to close resources while enumeration or undrained work remains.
+
+Failure cleanup first stops enumeration and dispatch, then waits for an engine
+work-completion barrier. If that bounded wait times out, the API returns a drain
+error and retains job resources rather than closing resources still in use.
+
+## Hardlink preservation (Checkpoint 5)
+
+`--hardlinks=preserve` retains supported hardlink relationships during copy and
+sync. Preserve-mode sync uses the standard indexed comparison path only. It is
+explicitly rejected when the Mover directory orchestrator or streaming merge-join
+is selected; use the standard indexed path for preservation, or `follow`/`skip`
+to retain the existing Mover paths.
+
+**Preserve-mode sync can unlink and recreate existing destination paths to
+reconstruct hardlink relationships, even when `--delete-destination=false`.**
+AzCopy warns about this behavior. This exception applies only to
+`--hardlinks=preserve`; it does not change the behavior of `follow` or `skip`.
+Deletion of destination-only paths remains controlled by `--delete-destination`.
+Review destination data and hardlink relationships before selecting preserve mode.
+
+## Final dependency and infrastructure integration (Checkpoint 6)
+
+Checkpoint 6 updates the storage SDK dependencies and uses MinIO Go v7.2.1 while
+retaining Mover-specific dependencies, the shared library executor, named
+credentials and the hardlink restrictions described above. Builds continue to
+use Go 1.26.6.
+
+The CI reporting updates retain the Mover sliding-window suite and the
+self-hosted Windows scenario job. Container packaging follows the upstream
+Azure Linux/MCR repository layout. Release publication and package removal remain
+explicit opt-in operations; FIPS-labelled builds retain the Microsoft Go
+toolchain checks and are not a claim of FIPS certification.
+
+New preserve-mode scans require a fresh JobID when inode state already exists.
+Use `ResumeJob` to resume the saved job; starting another scan does not overwrite
+its state or reuse stale anchors. Dry runs use disposable inode state.
 
 ## How to contribute to AzCopy v10
 

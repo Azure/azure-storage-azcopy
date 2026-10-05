@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
@@ -49,14 +50,14 @@ func (u *pageBlobUploader) Prologue(ps common.PrologueState) (destinationModifie
 	if u.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			u.metadataToApply = u.metadataToApply.Clone()
+			u.metadataToApply = &common.SafeMetadata{Metadata: u.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				u.jptm.FailActiveSend("GetUNIXProperties", err)
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply, u.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 

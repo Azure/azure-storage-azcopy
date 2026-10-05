@@ -153,9 +153,6 @@ type IJobMgr interface {
 	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(args *AddJobPartArgs) IJobPartMgr
-
-	SetIncludeExclude(map[string]int, map[string]int)
-	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
 	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
@@ -176,8 +173,8 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
-	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
-	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
+	getInMemoryTransitJobState() InMemoryTransitJobState
+	SetInMemoryTransitJobState(state InMemoryTransitJobState)
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
@@ -201,6 +198,7 @@ type IJobMgr interface {
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
+	GetJobErrorHandler() common.JobErrorHandler
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
@@ -214,9 +212,13 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool, errorHandlers ...common.JobErrorHandler) IJobMgr {
 
 	config := GetChannelSizeConfig()
+	var jobErrorHandler common.JobErrorHandler = common.GetLifecycleMgr()
+	if len(errorHandlers) > 0 && errorHandlers[0] != nil {
+		jobErrorHandler = errorHandlers[0]
+	}
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -243,11 +245,11 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
-		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), common.LogPathFolder, "" /* logFileNameSuffix */)
+		jobLogger = common.NewJobLogger(jobID, level, common.LogPathFolder, "" /* logFileNameSuffix */)
 		jobLogger.OpenLog()
 	}
 
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
 		httpClient:           common.GetGlobalHTTPClient(jobLogger),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
@@ -257,6 +259,9 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		initMu:               &sync.Mutex{},
 		jobPartProgress:      jobPartProgressCh,
 		reportCancelCh:       make(chan struct{}, 1),
+		reportLoopDone:       make(chan struct{}),
+		xferDoneInput:        jstm.xferDone,
+		partCreatedInput:     jstm.partCreated,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -285,6 +290,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter: fileCountLimiter,
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
+		jobErrorHandler:  jobErrorHandler,
 		isDaemon:         daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
@@ -396,6 +402,12 @@ func (jm *jobMgr) logConcurrencyParameters() {
 
 	jm.logger.Log(level, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
+
+	if tr, ok := jm.httpClient.Transport.(*http.Transport); ok {
+		jm.logger.Log(level, fmt.Sprintf(
+			"Global HTTP client %p: MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d IdleConnTimeout=%s",
+			jm.httpClient, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns, tr.IdleConnTimeout))
+	}
 }
 
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
@@ -444,18 +456,19 @@ type jobMgr struct {
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 
 	// reportCancelCh to close the report thread.
-	reportCancelCh chan struct{}
+	reportCancelCh       chan struct{}
+	reportLoopDone       chan struct{}
+	drainTracker         jobWorkTracker
+	xferDoneInput        chan xferDoneMsg
+	xferDoneCloseOnce    sync.Once
+	partCreatedInput     chan JobPartCreatedMsg
+	partCreatedCloseOnce sync.Once
 
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
 	inMemoryTransitJobState InMemoryTransitJobState
-	// list of transfer mentioned to include only then while resuming the job
-	include map[string]int
-	// list of transfer mentioned to exclude while resuming the job
-	exclude map[string]int
-
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
 
@@ -474,6 +487,8 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
+	jobErrorHandlerMu   sync.RWMutex
+	jobErrorHandler     common.JobErrorHandler
 
 	// scheduler coordination: several scheduleJobPartsWorker goroutines run concurrently,
 	// so the one-time pool-sizer startup, the one-time pool-sizer shutdown signal, and the
@@ -483,6 +498,10 @@ type jobMgr struct {
 	schedulerCloseOnce sync.Once
 
 	isDaemon bool /* is it running as service */
+
+	// For Hardlinks After Files/Folders/Symlinks processing mode
+	hardlinkGate hardlinkPartGate
+	// allOtherPartsComplete bool
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -542,7 +561,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 	// The states, above, that run inside that pool (basically the H and B states) will sum to
 	// a value <= this value. But without knowing this value, its harder to be sure if they are at the limit
 	// or not, especially if we are dynamically tuning the pool size.
-	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", jm.CurrentMainPoolSize())
+	result[len(result)-1] = fmt.Sprintf(strings.ReplaceAll(format, "%c", "%s"), "GRs", jm.CurrentMainPoolSize())
 
 	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection, jm.PipelineNetworkStats())
 
@@ -606,6 +625,9 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 	jpm.cachedJobID = plan.JobID
 	jpm.cachedPartNum = plan.PartNum
 	jpm.cachedNumTransfers = plan.NumTransfers
+	jpm.cachedJobPartType = plan.JobPartType
+	jpm.cachedIsFinalPart = plan.IsFinalPart
+	jm.hardlinkGate.register(args.PartNum, plan.JobPartType, plan.IsFinalPart)
 
 	jm.jobPartMgrs.Set(args.PartNum, jpm)
 	jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
@@ -617,7 +639,7 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          newFolderCreationTrackerForJob(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -658,6 +680,9 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jpm.cachedJobID = plan.JobID
 	jpm.cachedPartNum = plan.PartNum
 	jpm.cachedNumTransfers = plan.NumTransfers
+	jpm.cachedJobPartType = plan.JobPartType
+	jpm.cachedIsFinalPart = plan.IsFinalPart
+	jm.hardlinkGate.register(order.PartNum, plan.JobPartType, plan.IsFinalPart)
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
 	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
@@ -668,7 +693,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          newFolderCreationTrackerForJob(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -733,18 +758,6 @@ func (jm *jobMgr) PipelineNetworkStats() *PipelineNetworkStats {
 	return jm.pipelineNetworkStats
 }
 
-// SetIncludeExclude sets the include / exclude list of transfers
-// supplied with resume command to include or exclude mentioned transfers
-func (jm *jobMgr) SetIncludeExclude(include, exclude map[string]int) {
-	jm.include = include
-	jm.exclude = exclude
-}
-
-// Returns the list of transfer mentioned to include / exclude
-func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
-	return jm.include, jm.exclude
-}
-
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.Reset(appCtx, "")
@@ -752,20 +765,27 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// reset it to false while resuming it
 	jm.ResetAllTransfersScheduled()
 
-	// In mover builds, use READ lock (not write lock) to iterate jobPartMgrs while queuing to partsChannel.
-	// A write lock here would deadlock when partsChannel fills up (capacity 1000):
-	//   - ResumeTransfers holds write lock, blocks on partsChannel send
-	//   - reportJobPartDoneHandler needs read lock via Get(0), blocks on write lock
-	//   - scheduleJobParts blocks on unbuffered jobPartProgress, waiting for reportJobPartDoneHandler
-	// Read lock avoids this because RWMutex allows concurrent readers.
-	// No writers exist at this point — all AddJobPart/AddJobOrder calls completed in ResurrectJob (step 1).
-	useReadLock := buildmode.IsMover
-	partCount := 0
-	jm.jobPartMgrs.Iterate(useReadLock, func(p common.PartNumber, jpm IJobPartMgr) {
-		jm.QueueJobParts(jpm)
-		partCount++
+	// Reset part statuses so checkAndProcessHardlinkParts sees the correct state.
+	// Without this, mixed parts retain completed status from the previous attempt,
+	// causing hardlink parts to be dispatched before mixed parts are re-scheduled.
+	jm.hardlinkGate.reset()
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
+		jpm.Plan().SetJobPartStatus(common.EJobStatus.InProgress())
+		jm.hardlinkGate.register(p, jpm.Plan().JobPartType, jpm.Plan().IsFinalPart)
 	})
-	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: all %d parts queued successfully", jm.jobID, partCount))
+
+	// Collect parts first, then queue outside the lock.
+	// QueueJobParts → checkAndProcessHardlinkParts → jobPartMgrs.Iterate(true, ...)
+	// would deadlock if called from within jobPartMgrs.Iterate(false, ...) because
+	// Go's RWMutex does not support reentrant read-locking while a write lock is held.
+	var parts []IJobPartMgr
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
+		parts = append(parts, jpm)
+	})
+	for _, jpm := range parts {
+		jm.QueueJobParts(jpm)
+	}
+	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: all %d parts queued successfully", jm.jobID, len(parts)))
 }
 
 // When a previously job is resumed, ResetFailedTransfersCount
@@ -820,10 +840,16 @@ func (jm *jobMgr) AddTotalNumFilesProcessed(numFiles int64) {
 
 // ReportJobPartDone is called to report that a job part completed or failed
 func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
-	jm.jobPartProgress <- progressInfo
+	jm.drainTracker.add(1)
+	select {
+	case jm.jobPartProgress <- progressInfo:
+	case <-jm.reportLoopDone:
+		jm.drainTracker.done(1)
+	}
 }
 
 func (jm *jobMgr) reportJobPartDoneHandler() {
+	defer close(jm.reportLoopDone)
 	var haveFinalPart bool
 	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(common.LogInfo)
@@ -848,11 +874,14 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		case partProgressInfo := <-jm.jobPartProgress:
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if !ok {
-				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+				jm.Panic(fmt.Errorf("failed to find Job %v, Part #0", jm.jobID))
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
-			partsDone := atomic.AddUint32(&jm.partsDone, 1)
+			partsDone := atomic.LoadUint32(&jm.partsDone)
+			if partProgressInfo.partNum != nil {
+				partsDone = atomic.AddUint32(&jm.partsDone, 1)
+			}
 			jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
 			jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
 			jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
@@ -876,6 +905,11 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				close(partProgressInfo.completionChan)
 			}
 
+			// Check if we can process queued hardlink parts after this part completes
+			if partProgressInfo.partNum != nil {
+				jm.dispatchHardlinkParts(jm.hardlinkGate.complete(*partProgressInfo.partNum))
+			}
+
 			// If the last part is still awaited or other parts all still not complete,
 			// JobPart 0 status is not changed (unless we are cancelling)
 			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
@@ -884,15 +918,13 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
-				// Inform StatusManager that all parts are done.
-				if jm.jstm.xferDone != nil {
-					close(jm.jstm.xferDone)
+				// Incomplete cancellation may publish a terminal status before work is
+				// drained. Keep the input open for remaining transfer completions; the
+				// explicit drain barrier closes it once all producers and work are done.
+				if haveFinalPart && allKnownPartsDone {
+					jm.closeXferDone()
+					jm.waitToDrainXferDone()
 				}
-
-				// Wait  for all XferDone messages to be processed by statusManager. Front end
-				// depends on JobStatus to determine if we've to quit job. Setting it here without
-				// draining XferDone will make it report incorrect statistics.
-				jm.waitToDrainXferDone()
 				partDescription := "all parts of entire Job"
 				if !haveFinalPart {
 					if allKnownPartsDone {
@@ -928,24 +960,24 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			if shouldLog {
 				jm.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 			}
+			jm.drainTracker.done(1)
 		}
 	}
 }
+
+func (jm *jobMgr) Context() context.Context { return jm.ctx }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
 	return jm.inMemoryTransitJobState
 }
 
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// And the state should no more be changed inside STE module.
 func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }
-
-func (jm *jobMgr) Context() context.Context { return jm.ctx }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
-	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately
+	jm.dispatchHardlinkParts(jm.hardlinkGate.cancel())
+	jm.ReportJobPartDone(jobPartProgressInfo{})
 }
 func (jm *jobMgr) ShouldLog(level common.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level common.LogLevel, msg string) { jm.logger.Log(level, msg) }
@@ -1085,6 +1117,14 @@ func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc
 // from where this JobPartMgr will be picked by a routine and
 // its transfers will be scheduled
 func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
+	if part, ok := jpm.(*jobPartMgr); ok {
+		part.drainTracker = &jm.drainTracker
+		jm.drainTracker.add(uint64(part.cachedNumTransfers) + 1)
+		if part.cachedJobPartType == common.EJobPartType.Hardlink() {
+			jm.dispatchHardlinkParts(jm.hardlinkGate.enqueue(jpm))
+			return
+		}
+	}
 	jm.coordinatorChannels.partsChannel <- jpm
 }
 
@@ -1399,6 +1439,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
+		jm.Log(common.LogInfo, fmt.Sprintf("Job status updated: %s", desiredJobStatus))
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			ternary.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
@@ -1417,6 +1458,21 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 
 func (jm *jobMgr) IsDaemon() bool {
 	return jm.isDaemon
+}
+
+func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
+	jm.jobErrorHandlerMu.RLock()
+	defer jm.jobErrorHandlerMu.RUnlock()
+	return jm.jobErrorHandler
+}
+
+func (jm *jobMgr) SetJobErrorHandler(handler common.JobErrorHandler) {
+	if handler == nil {
+		return
+	}
+	jm.jobErrorHandlerMu.Lock()
+	jm.jobErrorHandler = handler
+	jm.jobErrorHandlerMu.Unlock()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

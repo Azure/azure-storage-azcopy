@@ -42,5 +42,7 @@ func (s *AutoDetectBlobTypeTestSuite) Scenario_AutoInferDetectBlobTypeVHD(svm *S
 				Type: ternary.Iff(srcObj.Location() == common.ELocation.Blob(), pointerTo(blob.BlobTypeBlockBlob), pointerTo(blob.BlobTypePageBlob)),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

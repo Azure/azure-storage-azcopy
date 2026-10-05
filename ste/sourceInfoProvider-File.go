@@ -25,6 +25,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"net/url"
 	"sync"
 	"time"
 
@@ -201,7 +202,7 @@ type fileSourceInfoProvider struct {
 	cachedProperties    shareFilePropertyProvider // use interface because may be file or directory properties
 	sourceURL           string
 	srcShareClient      *share.Client
-	scanPacer           common.IOPSPacer		// For Azure Files2Files DR, the Pacer is applied on source share not on destination
+	scanPacer           common.IOPSPacer // For Azure Files2Files DR, the Pacer is applied on source share not on destination
 	defaultRemoteSourceInfoProvider
 }
 
@@ -264,7 +265,7 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 		return nil, err
 	}
 	switch p.EntityType() {
-	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink(), common.EEntityType.FileProperties():
 		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
@@ -328,7 +329,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		p.cachedPermissionKey = properties.FilePermissionKey() // We cache this as getting the SDDL is a separate operation.
 
 		switch p.EntityType() {
-		case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
+		case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink(), common.EEntityType.FileProperties():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
 					ContentType:        properties.ContentType(),
@@ -369,7 +370,7 @@ func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 
 func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	switch p.EntityType() {
-	case common.EEntityType.File():
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
 		var rangeGetContentMD5 *bool
 		if count <= common.MaxRangeGetSize {
 			rangeGetContentMD5 = to.Ptr(true)
@@ -421,4 +422,28 @@ func (p *fileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder,
 
 func (p *fileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *string, err error) {
 	return nil, nil, nil, nil
+}
+
+func (p *fileSourceInfoProvider) ReadLink() (string, error) {
+	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get file service client: %w", err)
+	}
+
+	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
+	fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
+	symlink, err := fileClient.GetSymbolicLink(p.ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get symlink info: %w", err)
+	}
+
+	raw := string(*symlink.LinkText)
+	linkText, err := url.PathUnescape(raw)
+	if err != nil {
+		// Fall back to the raw link text when it isn't valid percent-encoding
+		// (e.g. a literal '%' in the symlink target).
+		linkText = raw
+	}
+
+	return linkText, nil
 }

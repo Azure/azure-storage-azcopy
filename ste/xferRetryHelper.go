@@ -23,25 +23,33 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Defines the retry policy rules
 var RetryStatusCodes RetryCodes
 
-var platformRetryPolicy func(response *http.Response, err error) bool
-
 type RetryFunc = func(*http.Response, error) bool
 
+// GetShouldRetry returns a RetryFunc that only returns false for errors we are certain should never be retried.
 func GetShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
 
 	return func(resp *http.Response, err error) bool {
+		// 1. If we received an error, retry by default.
+		// This includes transient network failures (e.g. connection resets),
+		// even if the underlying errno is wrapped or lost.
+		if err != nil {
+			return true
+		}
+
+		// 2. No error: evaluate response-based retry notification.
 		if resp != nil {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
@@ -81,12 +89,9 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 				}
 			}
 		}
-		// fall back to our platform retry policy
-		if platformRetryPolicy != nil {
-			return platformRetryPolicy(resp, err)
-		} else {
-			return false // If we have none, don't retry.
-		}
+
+		// 3. No error and no retryable status code → do not retry
+		return false
 	}
 }
 

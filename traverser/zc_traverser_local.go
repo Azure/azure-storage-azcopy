@@ -1,0 +1,1509 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package traverser
+
+import (
+	"context"
+	"crypto/md5"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"hash"
+	"io"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+)
+
+const MAX_SYMLINKS_TO_FOLLOW = 40
+
+type localTraverser struct {
+	fullPath        string
+	recursive       bool
+	stripTopDir     bool
+	symlinkHandling common.SymlinkHandlingType
+	appCtx          context.Context
+	// a generic function to notify that a new stored object has been enumerated
+	incrementEnumerationCounter        enumerationCounterFunc
+	incrementEnumerationFailureCounter func(common.EntityType)
+	errorChannel                       chan<- TraverserErrorItemInfo
+
+	targetHashType common.SyncHashType
+	hashAdapter    common.HashDataAdapter
+	// receives fullPath entries and manages hashing of files lacking metadata.
+	hashTargetChannel chan string
+	hardlinkHandling  common.HardlinkHandlingType
+	fromTo            common.FromTo
+	basePath          string
+	inodeNamespace    string
+	inodeStore        *common.InodeStore
+
+	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
+	// in a non-recursive traversal process. If true, prefixes will be enqueued as well even if location
+	// is not folder aware.
+	includeDirectoryOrPrefix bool
+
+	// getExtendedProperties bool
+	// if true, we will try to get extended properties of the file using Stat
+	getExtendedProperties bool
+}
+
+func (t *localTraverser) IsDirectory(bool) (bool, error) {
+	if strings.HasSuffix(t.fullPath, "/") {
+		return true, nil
+	}
+
+	props, err := common.OSStat(t.fullPath)
+
+	if err != nil {
+		return false, err
+	}
+
+	return props.IsDir(), nil
+}
+
+func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
+	if t.stripTopDir {
+		return nil, false, nil // StripTopDir can NEVER be a single file. If a user wants to target a single file, they must escape the *.
+	}
+
+	fullPath := t.fullPath
+
+	if buildmode.IsMover && t.symlinkHandling == common.ESymlinkHandlingType.Follow() {
+		// If we're following symlinks, we need to resolve the path first.
+		resolvedPath, err := filepath.EvalSymlinks(t.fullPath)
+
+		if err == nil && resolvedPath != t.fullPath {
+			fullPath = resolvedPath
+		}
+	}
+
+	// Calling os.Lstat here instead of os.Stat because we want to handle symlinks correctly.
+	// If the file is a symlink, we want to return the symlink's properties, not the target's.
+	// In case of os.Stat, it would return the target's properties, which is not what we want.
+	fileInfo, err := os.Lstat(fullPath)
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	if fileInfo.IsDir() {
+		return nil, false, nil
+	}
+
+	return fileInfo, true, nil
+}
+
+func UnfurlSymlinks(symlinkPath string) (result string, err error) {
+	var count uint32
+	unfurlingPlan := []string{symlinkPath}
+
+	// We need to do some special UNC path handling for windows.
+	if runtime.GOOS != "windows" {
+		return filepath.EvalSymlinks(symlinkPath)
+	}
+
+	for len(unfurlingPlan) > 0 {
+		item := unfurlingPlan[0]
+
+		fi, err := os.Lstat(item)
+
+		if err != nil {
+			return item, err
+		}
+
+		if fi.Mode()&os.ModeSymlink != 0 {
+			result, err := os.Readlink(item)
+
+			if err != nil {
+				return result, err
+			}
+
+			// Previously, we'd try to detect if the read link was a relative path by appending and starting the item
+			// However, it seems to be a fairly unlikely and hard to reproduce scenario upon investigation (Couldn't manage to reproduce the scenario)
+			// So it was dropped. However, on the off chance, we'll still do it if syntactically it makes sense.
+			if result == "" || result == "." { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
+				result = filepath.Dir(item)
+			} else if !os.IsPathSeparator(result[0]) { // We can assume that a relative path won't start with a separator
+				possiblyResult := filepath.Join(filepath.Dir(item), result)
+				if _, err := os.Lstat(possiblyResult); err == nil {
+					result = possiblyResult
+				}
+			}
+
+			result = common.ToExtendedPath(result)
+
+			/*
+			 * Either we can store all the symlink seen till now for this path or we count how many iterations to find out cyclic loop.
+			 * Choose the count method and restrict the number of links to 40. Which linux kernel adhere.
+			 */
+			if count >= MAX_SYMLINKS_TO_FOLLOW {
+				return "", errors.New("failed to unfurl symlink: too many links")
+			}
+
+			unfurlingPlan = append(unfurlingPlan, result)
+		} else {
+			return item, nil
+		}
+
+		unfurlingPlan = unfurlingPlan[1:]
+		count++
+	}
+
+	return "", errors.New("failed to unfurl symlink: exited loop early")
+}
+
+type seenPathsRecorder interface {
+	Record(path string)
+	HasSeen(path string) bool
+}
+
+type nullSeenPathsRecorder struct{}
+
+func (*nullSeenPathsRecorder) Record(_ string) {
+	// no-op
+}
+func (*nullSeenPathsRecorder) HasSeen(_ string) bool {
+	return false // in the null case, there are no symlinks in play, so no cycles, so we have never seen the path before
+}
+
+type realSeenPathsRecorder struct {
+	m map[string]struct{}
+}
+
+func (r *realSeenPathsRecorder) Record(path string) {
+	r.m[path] = struct{}{}
+}
+func (r *realSeenPathsRecorder) HasSeen(path string) bool {
+	_, ok := r.m[path]
+	return ok
+}
+
+type symlinkTargetFileInfo struct {
+	os.FileInfo
+	name string
+}
+
+// ErrorFileInfo holds information about files and folders that failed enumeration.
+type ErrorFileInfo struct {
+	FilePath string
+	FileInfo os.FileInfo
+	ErrorMsg error
+}
+
+var _ TraverserErrorItemInfo = (*ErrorFileInfo)(nil)
+
+// START - Implementing methods defined in TraverserErrorItemInfo
+
+func (e ErrorFileInfo) FullPath() string {
+	return e.FilePath
+}
+
+func (e ErrorFileInfo) Name() string {
+	if e.FileInfo == nil {
+		return ""
+	}
+	return e.FileInfo.Name()
+}
+
+func (e ErrorFileInfo) Size() int64 {
+	if e.FileInfo == nil {
+		return 0
+	}
+	return e.FileInfo.Size()
+}
+
+func (e ErrorFileInfo) LastModifiedTime() time.Time {
+	if e.FileInfo == nil {
+		return time.Time{}
+	}
+	return e.FileInfo.ModTime()
+}
+
+func (e ErrorFileInfo) IsDir() bool {
+	if e.FileInfo == nil {
+		return false
+	}
+	return e.FileInfo.IsDir()
+}
+
+func (e ErrorFileInfo) ErrorMessage() error {
+	return e.ErrorMsg
+}
+
+func (e ErrorFileInfo) Location() common.Location {
+	return common.ELocation.Local()
+}
+
+// END - Implementing methods defined in TraverserErrorItemInfo
+
+func (s symlinkTargetFileInfo) Name() string {
+	return s.name // override the name
+}
+
+func writeToErrorChannel(errorChannel chan<- TraverserErrorItemInfo, err ErrorFileInfo) {
+	if errorChannel != nil {
+		select {
+		case errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
+	} else {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Error channel is nil, cannot send error: %v", err.ErrorMessage()))
+	}
+}
+
+type WalkWithSymlinksOptions struct {
+	FromTo                             common.FromTo
+	SymlinkHandling                    common.SymlinkHandlingType
+	HardlinkHandling                   common.HardlinkHandlingType
+	ErrorChannel                       chan<- TraverserErrorItemInfo
+	IncrementEnumerationCounter        enumerationCounterFunc
+	IncrementEnumerationFailureCounter func(common.EntityType)
+
+	// If false, we will use the hasSeen map to check for symlink loops.
+	// This option consumes more RAM and may skip following a directory symlink
+	// that is pointed to by multiple symlinks.
+	//
+	// If true, we will check ancestors for symlink loops. This consumes
+	// less RAM and higher computation. It will also follow a directory symlink
+	// that is pointed to by multiple symlinks. There will be duplication of data at
+	// destination.
+	// Both approaches has their pros and cons. True scenario aligns with Mover scenario.
+	CheckAncestorsForLoops bool
+
+	Recursive bool
+}
+
+// WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
+// Separate this from the traverser for two purposes:
+// 1) Cleaner code
+// 2) Easier to test individually than to test the entire traverser.
+func WalkWithSymlinks(
+	appCtx context.Context,
+	fullPath string,
+	walkFunc filepath.WalkFunc,
+	options WalkWithSymlinksOptions) (err error) {
+
+	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
+	// So, what is the plan of attack?
+	// Because we can't create endless channels, we create an array instead and use it as a queue.
+	// Furthermore, we use a map as a hashset to avoid re-walking any paths we already know.
+	type walkItem struct {
+		fullPath     string // We need the full, symlink-resolved path to walk against.
+		relativeBase string // We also need the relative base path we found the symlink at.
+	}
+
+	fullPath, err = filepath.Abs(fullPath)
+	if err != nil {
+		return err
+	}
+
+	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
+
+	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
+	// When following symlinks, our current implementation tracks folders and files.  Which may consume GB's of RAM when there are 10s of millions of files.
+	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{}               // uses no RAM
+	if !options.CheckAncestorsForLoops && options.SymlinkHandling.Follow() { // only if we're following we need to worry about this
+		seenPaths = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
+	}
+
+	for len(walkQueue) > 0 {
+		queueItem := walkQueue[0]
+		walkQueue = walkQueue[1:]
+		// walk contents of this queueItem in parallel
+		// (for simplicity of coding, we don't parallelize across multiple queueItems)
+		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+			if fileError != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
+				if options.IncrementEnumerationFailureCounter != nil {
+					options.IncrementEnumerationFailureCounter(common.EEntityType.File())
+				}
+				return nil
+			}
+			computedRelativePath := strings.TrimPrefix(CleanLocalPath(filePath), CleanLocalPath(queueItem.fullPath))
+			computedRelativePath = CleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
+			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+			if computedRelativePath == "." {
+				computedRelativePath = ""
+			}
+
+			if options.CheckAncestorsForLoops && queueItem.relativeBase != "" &&
+				queueItem.relativeBase == computedRelativePath {
+				return nil // skip it
+			}
+
+			if fileInfo == nil {
+				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
+				WarnStdoutAndScanningLog(err.Error())
+				writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: nil, ErrorMsg: err})
+				if options.IncrementEnumerationFailureCounter != nil {
+					// Assuming it's a file, since we don't know what else it could be
+					options.IncrementEnumerationFailureCounter(common.EEntityType.File())
+				}
+				return nil
+			}
+			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				if options.SymlinkHandling.Preserve() {
+					// Handle it like it's not a symlink
+					result, err := filepath.Abs(filePath)
+
+					if err != nil {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						if options.IncrementEnumerationCounter != nil {
+							options.IncrementEnumerationCounter(common.EEntityType.Symlink(), options.SymlinkHandling, options.HardlinkHandling)
+						}
+						return nil
+					}
+
+					err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+					skipped, err := getProcessingError(err)
+
+					if err != nil {
+						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						if options.IncrementEnumerationCounter != nil {
+							options.IncrementEnumerationCounter(common.EEntityType.Symlink(), options.SymlinkHandling, options.HardlinkHandling)
+						}
+					}
+
+					// If the file was skipped, don't record it.
+					if !skipped {
+						seenPaths.Record(common.ToExtendedPath(result))
+					}
+
+					return err
+				}
+
+				if options.SymlinkHandling.None() {
+					if options.FromTo.IsNFS() {
+						HandleSymlinkForNFS(fileInfo.Name(), options.SymlinkHandling, options.IncrementEnumerationCounter)
+
+						// Using errorChannel to log skipped files
+						writeToErrorChannel(options.ErrorChannel,
+							ErrorFileInfo{
+								FilePath: filePath,
+								FileInfo: fileInfo,
+								ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
+							})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping symlink - '%s' for NFS", filePath))
+					}
+					return nil // skip it
+				}
+
+				/*
+				 * There is one case where symlink can point to outside of sharepoint(symlink is absolute path). In that case
+				 * we need to throw error. Its very unlikely same file or folder present on the agent side.
+				 * In that case it anywaythrow the error.
+				 *
+				 * TODO: Need to handle this case.
+				 */
+				result, err := UnfurlSymlinks(filePath)
+
+				if err != nil {
+					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					if options.IncrementEnumerationFailureCounter != nil {
+						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
+					}
+					return nil
+				}
+
+				result, err = filepath.Abs(result)
+				if err != nil {
+					err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					if options.IncrementEnumerationFailureCounter != nil {
+						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
+					}
+					return nil
+				}
+
+				slPath, err := filepath.Abs(filePath)
+				if err != nil {
+					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					if options.IncrementEnumerationFailureCounter != nil {
+						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
+					}
+					return nil
+				}
+
+				rStat, err := os.Stat(result)
+				if err != nil {
+					err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					if options.IncrementEnumerationFailureCounter != nil {
+						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
+					}
+					return nil
+				}
+
+				if rStat.IsDir() {
+					if !options.CheckAncestorsForLoops {
+						// Use HasSeen map to check for symlink loops
+						if !seenPaths.HasSeen(result) {
+							err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+							skipped, err := getProcessingError(err)
+
+							if err != nil {
+								writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
+								if options.IncrementEnumerationFailureCounter != nil {
+									options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
+								}
+							}
+
+							if !skipped { // Don't go any deeper (or record it) if we skipped it.
+								seenPaths.Record(common.ToExtendedPath(result))
+								seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+								walkQueue = append(walkQueue, walkItem{
+									fullPath:     result,
+									relativeBase: computedRelativePath,
+								})
+							}
+							// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
+							return err
+						} else {
+							WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+						}
+
+					} else {
+						// Checking ancestors for symlink loops, we need to check if the symlink causes a directory loop.
+
+						finalSlPath, err := filepath.Abs(common.GenerateFullPath(fullPath, computedRelativePath))
+						if err != nil {
+							err = fmt.Errorf("Failed to get absolute path of %s: %s", common.GenerateFullPath(fullPath, computedRelativePath), err.Error())
+							writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+							if options.IncrementEnumerationFailureCounter != nil {
+								options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
+							}
+							return err
+						}
+
+						/*
+						 * Symlink pointing to a directory has the potential of causing filesystem loops by pointing
+						 * to one of its ancestor directories.
+						 * Skip the symlink if it causes one, else queue it for scanning.
+						 */
+						if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
+							err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
+							WarnStdoutAndScanningLog(err.Error())
+							writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+							if options.IncrementEnumerationFailureCounter != nil {
+								options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
+							}
+							return nil
+						} else if ok {
+							err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
+							WarnStdoutAndScanningLog(err.Error())
+							writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
+							if options.IncrementEnumerationFailureCounter != nil {
+								options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
+							}
+							return nil
+						} else {
+							err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+							skipped, err := getProcessingError(err)
+
+							if err != nil {
+								writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
+								if options.IncrementEnumerationFailureCounter != nil {
+									options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
+								}
+							}
+
+							if !skipped { // Don't go any deeper (or record it) if we skipped it.
+								walkQueue = append(walkQueue, walkItem{
+									fullPath:     result,
+									relativeBase: computedRelativePath,
+								})
+							}
+							return err
+						}
+					}
+				} else {
+					// It's a symlink to a file and we handle cyclic symlinks.
+					// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+					// but if there are two symlinks to the same directory we will process it only once. Because only directories are
+					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+					_, err = getProcessingError(err)
+					if err != nil {
+						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						if options.IncrementEnumerationFailureCounter != nil {
+							// symlink is already resolved to a file
+							options.IncrementEnumerationFailureCounter(common.EEntityType.File())
+						}
+					}
+					return err
+				}
+				return nil
+			} else {
+				// Not a symlink
+				if options.FromTo.IsNFS() {
+					LogHardLinkIfDefaultPolicy(fileInfo, options.HardlinkHandling)
+					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
+						// We don't want to process other non-regular files here.
+						if options.IncrementEnumerationCounter != nil {
+							options.IncrementEnumerationCounter(common.EEntityType.Other(), options.SymlinkHandling, options.HardlinkHandling)
+						}
+
+						// Using errorChannel to log skipped files
+						writeToErrorChannel(options.ErrorChannel,
+							ErrorFileInfo{
+								FilePath: filePath,
+								FileInfo: fileInfo,
+								ErrorMsg: GetUnsupportedFileErrorMessage(common.EEntityType.Other(), nil),
+							})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping special file - '%s' for NFS", filePath))
+						logSpecialFileWarning(fileInfo.Name())
+						return nil
+					}
+				}
+
+				result, err := filepath.Abs(filePath)
+
+				if err != nil {
+					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					if options.IncrementEnumerationFailureCounter != nil {
+						if fileInfo.IsDir() {
+							options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
+						} else {
+							options.IncrementEnumerationFailureCounter(common.EEntityType.File())
+						}
+					}
+					return nil
+				}
+
+				if !seenPaths.HasSeen(result) || options.CheckAncestorsForLoops {
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+					skipped, err := getProcessingError(err)
+					if err != nil {
+						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						if options.IncrementEnumerationFailureCounter != nil {
+							if fileInfo.IsDir() {
+								options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
+							} else {
+								options.IncrementEnumerationFailureCounter(common.EEntityType.File())
+							}
+						}
+					}
+
+					// If the file was skipped, don't record it.
+					if !skipped {
+						seenPaths.Record(common.ToExtendedPath(result))
+					}
+
+					return err
+				} else {
+					if fileInfo.IsDir() {
+						// We can't output a warning here (and versions 10.3.x never did)
+						// because we'll hit this for the directory that is the direct (root) target of any symlink, so any warning here would be a red herring.
+						// In theory there might be cases when a warning here would be correct - but they are rare and too hard to identify in our code
+					} else {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
+					}
+					return nil
+				}
+			}
+		})
+	}
+
+	return
+}
+
+// checkSymlinkCausesDirectoryLoop checks if the symlink at absSymlinkPath points to a directory that is an ancestor of the symlink itself.
+func checkSymlinkCausesDirectoryLoop(absSymlinkPath string) (bool, error) {
+	if runtime.GOOS != "linux" {
+		// It should work for all Unix OS'es, but since we have tested only on Linux let's enforce that.
+		panic("checkSymlinkCausesDirectoryLoop not supported for this OS")
+	}
+
+	if !filepath.IsAbs(absSymlinkPath) {
+		panic(fmt.Sprintf("checkSymlinkCausesDirectoryLoop failed, symlink path not an absolute path(%s)", absSymlinkPath))
+	}
+
+	// Stat() the symlink target directory to find its inode.
+	tgtStat, err := os.Stat(absSymlinkPath)
+	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("os.Stat(%s) failed: %v\n", absSymlinkPath, err))
+		return false, err
+	}
+
+	if tgtStat.Mode()&os.ModeDir == 0 {
+		panic("checkSymlinkCausesDirectoryLoop must only be called for a symlink pointing to a directory")
+	}
+
+	tgtPath, err := filepath.EvalSymlinks(absSymlinkPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to evaluate symlinks for %s: %w", absSymlinkPath, err)
+	}
+
+	tgtPath, err = filepath.Abs(tgtPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to get absolute path for %s: %w", tgtPath, err)
+	}
+
+	tmpPath := absSymlinkPath
+	for {
+		tmpPath = filepath.Dir(tmpPath)
+
+		if tmpPath == tgtPath {
+			WarnStdoutAndScanningLog(fmt.Sprintf("Symlink (%s) points to its ancestor (%s), matching target path is %s\n", absSymlinkPath, tmpPath, tgtPath))
+			return true, nil
+		}
+
+		if tmpPath == "/" {
+			break
+		}
+	}
+
+	return false, nil
+}
+
+func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, error) {
+	if t.targetHashType == common.ESyncHashType.None() {
+		return nil, nil // no-op
+	}
+
+	fullPath := filepath.Join(t.fullPath, relPath)
+	fi, err := os.Stat(fullPath) // grab the stat so we can tell if the hash is valid
+	if err != nil {
+		return nil, err
+	}
+
+	if fi.IsDir() {
+		return nil, nil // there is no hash data on directories
+	}
+
+	// If a hash is considered unusable by some metric, attempt to set it up for generation, if the user allows it.
+	handleHashingError := func(err error) (*common.SyncHashData, error) {
+		switch err {
+		case ErrorNoHashPresent,
+			ErrorHashNoLongerValid,
+			ErrorHashNotCompatible:
+			break
+		default:
+			return nil, err
+		}
+
+		// defer hashing to the goroutine
+		t.hashTargetChannel <- relPath
+		return nil, ErrorHashAsyncCalculation
+	}
+
+	// attempt to grab existing hash data, and ensure it's validity.
+	data, err := t.hashAdapter.GetHashData(relPath)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			common.LogHashStorageFailure()
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
+			}
+		}
+
+		// Treat failure to read/parse/etc like a missing hash.
+		return handleHashingError(ErrorNoHashPresent)
+	} else {
+		if data.Mode != t.targetHashType {
+			return handleHashingError(ErrorHashNotCompatible)
+		}
+
+		if !data.LMT.Equal(fi.ModTime()) {
+			return handleHashingError(ErrorHashNoLongerValid)
+		}
+
+		return data, nil
+	}
+}
+
+// prepareHashingThreads creates background threads to perform hashing on local files that are missing hashes.
+// It returns a finalizer and a wrapped processor-- Use the wrapped processor in place of the original processor (even if synchashtype is none)
+// and wrap the error getting returned in the finalizer function to kill the background threads.
+func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (finalizer func(existingErr error) error, hashingProcessor func(obj StoredObject) error) {
+	if t.targetHashType == common.ESyncHashType.None() { // if no hashing is needed, do nothing.
+		return func(existingErr error) error {
+			return existingErr // nothing to overwrite with, no-op
+		}, processor
+	}
+
+	// set up for threaded hashing
+	t.hashTargetChannel = make(chan string, 1_000) // "reasonable" backlog
+	// Use half of the available CPU cores for hashing to prevent throttling the STE too hard if hashing is still occurring when the first job part gets sent out
+	hashingThreadCount := runtime.NumCPU() / 2
+	hashError := make(chan error, hashingThreadCount)
+	wg := &sync.WaitGroup{}
+	immediateStopHashing := int32(0)
+
+	// create return wrapper to handle hashing errors
+	finalizer = func(existingErr error) error {
+		if existingErr != nil {
+			close(t.hashTargetChannel)                  // stop sending hashes
+			atomic.StoreInt32(&immediateStopHashing, 1) // force the end of hashing
+			wg.Wait()                                   // Await the finalization of all hashing
+
+			return existingErr // discard all hashing errors
+		} else {
+			close(t.hashTargetChannel) // stop sending hashes
+
+			wg.Wait()                    // Await the finalization of all hashing
+			close(hashError)             // close out the error channel
+			for err := range hashError { // inspect all hashing errors
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}
+	}
+
+	// wrap the processor, preventing a data race
+	commitMutex := &sync.Mutex{}
+	mutexProcessor := func(proc ObjectProcessor) ObjectProcessor {
+		return func(object StoredObject) error {
+			commitMutex.Lock() // prevent committing two objects at once to prevent a data race
+			defer commitMutex.Unlock()
+			err := proc(object)
+
+			return err
+		}
+	}
+	processor = mutexProcessor(processor)
+
+	// spin up hashing threads
+	for i := 0; i < hashingThreadCount; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done() // mark the hashing thread as completed
+
+			for relPath := range t.hashTargetChannel {
+				if atomic.LoadInt32(&immediateStopHashing) == 1 { // should we stop hashing?
+					return
+				}
+
+				fullPath := filepath.Join(t.fullPath, relPath)
+				fi, err := os.Stat(fullPath) // query LMT & if it's a directory
+				if err != nil {
+					err = fmt.Errorf("failed to get properties of file result %s: %w", relPath, err)
+					hashError <- err
+					return
+				}
+
+				if fi.IsDir() { // this should never happen
+					panic(relPath)
+				}
+
+				f, err := os.OpenFile(fullPath, os.O_RDONLY, 0644) // perm is not used here since it's RO
+				if err != nil {
+					err = fmt.Errorf("failed to open file for reading result %s: %w", relPath, err)
+					hashError <- err
+					return
+				}
+
+				var hasher hash.Hash // set up hasher
+				switch t.targetHashType {
+				case common.ESyncHashType.MD5():
+					hasher = md5.New()
+				}
+
+				// hash.Hash provides a writer type, allowing us to do a (small, 32MB to be precise) buffered write into the hasher and avoid memory concerns
+				_, err = io.Copy(hasher, f)
+				if err != nil {
+					err = fmt.Errorf("failed to read file into hasher result %s: %w", relPath, err)
+					hashError <- err
+					return
+				}
+
+				sum := hasher.Sum([]byte{})
+
+				hashData := common.SyncHashData{
+					Mode: t.targetHashType,
+					Data: base64.StdEncoding.EncodeToString(sum),
+					LMT:  fi.ModTime(),
+				}
+
+				// failing to store hash data doesn't mean we can't transfer (e.g. RO directory)
+				err = t.hashAdapter.SetHashData(relPath, &hashData)
+				if err != nil {
+					common.LogHashStorageFailure()
+					if common.AzcopyScanningLogger != nil {
+						common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
+					}
+				}
+
+				err = ProcessIfPassedFilters(filters,
+					NewStoredObject(
+						func(storedObject *StoredObject) {
+							// apply the hash data
+							// storedObject.hashData = hashData
+							switch hashData.Mode {
+							case common.ESyncHashType.MD5():
+								storedObject.Md5 = sum
+							default: // no-op
+							}
+
+							if preprocessor != nil {
+								// apply the original preprocessor
+								preprocessor(storedObject)
+							}
+						},
+						fi.Name(),
+						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING),
+
+						common.EEntityType.File(),
+						fi.ModTime(),
+						fi.Size(),
+						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						NoBlobProps,
+						NoMetadata,
+						"", // Local has no such thing as containers
+						nil,
+					),
+					processor, // the original processor is wrapped in the mutex processor.
+				)
+				_, err = getProcessingError(err)
+				if err != nil {
+					hashError <- err
+					return
+				}
+			}
+		}()
+	}
+
+	// wrap the processor, try to grab hashes, or defer processing to the goroutines
+	hashingProcessor = func(storedObject StoredObject) error {
+		if storedObject.EntityType != common.EEntityType.File() {
+			// the original processor is wrapped in the mutex processor.
+			return processor(storedObject) // no process folders
+		}
+
+		if strings.HasSuffix(path.Base(storedObject.RelativePath), common.AzCopyHashDataStream) {
+			return nil // do not process hash data files.
+		}
+
+		hashData, err := t.GetHashData(storedObject.RelativePath)
+
+		if err != nil {
+			switch err {
+			case ErrorNoHashPresent, ErrorHashNoLongerValid, ErrorHashNotCompatible:
+				// the original processor is wrapped in the mutex processor.
+				return processor(storedObject) // There is no hash data, so this file will be overwritten (in theory).
+			case ErrorHashAsyncCalculation:
+				return nil // File will be processed later
+			default:
+				return err // Cannot get or create hash data for some reason
+			}
+		}
+
+		// storedObject.hashData = hashData
+		switch hashData.Mode {
+		case common.ESyncHashType.MD5():
+			md5data, _ := base64.StdEncoding.DecodeString(hashData.Data) // If decode fails, treat it like no hash is present.
+			storedObject.Md5 = md5data
+		default: // do nothing, no hash is present.
+		}
+
+		// delay the mutex until after potentially long-running operations
+		// the original processor is wrapped in the mutex processor.
+		return processor(storedObject)
+	}
+
+	return finalizer, hashingProcessor
+}
+
+var (
+	ErrorLoneSymlinkSkipped = errors.New("symlink handling was not specified and defaulted to skip, but the sole file target is a symlink")
+)
+
+func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
+	if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && t.inodeStore == nil {
+		return fmt.Errorf("hardlink preservation requires an inode store")
+	}
+	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
+	// it fails here if file does not exist
+	if err != nil {
+		common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+
+		writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+			FilePath: t.fullPath,
+			FileInfo: nil,
+			ErrorMsg: err,
+		})
+
+		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
+	}
+	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
+	processObject := hardlinkAwareProcessor(t.inodeStore, filters, hashingProcessor,
+		t.incrementEnumerationCounter, t.symlinkHandling, t.hardlinkHandling)
+
+	// if the path is a single file, then pass it through the filters and send to processor
+	if isSingleFile {
+		var NfsHardlinkManager NFSMetadataContext
+		if t.fromTo.IsNFS() {
+			NfsHardlinkManager.FileID = getInodeString(singleFileInfo)
+		}
+		entityType := common.EEntityType.File()
+		if t.fromTo.IsNFS() {
+			if IsSymbolicLink(singleFileInfo) {
+				entityType = common.EEntityType.Symlink()
+				if skip := HandleSymlinkForNFS(singleFileInfo.Name(),
+					t.symlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
+				if t.symlinkHandling.Preserve() && t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && IsHardlink(singleFileInfo) {
+					NfsHardlinkManager, err = t.hardlinkMetadata(t.fullPath, singleFileInfo)
+					if err != nil {
+						return err
+					}
+				}
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
+
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					if t.inodeStore == nil {
+						return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+					}
+
+					NfsHardlinkManager, err = t.hardlinkMetadata(t.fullPath, singleFileInfo)
+					if err != nil {
+						return err
+					}
+				}
+			} else if IsRegularFile(singleFileInfo) {
+				entityType = common.EEntityType.File()
+			} else {
+				entityType = common.EEntityType.Other()
+				logSpecialFileWarning(singleFileInfo.Name())
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
+				}
+				return nil
+			}
+		} else {
+			if IsSymbolicLink(singleFileInfo) {
+				if t.symlinkHandling == common.ESymlinkHandlingType.Follow() {
+					entityType = common.EEntityType.File()
+					singleFileInfo, err = os.Stat(t.fullPath) // follow the symlink intentionally
+
+					if err != nil {
+						return fmt.Errorf("failed to follow symlink: %w", err)
+					}
+				} else if t.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
+					entityType = common.EEntityType.Symlink()
+				} else if t.symlinkHandling == common.ESymlinkHandlingType.Skip() {
+					return ErrorLoneSymlinkSkipped
+				}
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
+			} else if IsRegularFile(singleFileInfo) {
+				entityType = common.EEntityType.File()
+			} else {
+				entityType = common.EEntityType.Other()
+			}
+		}
+
+		err := processObject(
+			NewStoredObject(
+				preprocessor,
+				singleFileInfo.Name(),
+				"",
+				entityType,
+				singleFileInfo.ModTime(),
+				singleFileInfo.Size(),
+				NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+				NoBlobProps,
+				NoMetadata,
+				"", // Local has no such thing as containers
+				&NfsHardlinkManager,
+			),
+		)
+		_, err = getProcessingError(err)
+
+		return finalizer(err)
+	} else {
+		processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
+			if fileError != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
+				return nil
+			}
+
+			var entityType common.EntityType
+			if fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink {
+				entityType = common.EEntityType.Symlink()
+			} else if fileInfo.IsDir() {
+				newFileInfo, err := WrapFolder(filePath, fileInfo)
+				if err != nil {
+					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err.Error()))
+				} else {
+					// fileInfo becomes nil in case we fail to wrap folder.
+					fileInfo = newFileInfo
+				}
+
+				entityType = common.EEntityType.Folder()
+			} else {
+				entityType = common.EEntityType.File()
+			}
+
+			var nfsCtx NFSMetadataContext
+			if t.fromTo.IsNFS() && !fileInfo.IsDir() {
+				nfsCtx.FileID = getInodeString(fileInfo)
+			}
+			// Never treat a directory's link count as a hardlink file.
+			if t.fromTo.IsNFS() && !fileInfo.IsDir() {
+				preservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+				if IsHardlink(fileInfo) && (!preservedSymlink || t.hardlinkHandling == common.EHardlinkHandlingType.Preserve()) {
+					entityType = common.EEntityType.Hardlink()
+					if HandleHardlinkForNFS(fileInfo, t.hardlinkHandling, t.incrementEnumerationCounter) {
+						return nil
+					}
+					if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+						var err error
+						nfsCtx, err = t.hardlinkMetadata(filePath, fileInfo)
+						if err != nil {
+							return err
+						}
+						entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), nfsCtx.TargetHardlinkFile, entityType)
+					}
+				}
+			}
+
+			relPath := strings.TrimPrefix(strings.TrimPrefix(CleanLocalPath(filePath), CleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
+			if t.symlinkHandling.None() && fileInfo.Mode()&os.ModeSymlink != 0 {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Skipping over symlink at %s because symlinks are not handled (--follow-symlinks or --preserve-symlinks)", common.GenerateFullPath(t.fullPath, relPath)))
+				return nil
+			}
+
+			// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
+			return processObject(
+				NewStoredObject(
+					preprocessor,
+					fileInfo.Name(),
+					strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+					entityType,
+					fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
+					fileInfo.Size(),
+					NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					NoBlobProps,
+					NoMetadata,
+					"", // Local has no such thing as containers
+					&nfsCtx,
+				),
+			)
+		}
+
+		if t.recursive {
+			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
+			return finalizer(WalkWithSymlinks(
+				t.appCtx,
+				t.fullPath,
+				processFile,
+				WalkWithSymlinksOptions{
+					FromTo:                             t.fromTo,
+					SymlinkHandling:                    t.symlinkHandling,
+					ErrorChannel:                       t.errorChannel,
+					HardlinkHandling:                   t.hardlinkHandling,
+					IncrementEnumerationCounter:        t.incrementEnumerationCounter,
+					IncrementEnumerationFailureCounter: t.incrementEnumerationFailureCounter,
+					CheckAncestorsForLoops:             buildmode.IsMover,
+					Recursive:                          t.recursive,
+				},
+			))
+		} else {
+			// if recursive is off, we only need to scan the files immediately under the fullPath
+			// We don't transfer any directory properties here, not even the root. (Because the root's
+			// properties won't be transferred, because the only way to do a non-recursive directory transfer
+			// is with /* (aka stripTopDir).
+			entries, err := os.ReadDir(t.fullPath)
+			if err != nil {
+				writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+					FilePath: t.fullPath,
+					FileInfo: nil,
+					ErrorMsg: fmt.Errorf("failed to read directory %s: %w", t.fullPath, err),
+				})
+				return err
+			}
+
+			// go through the files and return if any of them fail to process
+			for _, entry := range entries {
+				entityType := common.EEntityType.File()
+				var NfsHardlinkManager NFSMetadataContext
+				// This won't change. It's purely to hand info off to STE about where the symlink lives.
+				relativePath := entry.Name()
+				fileInfo, err := entry.Info()
+				path := common.GenerateFullPath(t.fullPath, relativePath)
+				if err != nil {
+					writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+						FilePath: path,
+						FileInfo: nil,
+						ErrorMsg: fmt.Errorf("failed to get file info for %s: %w", path, err),
+					})
+					// Update the counter for failed enumerations
+					if t.incrementEnumerationFailureCounter != nil {
+						if entry.IsDir() {
+							t.incrementEnumerationFailureCounter(common.EEntityType.Folder())
+						} else {
+							t.incrementEnumerationFailureCounter(common.EEntityType.File())
+						}
+					}
+					continue // Skip this entry and continue with the next one
+				}
+				entityType = common.EEntityType.File() // Default entity type is file, unless we find out otherwise.
+
+				if fileInfo.Mode()&os.ModeSymlink != 0 {
+
+					if t.symlinkHandling.None() {
+						// If we are not following symlinks, we skip them.
+						if t.fromTo.IsNFS() && t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(common.EEntityType.Symlink(), t.symlinkHandling, t.hardlinkHandling)
+							// Using errorChannel to log skipped files
+							writeToErrorChannel(t.errorChannel,
+								ErrorFileInfo{
+									FilePath: path,
+									FileInfo: fileInfo,
+									ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
+								})
+							WarnStdoutAndScanningLog(fmt.Sprintf("Skipping symlink - '%s' for NFS", path))
+						}
+						continue
+
+					} else if t.symlinkHandling.Preserve() { // Mark the entity type as a symlink.
+						entityType = common.EEntityType.Symlink()
+
+					} else if t.symlinkHandling.Follow() {
+						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
+						// Evaluate the symlink
+						result, err := UnfurlSymlinks(path)
+
+						if err != nil {
+							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+								FilePath: path,
+								FileInfo: fileInfo,
+								ErrorMsg: fmt.Errorf("failed to resolve symlink %s: %w", path, err),
+							})
+							if t.incrementEnumerationFailureCounter != nil {
+								t.incrementEnumerationFailureCounter(common.EEntityType.Symlink())
+							}
+							continue
+						}
+
+						// Resolve the absolute file path of the symlink
+						result, err = filepath.Abs(result)
+
+						if err != nil {
+							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+								FilePath: path,
+								FileInfo: fileInfo,
+								ErrorMsg: fmt.Errorf("failed to get absolute path of symlink result %s: %w", path, err),
+							})
+							if t.incrementEnumerationFailureCounter != nil {
+								t.incrementEnumerationFailureCounter(common.EEntityType.Symlink())
+							}
+							continue
+						}
+
+						// Replace the current FileInfo with
+						fileInfo, err = common.OSStat(result)
+
+						if err != nil {
+							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+								FilePath: path,
+								FileInfo: nil, // Will be treated as a file
+								ErrorMsg: fmt.Errorf("failed to get file info for symlink result %s: %w", path, err),
+							})
+							if t.incrementEnumerationFailureCounter != nil {
+								t.incrementEnumerationFailureCounter(common.EEntityType.Symlink())
+							}
+							continue
+						}
+
+						if t.includeDirectoryOrPrefix && fileInfo.IsDir() {
+							entityType = common.EEntityType.Folder()
+							path := t.fullPath + common.DeterminePathSeparator(t.fullPath) + entry.Name()
+							ok, _ := checkSymlinkCausesDirectoryLoop(path)
+							if ok {
+								err := errors.New("symlink caused cyclic loop")
+								writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+									FilePath: path,
+									FileInfo: fileInfo,
+									ErrorMsg: err})
+								if t.incrementEnumerationFailureCounter != nil {
+									// Count it as a folder, since the symlink points to a folder.
+									t.incrementEnumerationFailureCounter(entityType)
+								}
+								continue
+							}
+						}
+
+					}
+				}
+
+				// NFS handling
+				if t.fromTo.IsNFS() && !fileInfo.IsDir() {
+					NfsHardlinkManager.FileID = getInodeString(fileInfo)
+					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+					if IsHardlink(fileInfo) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
+						entityType = common.EEntityType.Hardlink()
+						if skip := HandleHardlinkForNFS(fileInfo,
+							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+							continue
+						}
+						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+							if t.inodeStore == nil {
+								return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+							}
+							NfsHardlinkManager, err = t.hardlinkMetadata(path, fileInfo)
+							if err != nil {
+								return err
+							}
+							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), NfsHardlinkManager.TargetHardlinkFile, entityType)
+						}
+					} else if !IsRegularFile(fileInfo) && !isPreservedSymlink {
+						entityType = common.EEntityType.Other()
+						if t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
+						}
+
+						// Using errorChannel to log skipped files
+						writeToErrorChannel(t.errorChannel,
+							ErrorFileInfo{
+								FilePath: path,
+								FileInfo: fileInfo,
+								ErrorMsg: GetUnsupportedFileErrorMessage(common.EEntityType.Other(), nil),
+							})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping special file - '%s' for NFS", path))
+						continue
+					}
+				}
+
+				if entry.IsDir() {
+					if t.includeDirectoryOrPrefix {
+						entityType = common.EEntityType.Folder()
+					} else {
+						continue
+					}
+				}
+
+				storedObject := NewStoredObject(
+					preprocessor,
+					entry.Name(),
+					strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+					entityType, // TODO: add code path for folders
+					fileInfo.ModTime(),
+					fileInfo.Size(),
+					NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					NoBlobProps,
+					NoMetadata,
+					"", // Local has no such thing as containers
+					&NfsHardlinkManager,
+				)
+
+				if t.getExtendedProperties {
+					extendedProp, err := common.GetExtendedProperties(path, storedObject.EntityType)
+					if err != nil {
+						// What do we here?
+						// During enumeration, we can check for Zero time and skip any optimization.
+						// The upload layer will fetch the properties again.
+						writeToErrorChannel(t.errorChannel,
+							ErrorFileInfo{
+								FilePath: path,
+								FileInfo: fileInfo,
+								ErrorMsg: fmt.Errorf("failed to get extended properties for %s: %s", path, err.Error())})
+						continue
+					} else {
+						storedObject.updateTimestamps(
+							extendedProp.GetLastWriteTime(),
+							extendedProp.GetChangeTime())
+					}
+				}
+
+				err = processObject(storedObject)
+				_, err = getProcessingError(err)
+				if err != nil {
+					return finalizer(err)
+				}
+			}
+		}
+	}
+
+	return finalizer(err)
+}
+
+func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
+	if opts.HardlinkHandling == common.EHardlinkHandlingType.Preserve() && runtime.GOOS == "windows" {
+		return nil, fmt.Errorf("local hardlink preservation is not supported on Windows")
+	}
+	var hashAdapter common.HashDataAdapter
+	if opts.SyncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
+		var err error
+		hashAdapter, err = common.NewHashDataAdapter(common.LocalHashDir, fullPath, common.LocalHashStorageMode)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize hash adapter: %w", err)
+		}
+	}
+
+	traverser := localTraverser{
+		fullPath:                           CleanLocalPath(fullPath),
+		recursive:                          opts.Recursive,
+		symlinkHandling:                    opts.SymlinkHandling,
+		appCtx:                             ctx,
+		incrementEnumerationCounter:        opts.IncrementEnumeration,
+		incrementEnumerationFailureCounter: opts.IncrementEnumerationFailure,
+		errorChannel:                       opts.ErrorChannel,
+		targetHashType:                     opts.SyncHashType,
+		hashAdapter:                        hashAdapter,
+		stripTopDir:                        opts.StripTopDir,
+		hardlinkHandling:                   opts.HardlinkHandling,
+		fromTo:                             opts.FromTo,
+		basePath:                           opts.BasePath,
+		inodeStore:                         opts.InodeStore,
+	}
+	if traverser.basePath == "" {
+		traverser.basePath = traverser.fullPath
+	}
+	traverser.inodeNamespace = hardlinkNamespace(traverser.basePath, true, opts.IsSyncDestination)
+
+	traverser.includeDirectoryOrPrefix = UseSyncOrchestrator && !traverser.recursive
+
+	// This is scoped to only linux system as we depend on POSIX CTime/MTime.
+	traverser.getExtendedProperties = UseSyncOrchestrator && runtime.GOOS == "linux" && !traverser.recursive
+
+	return &traverser, nil
+}
+
+func logSpecialFileWarning(fileName string) {
+	if common.AzcopyCurrentJobLogger == nil {
+		return
+	}
+
+	message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileName)
+	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+}
+
+// logNFSLinkWarning logs a warning for either a symbolic link or a hard link in an NFS share.
+// - For symlinks: inodeNo should be empty.
+// - For hard links: inodeNo should be the file's inode number.
+func logNFSLinkWarning(fileName,
+	inodeNo string,
+	isSymlink bool,
+	hardlinkHandling common.HardlinkHandlingType) {
+
+	if common.AzcopyCurrentJobLogger == nil {
+		return
+	}
+
+	var message string
+	if isSymlink {
+		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
+	} else if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, and will be skipped", fileName, inodeNo)
+	}
+	if message != "" {
+		common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+	}
+
+}
+
+// resolveHardlinkedSymlinkEntity adjusts the entity type for a hardlinked symlink.
+// The anchor (first-seen entry, indicated by targetHardlinkFile == "") must be
+// transferred as a symlink so its target is created correctly on the destination;
+// only subsequent links remain Hardlink entities.
+//
+// isSymlink should be true when the underlying file is a symbolic link (e.g.
+// IsSymbolicLink(fileInfo) for local files, or NFSFileType==Symlink for remote).
+func resolveHardlinkedSymlinkEntity(isSymlink bool, targetHardlinkFile string, currentEntityType common.EntityType) common.EntityType {
+	if isSymlink && targetHardlinkFile == "" {
+		return common.EEntityType.Symlink()
+	}
+	return currentEntityType
+}
+
+// HandleSymlinkForNFS processes a symbolic link based on the specified handling type.
+// It either logs a warning or preserves the symlink based on the symlink handling type.
+func HandleSymlinkForNFS(fileName string,
+	symlinkHandlingType common.SymlinkHandlingType,
+	incrementEnumerationCounter enumerationCounterFunc) bool {
+
+	if symlinkHandlingType.None() {
+		// Log a warning if symlink handling is disabled
+		logNFSLinkWarning(fileName, "", true, common.DefaultHardlinkHandlingType)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Symlink(),
+				symlinkHandlingType, common.DefaultHardlinkHandlingType)
+		}
+		return true
+	}
+	return false
+}
+
+// HandleHardlinkForNFS processes a hard link based on the specified handling type.
+// It either logs a warning if skip or preserves the hard link based on the hard link handling type.
+func HandleHardlinkForNFS(fileInfo os.FileInfo,
+	hardlinkHandlingType common.HardlinkHandlingType,
+	incrementEnumerationCounter enumerationCounterFunc) bool {
+
+	inodeStr := getInodeString(fileInfo)
+
+	if hardlinkHandlingType == hardlinkHandlingType.Skip() {
+		// Log a warning if hardlink handling is skipped
+		logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandlingType)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Hardlink(),
+				common.ESymlinkHandlingType.Skip(), hardlinkHandlingType)
+		}
+		return true
+	}
+	return false
+}

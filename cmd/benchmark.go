@@ -30,6 +30,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -140,7 +142,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		c.src = raw.target
 	} else { // Upload
 		// src must be string, but needs to indicate that its for benchmark and encode what we want
-		c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, raw.numOfFolders)
+		c.src = traverser.BenchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, raw.numOfFolders)
 		c.dst, err = raw.appendVirtualDir(raw.target, virtualDir)
 		if err != nil {
 			return dummyCooked, err
@@ -181,7 +183,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 }
 
 func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
-	switch InferArgumentLocation(target) {
+	switch azcopy.InferArgumentLocation(target) {
 	case common.ELocation.Blob():
 		p, err := blob.ParseURL(target)
 		if err != nil {
@@ -229,7 +231,7 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	rc.src = u.String()             // the SOURCE for the deletion is the the dest from the benchmark
 	rc.recursive = true
 
-	switch InferArgumentLocation(rc.src) {
+	switch azcopy.InferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
 	case common.ELocation.File(), common.ELocation.FileNFS():
@@ -247,50 +249,6 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	cooked.isCleanupJob = true
 	cooked.cleanupJobMessage = "Running cleanup job to delete files created during benchmarking"
 	return &cooked, err
-}
-
-type benchmarkSourceHelper struct{}
-
-// our code requires sources to be strings. So we may as well do the benchmark sources as URLs
-// so we can identify then as such using a specific domain. ".invalid" is reserved globally for cases where
-// you want a URL that can't possibly be a real one, so we'll use that
-const benchmarkSourceHost = "benchmark.invalid"
-
-func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64, numOfFolders uint) string {
-	return fmt.Sprintf("https://%s?fc=%d&bpf=%d&nf=%d", benchmarkSourceHost, fileCount, bytesPerFile, numOfFolders)
-}
-
-func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, numOfFolders uint, err error) {
-	// TODO: consider replace with regex?
-
-	expectedPrefix := "https://" + benchmarkSourceHost + "?"
-	if !strings.HasPrefix(s, expectedPrefix) {
-		return 0, 0, 0, errors.New("invalid benchmark source string")
-	}
-	s = strings.TrimPrefix(s, expectedPrefix)
-	pieces := strings.Split(s, "&")
-	if len(pieces) != 3 ||
-		!strings.HasPrefix(pieces[0], "fc=") ||
-		!strings.HasPrefix(pieces[1], "bpf=") ||
-		!strings.HasPrefix(pieces[2], "nf=") {
-		return 0, 0, 0, errors.New("invalid benchmark source string")
-	}
-	pieces[0] = strings.Split(pieces[0], "=")[1]
-	pieces[1] = strings.Split(pieces[1], "=")[1]
-	pieces[2] = strings.Split(pieces[2], "=")[1]
-	fc, err := strconv.ParseUint(pieces[0], 10, 32)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	bpf, err := strconv.ParseInt(pieces[1], 10, 64)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	nf, err := strconv.ParseUint(pieces[2], 10, 32)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return uint(fc), bpf, uint(nf), nil
 }
 
 func init() {
@@ -324,7 +282,7 @@ func init() {
 
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			cooked.SrcCredName = raw.CredName
 			cooked.DstCredName = raw.CredName
 			err = cooked.process()
@@ -358,7 +316,7 @@ func init() {
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect",
 		"Defines the type of blob at the destination. "+
 			"\n Used to allow benchmarking different blob types. \nIdentical to the same-named parameter in the copy command")
-	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, " put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. "+
+	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. "+
 		"\n (By default the hash is NOT created.) \n Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true,
 		"Check the length of a file on the destination after the transfer. "+

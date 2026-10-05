@@ -17,7 +17,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/spf13/cobra"
 )
@@ -48,7 +47,7 @@ var envCmd = &cobra.Command{
 				env.Name, val, env.Description))
 		}
 
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	},
 }
 

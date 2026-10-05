@@ -26,6 +26,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
@@ -42,7 +43,8 @@ func (c Client) GetJobSummary(opts GetJobSummaryOptions) (result JobSummaryRespo
 	if opts.JobID.IsEmpty() {
 		return JobSummaryResponse{}, errors.New("get job statistics requires the JobID")
 	}
-	resp := jobsAdmin.GetJobSummary(opts.JobID)
+	// Keep transfer lists available for embedded mover consumers.
+	resp := jobsAdmin.GetJobSummary(opts.JobID, !buildmode.IsMover)
 
 	if resp.ErrorMsg != "" {
 		return JobSummaryResponse(resp), fmt.Errorf("failed to get job summary for job %s due to error: %s", opts.JobID, resp.ErrorMsg)
@@ -109,6 +111,9 @@ Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
+Number of Hardlinks Completed: %v
+Number of Hardlinks Failed: %v
+Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
 Percent Complete (approx): %.1f
 Final Job Status: %v
@@ -118,12 +123,15 @@ Final Job Status: %v
 			summary.FolderPropertyTransfers,
 			summary.SymlinkTransfers,
 			summary.TotalTransfers,
-			summary.TransfersCompleted-summary.FoldersCompleted,
+			summary.TransfersCompleted-summary.FoldersCompleted-summary.HardlinksCompleted,
 			summary.FoldersCompleted,
-			summary.TransfersFailed-summary.FoldersFailed,
+			summary.TransfersFailed-summary.FoldersFailed-summary.HardlinksFailed,
 			summary.FoldersFailed,
-			summary.TransfersSkipped-summary.FoldersSkipped,
+			summary.TransfersSkipped-summary.FoldersSkipped-summary.HardlinksSkipped,
 			summary.FoldersSkipped,
+			summary.HardlinksCompleted,
+			summary.HardlinksFailed,
+			summary.HardlinksSkipped,
 			summary.TotalBytesTransferred,
 			summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
 			summary.JobStatus,

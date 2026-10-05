@@ -161,6 +161,7 @@ type params struct {
 	preserveSMBPermissions    bool
 	preserveSMBInfo           *bool
 	preservePOSIXProperties   bool
+	posixPropertiesStyle      common.PosixPropertiesStyle
 	relativeSourcePath        string
 	blobTags                  string
 	blobType                  string
@@ -185,7 +186,6 @@ type params struct {
 	trailingDot            common.TrailingDotOption
 	decompress             bool
 	preserveInfo           *bool
-	isNFSCopy              bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -551,8 +551,11 @@ type hookHelper interface {
 	// This is intended to be used in hook functions for pre or mid transfer adjustments.
 	CreateFile(f *testObject, atSource bool)
 
-	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
+	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and then resume the job
 	CancelAndResume()
+
+	// CancelOnly tells the runner to cancel the running AzCopy job (with "cancel" to stdin)
+	CancelOnly()
 
 	// CreateSourceSnapshot Create a source snapshot to use it as the source
 	CreateSourceSnapshot()

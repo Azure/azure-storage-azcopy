@@ -251,7 +251,7 @@ type ExpectedPlanFileBlobData struct {
 	ContentType                      *string
 	BlockBlobTier                    *common.BlockBlobTier `validate:"Block Blob Tier,DstBlobData.BlockBlobTier"`
 	PageBlobTier                     *common.PageBlobTier  `validate:"Page Blob Tier,DstBlobData.PageBlobTier"`
-	PutMd5                           *bool                 `validate:"Put MD5 Data,DstBlobData.PutMd5"`
+	PutMd5                           *bool                 `validate:"Put MD5 Data,DstBlobData.PutHash"`
 	Metadata                         common.Metadata
 	BlobTags                         common.BlobTags
 	CpkInfo                          *bool
@@ -359,7 +359,7 @@ func ValidatePlanFiles(sm *ScenarioVariationManager, stdOut AzCopyStdout, expect
 
 			_, _, blobType, blobTier,
 				propsInBackend, _, _, _, // DstLengthValidation, SourceChangeValidation, InvalidMetadataHandleOption
-				entityType, version, _, tags := plan.TransferSrcPropertiesAndMetadata(i) // missing snapshot ID
+				entityType, version, _, tags, _ := plan.TransferSrcPropertiesAndMetadataWithHardlink(i) // missing snapshot ID
 
 			errPrefix := fmt.Sprintf("object src: %s, dst: %s; ", src, dst)
 
