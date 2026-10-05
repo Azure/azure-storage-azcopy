@@ -86,36 +86,34 @@ func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) 
 	return sigFound, values.Encode()
 }
 
-// ///////////////////////////////////////////////////////////////////////////////////////////////
+// Deprecated: inspect the response status directly.
 type HTTPResponseExtension struct {
 	*http.Response
 }
 
-// IsSuccessStatusCode checks if response's status code is contained in specified success status codes.
 func (r HTTPResponseExtension) IsSuccessStatusCode(successStatusCodes ...int) bool {
 	if r.Response == nil {
 		return false
 	}
-	for _, i := range successStatusCodes {
-		if i == r.StatusCode {
+	for _, status := range successStatusCodes {
+		if status == r.StatusCode {
 			return true
 		}
 	}
 	return false
 }
 
-// ///////////////////////////////////////////////////////////////////////////////////////////////
 type ByteSlice []byte
+
+// Deprecated: use bytes.TrimPrefix directly.
 type ByteSliceExtension struct {
 	ByteSlice
 }
 
-// RemoveBOM removes any BOM from the byte slice
 func (bs ByteSliceExtension) RemoveBOM() []byte {
 	if bs.ByteSlice == nil {
 		return nil
 	}
-	// UTF8
 	return bytes.TrimPrefix(bs.ByteSlice, []byte("\xef\xbb\xbf"))
 }
 

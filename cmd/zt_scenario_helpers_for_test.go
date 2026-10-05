@@ -322,7 +322,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertion
 
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(a *assert.Assertions, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
-		err := s3Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: ""})
+		err := s3Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
 		a.Nil(err)
 
 		s.generateObjects(a, s3Client, bucketName, objectList)
