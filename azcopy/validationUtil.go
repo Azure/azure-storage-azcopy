@@ -396,6 +396,14 @@ func PerformNFSSpecificValidation(fromTo common.FromTo,
 	if hardlinkHandling == nil {
 		return errors.New("hardlink handling option is required")
 	}
+	if *hardlinkHandling != common.EHardlinkHandlingType.Skip() {
+		switch fromTo {
+		case common.EFromTo.FileSMBFileNFS():
+			return errors.New("'--hardlinks' must be set to 'skip'")
+		case common.EFromTo.FileNFSFileSMB():
+			return errors.New("Hardlinked files are not supported between NFS and SMB")
+		}
+	}
 	if err = ValidateHardlinksFlag(*hardlinkHandling, fromTo); err != nil {
 		return err
 	}

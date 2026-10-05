@@ -163,12 +163,8 @@ func (s *FileShareStatsTestSuite) Scenario_GetShareStatsPremiumShare(svm *Scenar
 }
 
 // Scenario_GetShareStatsStandardShare pins the documented non-premium behavior against
-// the real service. A standard share returns no throttling block, and PollStats maps
-// that to an all-zero ResourceStats.
-//
-// This is the same observable result as a schema break on a premium share, which is
-// exactly why Scenario_GetShareStatsPremiumShare asserts on non-zero limits: without
-// that, the two cases are indistinguishable.
+// the real service. Throttling statistics are premium-only, so standard shares reject
+// requests containing x-ms-file-return-throttling-stats.
 func (s *FileShareStatsTestSuite) Scenario_GetShareStatsStandardShare(svm *ScenarioVariationManager) {
 	shareRM := CreateResource[ContainerResourceManager](svm,
 		GetRootResource(svm, common.ELocation.File()),
@@ -181,14 +177,6 @@ func (s *FileShareStatsTestSuite) Scenario_GetShareStatsStandardShare(svm *Scena
 	shareURL := shareRM.URI(GetURIOptions{AzureOpts: AzureURIOpts{WithSAS: true}})
 
 	status, body := getShareStatsRaw(svm, shareURL)
-	svm.AssertNow("GetShareStats should return 200 on a standard share", Equal{}, status, http.StatusOK)
 	svm.Log("raw GetShareStats response body (standard share):\n%s", body)
-
-	src := common.NewAzfileShareStatsSource(shareURL, http.DefaultClient, shareStatsScenarioLogger{svm})
-
-	stats, err := src.PollStats()
-	svm.NoError("PollStats on a standard share should not error", err, true)
-
-	svm.Assert("standard share reports no IOPS limit", Equal{}, stats.IopsLimit, int64(0))
-	svm.Assert("standard share reports no bandwidth limit", Equal{}, stats.BandwidthLimitBytesPerSec, int64(0))
+	svm.AssertNow("standard shares should reject premium-only throttling statistics", Equal{}, status, http.StatusBadRequest)
 }

@@ -47,6 +47,8 @@ type windowsCredCache struct {
 	lock          sync.RWMutex
 }
 
+var _ RWKeyring = (*windowsCredCache)(nil)
+
 func (c *windowsCredCache) ListTokens() ([]TokenHeader, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -171,7 +173,10 @@ func (c *windowsCredCache) DeleteToken(nickname string) bool {
 func (c *windowsCredCache) SaveToken(tok Token) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	info := tok.(*token)
+	info, ok := tok.(*token)
+	if !ok {
+		return fmt.Errorf("unsupported token type %T", tok)
+	}
 
 	c.keyringData[info.Nickname] = *info
 	err := c.writeTokens()

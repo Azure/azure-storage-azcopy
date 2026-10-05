@@ -19,12 +19,16 @@ const (
 
 func GetOSKeyring(opts GetOSKeyringOptions) (Keyring, error) {
 	loginCacheName := ternary.DerefOrZero(opts.OSKeyringCacheName)
+	sessionKeyring, err := keyctl.SessionKeyring()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session keyring: %w", err)
+	}
 
 	return &linuxCredCache{
 		rootKeyName:      *ternary.DefaultValue(opts.RootKey, DefaultRootKeyName) + loginCacheName,
 		lock:             sync.RWMutex{},
-		fetchedKeysCache: nil,
-		isPermSet:        false,
+		sessionKeyring:   sessionKeyring,
+		fetchedKeysCache: make(map[string]credCacheEntry),
 	}, nil
 }
 
@@ -42,10 +46,15 @@ type linuxCredCache struct {
 	initOnce sync.Once
 
 	fetchedKeysCache map[string]credCacheEntry
-	isPermSet        bool
 }
 
+var _ RWKeyring = (*linuxCredCache)(nil)
+
 func (c *linuxCredCache) ListTokens() ([]TokenHeader, error) {
+	c.init()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
 	out := make([]TokenHeader, 0)
 	for _, v := range c.fetchedKeysCache {
 		out = append(out, v.Header)
@@ -70,6 +79,9 @@ func (c *linuxCredCache) init() {
 		if err != nil {
 			return
 		}
+		if c.fetchedKeysCache == nil {
+			c.fetchedKeysCache = make(map[string]credCacheEntry)
+		}
 	})
 }
 
@@ -84,10 +96,11 @@ func (c *linuxCredCache) GetToken(nickname string) (Token, bool) {
 
 	entry, ok := c.fetchedKeysCache[nickname]
 	if !ok {
-		if nickname != DefaultNickname {
-			return c.getToken(DefaultNickname)
+		token, found := c.getToken(nickname)
+		if found || nickname == DefaultNickname {
+			return token, found
 		}
-		return nil, false
+		return c.getToken(DefaultNickname)
 	}
 
 	if entry.Key == nil {
@@ -165,36 +178,27 @@ func (c *linuxCredCache) DeleteToken(nickname string) bool {
 	}
 
 	delete(c.fetchedKeysCache, nickname)
-	return true
+	return c.persistIndex() == nil
 }
 
-func (c *linuxCredCache) SaveToken(info token) error {
+func (c *linuxCredCache) SaveToken(tok Token) error {
 	c.init()
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	info, ok := tok.(*token)
+	if !ok {
+		return fmt.Errorf("unsupported token type %T", tok)
+	}
 
 	buf, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
 
-	keyring, err := keyctl.SessionKeyring()
+	key, err := c.addOrUpdateKey(info.Nickname, buf)
 	if err != nil {
 		return err
-	}
-
-	key, err := keyring.Add(info.Nickname, buf)
-	if err != nil {
-		return err
-	}
-
-	err = keyctl.SetPerm(key, keyctl.PermUserAll)
-	if err != nil {
-		unlinkErr := key.Unlink()
-		if unlinkErr != nil {
-			panic(errors.New("failed to set permissions, and cannot unlink key, for security reasons it is recommended to log out of the current session"))
-		}
-		return fmt.Errorf("failed to set permission for cached token, %v", err)
 	}
 
 	c.fetchedKeysCache[info.Nickname] = credCacheEntry{
@@ -202,7 +206,38 @@ func (c *linuxCredCache) SaveToken(info token) error {
 		Key:    key,
 	}
 
-	return nil
+	return c.persistIndex()
+}
+
+func (c *linuxCredCache) addOrUpdateKey(name string, data []byte) (*keyctl.Key, error) {
+	key, err := c.sessionKeyring.Add(name, data)
+	if errors.Is(err, syscall.EEXIST) {
+		key, err = c.sessionKeyring.Search(name)
+		if err != nil {
+			return nil, err
+		}
+		return key, key.Set(data)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err = keyctl.SetPerm(key, keyctl.PermUserAll); err != nil {
+		if unlinkErr := key.Unlink(); unlinkErr != nil {
+			panic(errors.New("failed to set permissions, and cannot unlink key, for security reasons it is recommended to log out of the current session"))
+		}
+		return nil, fmt.Errorf("failed to set permission for cached token: %w", err)
+	}
+	return key, nil
+}
+
+func (c *linuxCredCache) persistIndex() error {
+	buf, err := json.Marshal(c.fetchedKeysCache)
+	if err != nil {
+		return err
+	}
+	_, err = c.addOrUpdateKey(c.rootKeyName, buf)
+	return err
 }
 
 func (c *linuxCredCache) keyringImpl() {}

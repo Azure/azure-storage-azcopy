@@ -59,7 +59,7 @@ func (b *BlobFSServiceResourceManager) WithSpecificAuthType(cred ExplicitCredent
 }
 
 func (b *BlobFSServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return EExplicitCredentialType.With(EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.AcctKey())
+	return EExplicitCredentialType.With(EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.AcctKey())
 }
 
 func (b *BlobFSServiceResourceManager) Canon() string {

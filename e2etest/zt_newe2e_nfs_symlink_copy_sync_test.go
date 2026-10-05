@@ -188,7 +188,7 @@ func (s *FilesNFSTestSuite) Scenario_SymlinkSync_StaleSymlinkDeleted_WithDeleteD
 				ObjectShouldExist: pointerTo(false),
 			},
 		},
-	}, ValidateResourceOptions{})
+	}, ValidateResourceOptions{fromTo: fromTo})
 }
 
 // Scenario 2: Stale symlink at destination is not deleted when --delete-destination=false.
@@ -266,7 +266,7 @@ func (s *FilesNFSTestSuite) Scenario_SymlinkSync_StaleSymlinkSurvives_WhenDelete
 				ObjectShouldExist: pointerTo(true),
 			},
 		},
-	}, ValidateResourceOptions{})
+	}, ValidateResourceOptions{fromTo: fromTo})
 }
 
 // Scenario 3: Symlink present at BOTH source and destination must not be deleted.
@@ -372,5 +372,5 @@ func (s *FilesNFSTestSuite) Scenario_SymlinkSync_SymlinkPresentAtBothEnds_NotDel
 				},
 			},
 		},
-	}, ValidateResourceOptions{})
+	}, ValidateResourceOptions{fromTo: fromTo})
 }

@@ -889,6 +889,7 @@ func (e *SyncEnumerator) Enumerate() (err error) {
 		case fileerror.HasCode(err, fileerror.ResourceNotFound),
 			datalakeerror.HasCode(err, datalakeerror.ResourceNotFound),
 			bloberror.HasCode(err, bloberror.BlobNotFound),
+			strings.Contains(err.Error(), "not found in destination. Err BlobNotFound"),
 			strings.Contains(err.Error(), "The system cannot find the"),
 			errors.Is(err, os.ErrNotExist):
 			err = nil // Oh no! Oh well. We'll create it later.

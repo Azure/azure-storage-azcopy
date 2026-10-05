@@ -38,6 +38,8 @@ type darwinCredCache struct {
 	kcAccessible     keychain.Accessible
 }
 
+var _ RWKeyring = (*darwinCredCache)(nil)
+
 func (c *darwinCredCache) ListTokens() ([]TokenHeader, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -147,9 +149,14 @@ func (c *darwinCredCache) DeleteToken(nickname string) bool {
 	return true
 }
 
-func (c *darwinCredCache) SaveToken(info token) error {
+func (c *darwinCredCache) SaveToken(tok Token) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	info, ok := tok.(*token)
+	if !ok {
+		return fmt.Errorf("unsupported token type %T", tok)
+	}
 
 	b, err := json.Marshal(info)
 	if err != nil {

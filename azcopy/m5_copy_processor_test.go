@@ -220,6 +220,42 @@ func TestM5HardlinkPreserveValidationKeepsLegacyContracts(t *testing.T) {
 	}
 }
 
+func TestM5CrossProtocolNFSRequiresHardlinkSkip(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		fromTo   common.FromTo
+		expected string
+	}{
+		{"SMBToNFS", common.EFromTo.FileSMBFileNFS(), "'--hardlinks' must be set to 'skip'"},
+		{"NFSToSMB", common.EFromTo.FileNFSFileSMB(), "Hardlinked files are not supported between NFS and SMB"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, hardlinks := range []common.HardlinkHandlingType{
+				common.EHardlinkHandlingType.Follow(),
+				common.EHardlinkHandlingType.Preserve(),
+			} {
+				err := PerformNFSSpecificValidation(
+					test.fromTo,
+					common.EPreservePermissionsOption.None(),
+					false,
+					&hardlinks,
+					common.ESymlinkHandlingType.Skip(),
+				)
+				require.EqualError(t, err, test.expected)
+			}
+
+			skip := common.EHardlinkHandlingType.Skip()
+			require.NoError(t, PerformNFSSpecificValidation(
+				test.fromTo,
+				common.EPreservePermissionsOption.None(),
+				false,
+				&skip,
+				common.ESymlinkHandlingType.Skip(),
+			))
+		})
+	}
+}
+
 type m5CloseBackend struct{ closes int }
 
 func (*m5CloseBackend) ReadAt([]byte, int64) (int, error)      { return 0, io.EOF }

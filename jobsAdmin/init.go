@@ -55,15 +55,13 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 	file2FileCopy := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
 	common.LogToJobLogWithPrefix(fmt.Sprintf("file2FileCopy=%s", file2FileCopy), common.LogInfo)
-	common.GetLifecycleMgr().Info(fmt.Sprintf("file2FileCopy=%s", file2FileCopy))
 
 	// Register the Azure Files stats source factory for Files-to-Files scenarios
 	// when proactive stats polling is enabled
 	if file2FileCopy == "true" {
 		httpClient := common.GetGlobalHTTPClient(common.AzcopyCurrentJobLogger)
 		// Nil-safe: the job logger is not assigned until after MainSTE returns.
-		common.LogToJobLogWithPrefix("Registering Azure Files stats source factory.", common.LogError)
-		common.GetLifecycleMgr().Info(fmt.Sprintf("Registering Azure Files stats source factory."))
+		common.LogToJobLogWithPrefix("Registering Azure Files stats source factory.", common.LogInfo)
 		common.RegisterResourceStatsSourceFactory(
 			common.ShareStatsSourceFactory(httpClient, common.AzcopyCurrentJobLogger),
 		)
