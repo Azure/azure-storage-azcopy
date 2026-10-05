@@ -18,7 +18,7 @@ steps:
       sudo apt-get clean
       sudo apt-get update --fix-missing
       sudo apt-get install build-essential -y
-    displayName: "Installing Dependencies"
+    displayName: 'Install Dependencies'
   - script: |
       sudo dpkg --info $(signed)/azcopy${{ parameters.package_suffix }}-*${{ parameters.host_suffix }}.deb
       sudo dpkg -i $(signed)/azcopy${{ parameters.package_suffix }}-*${{ parameters.host_suffix }}.deb
@@ -33,7 +33,7 @@ steps:
     displayName: 'Verify tar gz'
   - script: |
       sudo apt-get install libsecret-1-dev -y
-    displayName: "Installing Dependencies"
+    displayName: 'Install Dependencies'
   - script: |
       mkdir -p $(extracted)
       tar xf $(signed)/azcopy_linux_se${{ parameters.build_suffix }}_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)

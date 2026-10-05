@@ -3,11 +3,16 @@ package azcopy
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -287,10 +292,8 @@ func TestM3CopyProcessorDecompressionPath(t *testing.T) {
 }
 
 func TestValidateProtocolCompatibility(t *testing.T) {
-	a := assert.New(t)
 	ctx := context.Background()
 
-	// Test cases where validation should NOT be called (no File locations involved)
 	testCases := []struct {
 		name           string
 		fromTo         common.FromTo
@@ -372,42 +375,48 @@ func TestValidateProtocolCompatibility(t *testing.T) {
 		{
 			name:           "FileToBlob",
 			fromTo:         common.EFromTo.FileBlob(),
-			shouldValidate: true,
-			description:    "File to Blob should validate (source is File)",
+			shouldValidate: false,
+			description:    "File to Blob has no share-to-share protocol comparison",
 		},
 		{
 			name:           "BlobToFile",
 			fromTo:         common.EFromTo.BlobFile(),
-			shouldValidate: true,
-			description:    "Blob to File should validate (destination is File)",
+			shouldValidate: false,
+			description:    "Blob to File has no share-to-share protocol comparison",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create dummy resource strings
+			a := assert.New(t)
 			src := common.ResourceString{Value: "https://source.example.com/path"}
 			dst := common.ResourceString{Value: "https://dest.example.com/path"}
-
-			// For non-File transfers, we can pass nil service clients since validation should be skipped
-			// For File transfers, we would need proper service clients, but we're testing the conditional logic
-			var srcClient, dstClient *common.ServiceClient
-
-			if !tc.shouldValidate {
-				// Test that validation is skipped when no File locations are involved
-				// This should not panic even with nil service clients
-				err := ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, srcClient, dstClient)
-				a.NoError(err, "validateProtocolCompatibility should not fail for %s: %s", tc.name, tc.description)
-			} else {
-				// For File transfers, we expect the function to attempt validation
-				// Since we're passing nil service clients, we expect it to fail gracefully
-				// This tests that the conditional logic correctly identifies File transfers
-				err := ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, srcClient, dstClient)
-				// We expect an error here because we're passing nil service clients for File transfers
-				// The important thing is that it doesn't panic and attempts validation
-				if tc.fromTo.From().IsFile() || tc.fromTo.To().IsFile() {
-					a.Error(err, "validateProtocolCompatibility should attempt validation for %s and fail with nil clients: %s", tc.name, tc.description)
+			a.NoError(ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, nil, nil), "nil clients retain embedded compatibility")
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				protocol := "NFS"
+				if tc.fromTo.IsNFS() {
+					protocol = "SMB"
 				}
+				w.Header().Set("x-ms-enabled-protocols", protocol)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			client, err := fileservice.NewClientWithNoCredential(server.URL, &fileservice.ClientOptions{
+				ClientOptions: azcore.ClientOptions{Retry: policy.RetryOptions{MaxRetries: -1}},
+			})
+			if !a.NoError(err) {
+				return
+			}
+			service := common.NewServiceClient(nil, client, nil)
+			err = ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, service, service)
+			if tc.shouldValidate {
+				a.ErrorContains(err, "protocol enabled", tc.description)
+				a.Positive(requests.Load(), "a real protocol mismatch must be detected")
+			} else {
+				a.NoError(err, tc.description)
+				a.Zero(requests.Load(), "unsupported protocol comparisons must not fetch share properties")
 			}
 		})
 	}

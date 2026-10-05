@@ -32,6 +32,7 @@ type createS3ResOptions struct {
 func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 	accessKeyID := enum.EEnvironmentVariable.AWSAccessKeyID().Get()
 	secretAccessKey := enum.EEnvironmentVariable.AWSSecretAccessKey().Get()
+	sessionToken := enum.EEnvironmentVariable.AwsSessionToken().Get()
 
 	if accessKeyID == "" || secretAccessKey == "" {
 		fmt.Println("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
@@ -39,7 +40,7 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 	}
 
 	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken),
 		Secure: true,
 		Region: o.Location,
 	})

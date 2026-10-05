@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"context"
 	"crypto/md5"
 	"fmt"
 	"io"
@@ -101,8 +100,7 @@ func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
 	if p.credType == enum.ECredentialType.S3PublicBucket() {
 		return p.rawSourceURL.String(), nil
 	}
-
-	source, err := p.s3Client.PresignedGetObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	source, err := p.s3Client.PresignedGetObject(p.jptm.Context(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
 	if err != nil {
 		return "", err
 	}
@@ -118,7 +116,7 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 
 	// Get properties in backend.
 	if p.transferInfo.S2SGetPropertiesInBackend {
-		objectInfo, err := p.s3Client.StatObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
+		objectInfo, err := p.s3Client.StatObject(p.jptm.Context(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +200,7 @@ func (p *s3SourceInfoProvider) IsLocal() bool {
 }
 
 func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	objectInfo, err := p.s3Client.StatObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
+	objectInfo, err := p.s3Client.StatObject(p.jptm.Context(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -222,7 +220,7 @@ func (p *s3SourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadClos
 		options.Set("Range", *r)
 	}
 
-	ctx := context.Background()
+	ctx := p.jptm.Context()
 	// Get the object with the specified range
 	body, err := p.s3Client.GetObject(ctx, p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
 	if err != nil {
@@ -240,7 +238,7 @@ func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	}
 
 	// s3 does not support getting range md5
-	body, err := p.s3Client.GetObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
+	body, err := p.s3Client.GetObject(p.jptm.Context(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
 	if err != nil {
 		return nil, err
 	}

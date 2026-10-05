@@ -362,24 +362,23 @@ func deleteBucket(_ asserter, client *minio.Client, bucketName string, waitQuart
 	// Some ghost buckets are temporary, others are permanent.
 	// As such, we need a way to deal with them when they show up.
 	// By doing this, they'll just be cleaned up the next test run instead of failing all tests.
-	objectsCh := make(chan string)
+	objectsCh := make(chan minio.ObjectInfo)
 
 	go func() {
 		defer close(objectsCh)
 
 		// List all objects from a bucket-name with a matching prefix.
-		for object := range client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Prefix: "", Recursive: true}) {
+		for object := range client.ListObjectsIter(ctx, bucketName, minio.ListObjectsOptions{Recursive: true}) {
 			if object.Err != nil {
 				return
 			}
 
-			objectsCh <- object.Key
+			objectsCh <- object
 		}
 	}()
-	remObjectsCh := make(chan minio.ObjectInfo)
 
 	// List bucket, and delete all the objects in the bucket
-	errChn := client.RemoveObjects(ctx, bucketName, remObjectsCh, minio.RemoveObjectsOptions{})
+	errChn := client.RemoveObjects(ctx, bucketName, objectsCh, minio.RemoveObjectsOptions{})
 	var err error
 
 	for rmObjErr := range errChn {

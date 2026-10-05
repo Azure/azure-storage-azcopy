@@ -558,7 +558,7 @@ func cleanS3Account(resourceURL string) {
 			continue // skip buckets not created by s2s copy testings.
 		}
 
-		objectsCh := make(chan string)
+		objectsCh := make(chan minio.ObjectInfo)
 
 		go func() {
 			defer close(objectsCh)
@@ -566,16 +566,17 @@ func cleanS3Account(resourceURL string) {
 			// List all objects from a bucket-name with a matching prefix.
 			for object := range s3Client.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{Prefix: "", Recursive: true}) {
 				if object.Err != nil {
-					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, err)
+					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, object.Err)
 					return
 				}
-				objectsCh <- object.Key
+				objectsCh <- object
 			}
 		}()
 
 		// List bucket, and delete all the objects in the bucket
-		remObjectsCh := make(chan minio.ObjectInfo)
-		_ = s3Client.RemoveObjects(ctx, bucket.Name, remObjectsCh, minio.RemoveObjectsOptions{})
+		for removeErr := range s3Client.RemoveObjects(ctx, bucket.Name, objectsCh, minio.RemoveObjectsOptions{}) {
+			fmt.Printf("error deleting object %q from bucket %q: %v\n", removeErr.ObjectName, bucket.Name, removeErr.Err)
+		}
 
 		// Remove the bucket.
 		if err := s3Client.RemoveBucket(ctx, bucket.Name); err != nil {

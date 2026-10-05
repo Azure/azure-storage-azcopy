@@ -194,7 +194,7 @@ func TestS3GetProperties(t *testing.T) {
 
 	bucketName := generateBucketName()
 	objectName := generateObjectName()
-	err = client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: ""})
+	err = client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
 	defer deleteBucket(client, bucketName, false)
 	a.Nil(err)
 

@@ -177,10 +177,11 @@ You can change this default behaviour and overwrite files at the destination by 
 By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command.
 To learn more, see [Synchronize files](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-blobs-synchronize).
 
-## Job-plan compatibility (Checkpoint 5)
+## Job-plan compatibility (Checkpoint 6)
 
-This integration writes **schema version 22** job plans for hardlink
-preservation. Older plan layouts cannot be resumed by this build.
+This integration writes **schema version 22** job plans, introduced in
+Checkpoint 5 for hardlink preservation and retained by Checkpoint 6.
+Older plan layouts cannot be resumed by this build.
 
 - Resume existing schema 21 jobs with the accepted **Checkpoint 4 binary**.
 - Resume existing schema 20 jobs with the accepted **Checkpoint 3 binary**.
@@ -191,7 +192,7 @@ preservation. Older plan layouts cannot be resumed by this build.
 Checkpoint 1 introduced schema 20, including persisted symlink handling;
 Checkpoints 2 and 3 retained that format. Checkpoint 4 introduced schema 21 for
 AMLFS header offsets and persisted `FolderExisted`/`Restarted` values.
-Checkpoint 5 does not migrate those older formats.
+Checkpoint 6 does not migrate those older formats.
 
 The embedded Mover sync API retains symlink following for local sources, including
 SMB and Blob destinations. The CLI sync flags retain upstream's NFS-specific
@@ -212,7 +213,7 @@ The `common.LifecycleMgr` contract and the exported `cmd.OutputFormat` value rem
 available for embedded hosts. No single-tenant OAuth manager is introduced.
 The `--include-root` flag controls root-property synchronization in addition to
 child objects. Checkpoint 2 retained Checkpoint 1's schema 20; the current
-Checkpoint 5 build uses schema 22 as described above.
+Checkpoint 6 build uses schema 22 as described above.
 
 ## Library execution integration (Checkpoint 3)
 
@@ -250,6 +251,19 @@ AzCopy warns about this behavior. This exception applies only to
 `--hardlinks=preserve`; it does not change the behavior of `follow` or `skip`.
 Deletion of destination-only paths remains controlled by `--delete-destination`.
 Review destination data and hardlink relationships before selecting preserve mode.
+
+## Final dependency and infrastructure integration (Checkpoint 6)
+
+Checkpoint 6 updates the storage SDK dependencies and uses MinIO Go v7.2.1 while
+retaining Mover-specific dependencies, the shared library executor, named
+credentials and the hardlink restrictions described above. Builds continue to
+use Go 1.26.6.
+
+The CI reporting updates retain the Mover sliding-window suite and the
+self-hosted Windows scenario job. Container packaging follows the upstream
+Azure Linux/MCR repository layout. Release publication and package removal remain
+explicit opt-in operations; FIPS-labelled builds retain the Microsoft Go
+toolchain checks and are not a claim of FIPS certification.
 
 New preserve-mode scans require a fresh JobID when inode state already exists.
 Use `ResumeJob` to resume the saved job; starting another scan does not overwrite
