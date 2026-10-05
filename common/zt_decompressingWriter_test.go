@@ -29,6 +29,7 @@ import (
 	"math/rand"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type closeableBuffer struct {
@@ -114,6 +115,31 @@ func TestDecompressingWriter_EarlyClose(t *testing.T) {
 		a.True(destFile.closeWasCalled())
 		a.NotNil(err)
 	}
+}
+
+func TestDecompressingWriter_WorkerFinishesBeforeClose(t *testing.T) {
+	a := assert.New(t)
+	originalData, compressedData := getTestData(a, ECompressionType.ZLib(), 1024)
+	destFile := &closeableBuffer{Buffer: &bytes.Buffer{}}
+	decWriter := NewDecompressingWriter(destFile, ECompressionType.ZLib())
+
+	_, err := decWriter.Write(compressedData)
+	a.Nil(err)
+	// zlib stops at its trailer, so the worker exits without waiting for Close.
+	a.Eventually(destFile.closeWasCalled, 5*time.Second, time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
+	_, err = decWriter.Write([]byte{0})
+	a.NotNil(err, "writing past the end of the stream must fail")
+
+	closed := make(chan error, 1)
+	go func() { closed <- decWriter.Close() }()
+	select {
+	case err = <-closed:
+		a.Nil(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return after the worker finished")
+	}
+	a.Equal(originalData, destFile.Bytes())
 }
 
 func getTestData(a *assert.Assertions, tp CompressionType, originalSize int) (original []byte, compressed []byte) {
