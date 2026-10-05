@@ -76,6 +76,7 @@ type IJobPartMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
+	GetJobErrorHandler() common.JobErrorHandler
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -167,7 +168,6 @@ type jobPartMgr struct {
 	dstServiceClient *common.ServiceClient
 
 	srcIsOAuth bool // true if source is authenticated via oauth
-	credOption *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
@@ -335,8 +335,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.clientInfo()
-
 	// Cache IsFinalPart before the transfer loop, since plan memory may be unmapped
 	// by progressive cleanup after the last ReportTransferDone fires.
 	isFinalPart := plan.IsFinalPart
@@ -460,17 +458,6 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) clientInfo() {
-	jpm.credOption = &common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(common.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
-
-}
-
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
 	return jpm.slicePool
 }
@@ -571,7 +558,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 }
 
 func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
-	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+	cpkInfo, err := common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+	if err != nil {
+		jpm.GetJobErrorHandler().Error(err.Error())
+	}
+	return cpkInfo
 }
 
 func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
@@ -740,6 +731,10 @@ func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 
 func (jpm *jobPartMgr) ResetFailedTransfersCount() {
 	atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
+}
+
+func (jpm *jobPartMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jpm.jobMgr.GetJobErrorHandler()
 }
 
 // TODO: Can we delete this method?

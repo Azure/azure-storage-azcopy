@@ -143,7 +143,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 
 			if err != nil {
@@ -151,7 +151,7 @@ func init() {
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()

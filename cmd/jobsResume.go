@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	aztraverser "github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -67,7 +68,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
+	glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -84,7 +85,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
+func (cca *resumeJobController) Cancel(lcm LifecycleMgr) {
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
 		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
@@ -92,7 +93,7 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 }
 
 // TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *resumeJobController) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 
 	// When we do GetJobSummary, the transfers list objects are cleared.
 	// This is a problem for other client consumers like XDM
@@ -101,9 +102,6 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
 
@@ -121,9 +119,9 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 
 		return ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	throughput := computeThroughput()
+	builder := func(format common.OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
@@ -135,7 +133,6 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				scanningString = ""
 			}
 
-			throughput := computeThroughput()
 			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 			if throughput == 0 {
 				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
@@ -152,16 +149,24 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
-	})
+	}
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
+	}
+
+	glcm.Progress(builder)
 
 	if jobDone {
-		exitCode := common.EExitCode.Success()
+		exitCode := EExitCode.Success()
 		if summary.TransfersFailed > 0 {
-			exitCode = common.EExitCode.Error()
+			exitCode = EExitCode.Error()
 		}
 
 		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
@@ -235,7 +240,7 @@ func init() {
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 	}
 
@@ -296,7 +301,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	dstCredInfo, err = GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
 		Context:            ctx,
-		CanBePublic:        true,  // source can be public
+		CanBePublic:        false, // destination requires write access
 		SharedKeyAllowed:   false, // but not shared key
 		PreferredTokenName: rca.DstCredName,
 		CpkOptions:         common.CpkOptions{},
@@ -306,6 +311,30 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("failed to get destination credentials: %w", err)
 	}
 
+	var missingSAS []string
+	if fromTo.From().IsAzure() && source.SAS == "" {
+		if srcCredInfo.CredentialType == enum.ECredentialType.Unknown() {
+			missingSAS = append(missingSAS, "source-sas")
+		} else if srcCredInfo.CredentialType == enum.ECredentialType.Anonymous() {
+			public := false
+			if fromTo.From() == common.ELocation.Blob() {
+				public, err = isPublic(ctx, source.Value, common.CpkOptions{})
+				if err != nil {
+					return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, err
+				}
+			}
+			if !public {
+				missingSAS = append(missingSAS, "source-sas")
+			}
+		}
+	}
+	if fromTo.To().IsAzure() && destination.SAS == "" &&
+		(dstCredInfo.CredentialType == enum.ECredentialType.Unknown() || dstCredInfo.CredentialType == enum.ECredentialType.Anonymous()) {
+		missingSAS = append(missingSAS, "destination-sas")
+	}
+	if len(missingSAS) > 0 {
+		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("the %s switch must be provided to resume the job", strings.Join(missingSAS, " and "))
+	}
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// Error for invalid JobId format
@@ -410,12 +439,12 @@ func (rca resumeCmdArgs) process() error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
 	// TODO: Replace context with root context
-	srcResourceString, err := SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
+	srcResourceString, err := aztraverser.SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
 	if err != nil {
 		return fmt.Errorf("failed to split source resource string: %w", err)
 	}
 	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
+	dstResourceString, err := aztraverser.SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
 	if err != nil {
 		return fmt.Errorf("failed to split dest resource string: %w", err)
 	}
@@ -428,7 +457,7 @@ func (rca resumeCmdArgs) process() error {
 		dstResourceString,
 	)
 	if err != nil {
-		return errors.New("could not create service clients " + err.Error())
+		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
 	}
 
 	// Send resume job request.
@@ -440,6 +469,7 @@ func (rca resumeCmdArgs) process() error {
 		DstServiceClient: dstServiceClient,
 		IncludeTransfer:  includeTransfer,
 		ExcludeTransfer:  excludeTransfer,
+		JobErrorHandler:  glcm,
 
 		// download is the only sort that uses the source as our target credential type
 		TargetCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsDownload(), srcCredInfo.CredentialType, dstCredInfo.CredentialType),

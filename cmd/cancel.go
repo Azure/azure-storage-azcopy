@@ -56,7 +56,7 @@ type cookedCancelCmdArgs struct {
 // handles the cancel command
 // dispatches the cancel Job order to the storage engine
 func (cca cookedCancelCmdArgs) process() error {
-	cancelJobResponse := jobsAdmin.CancelPauseJobOrder(cca.jobID, common.EJobStatus.Cancelling())
+	cancelJobResponse := jobsAdmin.CancelPauseJobOrder(cca.jobID, common.EJobStatus.Cancelling(), glcm)
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
@@ -102,7 +102,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to perform cancel command due to error " + err.Error())
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release.

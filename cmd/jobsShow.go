@@ -76,7 +76,7 @@ func init() {
 				}
 				PrintJobTransfers(common.ListJobTransfersResponse(resp))
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 	}
 
@@ -88,16 +88,16 @@ func init() {
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
 func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
-	if OutputFormat == common.EOutputFormat.Json() {
+	if OutputFormat == EOutputFormat.Json() {
 		glcm.Output(
 			func(_ common.OutputFormat) string {
 				buf, err := json.Marshal(listTransfersResponse)
 				common.PanicIfErr(err)
 				return string(buf)
-			}, common.EOutputMessageType.ListJobTransfers())
+			}, EOutputMessageType.ListJobTransfers())
 	}
 	glcm.Exit(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(listTransfersResponse)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
@@ -114,7 +114,7 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 				detail.Dst + folderChar + " status " + detail.TransferStatus.String() + "\n")
 		}
 		return sb.String()
-	}, common.EExitCode.Success())
+	}, EExitCode.Success())
 }
 
 // PrintJobProgressSummary formats a library job summary for CLI output.

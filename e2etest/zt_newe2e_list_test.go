@@ -220,7 +220,7 @@ func (s *ListSuite) Scenario_ListProperties_TextOutput(svm *ScenarioVariationMan
 			},
 			Flags: ListFlags{
 				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Text()),
+					OutputType: to.Ptr(cmd.EOutputFormat.Text()),
 				},
 				Properties: to.Ptr("LastModifiedTime;VersionId;BlobType;BlobAccessTier;ContentType;ContentEncoding;ContentMD5;LeaseState;LeaseStatus;LeaseDuration;ArchiveStatus"),
 			},
@@ -380,7 +380,7 @@ func (s *ListSuite) Scenario_ListBasic_TextOutput(svm *ScenarioVariationManager)
 			Flags: ListFlags{
 				RunningTally: to.Ptr(true),
 				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Text()),
+					OutputType: to.Ptr(cmd.EOutputFormat.Text()),
 				},
 			},
 		})
@@ -586,7 +586,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions_TextOutput(svm *S
 			},
 			Flags: ListFlags{
 				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Text()),
+					OutputType: to.Ptr(cmd.EOutputFormat.Text()),
 				},
 				RunningTally: to.Ptr(true),
 				Properties:   to.Ptr("VersionId"),

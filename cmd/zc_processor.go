@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/pkg/errors"
 
@@ -361,16 +362,16 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 	return json.Marshal(surrogate)
 }
 
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
+func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
 	var srcRelativePath, dstRelativePath string
-	if storedObject.relativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
-		srcRelativePath, dstRelativePath = storedObject.relativePath, storedObject.relativePath
+	if storedObject.RelativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
+		srcRelativePath, dstRelativePath = storedObject.RelativePath, storedObject.RelativePath
 	} else {
-		srcRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
-		dstRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
+		srcRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, true)
+		dstRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, false)
 		if srcRelativePath != "" {
 			srcRelativePath = "/" + srcRelativePath
 		}
@@ -381,7 +382,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	// In order to fix nameless dir case, we had to store directories in the stored object index with a trailing slash
 	// When we go to actually transfer a folder, we need to remove the trailing slash because it's not supported by azure apis
-	if s.folderPropertiesOption != common.EFolderPropertiesOption.NoFolders() && storedObject.entityType == common.EEntityType.Folder() {
+	if s.folderPropertiesOption != common.EFolderPropertiesOption.NoFolders() && storedObject.EntityType == common.EEntityType.Folder() {
 		srcRelativePath = strings.TrimSuffix(srcRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 		dstRelativePath = strings.TrimSuffix(dstRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 	}
@@ -427,27 +428,27 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 				}
 			}
 
-			if format == common.EOutputFormat.Json() {
+			if format == EOutputFormat.Json() {
 				tx := DryrunTransfer{
-					EntityType:  storedObject.entityType,
-					BlobType:    common.FromBlobType(storedObject.blobType),
+					EntityType:  storedObject.EntityType,
+					BlobType:    common.FromBlobType(storedObject.BlobType),
 					FromTo:      s.copyJobTemplate.FromTo,
 					Source:      common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
 					Destination: "",
-					SourceSize:  &storedObject.size,
+					SourceSize:  &storedObject.Size,
 					HttpHeaders: blob.HTTPHeaders{
-						BlobCacheControl:       &storedObject.cacheControl,
-						BlobContentDisposition: &storedObject.contentDisposition,
-						BlobContentEncoding:    &storedObject.contentEncoding,
-						BlobContentLanguage:    &storedObject.contentLanguage,
-						BlobContentMD5:         storedObject.md5,
-						BlobContentType:        &storedObject.contentType,
+						BlobCacheControl:       &storedObject.CacheControl,
+						BlobContentDisposition: &storedObject.ContentDisposition,
+						BlobContentEncoding:    &storedObject.ContentEncoding,
+						BlobContentLanguage:    &storedObject.ContentLanguage,
+						BlobContentMD5:         storedObject.Md5,
+						BlobContentType:        &storedObject.ContentType,
 					},
 					Metadata:     storedObject.Metadata,
-					BlobTier:     &storedObject.blobAccessTier,
-					BlobVersion:  &storedObject.blobVersionID,
-					BlobTags:     storedObject.blobTags,
-					BlobSnapshot: &storedObject.blobSnapshotID,
+					BlobTier:     &storedObject.BlobAccessTier,
+					BlobVersion:  &storedObject.BlobVersionID,
+					BlobTags:     storedObject.BlobTags,
+					BlobSnapshot: &storedObject.BlobSnapshotID,
 				}
 
 				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {

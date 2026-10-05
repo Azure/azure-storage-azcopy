@@ -21,9 +21,11 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
 )
 
 func newLocalRes(path string) common.ResourceString {
@@ -31,7 +33,7 @@ func newLocalRes(path string) common.ResourceString {
 }
 
 func newRemoteRes(url string) common.ResourceString {
-	r, err := SplitResourceString(url, common.ELocation.Blob())
+	r, err := traverser.SplitResourceString(url, common.ELocation.Blob())
 	if err != nil {
 		panic("can't parse resource string")
 	}
@@ -46,10 +48,10 @@ func TestRelativePath(t *testing.T) {
 		Destination: newLocalRes("y/z/"),
 	}
 
-	object := StoredObject{
-		name:         "c.txt",
-		entityType:   1,
-		relativePath: "c.txt",
+	object := traverser.StoredObject{
+		Name:         "c.txt",
+		EntityType:   1,
+		RelativePath: "c.txt",
 	}
 
 	// execute

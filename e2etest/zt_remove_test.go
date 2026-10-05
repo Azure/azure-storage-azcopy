@@ -23,8 +23,9 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 	"testing"
 	"time"
 )
@@ -46,7 +47,7 @@ func TestRemove_IncludeAfter(t *testing.T) {
 		beforeRunJob: func(h hookHelper) {
 			// Pause for a includeAfter time
 			time.Sleep(5 * time.Second)
-			h.GetModifiableParameters().includeAfter = time.Now().Format(cmd.ISO8601)
+			h.GetModifiableParameters().includeAfter = time.Now().Format(traverser.ISO8601)
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
 			// So that when validating, our validation can be sure that the right datetime has ended up in the right
 			// field

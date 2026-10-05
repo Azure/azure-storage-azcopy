@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 
@@ -123,10 +122,6 @@ type CopyJobPartOrderRequest struct {
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
 
-	//These clients are required only in S2S transfers from/to datalake
-	SrcDatalakeClient *datalake.Client
-	DstDatalakeClient *datalake.Client
-
 	Transfers      Transfers
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
@@ -150,6 +145,7 @@ type CopyJobPartOrderRequest struct {
 	S2SSourceCredentialType enum.CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
 	Provider                credentials.Provider //credential provider implementation for custom credential management
+	JobErrorHandler         JobErrorHandler
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -307,6 +303,7 @@ type ResumeJobRequest struct {
 	Provider                credentials.Provider
 	TargetCredentialType    enum.CredentialType
 	S2SSourceCredentialType enum.CredentialType
+	JobErrorHandler         JobErrorHandler
 }
 
 // represents the Details and details of a single transfer

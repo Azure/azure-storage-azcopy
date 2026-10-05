@@ -38,6 +38,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -57,7 +58,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 // base for delete processors targeting different resources
 type interactiveDeleteProcessor struct {
 	// the plugged-in deleter that performs the actual deletion
-	deleter objectProcessor
+	deleter traverser.ObjectProcessor
 
 	// whether we should ask the user for permission the first time we delete a file
 	shouldPromptUser bool
@@ -80,7 +81,7 @@ type interactiveDeleteProcessor struct {
 	dryrunMode bool
 }
 
-func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err error) {
+func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredObject) (err error) {
 	if d.shouldPromptUser {
 		d.shouldDelete, d.shouldPromptUser = d.promptForConfirmation(object) // note down the user's decision
 	}
@@ -91,16 +92,16 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 
 	if d.dryrunMode {
 		glcm.Dryrun(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+			if format == EOutputFormat.Json() {
 				deleteTarget := common.ELocation.Local()
 				if d.objectTypeToDisplay != LocalFileObjectType {
 					_ = deleteTarget.Parse(d.objectTypeToDisplay)
 				}
 
 				tx := DryrunTransfer{
-					Source:     common.GenerateFullPath(d.objectLocationToDisplay, object.relativePath),
-					BlobType:   common.FromBlobType(object.blobType),
-					EntityType: object.entityType,
+					Source:     common.GenerateFullPath(d.objectLocationToDisplay, object.RelativePath),
+					BlobType:   common.FromBlobType(object.BlobType),
+					EntityType: object.EntityType,
 					FromTo:     common.FromToValue(deleteTarget, common.ELocation.Unknown()),
 				}
 
@@ -109,7 +110,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 				return string(jsonOutput)
 			} else { // remove for sync
 				return fmt.Sprintf("DRYRUN: remove %v",
-					common.GenerateFullPath(d.objectLocationToDisplay, object.relativePath))
+					common.GenerateFullPath(d.objectLocationToDisplay, object.RelativePath))
 			}
 		})
 		return nil
@@ -117,10 +118,10 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 
 	err = d.deleter(object)
 	if err != nil {
-		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
 		glcm.Info(msg + "; check the scanning log file for more details")
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 		}
 	}
 
@@ -132,13 +133,13 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 	return nil // Missing a file is an error, but it's not show-stopping. We logged it earlier; that's OK.
 }
 
-func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) (shouldDelete bool, keepPrompting bool) {
+func (d *interactiveDeleteProcessor) promptForConfirmation(object traverser.StoredObject) (shouldDelete bool, keepPrompting bool) {
 	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
 		"Do you wish to delete it from the destination(%s)?",
-		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay),
+		d.objectTypeToDisplay, object.RelativePath, d.objectLocationToDisplay),
 		common.PromptDetails{
 			PromptType:   common.EPromptType.DeleteDestination(),
-			PromptTarget: object.relativePath,
+			PromptTarget: object.RelativePath,
 			ResponseOptions: []common.ResponseOption{
 				common.EResponseOption.Yes(),
 				common.EResponseOption.No(),
@@ -155,18 +156,18 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) 
 		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
 		return true, false
 	case common.EResponseOption.No():
-		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
+		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.RelativePath))
 		return false, true
 	case common.EResponseOption.NoForAll():
 		glcm.Info("No deletions will happen from now onwards.")
 		return false, false
 	default:
-		glcm.Info(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.relativePath))
+		glcm.Info(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.RelativePath))
 		return false, true
 	}
 }
 
-func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination common.DeleteDestination,
+func newInteractiveDeleteProcessor(deleter traverser.ObjectProcessor, deleteDestination common.DeleteDestination,
 	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func(), dryrun bool) *interactiveDeleteProcessor {
 
 	return &interactiveDeleteProcessor{
@@ -186,7 +187,7 @@ func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderProper
 	localDeleter := localFileDeleter{
 		rootPath:               cca.destination.ValueLocal(),
 		fpo:                    fpo,
-		folderManager:          common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger),
+		folderManager:          common.NewFolderDeletionManager(context.Background(), fpo, common.AzcopyScanningLogger),
 		incrementDeletionCount: cca.incrementDeletionCount,
 	}
 
@@ -208,35 +209,35 @@ type localFileDeleter struct {
 	incrementDeletionCount func()
 }
 
-func (l *localFileDeleter) getObjectURL(object StoredObject) *url.URL {
+func (l *localFileDeleter) getObjectURL(object traverser.StoredObject) *url.URL {
 	return &url.URL{
 		Scheme: "local",
-		Path:   "/" + strings.ReplaceAll(object.relativePath, "\\", "/"), // consolidate to forward slashes
+		Path:   "/" + strings.ReplaceAll(object.RelativePath, "\\", "/"), // consolidate to forward slashes
 	}
 }
 
-func (l *localFileDeleter) deleteFile(object StoredObject) error {
+func (l *localFileDeleter) deleteFile(object traverser.StoredObject) error {
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
-	if object.entityType == common.EEntityType.File() {
-		msg := "Deleting extra file: " + object.relativePath
+	if object.EntityType == common.EEntityType.File() {
+		msg := "Deleting extra file: " + object.RelativePath
 		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, msg)
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
-		err := os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
+		err := os.Remove(common.GenerateFullPath(l.rootPath, object.RelativePath))
 		l.folderManager.RecordChildDeleted(objectURI)
 		return err
-	} else if object.entityType == common.EEntityType.Folder() && l.fpo != common.EFolderPropertiesOption.NoFolders() {
-		msg := "Deleting extra folder: " + object.relativePath
+	} else if object.EntityType == common.EEntityType.Folder() && l.fpo != common.EFolderPropertiesOption.NoFolders() {
+		msg := "Deleting extra folder: " + object.RelativePath
 		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, msg)
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
 
 		l.folderManager.RequestDeletion(objectURI, func(ctx context.Context, logger common.ILogger) bool {
-			return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath)) == nil
+			return os.Remove(common.GenerateFullPath(l.rootPath, object.RelativePath)) == nil
 		})
 	}
 
@@ -295,9 +296,9 @@ func newRemoteResourceDeleter(
 		targetLocation: targetLocation,
 		folderManager: func() common.FolderDeletionManager { // ensure we don't create a null manager when orchestrator requires recursive deletion
 			if UseSyncOrchestrator && fpo == common.EFolderPropertiesOption.NoFolders() {
-				return common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger, common.FolderDeletionManagerOptions{Recursive: true})
+				return common.NewFolderDeletionManager(ctx, fpo, common.AzcopyScanningLogger, common.FolderDeletionManagerOptions{Recursive: true})
 			}
-			return common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger)
+			return common.NewFolderDeletionManager(ctx, fpo, common.AzcopyScanningLogger)
 		}(),
 		folderOption:           fpo,
 		forceIfReadOnly:        forceIfReadOnly,
@@ -316,32 +317,32 @@ func (b *remoteResourceDeleter) getObjectURL(objectURL string) (*url.URL, error)
 	return u, nil
 }
 
-func (b *remoteResourceDeleter) delete(object StoredObject) error {
+func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 	/* knarasim: This needs to be taken care of
-	if b.targetLocation == common.ELocation.BlobFS() && object.entityType == common.EEntityType.Folder() {
+	if b.targetLocation == common.ELocation.BlobFS() && object.EntityType == common.EEntityType.Folder() {
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
 	}
 	*/
-	objectPath := path.Join(b.rootPath, object.relativePath) // BUG: path.Join will normalize FNS paths with nameless virtual dirs (ex: a///b is normalized to a/b)
-	if object.relativePath == "\x00" && b.targetLocation != common.ELocation.Blob() {
+	objectPath := path.Join(b.rootPath, object.RelativePath)
+	if object.RelativePath == "\x00" && b.targetLocation != common.ELocation.Blob() {
 		return nil // Do nothing, we don't want to accidentally delete the root.
-	} else if object.relativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.
+	} else if object.RelativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.
 		objectPath = b.rootPath
 	}
 
-	if strings.HasSuffix(object.relativePath, "/") && !strings.HasSuffix(objectPath, "/") && b.targetLocation == common.ELocation.Blob() {
+	if strings.HasSuffix(object.RelativePath, "/") && !strings.HasSuffix(objectPath, "/") && b.targetLocation == common.ELocation.Blob() {
 		// If we were targeting a directory, we still need to be. path.join breaks that.
 		// We also want to defensively code around this, and make sure we are not putting folder// or trying to put a weird URI in to an endpoint that can't do this.
 		objectPath += "/"
 	}
 
 	sc := b.remoteClient
-	if object.entityType == common.EEntityType.File() {
+	if object.EntityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
-		msg := "Deleting extra object: " + object.relativePath
+		msg := "Deleting extra object: " + object.RelativePath
 		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, msg)
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
 
 		var err error
@@ -391,21 +392,21 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		}
 
 		if err != nil {
-			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
 			glcm.Info(msg + "; check the scanning log file for more details")
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
 
 			return err
 		}
 
 		return nil
-	} else if object.entityType == common.EEntityType.Symlink() {
-		msg := "Deleting extra object: " + object.relativePath
+	} else if object.EntityType == common.EEntityType.Symlink() {
+		msg := "Deleting extra object: " + object.RelativePath
 		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, msg)
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
 
 		var err error
@@ -431,10 +432,10 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		}
 
 		if err != nil {
-			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
 			glcm.Info(msg + "; check the scanning log file for more details")
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
 
 			return err
@@ -671,8 +672,8 @@ func (b *remoteResourceDeleter) enumerateAndRegisterBlobs(
 		if processedCount > 0 && processedCount%1000 == 0 {
 			msg := fmt.Sprintf("Registered %d items for deletion, %d folders remaining",
 				processedCount, len(foldersToProcess))
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg)
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, msg)
 			}
 		}
 
@@ -689,8 +690,8 @@ func (b *remoteResourceDeleter) createBlobDeletionFunc(blobClient *blob.Client, 
 
 		if _, err := blobClient.Delete(ctx, nil); err != nil {
 			msg := fmt.Sprintf("Failed to delete blob %s: %v", blobName, err)
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg)
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, msg)
 			}
 		}
 
@@ -833,8 +834,8 @@ func (b *remoteResourceDeleter) enumerateAndRegisterFiles(
 				if err != nil {
 					// Log error but continue processing other folders
 					msg := fmt.Sprintf("Failed to enumerate Azure Files directory %s: %v", currentFolder, err)
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogError, msg)
+					if common.AzcopyScanningLogger != nil {
+						common.AzcopyScanningLogger.Log(common.LogError, msg)
 					}
 					break // Break from this folder's pagination, continue with next folder
 				}
@@ -850,8 +851,8 @@ func (b *remoteResourceDeleter) enumerateAndRegisterFiles(
 							remoteClient, shareName); err != nil {
 							// Log error but continue processing
 							msg := fmt.Sprintf("Failed to register directory %s for deletion: %v", subDirPath, err)
-							if azcopyScanningLogger != nil {
-								azcopyScanningLogger.Log(common.LogError, msg)
+							if common.AzcopyScanningLogger != nil {
+								common.AzcopyScanningLogger.Log(common.LogError, msg)
 							}
 						} else {
 							processedDirCount++
@@ -870,8 +871,8 @@ func (b *remoteResourceDeleter) enumerateAndRegisterFiles(
 						if err != nil {
 							// Log error but continue processing
 							msg := fmt.Sprintf("Failed to parse file URL for %s: %v", filePath, err)
-							if azcopyScanningLogger != nil {
-								azcopyScanningLogger.Log(common.LogError, msg)
+							if common.AzcopyScanningLogger != nil {
+								common.AzcopyScanningLogger.Log(common.LogError, msg)
 							}
 							continue
 						}
@@ -901,16 +902,16 @@ func (b *remoteResourceDeleter) enumerateAndRegisterFiles(
 			if totalProcessed > 0 && totalProcessed%1000 == 0 {
 				msg := fmt.Sprintf("Azure Files: Registered %d files and %d directories for deletion, %d folders remaining",
 					processedFileCount, processedDirCount, len(foldersToProcess))
-				if azcopyScanningLogger != nil {
-					azcopyScanningLogger.Log(common.LogError, msg)
+				if common.AzcopyScanningLogger != nil {
+					common.AzcopyScanningLogger.Log(common.LogError, msg)
 				}
 			}
 		}
 
 		msg := fmt.Sprintf("Azure Files: Completed registration - %d files and %d directories queued for deletion",
 			processedFileCount, processedDirCount)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogError, msg)
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogError, msg)
 		}
 	}()
 
@@ -929,8 +930,8 @@ func (b *remoteResourceDeleter) createFileDeletionFunc(fileClient *file.Client, 
 
 		if err != nil {
 			msg := fmt.Sprintf("Failed to delete file %s: %v", filePath, err)
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg)
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, msg)
 			}
 			return // Don't increment count on failure
 		}

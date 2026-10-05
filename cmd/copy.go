@@ -39,9 +39,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -265,7 +267,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	cooked.Destination, err = traverser.SplitResourceString(tempDest, cooked.FromTo.To())
 	if err != nil {
 		return cooked, err
 	}
@@ -280,7 +282,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	}
-	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	cooked.Source, err = traverser.SplitResourceString(tempSrc, cooked.FromTo.From())
 	if err != nil {
 		return cooked, err
 	}
@@ -335,7 +337,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeBefore != "" {
 		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
 		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
-		parsedIncludeBefore, err := IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
+		parsedIncludeBefore, err := traverser.IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
 		if err != nil {
 			return cooked, err
 		}
@@ -345,7 +347,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeAfter != "" {
 		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
 		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
-		parsedIncludeAfter, err := IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
+		parsedIncludeAfter, err := traverser.IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
@@ -379,7 +381,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	// This will only happen in CLI commands, not AzCopy as a library.
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
-		glcm.SetOutputFormat(common.EOutputFormat.None())
+		glcm.SetOutputFormat(EOutputFormat.None())
 	}
 
 	if cooked.FromTo.IsNFS() {
@@ -735,7 +737,7 @@ type CookedCopyCmdArgs struct {
 	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
 	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
 	followupJobArgs   *CookedCopyCmdArgs
-	priorJobExitCode  *common.ExitCode
+	priorJobExitCode  *ExitCode
 	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
 	cleanupJobMessage string
 
@@ -806,7 +808,7 @@ func (cca *CookedCopyCmdArgs) process() error {
 		}
 
 		// if no error, the operation is now complete
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	}
 	return cca.processCopyJobPartOrders()
 }
@@ -849,7 +851,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, credInfo.TokenCredential, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyScanningLogger, credInfo.TokenCredential, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -867,9 +869,12 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
 	}
 	// step 3: start download
-
+	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
+	if err != nil {
+		return err
+	}
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKInfo:      cpkInfo,
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 	if err != nil {
@@ -965,6 +970,10 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
 		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
 	}
+	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
+	if err != nil {
+		return err
+	}
 	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
 		BlockSize:   blockSize,
 		Concurrency: pipingUploadParallelism,
@@ -978,7 +987,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			BlobCacheControl:       ternary.IffNotEmpty(cca.cacheControl),
 		},
 		AccessTier:   bbAccessTier,
-		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKInfo:      cpkInfo,
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 
@@ -1074,6 +1083,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, cca.credentialInfo.TokenCredential)
@@ -1138,7 +1148,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err := azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
 		}
@@ -1155,12 +1165,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
-		var e *CopyEnumerator
+		var e *traverser.CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete
@@ -1174,7 +1184,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 				return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 			}
 
-			err = e.enumerate()
+			err = e.Enumerate()
 		}
 
 	case cca.FromTo.IsSetProperties():
@@ -1183,7 +1193,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if createErr != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	default:
 		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
@@ -1212,7 +1222,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 		if common.LogPathFolder != "" {
 			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+		glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(),
 			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
@@ -1233,7 +1243,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *CookedCopyCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, "+
@@ -1262,14 +1272,14 @@ func (cca *CookedCopyCmdArgs) hasFollowup() bool {
 	return cca.followupJobArgs != nil
 }
 
-func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
+func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode ExitCode) {
 	go func() {
 		glcm.AllowReinitiateProgressReporting()
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
 		if err == ErrNothingToRemove {
 			glcm.Info("Cleanup completed (nothing needed to be deleted)")
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		} else if err != nil {
 			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
 		}
@@ -1277,11 +1287,11 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 	}()
 }
 
-func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
+func (cca *CookedCopyCmdArgs) getSuccessExitCode() ExitCode {
 	if cca.priorJobExitCode != nil {
 		return *cca.priorJobExitCode // in a chain of jobs our best case outcome is whatever the predecessor(s) finished with
 	} else {
-		return common.EExitCode.Success()
+		return EExitCode.Success()
 	}
 }
 
@@ -1294,9 +1304,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1317,8 +1324,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		return ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	builder := func(format common.OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
@@ -1353,7 +1360,16 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
 				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
-	})
+	}
+
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
+	}
+
+	lcm.Progress(builder)
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
@@ -1363,11 +1379,11 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-			exitCode = common.EExitCode.Error()
+			exitCode = EExitCode.Error()
 		}
 
 		builder := func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
@@ -1425,17 +1441,19 @@ Final Job Status: %v%s%s
 				}
 
 				// log to job log
-				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-				if exists {
-					// Passing this as LogError ensures the stats are always logged.
-					jobMan.Log(common.LogError, logStats+"\n"+output)
+				if jobsAdmin.JobsAdmin != nil {
+					jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+					if exists {
+						// Passing this as LogError ensures the stats are always logged.
+						jobMan.Log(common.LogError, logStats+"\n"+output)
+					}
 				}
 				return output
 			}
 		}
 
 		if cca.hasFollowup() {
-			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			lcm.Exit(builder, EExitCode.NoExit()) // leave the app running to process the followup
 			cca.launchFollowup(exitCode)
 			lcm.SurrenderControl() // the followup job will run on its own goroutines
 		} else {
@@ -1597,14 +1615,14 @@ func init() {
 			}
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()

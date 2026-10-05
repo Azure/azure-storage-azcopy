@@ -31,6 +31,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -41,6 +43,19 @@ type SyncEnumeratorOptions struct {
 
 	// SyncOrchOptions contains options for the sync orchestrator.
 	SyncOrchOptions *SyncOrchestratorOptions
+}
+
+func (options *SyncEnumeratorOptions) forJob(fromTo common.FromTo) *SyncEnumeratorOptions {
+	if options == nil {
+		options = NewSyncDefaultEnumeratorOptions()
+	}
+	owned := *options
+	if options.SyncOrchOptions != nil {
+		settings := *options.SyncOrchOptions
+		settings.SetFromTo(fromTo)
+		owned.SyncOrchOptions = &settings
+	}
+	return &owned
 }
 
 func NewSyncDefaultEnumeratorOptions() *SyncEnumeratorOptions {
@@ -88,13 +103,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		return nil, err
 	}
 
-	if enumeratorOptions == nil {
-		enumeratorOptions = NewSyncDefaultEnumeratorOptions()
-	}
-
-	if enumeratorOptions.SyncOrchOptions.valid {
-		enumeratorOptions.SyncOrchOptions.fromTo = cca.fromTo
-	}
+	enumeratorOptions = enumeratorOptions.forJob(cca.fromTo)
 
 	srcCredInfo, err := GetTargetCredInfo(cca.source, cca.fromTo.From(), GetTargetCredInfoOptions{
 		Context:            ctx,
@@ -171,6 +180,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		HardlinkHandling:        cca.hardlinks,
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
+		IncludeRoot:             cca.includeRoot,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 
 			switch entityType {
@@ -185,8 +195,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		ErrorChannel: enumeratorOptions.ErrorChannel,
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
-		location: cca.fromTo.From(),
-		options:  sourceTraverserOptions,
+		Location: cca.fromTo.From(),
+		Options:  sourceTraverserOptions,
 	}
 	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, sourceTraverserOptions)
 
@@ -236,13 +246,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		FromTo:                  cca.fromTo,
+		IncludeRoot:             cca.includeRoot,
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
 		IsSyncDestination:       true,
 		SymlinkHandling:         cca.symlinkHandling,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
-		location: cca.fromTo.To(),
-		options:  destinationTraverserOptions,
+		Location: cca.fromTo.To(),
+		Options:  destinationTraverserOptions,
 	}
 	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, destinationTraverserOptions)
 	if err != nil {
@@ -274,9 +285,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		*/
 
 		if bloberror.HasCode(err, bloberror.ContainerNotFound) { // We can resolve a missing container. Let's create it.
-			bt := destinationTraverser.(*blobTraverser)
-			sc := bt.serviceClient                                                   // it being a blob traverser is a relatively safe assumption, because
-			bUrlParts, _ := blob.ParseURL(bt.rawURL)                                 // it should totally have succeeded by now anyway
+			bt := destinationTraverser.(*traverser.BlobTraverser)
+			sc := bt.ServiceClient                                                   // it being a blob traverser is a relatively safe assumption, because
+			bUrlParts, _ := blob.ParseURL(bt.RawURL)                                 // it should totally have succeeded by now anyway
 			_, err = sc.NewContainerClient(bUrlParts.ContainerName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
 			if err != nil {
 				glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
@@ -294,31 +305,35 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
-	filters := buildIncludeFilters(cca.includePatterns)
+	filters := traverser.BuildIncludeFilters(cca.includePatterns)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
+		includeAttrFilters := traverser.BuildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
 	}
 
-	filters = append(filters, buildExcludeFilters(cca.excludePatterns, false)...)
-	filters = append(filters, buildExcludeFilters(cca.excludePaths, true)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePatterns, false)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePaths, true)...)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
+		excludeAttrFilters := traverser.BuildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
 
 	// includeRegex
-	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
-	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
-	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	// decide our folder transfer strategy
+	var fpo common.FolderPropertyOption
+	var folderMessage string
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage = NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo,
+		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null),
+		cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -380,6 +395,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 	//Optional check for custom credential provider
 	var credProvider credentials.Provider = nil
@@ -510,13 +526,13 @@ func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *coo
 		cca.reportScanningProgress(glcm, 0)
 		glcm.Exit(func(format common.OutputFormat) string {
 			return "The source and destination are already in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	} else if !transferJobInitiated && anyDestinationFileDeleted {
 		// some files were deleted but no transfer scheduled
 		cca.reportScanningProgress(glcm, 0)
 		glcm.Exit(func(format common.OutputFormat) string {
 			return "The source and destination are now in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	}
 }
 
@@ -554,7 +570,7 @@ func GetSyncEnumeratorWithDestComparator(
 	// we ALREADY have available a complete map of everything that exists locally
 	// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-	comparator := newSyncDestinationComparator(
+	comparator := traverser.NewSyncDestinationComparator(
 		indexer,
 		transferScheduler.scheduleCopyTransfer,
 		destCleanerFunc,
@@ -562,11 +578,11 @@ func GetSyncEnumeratorWithDestComparator(
 		cca.preserveInfo,
 		cca.mirrorMode,
 		cca.deleteDestination,
-		srcTraverserTemplate.options.IncrementNotTransferred,
-		enumeratorOptions.SyncOrchOptions).processIfNecessary
+		srcTraverserTemplate.Options.IncrementNotTransferred,
+		enumeratorOptions.SyncOrchOptions).ProcessIfNecessary
 	finalize := func() error {
 		// schedule every local file that doesn't exist at the destination
-		err := indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+		err := indexer.Traverse(transferScheduler.scheduleCopyTransfer, filters)
 		if err != nil {
 			return err
 		}
@@ -582,7 +598,10 @@ func GetSyncEnumeratorWithDestComparator(
 		return nil
 	}
 
-	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
+	return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, traverser.SyncEnumeratorOptions{
+		PrimaryTemplate: srcTraverserTemplate, SecondaryTemplate: dstTraverserTemplate,
+		ScheduleTransfer: transferScheduler.scheduleCopyTransfer, OrchestratorOptions: enumeratorOptions.SyncOrchOptions,
+	}), nil
 }
 
 func GetSyncEnumeratorWithSrcComparator(
@@ -597,10 +616,10 @@ func GetSyncEnumeratorWithSrcComparator(
 	enumeratorOptions *SyncEnumeratorOptions,
 ) (*syncEnumerator, error) {
 
-	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+	indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 	// in all other cases (download and S2S), the destination is scanned/indexed first
 	// then the source is scanned and filtered based on what the destination contains
-	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode, srcTraverserTemplate.options.IncrementNotTransferred).processIfNecessary
+	comparator := traverser.NewSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode, srcTraverserTemplate.Options.IncrementNotTransferred).ProcessIfNecessary
 
 	finalize := func() error {
 		// remove the extra files at the destination that were not present at the source
@@ -618,7 +637,7 @@ func GetSyncEnumeratorWithSrcComparator(
 			deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
 		}
 
-		err := indexer.traverse(deleteScheduler, nil)
+		err := indexer.Traverse(deleteScheduler, nil)
 		if err != nil {
 			return err
 		}
@@ -636,5 +655,8 @@ func GetSyncEnumeratorWithSrcComparator(
 		return nil
 	}
 
-	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
+	return traverser.NewSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, traverser.SyncEnumeratorOptions{
+		PrimaryTemplate: srcTraverserTemplate, SecondaryTemplate: dstTraverserTemplate,
+		ScheduleTransfer: transferScheduler.scheduleCopyTransfer, OrchestratorOptions: enumeratorOptions.SyncOrchOptions,
+	}), nil
 }

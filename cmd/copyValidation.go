@@ -256,7 +256,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("cannot check file attributes on remote objects")
 	}
 
-	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
+	if OutputLevel == EOutputVerbosity.Quiet() || OutputLevel == EOutputVerbosity.Essential() {
 		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
 			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", OutputLevel.String(), cooked.ForceWrite.String())
 		} else if cooked.dryrunMode {
