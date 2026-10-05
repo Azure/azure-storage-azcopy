@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -14,11 +15,15 @@ import (
 // PreparedSync supports existing embedded callers that separately prepare and run enumeration.
 // Both this adapter and Client.Sync use the same library executor.
 type PreparedSync struct {
-	syncer     *syncer
-	enumerator *traverser.SyncEnumerator
-	ctx        context.Context
-	cancel     context.CancelFunc
-	lifecycle  *jobLifecycleManager
+	syncer          *syncer
+	enumerator      *traverser.SyncEnumerator
+	ctx             context.Context
+	cancel          context.CancelFunc
+	lifecycle       *jobLifecycleManager
+	mu              sync.Mutex
+	running         bool
+	closed          bool
+	retainResources bool
 }
 
 func (c *Client) PrepareSync(ctx context.Context, src, dst string, opts SyncOptions) (*PreparedSync, error) {
@@ -46,31 +51,68 @@ func (c *Client) PrepareSync(ctx context.Context, src, dst string, opts SyncOpti
 	mgr := NewJobLifecycleManager(common.GetLifecycleMgr())
 	enumerator, err := s.initEnumerator(ctx, c.GetLogLevel(), mgr)
 	if err != nil {
-		cancel()
-		return nil, err
+		if drainErr := s.cancelAndDrain(cancel, jobID, mgr); drainErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("prepared sync cancellation did not drain; job resources retained: %w", drainErr))
+		}
+		return nil, errors.Join(err, s.Close())
 	}
 	return &PreparedSync{syncer: s, enumerator: enumerator, ctx: ctx, cancel: cancel, lifecycle: mgr}, nil
 }
 
 func (p *PreparedSync) Enumerator() *traverser.SyncEnumerator { return p.enumerator }
 
-func (p *PreparedSync) Enumerate(ctx context.Context) error {
+func (p *PreparedSync) Enumerate(ctx context.Context) (err error) {
 	if ctx == nil {
 		return fmt.Errorf("a context is required for sync enumeration")
 	}
+	p.mu.Lock()
+	if p.running || p.closed {
+		p.mu.Unlock()
+		return errors.New("prepared sync enumeration is already running or closed")
+	}
+	p.running = true
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.running = false
+		if !p.retainResources {
+			err = errors.Join(err, p.syncer.Close())
+			p.closed = true
+		}
+	}()
 	stop := context.AfterFunc(ctx, p.cancel)
 	defer stop()
-	err := p.syncer.enumerate(p.ctx, p.enumerator)
+	err = p.syncer.enumerate(p.ctx, p.enumerator)
 	if err == nil {
 		err = p.ctx.Err()
 	}
 	if err != nil {
-		return errors.Join(err, p.syncer.cancelAndDrain(p.cancel, p.syncer.spt.jobID, p.lifecycle))
+		drainErr := p.syncer.cancelAndDrain(p.cancel, p.syncer.spt.jobID, p.lifecycle)
+		p.mu.Lock()
+		p.retainResources = drainErr != nil
+		p.mu.Unlock()
+		return errors.Join(err, drainErr)
 	}
 	return nil
 }
 
 func (p *PreparedSync) Cancel() { p.cancel() }
+
+// Close releases resources if prepared enumeration is abandoned before it starts.
+// Enumerate releases them automatically unless cancellation fails to drain.
+func (p *PreparedSync) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.running || p.retainResources {
+		return errors.New("prepared sync resources cannot close while enumeration or undrained work remains")
+	}
+	if p.closed {
+		return nil
+	}
+	p.closed = true
+	return p.syncer.Close()
+}
 
 func (p *PreparedSync) ScanProgress() SyncScanProgress {
 	return SyncScanProgress{

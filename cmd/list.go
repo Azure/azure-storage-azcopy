@@ -169,7 +169,8 @@ type cookedListCmdArgs struct {
 	trailingDot     common.TrailingDotOption
 
 	// named credentials (resolved from --cred flag)
-	CredName string
+	CredName             string
+	hardlinkHandlingType common.HardlinkHandlingType
 }
 
 var raw rawListCmdArgs
@@ -293,7 +294,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		GetPropertiesInFrontend: true,
 
 		ListVersions:     getVersionId,
-		HardlinkHandling: common.EHardlinkHandlingType.Follow(),
+		HardlinkHandling: cooked.hardlinkHandlingType,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

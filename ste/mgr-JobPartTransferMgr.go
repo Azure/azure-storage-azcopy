@@ -150,6 +150,11 @@ type TransferInfo struct {
 	VersionID  string
 	SnapshotID string
 	Provider   credentials.Provider //custom Provider
+
+	// Note: Used for NFS hardlinks only
+	TargetHardlinkFilePath string // used for hardlink transfers
+	HardlinkHandlingType   common.HardlinkHandlingType
+	IsSyncJob              bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -310,8 +315,8 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		}
 	}
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags :=
-		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags, targetHardlinkFilePath :=
+		plan.TransferSrcPropertiesAndMetadataWithHardlink(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
@@ -449,11 +454,14 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:       srcBlobType,
-		S2SSrcBlobTier:    srcBlobTier,
-		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
-		VersionID:         versionID,
-		SnapshotID:        snapshotID,
+		SrcBlobType:            srcBlobType,
+		S2SSrcBlobTier:         srcBlobTier,
+		RehydratePriority:      plan.RehydratePriority.ToRehydratePriorityType(),
+		VersionID:              versionID,
+		SnapshotID:             snapshotID,
+		TargetHardlinkFilePath: targetHardlinkFilePath,
+		HardlinkHandlingType:   plan.HardlinkHandling,
+		IsSyncJob:              plan.IsSyncJob,
 	}
 }
 
@@ -1035,6 +1043,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
+		IsHardlink:         jptm.Info().EntityType == common.EEntityType.Hardlink() && jptm.Info().HardlinkHandlingType == common.EHardlinkHandlingType.Preserve(),
 		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
@@ -1086,4 +1095,9 @@ func (jptm *jobPartTransferMgr) SuccessfulBytesTransferred() int64 {
 
 func (jptm *jobPartTransferMgr) GetJobErrorHandler() common.JobErrorHandler {
 	return jptm.jobPartMgr.GetJobErrorHandler()
+}
+
+func (jptm *jobPartTransferMgr) GetSourceRoot() string {
+	p := jptm.jobPartMgr.Plan()
+	return string(p.SourceRoot[:p.SourceRootLength])
 }

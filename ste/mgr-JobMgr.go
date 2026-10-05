@@ -498,6 +498,10 @@ type jobMgr struct {
 	schedulerCloseOnce sync.Once
 
 	isDaemon bool /* is it running as service */
+
+	// For Hardlinks After Files/Folders/Symlinks processing mode
+	hardlinkGate hardlinkPartGate
+	// allOtherPartsComplete bool
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -621,6 +625,9 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 	jpm.cachedJobID = plan.JobID
 	jpm.cachedPartNum = plan.PartNum
 	jpm.cachedNumTransfers = plan.NumTransfers
+	jpm.cachedJobPartType = plan.JobPartType
+	jpm.cachedIsFinalPart = plan.IsFinalPart
+	jm.hardlinkGate.register(args.PartNum, plan.JobPartType, plan.IsFinalPart)
 
 	jm.jobPartMgrs.Set(args.PartNum, jpm)
 	jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
@@ -673,6 +680,9 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jpm.cachedJobID = plan.JobID
 	jpm.cachedPartNum = plan.PartNum
 	jpm.cachedNumTransfers = plan.NumTransfers
+	jpm.cachedJobPartType = plan.JobPartType
+	jpm.cachedIsFinalPart = plan.IsFinalPart
+	jm.hardlinkGate.register(order.PartNum, plan.JobPartType, plan.IsFinalPart)
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
 	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
@@ -755,20 +765,27 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// reset it to false while resuming it
 	jm.ResetAllTransfersScheduled()
 
-	// In mover builds, use READ lock (not write lock) to iterate jobPartMgrs while queuing to partsChannel.
-	// A write lock here would deadlock when partsChannel fills up (capacity 1000):
-	//   - ResumeTransfers holds write lock, blocks on partsChannel send
-	//   - reportJobPartDoneHandler needs read lock via Get(0), blocks on write lock
-	//   - scheduleJobParts blocks on unbuffered jobPartProgress, waiting for reportJobPartDoneHandler
-	// Read lock avoids this because RWMutex allows concurrent readers.
-	// No writers exist at this point — all AddJobPart/AddJobOrder calls completed in ResurrectJob (step 1).
-	useReadLock := buildmode.IsMover
-	partCount := 0
-	jm.jobPartMgrs.Iterate(useReadLock, func(p common.PartNumber, jpm IJobPartMgr) {
-		jm.QueueJobParts(jpm)
-		partCount++
+	// Reset part statuses so checkAndProcessHardlinkParts sees the correct state.
+	// Without this, mixed parts retain completed status from the previous attempt,
+	// causing hardlink parts to be dispatched before mixed parts are re-scheduled.
+	jm.hardlinkGate.reset()
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
+		jpm.Plan().SetJobPartStatus(common.EJobStatus.InProgress())
+		jm.hardlinkGate.register(p, jpm.Plan().JobPartType, jpm.Plan().IsFinalPart)
 	})
-	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: all %d parts queued successfully", jm.jobID, partCount))
+
+	// Collect parts first, then queue outside the lock.
+	// QueueJobParts → checkAndProcessHardlinkParts → jobPartMgrs.Iterate(true, ...)
+	// would deadlock if called from within jobPartMgrs.Iterate(false, ...) because
+	// Go's RWMutex does not support reentrant read-locking while a write lock is held.
+	var parts []IJobPartMgr
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
+		parts = append(parts, jpm)
+	})
+	for _, jpm := range parts {
+		jm.QueueJobParts(jpm)
+	}
+	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: all %d parts queued successfully", jm.jobID, len(parts)))
 }
 
 // When a previously job is resumed, ResetFailedTransfersCount
@@ -888,6 +905,11 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				close(partProgressInfo.completionChan)
 			}
 
+			// Check if we can process queued hardlink parts after this part completes
+			if partProgressInfo.partNum != nil {
+				jm.dispatchHardlinkParts(jm.hardlinkGate.complete(*partProgressInfo.partNum))
+			}
+
 			// If the last part is still awaited or other parts all still not complete,
 			// JobPart 0 status is not changed (unless we are cancelling)
 			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
@@ -954,6 +976,7 @@ func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
+	jm.dispatchHardlinkParts(jm.hardlinkGate.cancel())
 	jm.ReportJobPartDone(jobPartProgressInfo{})
 }
 func (jm *jobMgr) ShouldLog(level common.LogLevel) bool  { return jm.logger.ShouldLog(level) }
@@ -1097,6 +1120,10 @@ func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 	if part, ok := jpm.(*jobPartMgr); ok {
 		part.drainTracker = &jm.drainTracker
 		jm.drainTracker.add(uint64(part.cachedNumTransfers) + 1)
+		if part.cachedJobPartType == common.EJobPartType.Hardlink() {
+			jm.dispatchHardlinkParts(jm.hardlinkGate.enqueue(jpm))
+			return
+		}
 	}
 	jm.coordinatorChannels.partsChannel <- jpm
 }

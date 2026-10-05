@@ -108,6 +108,23 @@ type SyncDestinationComparator struct {
 	// This flag helps to decide if orchestrator options can be used for comparison
 	// pre-computing this flag helps to avoid redoing it for each object
 	useOrchestratorOptions bool
+
+	inodeStore                     *common.InodeStore
+	hardlinkRestructureDeleter     ObjectProcessor
+	destPendingHardlinkObjects     *ObjectIndexer
+	srcPathToInode                 map[string]string
+	srcInodeHasIndependentDestFile map[string]bool
+	skipSourceSymlinks             bool
+	incrementSkippedSymlink        func()
+}
+
+type HardlinkSyncOptions struct {
+	InodeStore              *common.InodeStore
+	RestructureDeleter      ObjectProcessor
+	DestinationCleaner      ObjectProcessor
+	DestinationIsLocal      bool
+	SkipSourceSymlinks      bool
+	IncrementSkippedSymlink func()
 }
 
 func NewSyncDestinationComparator(
@@ -119,7 +136,7 @@ func NewSyncDestinationComparator(
 	disableComparison bool,
 	deleteDestination common.DeleteDestination,
 	incrementNotTransferred func(common.EntityType),
-	orchestratorOptions *SyncOrchestratorOptions) *SyncDestinationComparator {
+	orchestratorOptions *SyncOrchestratorOptions, hardlinks ...HardlinkSyncOptions) *SyncDestinationComparator {
 	comp := &SyncDestinationComparator{
 		sourceIndex:             i,
 		copyTransferScheduler:   copyScheduler,
@@ -135,6 +152,13 @@ func NewSyncDestinationComparator(
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
 		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
 			orchestratorOptions.fromTo.From() == common.ELocation.File())
+	if len(hardlinks) > 0 {
+		comp.inodeStore = hardlinks[0].InodeStore
+		comp.hardlinkRestructureDeleter = hardlinks[0].RestructureDeleter
+		comp.destPendingHardlinkObjects = NewObjectIndexer()
+		comp.skipSourceSymlinks = hardlinks[0].SkipSourceSymlinks
+		comp.incrementSkippedSymlink = hardlinks[0].IncrementSkippedSymlink
+	}
 
 	return comp
 }
@@ -145,6 +169,25 @@ func NewSyncDestinationComparator(
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *SyncDestinationComparator) ProcessIfNecessary(destinationObject StoredObject) error {
+	if f.inodeStore != nil {
+		if f.srcPathToInode == nil {
+			f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
+		}
+		key := destinationObject.RelativePath
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			key = strings.ToLower(key)
+		}
+		if source, present := f.sourceIndex.IndexMap[key]; present && f.skipSourceSymlinks &&
+			(source.EntityType == common.EEntityType.Symlink() || source.hardlinkedSymlink) {
+			countSkippedSymlinkAlias(source, f.incrementSkippedSymlink)
+			delete(f.sourceIndex.IndexMap, key)
+			return nil
+		}
+		if destinationObject.EntityType == common.EEntityType.Hardlink() && destinationObject.Inode != "" {
+			f.destPendingHardlinkObjects.IndexMap[destinationObject.RelativePath] = destinationObject
+			return nil
+		}
+	}
 	var sourceObjectInMap StoredObject
 	var present bool
 
@@ -172,6 +215,22 @@ func (f *SyncDestinationComparator) ProcessIfNecessary(destinationObject StoredO
 				delete(f.sourceIndex.IndexMap, destinationObject.RelativePath)
 			}
 		}()
+
+		if f.inodeStore != nil && sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+			if err := f.normalizeHardlinkTarget(&sourceObjectInMap); err != nil {
+				return err
+			}
+			if sourceObjectInMap.Inode != "" {
+				if f.srcInodeHasIndependentDestFile == nil {
+					f.srcInodeHasIndependentDestFile = make(map[string]bool)
+				}
+				f.srcInodeHasIndependentDestFile[sourceObjectInMap.Inode] = true
+			}
+			if err := f.hardlinkRestructureDeleter(destinationObject); err != nil {
+				return err
+			}
+			return f.copyTransferScheduler(sourceObjectInMap)
+		}
 
 		if f.useOrchestratorOptions {
 			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
@@ -437,6 +496,16 @@ type SyncSourceComparator struct {
 
 	// Function to increment files/folders not transferred as a result of no change since last sync.
 	incrementNotTransferred func(common.EntityType)
+
+	inodeStore                     *common.InodeStore
+	hardlinkRestructureDeleter     ObjectProcessor
+	destinationCleaner             ObjectProcessor
+	srcPendingHardlinkObjects      *ObjectIndexer
+	dstPathToInode                 map[string]string
+	srcInodeHasIndependentDestFile map[string]bool
+	destinationIsLocal             bool
+	skipSourceSymlinks             bool
+	incrementSkippedSymlink        func()
 }
 
 func NewSyncSourceComparator(
@@ -445,8 +514,8 @@ func NewSyncSourceComparator(
 	comparisonHashType common.SyncHashType,
 	preferSMBTime,
 	disableComparison bool,
-	incrementNotTransferred func(common.EntityType)) *SyncSourceComparator {
-	return &SyncSourceComparator{
+	incrementNotTransferred func(common.EntityType), hardlinks ...HardlinkSyncOptions) *SyncSourceComparator {
+	comp := &SyncSourceComparator{
 		destinationIndex:        i,
 		copyTransferScheduler:   copyScheduler,
 		preferSMBTime:           preferSMBTime,
@@ -454,6 +523,16 @@ func NewSyncSourceComparator(
 		comparisonHashType:      comparisonHashType,
 		incrementNotTransferred: incrementNotTransferred,
 	}
+	if len(hardlinks) > 0 {
+		comp.inodeStore = hardlinks[0].InodeStore
+		comp.hardlinkRestructureDeleter = hardlinks[0].RestructureDeleter
+		comp.destinationCleaner = hardlinks[0].DestinationCleaner
+		comp.destinationIsLocal = hardlinks[0].DestinationIsLocal
+		comp.skipSourceSymlinks = hardlinks[0].SkipSourceSymlinks
+		comp.incrementSkippedSymlink = hardlinks[0].IncrementSkippedSymlink
+		comp.srcPendingHardlinkObjects = NewObjectIndexer()
+	}
+	return comp
 }
 
 // it will only transfer source items that are:
@@ -463,6 +542,9 @@ func NewSyncSourceComparator(
 // note: we remove the StoredObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT seen at the source
 func (f *SyncSourceComparator) ProcessIfNecessary(sourceObject StoredObject) error {
+	if f.inodeStore != nil && f.dstPathToInode == nil {
+		f.dstPathToInode = buildSrcPathToInode(f.destinationIndex.IndexMap)
+	}
 	relPath := sourceObject.RelativePath
 
 	if f.destinationIndex.IsDestinationCaseInsensitive {
@@ -470,8 +552,26 @@ func (f *SyncSourceComparator) ProcessIfNecessary(sourceObject StoredObject) err
 	}
 	destinationObjectInMap, present := f.destinationIndex.IndexMap[relPath]
 
+	if f.skipSourceSymlinks && (sourceObject.EntityType == common.EEntityType.Symlink() || sourceObject.hardlinkedSymlink) {
+		countSkippedSymlinkAlias(sourceObject, f.incrementSkippedSymlink)
+		delete(f.destinationIndex.IndexMap, relPath)
+		return nil
+	}
+
+	if f.inodeStore != nil && sourceObject.EntityType == common.EEntityType.Hardlink() && sourceObject.Inode != "" {
+		f.srcPendingHardlinkObjects.IndexMap[relPath] = sourceObject
+		return nil
+	}
+
 	if present {
 		defer delete(f.destinationIndex.IndexMap, relPath)
+
+		if f.inodeStore != nil && destinationObjectInMap.EntityType == common.EEntityType.Hardlink() {
+			if err := f.hardlinkRestructureDeleter(destinationObjectInMap); err != nil {
+				return err
+			}
+			return f.copyTransferScheduler(sourceObject)
+		}
 
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison {

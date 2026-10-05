@@ -184,7 +184,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 				&oie,
 				NoBlobProps,
 				oie.NewCommonMetadata(),
-				t.s3URLParts.BucketName)
+				t.s3URLParts.BucketName,
+				nil)
 
 			err = ProcessIfPassedFilters(
 				filters,

@@ -244,7 +244,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DstFileData: JobPartPlanDstFile{
 			TrailingDot: order.FileAttributes.TrailingDot,
 		},
-		SymlinkHandling: order.SymlinkHandlingType,
+		SymlinkHandling:  order.SymlinkHandlingType,
+		JobPartType:      order.JobPartType,
+		IsSyncJob:        order.IsSyncJob,
+		HardlinkHandling: order.HardlinkHandlingType,
 	}
 
 	// Copy any strings into their respective fields
@@ -289,6 +292,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers.List {
+		if len(order.Transfers.List[t].TargetHardlinkFile) > math.MaxInt16 {
+			panic(fmt.Sprintf("hardlink target for %s exceeds the maximum persisted path length", order.Transfers.List[t].Source))
+		}
 		if len(order.Transfers.List[t].Source) > math.MaxInt16 || len(order.Transfers.List[t].Destination) > math.MaxInt16 {
 			panic(fmt.Sprintf("The file %s exceeds azcopy's current maximum path length on either the source or the destination.", order.Transfers.List[t].Source))
 		}
@@ -316,6 +322,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		if srcBlobTagsLength > math.MaxInt16 {
 			panic(fmt.Sprintf("The length of tags %s exceeds maximum allowed length, and cannot be processed.", order.Transfers.List[t].BlobTags))
 		}
+		sourceSize := order.Transfers.List[t].SourceSize
+		if order.HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() &&
+			order.Transfers.List[t].EntityType == common.EEntityType.Hardlink() &&
+			order.Transfers.List[t].TargetHardlinkFile != "" {
+			sourceSize = 0 // The anchor transfers the data; this entry only creates a link.
+		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
@@ -323,7 +335,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			DstLength:      int16(len(order.Transfers.List[t].Destination)),
 			EntityType:     order.Transfers.List[t].EntityType,
 			ModifiedTime:   order.Transfers.List[t].LastModifiedTime.UnixNano(),
-			SourceSize:     order.Transfers.List[t].SourceSize,
+			SourceSize:     sourceSize,
 			CompletionTime: 0,
 			// For S2S copy, per Transfer source's properties
 			SrcContentTypeLength:        int16(len(order.Transfers.List[t].ContentType)),
@@ -341,16 +353,22 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			// ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
+			TargetHardlinkFilePathLength: int16(len(order.Transfers.List[t].TargetHardlinkFile)),
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry
 
 		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
 		srcDstStringsOffset[t] = currentSrcStringOffset
 
-		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
-			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
-			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobSnapshotIDLength + jppt.SrcBlobTagsLength)
+		for _, length := range []int16{
+			jppt.SrcLength, jppt.DstLength, jppt.SrcContentTypeLength,
+			jppt.SrcContentEncodingLength, jppt.SrcContentLanguageLength, jppt.SrcContentDispositionLength,
+			jppt.SrcCacheControlLength, jppt.SrcContentMD5Length, jppt.SrcMetadataLength,
+			jppt.SrcBlobTypeLength, jppt.SrcBlobTierLength, jppt.SrcBlobVersionIDLength,
+			jppt.SrcBlobSnapshotIDLength, jppt.SrcBlobTagsLength, jppt.TargetHardlinkFilePathLength,
+		} {
+			currentSrcStringOffset += int64(length)
+		}
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -433,6 +451,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		if len(order.Transfers.List[t].BlobTags) != 0 {
 			blobTagsStr := order.Transfers.List[t].BlobTags.ToString()
 			bytesWritten, err = file.WriteString(blobTagsStr)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers.List[t].TargetHardlinkFile) != 0 {
+			TargetHardlinkFileStr := order.Transfers.List[t].TargetHardlinkFile
+			bytesWritten, err = file.WriteString(TargetHardlinkFileStr)
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}

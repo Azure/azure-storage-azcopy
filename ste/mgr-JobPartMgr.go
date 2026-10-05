@@ -188,6 +188,8 @@ type jobPartMgr struct {
 	cachedJobID        common.JobID
 	cachedPartNum      PartNumber
 	cachedNumTransfers uint32
+	cachedJobPartType  common.JobPartType
+	cachedIsFinalPart  bool
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	httpHeaders common.ResourceHTTPHeaders
@@ -285,9 +287,15 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			}
 		}()
 	}
-	if plan.PartNum == 0 && plan.NumTransfers == 0 {
-		/* This will wind down the transfer and report summary */
-		plan.SetJobStatus(common.EJobStatus.Completed())
+	if plan.NumTransfers == 0 {
+		plan.SetJobPartStatus(common.EJobStatus.Completed())
+		if jpm.cachedIsFinalPart {
+			jpm.jobMgr.ConfirmAllTransfersScheduled()
+		}
+		jpm.jobMgr.ReportJobPartDone(jobPartProgressInfo{
+			completionChan: jpm.closeOnCompletion,
+			partNum:        &jpm.cachedPartNum,
+		})
 		return
 	}
 
@@ -439,19 +447,19 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		}
 		// ===== TEST KNOB
 		jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
-
-		// This sets the atomic variable atomicAllTransfersScheduled to 1
-		// atomicAllTransfersScheduled variables is used in case of resume job
-		// Since iterating the JobParts and scheduling transfer is independent
-		// a variable is required which defines whether last part is resumed or not
-		if isFinalPart {
-			jpm.jobMgr.ConfirmAllTransfersScheduled()
-		}
 	}
 
+	// This sets the atomic variable atomicAllTransfersScheduled to 1.
+	// It must be outside the transfer loop so that it is called even when
+	// every transfer in the final part was already Success (resume scenario).
+	// atomicAllTransfersScheduled is used in case of resume job:
+	// since iterating the JobParts and scheduling transfers is independent,
+	// a variable is required which defines whether the last part is resumed or not.
 	if isFinalPart {
+		jpm.jobMgr.ConfirmAllTransfersScheduled()
 		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
+
 }
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {

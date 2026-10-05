@@ -18,16 +18,11 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(source traverser.ResourceTravers
 
 func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 	filters := traverser.BuildFilters(cca.FromTo, cca.Source, cca.Recursive, traverser.FilterOptions{
-		IncludeBefore:     cca.IncludeBefore,
-		IncludeAfter:      cca.IncludeAfter,
-		IncludePatterns:   cca.IncludePatterns,
-		ExcludePatterns:   cca.ExcludePatterns,
-		ExcludePaths:      cca.ExcludePathPatterns,
-		IncludeRegex:      cca.includeRegex,
-		ExcludeRegex:      cca.excludeRegex,
+		IncludeBefore: cca.IncludeBefore, IncludeAfter: cca.IncludeAfter,
+		IncludePatterns: cca.IncludePatterns, ExcludePatterns: cca.ExcludePatterns,
+		ExcludePaths: cca.ExcludePathPatterns, IncludeRegex: cca.includeRegex, ExcludeRegex: cca.excludeRegex,
 		ExcludeBlobTypes:  cca.excludeBlobType,
-		IncludeAttributes: cca.IncludeFileAttributes,
-		ExcludeAttributes: cca.ExcludeFileAttributes,
+		IncludeAttributes: cca.IncludeFileAttributes, ExcludeAttributes: cca.ExcludeFileAttributes,
 	})
 	switch cca.permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():

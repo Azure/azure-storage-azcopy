@@ -36,7 +36,7 @@ func createM4TestPlan(t *testing.T) JobPartPlanFileName {
 	return name
 }
 
-func TestM4Schema21RoundTrip(t *testing.T) {
+func TestM5Schema22PreservesPOSIXRoundTrip(t *testing.T) {
 	name := createM4TestPlan(t)
 	mapped := name.Map()
 	defer func() {
@@ -45,7 +45,7 @@ func TestM4Schema21RoundTrip(t *testing.T) {
 		}
 	}()
 	plan := mapped.Plan()
-	require.Equal(t, common.Version(21), plan.Version)
+	require.Equal(t, common.Version(22), plan.Version)
 	require.Equal(t, common.AMLFSPosixPropertiesStyle, plan.PosixPropertiesStyle)
 	require.True(t, plan.PreservePOSIXProperties)
 	require.True(t, plan.S2SGetPropertiesInBackend)
@@ -68,7 +68,7 @@ func TestM4RejectsSchema20Header(t *testing.T) {
 	mapped := name.Map()
 	mapped.Plan().Version = 20
 	mapped.Unmap()
-	require.PanicsWithError(t, "job part plan header schema 20 is unsupported; this binary requires schema 21", func() {
+	require.PanicsWithError(t, "job part plan header schema 20 is unsupported; this binary requires schema 22", func() {
 		name.Map()
 	})
 }

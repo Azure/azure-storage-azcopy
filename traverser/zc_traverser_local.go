@@ -62,6 +62,9 @@ type localTraverser struct {
 	hashTargetChannel chan string
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
+	basePath          string
+	inodeNamespace    string
+	inodeStore        *common.InodeStore
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
 	// in a non-recursive traversal process. If true, prefixes will be enqueued as well even if location
@@ -899,6 +902,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
+						nil,
 					),
 					processor, // the original processor is wrapped in the mutex processor.
 				)
@@ -957,6 +961,9 @@ var (
 )
 
 func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
+	if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && t.inodeStore == nil {
+		return fmt.Errorf("hardlink preservation requires an inode store")
+	}
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
@@ -971,10 +978,15 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
+	processObject := hardlinkAwareProcessor(t.inodeStore, filters, hashingProcessor,
+		t.incrementEnumerationCounter, t.symlinkHandling, t.hardlinkHandling)
 
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
-
+		var NfsHardlinkManager NFSMetadataContext
+		if t.fromTo.IsNFS() {
+			NfsHardlinkManager.FileID = getInodeString(singleFileInfo)
+		}
 		entityType := common.EEntityType.File()
 		if t.fromTo.IsNFS() {
 			if IsSymbolicLink(singleFileInfo) {
@@ -983,9 +995,29 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					t.symlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
 				}
+				if t.symlinkHandling.Preserve() && t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && IsHardlink(singleFileInfo) {
+					NfsHardlinkManager, err = t.hardlinkMetadata(t.fullPath, singleFileInfo)
+					if err != nil {
+						return err
+					}
+				}
 			} else if IsHardlink(singleFileInfo) {
 				entityType = common.EEntityType.Hardlink()
-				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
+
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					if t.inodeStore == nil {
+						return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+					}
+
+					NfsHardlinkManager, err = t.hardlinkMetadata(t.fullPath, singleFileInfo)
+					if err != nil {
+						return err
+					}
+				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
@@ -1010,6 +1042,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				} else if t.symlinkHandling == common.ESymlinkHandlingType.Skip() {
 					return ErrorLoneSymlinkSkipped
 				}
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
@@ -1017,11 +1055,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 			}
 		}
 
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
-		}
-
-		err := ProcessIfPassedFilters(filters,
+		err := processObject(
 			NewStoredObject(
 				preprocessor,
 				singleFileInfo.Name(),
@@ -1033,8 +1067,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				NoBlobProps,
 				NoMetadata,
 				"", // Local has no such thing as containers
+				&NfsHardlinkManager,
 			),
-			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
 		_, err = getProcessingError(err)
 
@@ -1063,10 +1097,26 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				entityType = common.EEntityType.File()
 			}
 
-			// NFS Handling
-			if t.fromTo.IsNFS() && entityType != common.EEntityType.Symlink() {
-				if IsHardlink(fileInfo) {
+			var nfsCtx NFSMetadataContext
+			if t.fromTo.IsNFS() && !fileInfo.IsDir() {
+				nfsCtx.FileID = getInodeString(fileInfo)
+			}
+			// Never treat a directory's link count as a hardlink file.
+			if t.fromTo.IsNFS() && !fileInfo.IsDir() {
+				preservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+				if IsHardlink(fileInfo) && (!preservedSymlink || t.hardlinkHandling == common.EHardlinkHandlingType.Preserve()) {
 					entityType = common.EEntityType.Hardlink()
+					if HandleHardlinkForNFS(fileInfo, t.hardlinkHandling, t.incrementEnumerationCounter) {
+						return nil
+					}
+					if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+						var err error
+						nfsCtx, err = t.hardlinkMetadata(filePath, fileInfo)
+						if err != nil {
+							return err
+						}
+						entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), nfsCtx.TargetHardlinkFile, entityType)
+					}
 				}
 			}
 
@@ -1076,12 +1126,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				return nil
 			}
 
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
-			}
-
 			// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
-			return ProcessIfPassedFilters(filters,
+			return processObject(
 				NewStoredObject(
 					preprocessor,
 					fileInfo.Name(),
@@ -1093,8 +1139,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					NoBlobProps,
 					NoMetadata,
 					"", // Local has no such thing as containers
+					&nfsCtx,
 				),
-				hashingProcessor, // hashingProcessor handles the mutex wrapper
 			)
 		}
 
@@ -1130,9 +1176,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				return err
 			}
 
-			var entityType common.EntityType
 			// go through the files and return if any of them fail to process
 			for _, entry := range entries {
+				entityType := common.EEntityType.File()
+				var NfsHardlinkManager NFSMetadataContext
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
 				fileInfo, err := entry.Info()
@@ -1244,10 +1291,26 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 
 				// NFS handling
-				if t.fromTo.IsNFS() && !fileInfo.IsDir() && entityType != common.EEntityType.Symlink() {
-					if IsHardlink(fileInfo) {
+				if t.fromTo.IsNFS() && !fileInfo.IsDir() {
+					NfsHardlinkManager.FileID = getInodeString(fileInfo)
+					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+					if IsHardlink(fileInfo) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
-					} else if !IsRegularFile(fileInfo) {
+						if skip := HandleHardlinkForNFS(fileInfo,
+							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+							continue
+						}
+						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+							if t.inodeStore == nil {
+								return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+							}
+							NfsHardlinkManager, err = t.hardlinkMetadata(path, fileInfo)
+							if err != nil {
+								return err
+							}
+							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), NfsHardlinkManager.TargetHardlinkFile, entityType)
+						}
+					} else if !IsRegularFile(fileInfo) && !isPreservedSymlink {
 						entityType = common.EEntityType.Other()
 						if t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
@@ -1273,10 +1336,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					}
 				}
 
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
-				}
-
 				storedObject := NewStoredObject(
 					preprocessor,
 					entry.Name(),
@@ -1288,6 +1347,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					NoBlobProps,
 					NoMetadata,
 					"", // Local has no such thing as containers
+					&NfsHardlinkManager,
 				)
 
 				if t.getExtendedProperties {
@@ -1309,10 +1369,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					}
 				}
 
-				err = ProcessIfPassedFilters(filters,
-					storedObject,
-					hashingProcessor, // hashingProcessor handles the mutex wrapper
-				)
+				err = processObject(storedObject)
 				_, err = getProcessingError(err)
 				if err != nil {
 					return finalizer(err)
@@ -1325,6 +1382,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 }
 
 func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
+	if opts.HardlinkHandling == common.EHardlinkHandlingType.Preserve() && runtime.GOOS == "windows" {
+		return nil, fmt.Errorf("local hardlink preservation is not supported on Windows")
+	}
 	var hashAdapter common.HashDataAdapter
 	if opts.SyncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error
@@ -1347,7 +1407,13 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		stripTopDir:                        opts.StripTopDir,
 		hardlinkHandling:                   opts.HardlinkHandling,
 		fromTo:                             opts.FromTo,
+		basePath:                           opts.BasePath,
+		inodeStore:                         opts.InodeStore,
 	}
+	if traverser.basePath == "" {
+		traverser.basePath = traverser.fullPath
+	}
+	traverser.inodeNamespace = hardlinkNamespace(traverser.basePath, true, opts.IsSyncDestination)
 
 	traverser.includeDirectoryOrPrefix = UseSyncOrchestrator && !traverser.recursive
 
@@ -1381,13 +1447,27 @@ func logNFSLinkWarning(fileName,
 	var message string
 	if isSymlink {
 		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
-	} else if inodeNo != "" {
-		if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
-			message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but will be skipped", fileName, inodeNo)
-		}
+	} else if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, and will be skipped", fileName, inodeNo)
+	}
+	if message != "" {
+		common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
 	}
 
-	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+}
+
+// resolveHardlinkedSymlinkEntity adjusts the entity type for a hardlinked symlink.
+// The anchor (first-seen entry, indicated by targetHardlinkFile == "") must be
+// transferred as a symlink so its target is created correctly on the destination;
+// only subsequent links remain Hardlink entities.
+//
+// isSymlink should be true when the underlying file is a symbolic link (e.g.
+// IsSymbolicLink(fileInfo) for local files, or NFSFileType==Symlink for remote).
+func resolveHardlinkedSymlinkEntity(isSymlink bool, targetHardlinkFile string, currentEntityType common.EntityType) common.EntityType {
+	if isSymlink && targetHardlinkFile == "" {
+		return common.EEntityType.Symlink()
+	}
+	return currentEntityType
 }
 
 // HandleSymlinkForNFS processes a symbolic link based on the specified handling type.
@@ -1402,6 +1482,26 @@ func HandleSymlinkForNFS(fileName string,
 		if incrementEnumerationCounter != nil {
 			incrementEnumerationCounter(common.EEntityType.Symlink(),
 				symlinkHandlingType, common.DefaultHardlinkHandlingType)
+		}
+		return true
+	}
+	return false
+}
+
+// HandleHardlinkForNFS processes a hard link based on the specified handling type.
+// It either logs a warning if skip or preserves the hard link based on the hard link handling type.
+func HandleHardlinkForNFS(fileInfo os.FileInfo,
+	hardlinkHandlingType common.HardlinkHandlingType,
+	incrementEnumerationCounter enumerationCounterFunc) bool {
+
+	inodeStr := getInodeString(fileInfo)
+
+	if hardlinkHandlingType == hardlinkHandlingType.Skip() {
+		// Log a warning if hardlink handling is skipped
+		logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandlingType)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Hardlink(),
+				common.ESymlinkHandlingType.Skip(), hardlinkHandlingType)
 		}
 		return true
 	}

@@ -98,6 +98,14 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 var ExecuteNewCopyJobPartOrder =
 // ExecuteNewCopyJobPartOrder api executes a new job part order
 func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+	if order.HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+		order.Transfers.TotalSizeInBytes = 0
+		for _, transfer := range order.Transfers.List {
+			if transfer.EntityType != common.EEntityType.Hardlink() || transfer.TargetHardlinkFile == "" {
+				order.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
+			}
+		}
+	}
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order) // Convert the order to a plan file
@@ -146,6 +154,7 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		FolderTransfer:          order.Transfers.FolderTransferCount,
 		HardlinksConvertedCount: order.Transfers.HardlinksConvertedCount,
 		FilePropertyTransfers:   order.Transfers.FilePropertyTransferCount,
+		HardlinksTransferCount:  order.Transfers.HardlinksTransferCount,
 	})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
@@ -502,12 +511,18 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.EEntityType.Symlink():
 				js.SymlinkTransfers++
 			case common.EEntityType.Hardlink():
-				js.HardlinksConvertedCount++
+				if jpp.HardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					js.HardlinksTransferCount++
+				} else {
+					js.HardlinksConvertedCount++
+				}
 			case common.EEntityType.FileProperties():
 				js.FilePropertyTransfers++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end
+			isHardlink := jppt.EntityType == common.EEntityType.Hardlink() && jpp.HardlinkHandling == common.EHardlinkHandlingType.Preserve()
+
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
@@ -518,12 +533,18 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
+				if isHardlink {
+					js.HardlinksCompleted++
+				}
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
+				if isHardlink {
+					js.HardlinksFailed++
+				}
 				// getting the source and destination for failed transfer at position - index
 				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				// appending to list of failed transfer
@@ -532,6 +553,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						Src:                src,
 						Dst:                dst,
 						IsFolderProperties: isFolder,
+						IsHardlink:         isHardlink,
 						TransferStatus:     common.ETransferStatus.Failed(),
 						ErrorCode:          jppt.ErrorCode(),
 						ErrorMessage:       jppt.ErrorMessage(),
@@ -539,6 +561,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
+				if isHardlink {
+					js.HardlinksSkipped++
+				}
 				// getting the source and destination for skipped transfer at position - index
 				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				js.SkippedTransfers = append(js.SkippedTransfers,
@@ -546,6 +571,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						Src:                src,
 						Dst:                dst,
 						IsFolderProperties: isFolder,
+						IsHardlink:         isHardlink,
 						TransferStatus:     jppt.TransferStatus(),
 					})
 			case common.ETransferStatus.SkippedArchiveNotRestored():

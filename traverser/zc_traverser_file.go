@@ -36,6 +36,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
@@ -59,6 +60,9 @@ type fileTraverser struct {
 	hardlinkHandling            common.HardlinkHandlingType
 	symlinkHandling             common.SymlinkHandlingType
 	fromTo                      common.FromTo
+	inodeStore                  *common.InodeStore
+	basePath                    string
+	inodeNamespace              string
 
 	errorChannel chan<- TraverserErrorItemInfo
 
@@ -212,6 +216,11 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse
 }
 
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
+	if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && t.inodeStore == nil {
+		return fmt.Errorf("hardlink preservation requires an inode store")
+	}
+	processObject := hardlinkAwareProcessor(t.inodeStore, filters, processor,
+		t.incrementEnumerationCounter, t.symlinkHandling, t.hardlinkHandling)
 	invalidBlobOrWindowsName := func(path string) bool {
 		if t.destination != nil {
 			if t.trailingDot == common.ETrailingDotOption.AllowToUnsafeDestination() && (*t.destination != common.ELocation.Blob() || *t.destination != common.ELocation.BlobFS()) { // Allow only Local, Trailing dot files not supported in Blob
@@ -243,7 +252,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		return path != "" && strings.Trim(path, ".") == ""
 	}
 	// if not pointing to a share, check if we are pointing to a single file
-	if !UseSyncOrchestrator && targetURLParts.DirectoryOrFilePath != "" {
+	if !t.skipRootProperties && targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
 			t.writeToErrorChannel(ErrorAzFileInfo{
 				FilePath: targetURLParts.DirectoryOrFilePath,
@@ -291,35 +300,45 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
+				nil,
 			)
 			// NFS handling for different file types
 			// If the source provided is of NFS type we will check for NFSFileType value and process accordingly
 			// If NFSFileType is nil it means that the source is not NFS type and we can consider it as SMB type
 			if fileProperties.NFSFileType != nil {
+				linkCount := ternary.IffNotNil(fileProperties.LinkCount, int64(1))
+				fileID := ternary.IffNotNil(fileProperties.ID, "")
 				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 					Name:             storedObject.Name,
 					NFSFileType:      *fileProperties.NFSFileType,
-					LinkCount:        *fileProperties.LinkCount,
-					FileID:           *fileProperties.ID,
+					LinkCount:        linkCount,
+					FileID:           fileID,
 					hardlinkHandling: t.hardlinkHandling,
 					symlinkHandling:  t.symlinkHandling,
 				}, t.incrementEnumerationCounter); err == nil && skip {
 
 					return nil
 				}
+				// Classify by NFS file type; a hardlinked symlink stays Symlink.
 				if *fileProperties.NFSFileType == file.NFSFileTypeSymlink {
 					storedObject.EntityType = common.EEntityType.Symlink()
-				} else if *fileProperties.LinkCount > int64(1) {
+				} else if linkCount > int64(1) {
 					storedObject.EntityType = common.EEntityType.Hardlink()
 				}
+				storedObject.FileID = fileID
+				if linkCount > 1 && t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					metadata, err := t.hardlinkMetadata(t.rawURL, fileID)
+					if err != nil {
+						return err
+					}
+					storedObject.Inode = metadata.Inode
+					storedObject.inodePath = metadata.inodePath
+					storedObject.hardlinkedSymlink = *fileProperties.NFSFileType == file.NFSFileTypeSymlink
+				}
 			}
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(storedObject.EntityType, t.symlinkHandling, t.hardlinkHandling)
-			}
-
 			storedObject.updateTimestamps(*fileProperties.FileLastWriteTime, *fileProperties.FileChangeTime)
 
-			err := ProcessIfPassedFilters(filters, storedObject, processor)
+			err := processObject(storedObject)
 			_, err = getProcessingError(err)
 
 			return err
@@ -348,14 +367,16 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 
 		// When includeExtendedInfo is true, we already have the properties from the listing API
 		// so we don't need to fetch full properties (which would make individual API calls)
-		needsFullPropertiesFetch := !t.includeExtendedInfo && t.getProperties
+		needsFullPropertiesFetch := !t.includeExtendedInfo && (t.getProperties || t.fromTo.IsNFS())
 		fullProperties, err := f.propertyGetter(t.ctx, needsFullPropertiesFetch, t.scanPacer)
 		if err != nil {
 			return StoredObject{
 				RelativePath: relativePath,
 			}, err
 		}
-
+		var targetHardlinkFile string
+		var nfsMetadata NFSMetadataContext
+		nfsMetadata.FileID = fullProperties.FileID()
 		// NFS handling
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
@@ -370,11 +391,39 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				symlinkHandling:  t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
-			//set entity tile to symlink
-			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
+			//set entity type to symlink
+			isNFSSymlink := fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink)
+			if isNFSSymlink {
 				f.entityType = common.EEntityType.Symlink()
-			} else if fullProperties.LinkCount() > int64(1) {
+			}
+
+			//set entity type to hardlink
+			// When the file is a preserved symlink, skip hardlink handling unless
+			// hardlinks are also being preserved (the preserve path has its own
+			// anchor/subsequent logic below).
+			isPreservedSymlink := isNFSSymlink && t.symlinkHandling.Preserve()
+			if f.entityType != common.EEntityType.Folder() && fullProperties.LinkCount() > int64(1) &&
+				!(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 				f.entityType = common.EEntityType.Hardlink()
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					if t.inodeStore == nil {
+						return nil, fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+					}
+
+					nfsMetadata, err = t.hardlinkMetadata(f.url, fullProperties.FileID())
+					if err != nil {
+						return nil, err
+					}
+					nfsMetadata.hardlinkedSymlink = isNFSSymlink
+					targetHardlinkFile = nfsMetadata.TargetHardlinkFile
+				}
+
+				// A hardlinked symlink: the anchor (first-seen entry) must be
+				// transferred as a symlink so its target is created correctly
+				// on the destination; only subsequent links become Hardlink.
+				if isNFSSymlink && targetHardlinkFile == "" {
+					f.entityType = common.EEntityType.Symlink()
+				}
 			}
 		}
 
@@ -392,6 +441,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
 		}
+		// Populate Inode only when --hardlinks=preserve. The sync comparator
+		// defers objects with Inode != "" into pending-hardlink processing which
+		// calls InodeStore.GetAnchor; that store is only populated (via GetOrAdd)
+		// during preserve-mode traversal. Setting Inode in follow/skip modes
+		// would cause "anchor for inode … not found" errors.
 		obj := NewStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
@@ -403,6 +457,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
+			&nfsMetadata,
 		)
 
 		obj.updateTimestamps(lwt, ct)
@@ -411,10 +466,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	processStoredObject := func(s StoredObject) error {
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(s.EntityType, t.symlinkHandling, t.hardlinkHandling)
-		}
-		err := ProcessIfPassedFilters(filters, s, processor)
+		err := processObject(s)
 		_, err = getProcessingError(err)
 		return err
 	}
@@ -629,7 +681,13 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		symlinkHandling:             opts.SymlinkHandling,
 		fromTo:                      opts.FromTo,
 		errorChannel:                opts.ErrorChannel,
+		inodeStore:                  opts.InodeStore,
+		basePath:                    opts.BasePath,
 	}
+	if t.basePath == "" {
+		t.basePath = rawURL
+	}
+	t.inodeNamespace = hardlinkNamespace(t.basePath, false, opts.IsSyncDestination)
 
 	// Meter enumeration (metadata) IOPS against the source share's per-share
 	// rate-limit budget, unless a caller supplied an explicit ScanPacer.
@@ -652,7 +710,9 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		t.scanPacer = common.GetShareScanPacer(rawURL)
 	}
 
-	t.skipRootProperties = UseSyncOrchestrator && !t.recursive
+	// Preserve-mode copy still needs to distinguish a single file from a directory.
+	// Orchestrated sync rejects preserve before constructing these traversers.
+	t.skipRootProperties = UseSyncOrchestrator && !t.recursive && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()
 
 	// Set this to true if we are using SyncOrchestrator and getProperties is true
 	// We are disabling it for NFS copy as it needs few properties like LinkCount, FileID

@@ -177,25 +177,27 @@ You can change this default behaviour and overwrite files at the destination by 
 By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command.
 To learn more, see [Synchronize files](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-blobs-synchronize).
 
-## Job-plan compatibility (M4)
+## Job-plan compatibility (Checkpoint 5)
 
-This integration writes **schema version 21** job plans. M4's AMLFS header
-offsets and persisted `FolderExisted`/`Restarted` values are incompatible with
-schema version 20.
+This integration writes **schema version 22** job plans for hardlink
+preservation. Older plan layouts cannot be resumed by this build.
 
-- Resume existing schema 20 jobs with the accepted **M3 binary**.
+- Resume existing schema 21 jobs with the accepted **Checkpoint 4 binary**.
+- Resume existing schema 20 jobs with the accepted **Checkpoint 3 binary**.
 - Resume existing schema 19 jobs with the older binary that created them.
 - Finish those jobs with their compatible binary, or start a new job with this
   build. Do not rename old plan files to change their schema version.
 
-M1 introduced schema 20, including persisted symlink handling; M2 and M3 retained
-that format. M4 does not migrate or resume those older plan formats.
+Checkpoint 1 introduced schema 20, including persisted symlink handling;
+Checkpoints 2 and 3 retained that format. Checkpoint 4 introduced schema 21 for
+AMLFS header offsets and persisted `FolderExisted`/`Restarted` values.
+Checkpoint 5 does not migrate those older formats.
 
 The embedded Mover sync API retains symlink following for local sources, including
 SMB and Blob destinations. The CLI sync flags retain upstream's NFS-specific
 symlink restrictions.
 
-## Mover traversal integration (M2)
+## Mover traversal integration (Checkpoint 2)
 
 Resource enumeration, directory orchestration, indexing, comparison, and streaming
 merge-join synchronization live in the [traverser package](traverser).
@@ -209,10 +211,10 @@ Existing Mover sync entry points in `cmd` delegate to the shared implementation.
 The `common.LifecycleMgr` contract and the exported `cmd.OutputFormat` value remain
 available for embedded hosts. No single-tenant OAuth manager is introduced.
 The `--include-root` flag controls root-property synchronization in addition to
-child objects. M2 retained M1's schema 20; the current M4 build uses schema 21 as
-described above.
+child objects. Checkpoint 2 retained Checkpoint 1's schema 20; the current
+Checkpoint 5 build uses schema 22 as described above.
 
-## Library execution integration (M3)
+## Library execution integration (Checkpoint 3)
 
 Copy, sync, login/logout and resume operations execute through the `azcopy`
 library. Existing Mover command entry points adapt options and progress callbacks
@@ -223,12 +225,35 @@ including streaming merge-join and metadata-only comparisons.
 Library options can carry an explicit job ID and credential manager with separate
 source and destination credential names. `PreparedSync` supports callers that
 prepare and enumerate separately, and exposes an execution-state snapshot for
-legacy progress reporting. M3 retained job-plan schema 20; use the M3 binary for
-those plans after upgrading to this schema 21 build.
+legacy progress reporting. Checkpoint 3 retained job-plan schema 20; use the
+Checkpoint 3 binary for those plans after upgrading to this schema 22 build.
+
+Prepared enumeration releases its inode-store resources when `Enumerate` finishes
+safely. Call `PreparedSync.Close` if preparation is abandoned before enumeration;
+it refuses to close resources while enumeration or undrained work remains.
 
 Failure cleanup first stops enumeration and dispatch, then waits for an engine
 work-completion barrier. If that bounded wait times out, the API returns a drain
 error and retains job resources rather than closing resources still in use.
+
+## Hardlink preservation (Checkpoint 5)
+
+`--hardlinks=preserve` retains supported hardlink relationships during copy and
+sync. Preserve-mode sync uses the standard indexed comparison path only. It is
+explicitly rejected when the Mover directory orchestrator or streaming merge-join
+is selected; use the standard indexed path for preservation, or `follow`/`skip`
+to retain the existing Mover paths.
+
+**Preserve-mode sync can unlink and recreate existing destination paths to
+reconstruct hardlink relationships, even when `--delete-destination=false`.**
+AzCopy warns about this behavior. This exception applies only to
+`--hardlinks=preserve`; it does not change the behavior of `follow` or `skip`.
+Deletion of destination-only paths remains controlled by `--delete-destination`.
+Review destination data and hardlink relationships before selecting preserve mode.
+
+New preserve-mode scans require a fresh JobID when inode state already exists.
+Use `ResumeJob` to resume the saved job; starting another scan does not overwrite
+its state or reuse stale anchors. Dry runs use disposable inode state.
 
 ## How to contribute to AzCopy v10
 

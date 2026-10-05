@@ -97,8 +97,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 			cooked.FromTo,
 			cooked.preservePermissions,
 			cooked.preserveInfo,
-			&cooked.hardlinks,
-			cooked.SymlinkHandling); err != nil {
+			&cooked.hardlinks, cooked.SymlinkHandling); err != nil {
 			return err
 		}
 	} else {
