@@ -35,6 +35,7 @@ type syncProgressTracker struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
 	// so the 64 bit integers are placed first in the struct to avoid future breaks
 	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	phaseTimer
 	// incremented by traversers
 	atomicSourceFilesScanned      uint64
 	atomicDestinationFilesScanned uint64
@@ -56,14 +57,20 @@ type syncProgressTracker struct {
 	// used to calculate job summary
 	jobStartTime time.Time
 
-	jobID   common.JobID
-	handler SyncHandler
+	jobID        common.JobID
+	handler      SyncHandler
+	shapeTracker *sourceShapeTracker
 }
 
-func newSyncProgressTracker(jobID common.JobID, handler SyncHandler) *syncProgressTracker {
+func newSyncProgressTracker(jobID common.JobID, handler SyncHandler, fromTo common.FromTo, symlinkHandling common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType, collectSourceShape bool) *syncProgressTracker {
+	var shapeTracker *sourceShapeTracker
+	if collectSourceShape {
+		shapeTracker = newSourceShapeTracker(fromTo.From(), symlinkHandling, hardlinkHandling)
+	}
 	return &syncProgressTracker{
-		jobID:   jobID,
-		handler: handler,
+		jobID:        jobID,
+		handler:      handler,
+		shapeTracker: shapeTracker,
 	}
 }
 
@@ -151,6 +158,14 @@ func (spt *syncProgressTracker) GetElapsedTime() time.Duration {
 	return time.Since(spt.jobStartTime)
 }
 
+func (spt *syncProgressTracker) GetSourceShapeSummary() sourceShapeSummary {
+	return spt.shapeTracker.snapshot()
+}
+
+func (spt *syncProgressTracker) GetEnumerationElapsedTime() time.Duration {
+	return spt.enumerationElapsedSince(spt.jobStartTime)
+}
+
 func (spt *syncProgressTracker) incSourceEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 	if entityType == common.EEntityType.File() {
 		atomic.AddUint64(&spt.atomicSourceFilesScanned, 1)
@@ -205,6 +220,7 @@ func (spt *syncProgressTracker) getDeletionCount() uint32 {
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
 func (spt *syncProgressTracker) setFirstPartOrdered() {
+	spt.markTransferStart()
 	atomic.StoreUint32(&spt.atomicFirstPartOrdered, 1)
 }
 
@@ -215,6 +231,7 @@ func (spt *syncProgressTracker) firstPartOrdered() bool {
 
 // setScanningComplete sets the value of atomicScanningStatus to 1.
 func (spt *syncProgressTracker) setScanningComplete() {
+	spt.markEnumerationEnd()
 	atomic.StoreUint32(&spt.atomicScanningStatus, 1)
 }
 
