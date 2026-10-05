@@ -402,7 +402,15 @@ func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 
 	showS3UrlTypeWarning(s3URLParts)
 
-	t.s3Client, err = GetS3TraverserGlobalClientManager().GetS3Client(ctx, s3URLParts, *opts.Credential)
+	info := cred.CredentialInfo{CredentialType: opts.CredentialType}
+	if opts.Credential != nil {
+		info = *opts.Credential
+	}
+	manager := opts.S3ClientManager
+	if manager == nil {
+		manager = &S3ClientManager{}
+	}
+	t.s3Client, err = manager.GetS3Client(ctx, s3URLParts, info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get S3 client from global manager: %w", err)
 	}
@@ -442,7 +450,7 @@ type S3ClientManager struct {
 func (m *S3ClientManager) GetS3Client(ctx context.Context, s3URLParts common.S3URLParts, credInfo cred.CredentialInfo) (*minio.Client, error) {
 	m.once.Do(func() {
 		// XDM: Do we need retry here?
-		m.client, m.err = CreateSharedS3Client(ctx, s3URLParts, credInfo.CredentialType)
+		m.client, m.err = createSharedS3Client(ctx, s3URLParts, credInfo)
 	})
 	return m.client, m.err
 }
@@ -459,15 +467,19 @@ func GetS3TraverserGlobalClientManager() *S3ClientManager {
 // CreateSharedS3Client creates a shared S3 client that can be reused across multiple traversers
 // This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
 func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, credentialType enum.CredentialType) (*minio.Client, error) {
+	return createSharedS3Client(ctx, s3URLParts, cred.CredentialInfo{CredentialType: credentialType})
+}
+
+func createSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, credentialInfo cred.CredentialInfo) (*minio.Client, error) {
 	//Optional check for custom credential provider
-	var credProvider credentials.Provider = nil
+	var credProvider credentials.Provider = credentialInfo.S3CredentialInfo.Provider
 	creds := ctx.Value(customCreds)
 	if creds != nil {
 		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
 	}
 
 	return common.CreateS3Client(ctx, common.CredentialInfo{
-		CredentialType: credentialType,
+		CredentialType: credentialInfo.CredentialType,
 		S3CredentialInfo: cred.S3CredentialInfo{
 			Endpoint:   s3URLParts.Endpoint,
 			Region:     s3URLParts.Region,

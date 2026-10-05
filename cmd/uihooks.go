@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -80,6 +81,53 @@ func GetLifecycleMgr() LifecycleMgr {
 func SetLifecycleMgr(manager LifecycleMgr) {
 	common.SetLifecycleMgr(manager)
 	glcm = manager
+}
+
+// WithJobCancellation connects migrated library jobs to both OS signals and the
+// existing stdin/host cancellation channel without starting another progress loop.
+func WithJobCancellation(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	signals := make(chan os.Signal, 1)
+	requests := make(chan struct{}, 1)
+	jobContext := common.WithJobCancellationRequests(ctx, requests, cancel)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	var hostSignals <-chan os.Signal
+	if source, ok := glcm.(interface{ CancellationChannel() <-chan os.Signal }); ok {
+		hostSignals = source.CancellationChannel()
+	}
+	go func() {
+		defer signal.Stop(signals)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-signals:
+			case _, ok := <-hostSignals:
+				if !ok {
+					hostSignals = nil
+					continue
+				}
+			}
+			// Preflight and dry-run enumeration have no progress reporter to answer
+			// cancellation requests, so cancellation must reach their context directly.
+			if !common.JobCancellationRequestsEnabled(jobContext) {
+				cancel()
+				continue
+			}
+			select {
+			case requests <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	return jobContext, func() {
+		signal.Stop(signals)
+		cancel()
+	}
+}
+
+func (lcm *lifecycleMgr) CancellationChannel() <-chan os.Signal {
+	return lcm.cancelChannel
 }
 
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager

@@ -153,9 +153,6 @@ type IJobMgr interface {
 	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(args *AddJobPartArgs) IJobPartMgr
-
-	SetIncludeExclude(map[string]int, map[string]int)
-	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
 	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
@@ -248,11 +245,11 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
-		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), common.LogPathFolder, "" /* logFileNameSuffix */)
+		jobLogger = common.NewJobLogger(jobID, level, common.LogPathFolder, "" /* logFileNameSuffix */)
 		jobLogger.OpenLog()
 	}
 
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
 		httpClient:           common.GetGlobalHTTPClient(jobLogger),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
@@ -262,6 +259,9 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		initMu:               &sync.Mutex{},
 		jobPartProgress:      jobPartProgressCh,
 		reportCancelCh:       make(chan struct{}, 1),
+		reportLoopDone:       make(chan struct{}),
+		xferDoneInput:        jstm.xferDone,
+		partCreatedInput:     jstm.partCreated,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -450,18 +450,19 @@ type jobMgr struct {
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 
 	// reportCancelCh to close the report thread.
-	reportCancelCh chan struct{}
+	reportCancelCh       chan struct{}
+	reportLoopDone       chan struct{}
+	drainTracker         jobWorkTracker
+	xferDoneInput        chan xferDoneMsg
+	xferDoneCloseOnce    sync.Once
+	partCreatedInput     chan JobPartCreatedMsg
+	partCreatedCloseOnce sync.Once
 
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
-	// list of transfer mentioned to include only then while resuming the job
 	inMemoryTransitJobState InMemoryTransitJobState
-	include                 map[string]int
-	// list of transfer mentioned to exclude while resuming the job
-	exclude map[string]int
-
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
 
@@ -480,6 +481,7 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
+	jobErrorHandlerMu   sync.RWMutex
 	jobErrorHandler     common.JobErrorHandler
 
 	// scheduler coordination: several scheduleJobPartsWorker goroutines run concurrently,
@@ -740,18 +742,6 @@ func (jm *jobMgr) PipelineNetworkStats() *PipelineNetworkStats {
 	return jm.pipelineNetworkStats
 }
 
-// SetIncludeExclude sets the include / exclude list of transfers
-// supplied with resume command to include or exclude mentioned transfers
-func (jm *jobMgr) SetIncludeExclude(include, exclude map[string]int) {
-	jm.include = include
-	jm.exclude = exclude
-}
-
-// Returns the list of transfer mentioned to include / exclude
-func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
-	return jm.include, jm.exclude
-}
-
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.Reset(appCtx, "")
@@ -827,10 +817,16 @@ func (jm *jobMgr) AddTotalNumFilesProcessed(numFiles int64) {
 
 // ReportJobPartDone is called to report that a job part completed or failed
 func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
-	jm.jobPartProgress <- progressInfo
+	jm.drainTracker.add(1)
+	select {
+	case jm.jobPartProgress <- progressInfo:
+	case <-jm.reportLoopDone:
+		jm.drainTracker.done(1)
+	}
 }
 
 func (jm *jobMgr) reportJobPartDoneHandler() {
+	defer close(jm.reportLoopDone)
 	var haveFinalPart bool
 	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(common.LogInfo)
@@ -859,7 +855,10 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
-			partsDone := atomic.AddUint32(&jm.partsDone, 1)
+			partsDone := atomic.LoadUint32(&jm.partsDone)
+			if partProgressInfo.partNum != nil {
+				partsDone = atomic.AddUint32(&jm.partsDone, 1)
+			}
 			jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
 			jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
 			jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
@@ -891,15 +890,13 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
-				// Inform StatusManager that all parts are done.
-				if jm.jstm.xferDone != nil {
-					close(jm.jstm.xferDone)
+				// Incomplete cancellation may publish a terminal status before work is
+				// drained. Keep the input open for remaining transfer completions; the
+				// explicit drain barrier closes it once all producers and work are done.
+				if haveFinalPart && allKnownPartsDone {
+					jm.closeXferDone()
+					jm.waitToDrainXferDone()
 				}
-
-				// Wait  for all XferDone messages to be processed by statusManager. Front end
-				// depends on JobStatus to determine if we've to quit job. Setting it here without
-				// draining XferDone will make it report incorrect statistics.
-				jm.waitToDrainXferDone()
 				partDescription := "all parts of entire Job"
 				if !haveFinalPart {
 					if allKnownPartsDone {
@@ -935,6 +932,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			if shouldLog {
 				jm.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 			}
+			jm.drainTracker.done(1)
 		}
 	}
 }
@@ -950,7 +948,7 @@ func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
-	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately
+	jm.ReportJobPartDone(jobPartProgressInfo{})
 }
 func (jm *jobMgr) ShouldLog(level common.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level common.LogLevel, msg string) { jm.logger.Log(level, msg) }
@@ -1090,6 +1088,10 @@ func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc
 // from where this JobPartMgr will be picked by a routine and
 // its transfers will be scheduled
 func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
+	if part, ok := jpm.(*jobPartMgr); ok {
+		part.drainTracker = &jm.drainTracker
+		jm.drainTracker.add(uint64(part.cachedNumTransfers) + 1)
+	}
 	jm.coordinatorChannels.partsChannel <- jpm
 }
 
@@ -1425,7 +1427,18 @@ func (jm *jobMgr) IsDaemon() bool {
 }
 
 func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
+	jm.jobErrorHandlerMu.RLock()
+	defer jm.jobErrorHandlerMu.RUnlock()
 	return jm.jobErrorHandler
+}
+
+func (jm *jobMgr) SetJobErrorHandler(handler common.JobErrorHandler) {
+	if handler == nil {
+		return
+	}
+	jm.jobErrorHandlerMu.Lock()
+	jm.jobErrorHandler = handler
+	jm.jobErrorHandlerMu.Unlock()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

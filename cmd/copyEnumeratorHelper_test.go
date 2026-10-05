@@ -55,8 +55,8 @@ func TestRelativePath(t *testing.T) {
 	}
 
 	// execute
-	srcRelPath := cca.MakeEscapedRelativePath(true, false, false, object)
-	destRelPath := cca.MakeEscapedRelativePath(false, true, false, object)
+	srcRelPath := cca.MakeEscapedRelativePath(true, false, object)
+	destRelPath := cca.MakeEscapedRelativePath(false, true, object)
 
 	// assert
 	a.Equal("/c.txt", srcRelPath)

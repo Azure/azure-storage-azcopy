@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -49,22 +50,40 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 	var sourceTraverser traverser.ResourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	from := cca.FromTo.From()
+	if !from.SupportsTrailingDot() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
+	}
 
 	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
-		Context:            ctx,
-		CanBePublic:        true,
-		SharedKeyAllowed:   false,
-		PreferredTokenName: cca.DstCredName,
-		CpkOptions:         cca.CpkOptions,
-		TokenManager:       GetCredentialManager(),
+		Context: ctx, CanBePublic: false, SharedKeyAllowed: false,
+		PreferredTokenName: cca.DstCredName, CpkOptions: cca.CpkOptions, TokenManager: GetCredentialManager(),
 	})
+	if err != nil {
+		return nil, err
+	}
+	cca.credentialInfo = srcCredInfo
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
+	var fileClientOptions any
+	if cca.FromTo.From().IsFile() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
+	}
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		cca.Source,
+		cca.credentialInfo.CredentialType,
+		srcCredInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
-		Credential: &srcCredInfo,
+		Client:         targetServiceClient,
+		CredentialType: cca.credentialInfo.CredentialType,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -109,42 +128,21 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
+	fpo, message := azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	from := cca.FromTo.From()
-	if !from.SupportsTrailingDot() {
-		cca.trailingDot = common.ETrailingDotOption.Disable()
-	}
-
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
-	var fileClientOptions any
-	if cca.FromTo.From().IsFile() {
-		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
-	}
-	targetServiceClient, err := common.GetServiceClientForLocation(
-		cca.FromTo.From(),
-		cca.Source,
-		srcCredInfo.CredentialType,
-		srcCredInfo.TokenCredential,
-		&options,
-		fileClientOptions,
-	)
-	if err != nil {
-		return nil, err
-	}
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	transferScheduler := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		jobInitiated, err := transferScheduler.DispatchFinalPart()
 		if err != nil {
 			if cca.dryrunMode {
 				return nil
-			} else if err == NothingScheduledError {
+			} else if err == azcopy.NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return ErrNothingToRemove
 			}
@@ -164,7 +162,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		return nil
 	}
 
-	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }
 
 // TODO move after ADLS/Blob interop goes public
@@ -195,7 +193,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 
 	dsc, _ := targetServiceClient.DatalakeServiceClient() // We've just created client above, need not verify error here.
 
-	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
+	transferProcessor := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {
@@ -218,7 +216,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		if cca.dryrunMode {
 			return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 		} else {
-			err := transferProcessor.scheduleCopyTransfer(traverser.NewStoredObject(
+			err := transferProcessor.ScheduleSyncRemoveSetPropertiesTransfer(traverser.NewStoredObject(
 				nil,
 				path.Base(datalakeURLParts.PathName),
 				"",
@@ -247,7 +245,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 			if cca.dryrunMode {
 				return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 			} else {
-				err := transferProcessor.scheduleCopyTransfer(traverser.NewStoredObject(
+				err := transferProcessor.ScheduleSyncRemoveSetPropertiesTransfer(traverser.NewStoredObject(
 					nil,
 					path.Base(datalakeURLParts.PathName),
 					childPath,
@@ -267,7 +265,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		}
 	}
 
-	_, err = transferProcessor.dispatchFinalPart()
+	_, err = transferProcessor.DispatchFinalPart()
 	return err
 }
 

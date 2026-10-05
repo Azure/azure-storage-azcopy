@@ -397,6 +397,9 @@ type InitResourceTraverserOptions struct {
 	Credential                  *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
 	IncrementEnumerationFailure func(common.EntityType)
+	Client                      *common.ServiceClient // For Azure storage traversers
+	CredentialType              enum.CredentialType
+	S3ClientManager             *S3ClientManager
 
 	ListOfFiles      <-chan string // Creates a list of files traverser
 	ListOfVersionIDs <-chan string // Used by Blob/DFS
@@ -510,6 +513,20 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 	options := CreateClientOptions(common.AzcopyScanningLogger, nil, reauthTok)
 
+	if opts.Client == nil && resourceLocation.IsAzure() {
+		info := cred.CredentialInfo{CredentialType: opts.CredentialType}
+		if opts.Credential != nil {
+			info = *opts.Credential
+		}
+		var fileOptions any
+		if resourceLocation.IsFile() {
+			fileOptions = &common.FileClientOptions{AllowTrailingDot: opts.TrailingDotOption.IsEnabled()}
+		}
+		opts.Client, err = common.GetServiceClientForLocation(resourceLocation, resource, info.CredentialType, info.TokenCredential, &options, fileOptions)
+		if err != nil {
+			return nil, err
+		}
+	}
 	switch resourceLocation {
 	case common.ELocation.Local():
 		_, err := common.OSStat(resource.ValueLocal())
@@ -562,22 +579,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 		containerName := blobURLParts.ContainerName
-		// Strip any non-service related things away
-		blobURLParts.ContainerName = ""
-		blobURLParts.BlobName = ""
-		blobURLParts.Snapshot = ""
-		blobURLParts.VersionID = ""
-
-		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
-		if err != nil {
-			return nil, err
-		}
-
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
-		if err != nil {
-			return nil, err
-		}
-		bsc, err := c.BlobServiceClient()
+		bsc, err := opts.Client.BlobServiceClient()
 		if err != nil {
 			return nil, err
 		}
@@ -608,29 +610,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 		shareName := fileURLParts.ShareName
-		// Strip any non-service related things away
-		fileURLParts.ShareName = ""
-		fileURLParts.ShareSnapshot = ""
-		fileURLParts.DirectoryOrFilePath = ""
-		fileOptions := &common.FileClientOptions{
-			AllowTrailingDot: opts.TrailingDotOption.IsEnabled(),
-		}
-		var resLoc common.Location
-		if resourceLocation == common.ELocation.File() {
-			resLoc = common.ELocation.File()
-		} else {
-			resLoc = common.ELocation.FileNFS()
-		}
-		res, err := SplitResourceString(fileURLParts.String(), resLoc)
-		if err != nil {
-			return nil, err
-		}
-
-		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, fileOptions)
-		if err != nil {
-			return nil, err
-		}
-		fsc, err := c.FileServiceClient()
+		fsc, err := opts.Client.FileServiceClient()
 		if err != nil {
 			return nil, err
 		}
@@ -658,22 +638,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 		containerName := blobURLParts.ContainerName
-		// Strip any non-service related things away
-		blobURLParts.ContainerName = ""
-		blobURLParts.BlobName = ""
-		blobURLParts.Snapshot = ""
-		blobURLParts.VersionID = ""
-
-		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
-		if err != nil {
-			return nil, err
-		}
-
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
-		if err != nil {
-			return nil, err
-		}
-		bsc, err := c.BlobServiceClient()
+		bsc, err := opts.Client.BlobServiceClient()
 		if err != nil {
 			return nil, err
 		}

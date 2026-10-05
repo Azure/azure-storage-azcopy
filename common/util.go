@@ -229,7 +229,7 @@ func GetServiceClientForLocation(loc Location,
 		return ret, nil
 
 	default:
-		return nil, nil
+		return ret, nil
 	}
 }
 

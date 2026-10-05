@@ -24,9 +24,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
-	//"strings"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,17 +48,6 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
-}
-
-// round api rounds up the float number after the decimal point.
-func round(num float64) int {
-	return int(num + math.Copysign(0.5, num))
-}
-
-// ToFixed api returns the float number precised up to given decimal places.
-func ToFixed(num float64, precision int) float64 {
-	output := math.Pow(10, float64(precision))
-	return float64(round(num*output)) / output
 }
 
 // MainSTE initializes the Storage Transfer Engine
@@ -187,13 +175,13 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
-	// Strip '?' if present as first character of the source sas / destination sas
-	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
-		req.SourceSAS = req.SourceSAS[1:]
+	if len(req.IncludeTransfer) != 0 || len(req.ExcludeTransfer) != 0 {
+		return common.CancelPauseResumeResponse{
+			ErrorMsg: "include/exclude transfer lists are obsolete and cannot be used when resuming a job",
+		}
 	}
-	if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
-		req.DestinationSAS = req.DestinationSAS[1:]
-	}
+	req.SourceSAS = strings.TrimPrefix(req.SourceSAS, "?")
+	req.DestinationSAS = strings.TrimPrefix(req.DestinationSAS, "?")
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
 	srcIsOauth := req.S2SSourceCredentialType.IsAzureOAuth()
@@ -291,8 +279,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		}
 	}
 
-	// After creating the Job mgr, set the include / exclude list of transfer.
-	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
@@ -737,3 +723,7 @@ type warnJobErrorHandler struct {
 func (w warnJobErrorHandler) Error(err string) {
 	panic("We don't expect errors to be hit for job " + w.jobID.String() + ". error: " + err)
 }
+
+// Read-only resurrection must create a logger for this job, not borrow another
+// concurrent operation's process-global logger.
+func (w warnJobErrorHandler) JobLogger() common.ILoggerResetable { return nil }

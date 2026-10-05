@@ -277,11 +277,27 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (ste.IJobMgr, bool) {
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	level common.LogLevel, commandString string, errorHandlers ...common.JobErrorHandler) ste.IJobMgr {
 
-	return ja.jobIDToJobMgr.EnsureExists(jobID,
+	manager := ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false, errorHandlers...)
+			logger := common.AzcopyCurrentJobLogger
+			if len(errorHandlers) > 0 {
+				if provider, ok := errorHandlers[0].(interface {
+					JobLogger() common.ILoggerResetable
+				}); ok {
+					logger = provider.JobLogger()
+				}
+			}
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, logger, false, errorHandlers...)
 		})
+	if len(errorHandlers) > 0 && errorHandlers[0] != nil {
+		// A details/summary request may have resurrected this job before execution
+		// installs its lifecycle handler. Resume errors must reach the current owner.
+		if updatable, ok := manager.(interface{ SetJobErrorHandler(common.JobErrorHandler) }); ok {
+			updatable.SetJobErrorHandler(errorHandlers[0])
+		}
+	}
+	return manager
 }
 
 // JobMgrCleanup cleans up the jobMgr identified by the given jobId. It undoes what NewJobMgr() does, basically it does the following:

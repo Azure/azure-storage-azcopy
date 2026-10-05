@@ -21,14 +21,12 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	logoutCmdArgs := LogoutOptions{}
-
 	// logoutCmd represents the logout command
 	logoutCmd := &cobra.Command{
 		Use:        "logout",
@@ -56,9 +54,8 @@ type LogoutOptions struct {
 }
 
 func (options LogoutOptions) process() error {
-	nickname := options.Nickname
-	if !GetCredentialManager().DeleteCredentials(nickname) {
-		return fmt.Errorf("no cached token found for %q", nickname)
+	if _, err := Client.Logout(azcopy.LogoutOptions{Nickname: options.Nickname}); err != nil {
+		return err
 	}
 
 	glcm.Info("Logout succeeded.")

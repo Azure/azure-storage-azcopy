@@ -70,20 +70,26 @@ func (jm *jobMgr) statusMgrClosed() bool {
 
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
+	jm.drainTracker.add(1)
+	sent := false
 	defer func() {
+		if !sent {
+			jm.drainTracker.done(1)
+		}
 		if recErr := recover(); recErr != nil {
 			jm.Log(common.LogError, "Cannot send message on closed channel")
 		}
 	}()
-	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
+	if jm.partCreatedInput != nil {
 		select {
-		case jm.jstm.partCreated <- msg:
+		case jm.partCreatedInput <- msg:
+			sent = true
 		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
 		}
 
 		if msg.IsFinalPart {
 			// Inform statusManager that this is all parts we've
-			close(jm.jstm.partCreated)
+			jm.partCreatedCloseOnce.Do(func() { close(jm.partCreatedInput) })
 		}
 	}
 }
@@ -94,7 +100,7 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 			jm.Log(common.LogError, "Cannot send message on channel")
 		}
 	}()
-	jm.jstm.xferDone <- msg
+	jm.xferDoneInput <- msg
 }
 
 func (jm *jobMgr) ListJobSummary(reset ...bool) common.ListJobSummaryResponse {
@@ -146,6 +152,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 			js.HardlinksConvertedCount += msg.HardlinksConvertedCount
+			jm.drainTracker.done(1)
 
 		case msg, ok := <-jstm.xferDone:
 			if !ok { // Channel is closed, all transfers have been attended.
@@ -220,7 +227,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.FailedTransfers = []common.TransferDetail{}
 			js.SkippedTransfers = []common.TransferDetail{}
 
-			if allXferDoneHandled {
+			if allXferDoneHandled && jstm.partCreated == nil {
 				close(jstm.statusMgrDone)
 				close(jstm.respChan)
 				close(jstm.listReq)

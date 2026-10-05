@@ -166,6 +166,23 @@ available for embedded hosts. No single-tenant OAuth manager is introduced.
 The `--include-root` flag controls root-property synchronization in addition to
 child objects. M1's job-plan schema 20 requirement continues to apply.
 
+## Library execution integration (M3)
+
+Copy, sync, login/logout and resume operations execute through the `azcopy`
+library. Existing Mover command entry points adapt options and progress callbacks
+to that same implementation; they do not maintain a second transfer executor.
+Mover sync continues to use the `traverser` directory orchestrator when requested,
+including streaming merge-join and metadata-only comparisons.
+
+Library options can carry an explicit job ID and credential manager with separate
+source and destination credential names. `PreparedSync` supports callers that
+prepare and enumerate separately, and exposes an execution-state snapshot for
+legacy progress reporting. Job-plan schema 20 remains unchanged.
+
+Failure cleanup first stops enumeration and dispatch, then waits for an engine
+work-completion barrier. If that bounded wait times out, the API returns a drain
+error and retains job resources rather than closing resources still in use.
+
 ## How to contribute to AzCopy v10
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

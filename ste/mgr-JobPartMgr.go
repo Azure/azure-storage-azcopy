@@ -216,6 +216,7 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone      uint32
+	drainTracker             *jobWorkTracker
 	atomicTransfersCompleted uint32
 	atomicTransfersFailed    uint32
 	atomicTransfersSkipped   uint32
@@ -247,6 +248,9 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+	if jpm.drainTracker != nil {
+		defer jpm.drainTracker.done(1)
+	}
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0   // Reset the # of transfers done back to 0
 	jpm.atomicTransfersFailed = 0 // Resets the # transfers failed back to 0 during resume operation
@@ -274,12 +278,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		/* This will wind down the transfer and report summary */
 		plan.SetJobStatus(common.EJobStatus.Completed())
 		return
-	}
-
-	// get the list of include / exclude transfers
-	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
-	if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
-		panic("List of transfers is obsolete.")
 	}
 
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
@@ -634,6 +632,9 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
 func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfersDone uint32) {
+	if jpm.drainTracker != nil {
+		defer jpm.drainTracker.done(1)
+	}
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 

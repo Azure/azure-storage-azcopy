@@ -28,8 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 )
@@ -53,9 +51,6 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-			return mockedRPC.intercept(order)
-		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -64,7 +59,7 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 		raw := getDefaultSyncRawInput(srcFileURLWithSAS.String(), dstFileURLWithSAS.String())
 
 		// the destination was created after the source, so no sync should happen
-		runSyncAndVerify(a, raw, func(err error) {
+		runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 			a.Nil(err)
 
 			// validate that the right number of transfers were scheduled
@@ -75,7 +70,7 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 		scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 		mockedRPC.reset()
 
-		runSyncAndVerify(a, raw, func(err error) {
+		runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 			a.Nil(err)
 			validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 		})
@@ -97,9 +92,6 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -109,7 +101,7 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 
 	// all files at source should be synced to destination
 	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -122,7 +114,7 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 	// turn off recursive, this time only top files should be transferred
 	raw.recursive = false
 	mockedRPC.reset()
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(fileList), len(mockedRPC.transfers))
 
@@ -151,9 +143,6 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -162,7 +151,7 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
 
 	// nothing should be sync since the source is older
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -172,7 +161,7 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	// refresh the source files' last modified time so that they get synced
 	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 	mockedRPC.reset()
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 	})
@@ -197,13 +186,10 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 	expectedOutput := fileList[len(fileList)/2:] // the missing half of source files should be transferred
 
 	// add some extra files that shouldn't be included
-	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, dstShareClient, fsc, "extra")
+	extras := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, dstShareClient, fsc, "extra")
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -219,27 +205,14 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 		delete(expectedOutputMap, exists) // remove directories that actually exist at destination
 	}
 	expectedOutput = scenarioHelper{}.convertMapKeysToList(expectedOutputMap)
+	extras = scenarioHelper{}.addFoldersToList(extras, false)
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
-		extraFilesFound := false
-		pager := dstShareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
-		for pager.More() {
-			listResponse, err := pager.NextPage(ctx)
-			a.Nil(err)
-
-			// if ever the extra files are found, note it down
-			for _, file := range listResponse.Segment.Files {
-				if strings.Contains(*file.Name, "extra") {
-					extraFilesFound = true
-				}
-			}
-		}
-
-		a.False(extraFilesFound)
+		validateDeleteTransfersAreScheduled(a, extras, mockedRPC)
 	})
 }
 
@@ -263,9 +236,6 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -275,7 +245,7 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 	raw.include = includeString
 
 	// verify that only the files specified by the include flag are synced
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, filesToInclude, mockedRPC)
 	})
@@ -301,9 +271,6 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -313,7 +280,7 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	// make sure the list doesn't include the files specified by the exclude flag
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 	})
@@ -345,9 +312,6 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -358,7 +322,7 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	// verify that only the files specified by the include flag are synced
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, filesToInclude, mockedRPC)
 	})
@@ -393,7 +357,7 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
 //
 // 	// verify error is thrown
-// 	runSyncAndVerify(a, raw, func(err error) {
+// 	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete,  func(err error) {
 // 		// error should not be nil, but the app should not crash either
 // 		a.NotNil(err)
 //
@@ -417,9 +381,6 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -432,7 +393,7 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 
 	// verify that targeting a directory works fine
 	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -446,7 +407,7 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(fileList), len(mockedRPC.transfers))
 
@@ -476,9 +437,6 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -489,7 +447,7 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
 
 	// nothing should be synced since the source is older
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -500,7 +458,7 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 	mockedRPC.reset()
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
@@ -523,10 +481,6 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileToDelete)
 
 	// set up interceptor
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(EOutputFormat.Text())
 	glcm = &mockedLcm
@@ -538,9 +492,8 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 	raw.dryrun = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, dryrunNewCopyJobPartOrder, dryrunDelete, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)
@@ -576,10 +529,6 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileToDelete)
 
 	// set up interceptor
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(EOutputFormat.Text())
 	glcm = &mockedLcm
@@ -590,9 +539,8 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 	raw.dryrun = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, dryrunNewCopyJobPartOrder, dryrunDelete, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)
@@ -632,9 +580,6 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -644,7 +589,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	raw.preserveInfo = false
 
 	// nothing should be sync since the source is older
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -656,7 +601,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	mockedRPC.reset()
 	currentTime := time.Now().UTC()
 	newTime := currentTime.Add(-time.Hour).UTC() // give extra hour
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 
