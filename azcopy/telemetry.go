@@ -39,6 +39,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -50,9 +51,12 @@ const (
 	telemetrySchemaVersion = "1"
 )
 
-// telemetryConnectionString is empty until a later integration layer configures it.
+// telemetryConnectionString targets the production AzCopy telemetry Application Insights component.
 // AZCOPY_TELEMETRY_CONNECTION_STRING overrides it at runtime.
-const telemetryConnectionString = ""
+const telemetryConnectionString = "InstrumentationKey=2c4d1db5-8231-4f37-b4d8-d0cf9d3988b1;" +
+	"IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;" +
+	"LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;" +
+	"ApplicationId=ca8b8ff5-e75a-41ab-a99d-e1d3a4ed4358"
 
 const (
 	// envTelemetryConnectionString overrides the embedded connection string.
@@ -127,7 +131,12 @@ func newTelemetryAgent(enabled bool) *telemetryAgent {
 	if !enabled || strings.EqualFold(os.Getenv(envDisableTelemetry), "true") {
 		return a
 	}
-	conn := configuredTelemetryConnectionString(os.Getenv, telemetryConnectionString)
+	embedded := telemetryConnectionString
+	if testing.Testing() {
+		// Test binaries report only to an explicitly configured instance.
+		embedded = ""
+	}
+	conn := configuredTelemetryConnectionString(os.Getenv, embedded)
 	if conn == "" {
 		return a
 	}
