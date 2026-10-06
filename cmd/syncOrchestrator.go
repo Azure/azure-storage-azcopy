@@ -300,7 +300,7 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 		err = validateBlobRoot(path)
 	case common.ELocation.BlobFS():
 		err = validateBlobFSRoot(path)
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		err = validateFileShareRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
@@ -586,7 +586,7 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 		// sync orchestrator is supported for these types
 	case common.EFromTo.S3Blob():
 		// sync orchestrator is supported for these types
-	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.FileFile():
+	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -601,8 +601,8 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Blob->BlobFS\n" +
 				"\t- BlobFS->Blob\n" +
 				"\t- BlobFS->BlobFS\n" +
-				"\t- File->File",
-		)
+				"\t- File->File\n" +
+				"\t- FileNFS->FileNFS")
 	}
 
 	if cca.recursive {
