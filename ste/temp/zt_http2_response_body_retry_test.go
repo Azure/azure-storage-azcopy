@@ -215,22 +215,36 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Log(1)
 	defer cancel()
+	t.Log(2)
 	response, err := client.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		Range: blob.HTTPRange{Offset: 0, Count: blobSize},
 	})
+	t.Log(3)
 	require.NoError(t, err)
 
+	t.Log(4)
 	retryReader := response.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: 1})
+	t.Log(5)
 	defer retryReader.Close()
+	t.Log(6)
 	downloaded, err := io.ReadAll(retryReader)
+	t.Log(7)
 	require.NoError(t, err)
+	t.Log(8)
 	require.Equal(t, body, downloaded)
+	t.Log(9)
 
 	result := <-downloadResult
+	t.Log(10)
 	require.NoError(t, <-peerError)
+	t.Log(11)
 	require.Equal(t, "bytes=0-8388607", result.firstRange)
+	t.Log(12)
 	require.Equal(t, "bytes=4194304-8388607", result.secondRange)
+	t.Log(13)
 	require.Equal(t, int32(2), transport.calls.Load(),
 		"the resumed range must be requested by azblob RetryReader")
+	t.Log(14)
 }
