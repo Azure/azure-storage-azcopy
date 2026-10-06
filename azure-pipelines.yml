@@ -234,7 +234,7 @@ jobs:
 
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
-          directory: 'ste'
+          directory: 'ste/temp'
           coverage_name: 'ste'
           isMutexSet: variables['isMutexSet']
 

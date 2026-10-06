@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -198,7 +199,7 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 
 	transport := &countingTransporter{client: &http.Client{Transport: clientTransport}}
 	client, err := blockblob.NewClientWithNoCredential("https://"+tlsListener.Addr().String()+"/container/blob", &blockblob.ClientOptions{
-		ClientOptions: NewClientOptions(
+		ClientOptions: ste.NewClientOptions(
 			policy.RetryOptions{
 				MaxRetries:    1,
 				RetryDelay:    time.Millisecond,
@@ -206,7 +207,7 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 			},
 			policy.TelemetryOptions{},
 			transport,
-			LogOptions{},
+			ste.LogOptions{},
 			nil,
 			nil,
 		),
