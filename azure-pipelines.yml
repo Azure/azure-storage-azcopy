@@ -18,12 +18,12 @@ jobs:
         Linux:
           imageName: 'ubuntu-latest'
           type: 'linux'
-        MacOS:
-          imageName: 'macos-latest'
-          type: 'mac-os'
-        Windows:
-          imageName: 'windows-latest'
-          type: 'windows'
+        # MacOS:
+        #   imageName: 'macos-latest'
+        #   type: 'mac-os'
+        # Windows:
+        #   imageName: 'windows-latest'
+        #   type: 'windows'
     pool:
       vmImage: $(imageName)
     steps:
