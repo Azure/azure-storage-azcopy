@@ -236,7 +236,6 @@ jobs:
         parameters:
           directory: 'ste'
           coverage_name: 'ste'
-          with_federated_credential: true
           isMutexSet: variables['isMutexSet']
 
       # - template: azurePipelineTemplates/run-ut.yml
