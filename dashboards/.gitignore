@@ -1,5 +1,7 @@
 !azcopy-business-metrics/azcopy-business-metrics.telemetry-test.dashboard.json
+!azcopy-business-metrics/azcopy-business-metrics.telemetry-prod.dashboard.json
 !azcopy-telemetry-metrics/azcopy-telemetry-metrics.telemetry-test.dashboard.json
+!azcopy-telemetry-metrics/azcopy-telemetry-metrics.telemetry-prod.dashboard.json
 !azcopy-data-metrics/*.dashboard.json
 !azcopy-usage-dashboards/generated/*.dashboard.json
 !azcopy-usage-dashboards/generated/*.grafana.json

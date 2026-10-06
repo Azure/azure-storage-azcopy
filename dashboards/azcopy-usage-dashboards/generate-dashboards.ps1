@@ -3,6 +3,7 @@ param(
     [string]$AppInsightsResourceId = "/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourceGroups/sharankur_playground/providers/Microsoft.Insights/components/sharankur_insights1",
     [string]$AppInsightsDatabase = "sharankur_insights1",
     [string]$OutputSuffix = "",
+    [string]$DashboardVariant = "",
     [switch]$EnableLiveArgEnrichment = $true,
     [switch]$EnableAipddEnrichment = $true
 )
@@ -23,6 +24,10 @@ $grafanaDatasource = [ordered]@{
 }
 $grafanaPluginVersion = "7.2.6"
 $grafanaBaseUrl = "https://azcopy-telemetry-ankur-cbbcech2ecd9gad6.eus.grafana.azure.com"
+# A variant gets its own IDs, Grafana UIDs, and titles so it can be published next to the others.
+$variantId = ($DashboardVariant.Trim().ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim([char]'-')
+$uidSuffix = if ($variantId) { "-$variantId" } else { "" }
+$titleSuffix = if ($DashboardVariant.Trim()) { " - $($DashboardVariant.Trim())" } else { "" }
 
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
@@ -416,7 +421,7 @@ $projection
 }
 
 function New-AdxDashboard([hashtable]$Definition) {
-    $prefix = "azcopy-usage:$($Definition.Name)"
+    $prefix = if ($variantId) { "azcopy-usage:${variantId}:$($Definition.Name)" } else { "azcopy-usage:$($Definition.Name)" }
     $pageId = New-StableGuid "${prefix}:page"
     $dataSourceId = New-StableGuid "${prefix}:datasource"
     $queries = @()
@@ -526,7 +531,7 @@ function New-AdxDashboard([hashtable]$Definition) {
         '$schema' = "https://dataexplorer.azure.com/static/d/schema/60/dashboard.json"
         id = New-StableGuid "${prefix}:dashboard"
         eTag = New-StableGuid "${prefix}:etag"
-        title = $Definition.Title
+        title = "$($Definition.Title)$titleSuffix"
         schema_version = "60"
         tiles = $tiles
         dataSources = @(
@@ -539,7 +544,7 @@ function New-AdxDashboard([hashtable]$Definition) {
                 database = "Xstore"
             }
         )
-        pages = @([ordered]@{ name = $Definition.Title; id = $pageId })
+        pages = @([ordered]@{ name = "$($Definition.Title)$titleSuffix"; id = $pageId })
         parameters = $parameters
         queries = $queries
     }
@@ -567,8 +572,8 @@ function New-GrafanaDashboard([hashtable]$Definition) {
         $panels += New-GrafanaPanel $Definition.Panels[$i] ($i + 1) $useAipddEnrichment
     }
     $dashboard = [ordered]@{
-        uid = $Definition.Uid
-        title = $Definition.Title
+        uid = "$($Definition.Uid)$uidSuffix"
+        title = "$($Definition.Title)$titleSuffix"
         description = $Definition.Description
         tags = @("AzCopy", "Telemetry", "StorageMover-adaptation")
         schemaVersion = 42
@@ -596,7 +601,7 @@ function New-GrafanaDashboard([hashtable]$Definition) {
     $wrapper | ConvertTo-Json -Depth 100 | Set-Content -Encoding utf8 $path
 }
 
-$customerUrl = "$grafanaBaseUrl/d/azcopy-customer-drilldown/azcopy-customer-drilldown"
+$customerUrl = "$grafanaBaseUrl/d/azcopy-customer-drilldown$uidSuffix/azcopy-customer-drilldown"
 $installationLink = @{
     Field = "InstallationID"
     Title = "Open installation drilldown"
@@ -1134,8 +1139,8 @@ function New-DataGrafanaDashboard {
         $panels += New-GrafanaPanel $definition ($i + 1)
     }
     $dashboard = [ordered]@{
-        uid = "azcopy-data-metrics"
-        title = "AzCopy Data Metrics"
+        uid = "azcopy-data-metrics$uidSuffix"
+        title = "AzCopy Data Metrics$titleSuffix"
         description = "AzCopy adaptation of the Storage Mover Data dashboard."
         tags = @("AzCopy", "Telemetry", "Data")
         schemaVersion = 42

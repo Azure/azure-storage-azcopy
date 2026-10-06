@@ -11,6 +11,7 @@ customEvents
     'azcopy.regular_files_scheduled',
     'azcopy.symlinks_scheduled',
     'azcopy.hardlinks_converted_scheduled',
+    'azcopy.hardlinks_preserved_scheduled',
     'azcopy.folder_properties_scheduled')
 | summarize Objects = sum(value) by bin(timestamp, 1h), Metric = name
 | order by timestamp asc

@@ -43,8 +43,11 @@ $argResourcesTable = "cluster('https://argeusarm1pone.eastus.kusto.windows.net')
 $argSubscriptionsTable = "cluster('https://argeusarm1pone.eastus.kusto.windows.net').database('AzureResourceGraph').InternalSubscriptionResources"
 $enrichmentQuery = Get-Content -Path (Join-Path $PSScriptRoot 'queries/common/enriched_finished_jobs.kql') -Raw
 $enrichmentFilters = Get-Content -Path (Join-Path $PSScriptRoot 'queries/common/enrichment_filters.kql') -Raw
-$isTelemetryTest = $AppInsightsName -eq "azcopy-telemetry-test-ai"
-$titleSuffix = if ($isTelemetryTest) { " - Telemetry Test" } else { "" }
+$titleSuffix = switch ($AppInsightsName) {
+    "azcopy-telemetry-test-ai" { " - Telemetry Test" }
+    "azcopy-telemetry-prod-ai" { " - Telemetry Prod" }
+    default { "" }
+}
 $prefix = "azcopy-data-metrics:$resourceId"
 $dataSourceId = New-StableGuid "${prefix}:datasource"
 
