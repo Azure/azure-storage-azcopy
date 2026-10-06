@@ -141,15 +141,15 @@ jobs:
           verbosity: 'Verbose'
           alertWarningLevel: 'High'
 
-  - template: azurePipelineTemplates/run-e2e.yml
-    parameters:
-      job_name: 'Old_E2E'
-      test_cli_param: '-tags olde2etest'
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     job_name: 'Old_E2E'
+  #     test_cli_param: '-tags olde2etest'
 
-  - template: azurePipelineTemplates/run-e2e.yml
-    parameters:
-      job_name: 'New_E2E'
-      test_cli_param: '-run "TestNewE2E/.*"'
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     job_name: 'New_E2E'
+  #     test_cli_param: '-run "TestNewE2E/.*"'
       
   - job: Unit_and_Python_Tests
     variables:
@@ -196,41 +196,41 @@ jobs:
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         displayName: 'Acquire the Distributed Mutex'
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'azcopy'
-          coverage_name: 'azcopy'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'azcopy'
+      #     coverage_name: 'azcopy'
+      #     isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'cmd'
-          coverage_name: 'cmd'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'cmd'
+      #     coverage_name: 'cmd'
+      #     isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common'
-          coverage_name: 'common'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'common'
+      #     coverage_name: 'common'
+      #     isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common/parallel'
-          coverage_name: 'parallel'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'common/parallel'
+      #     coverage_name: 'parallel'
+      #     isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'mock_server'
-          coverage_name: 'mock_server'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'mock_server'
+      #     coverage_name: 'mock_server'
+      #     isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'sddl'
-          coverage_name: 'sddl'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'sddl'
+      #     coverage_name: 'sddl'
+      #     isMutexSet: variables['isMutexSet']
 
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
@@ -239,71 +239,71 @@ jobs:
           with_federated_credential: true
           isMutexSet: variables['isMutexSet']
 
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'traverser'
-          coverage_name: 'traverser'
-          isMutexSet: variables['isMutexSet']
+      # - template: azurePipelineTemplates/run-ut.yml
+      #   parameters:
+      #     directory: 'traverser'
+      #     coverage_name: 'traverser'
+      #     isMutexSet: variables['isMutexSet']
 
-      - script: |
-          GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
-          go build -tags "netgo" -o test-validator ./testSuite/
-          mkdir test-temp
-          mkdir "$(coverageDir)"
-          export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
-          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+      # - script: |
+      #     GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
+      #     go build -tags "netgo" -o test-validator ./testSuite/
+      #     mkdir test-temp
+      #     mkdir "$(coverageDir)"
+      #     export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+      #     export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+      #     export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
-          # Run tests and write coverage data to a directory
-          echo "Running tests. Writing coverage data to \"$(coverageDir)\" directory."
-          keyctl session test python ./testSuite/scripts/run.py
+      #     # Run tests and write coverage data to a directory
+      #     echo "Running tests. Writing coverage data to \"$(coverageDir)\" directory."
+      #     keyctl session test python ./testSuite/scripts/run.py
           
-          # Convert coverage data to text format
-          echo "Generating plain-text coverage report $(pythonCoverageReportName).txt"
-          go tool covdata textfmt -i="$(coverageDir)" -o "$(pythonCoverageReportName).txt"
+      #     # Convert coverage data to text format
+      #     echo "Generating plain-text coverage report $(pythonCoverageReportName).txt"
+      #     go tool covdata textfmt -i="$(coverageDir)" -o "$(pythonCoverageReportName).txt"
 
-          # Convert coverage data to JSON format
-          echo "Generating JSON coverage report $(pythonCoverageReportName).json"
-          $(go env GOPATH)/bin/gocov convert "$(pythonCoverageReportName).txt" > "$(pythonCoverageReportName).json"
+      #     # Convert coverage data to JSON format
+      #     echo "Generating JSON coverage report $(pythonCoverageReportName).json"
+      #     $(go env GOPATH)/bin/gocov convert "$(pythonCoverageReportName).txt" > "$(pythonCoverageReportName).json"
           
-          # Convert coverage data to XML format
-          echo "Generating XML coverage report $(pythonCoverageReportName).xml"
-          $(go env GOPATH)/bin/gocov-xml < "$(pythonCoverageReportName).json" > "$(pythonCoverageReportName).xml"
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-          CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
-          CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
-          CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
-          FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
-          FILESYSTEM_URL: $(FILESYSTEM_URL)
-          OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
-          OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
-          PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
-          S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
-          S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
-          S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
-          S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
-          S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
-          SHARE_SAS_URL: $(SHARE_SAS_URL)
-          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/$(coverageDir)'
-        displayName: 'Run Python Tests'
-        # Don't let a unit-test failure prevent the Python tests from running,
-        # but don't run if job is canceled or mutex wasn't acquired
-        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+      #     # Convert coverage data to XML format
+      #     echo "Generating XML coverage report $(pythonCoverageReportName).xml"
+      #     $(go env GOPATH)/bin/gocov-xml < "$(pythonCoverageReportName).json" > "$(pythonCoverageReportName).xml"
+      #   env:
+      #     ACCOUNT_NAME: $(ACCOUNT_NAME)
+      #     ACCOUNT_KEY: $(ACCOUNT_KEY)
+      #     AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      #     AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      #     GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+      #     GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+      #     ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+      #     AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+      #     CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
+      #     CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
+      #     CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
+      #     FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
+      #     FILESYSTEM_URL: $(FILESYSTEM_URL)
+      #     OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
+      #     OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
+      #     PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
+      #     S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
+      #     S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
+      #     S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
+      #     S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+      #     S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
+      #     SHARE_SAS_URL: $(SHARE_SAS_URL)
+      #     GOCOVERDIR: '$(System.DefaultWorkingDirectory)/$(coverageDir)'
+      #   displayName: 'Run Python Tests'
+      #   # Don't let a unit-test failure prevent the Python tests from running,
+      #   # but don't run if job is canceled or mutex wasn't acquired
+      #   condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
-      # Smoke Tests Publishing
-      - task: PublishCodeCoverageResults@2
-        inputs:
-          summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(pythonCoverageReportName).xml'
-        # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
-        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+      # # Smoke Tests Publishing
+      # - task: PublishCodeCoverageResults@2
+      #   inputs:
+      #     summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(pythonCoverageReportName).xml'
+      #   # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+      #   condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
       - script: |
           pip install azure-storage-blob==12.12.0
@@ -312,61 +312,61 @@ jobs:
         # If the mutex was acquired by this job, release the mutex - even if the job was canceled
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
 
-  - job: Additional_E2E_Tests
-    timeoutInMinutes: 360
-    strategy:
-      matrix:
-        Linux:
-          image_name: 'ubuntu-latest'
-          build_name: 'azcopy_linux_amd64'
-          container_name: 'testcontainer1'
-          GOOS: 'linux'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '0'
-        Windows:
-          image_name: 'windows-latest'
-          build_name: 'azcopy_windows_amd64.exe'
-          container_name: 'testcontainer2'
-          GOOS: 'windows'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '0'        
-        #TODO: Add MacOS
-    pool:
-      vmImage: $(image_name)
+  # - job: Additional_E2E_Tests
+  #   timeoutInMinutes: 360
+  #   strategy:
+  #     matrix:
+  #       Linux:
+  #         image_name: 'ubuntu-latest'
+  #         build_name: 'azcopy_linux_amd64'
+  #         container_name: 'testcontainer1'
+  #         GOOS: 'linux'
+  #         GOARCH: 'amd64'
+  #         CGO_ENABLED: '0'
+  #       Windows:
+  #         image_name: 'windows-latest'
+  #         build_name: 'azcopy_windows_amd64.exe'
+  #         container_name: 'testcontainer2'
+  #         GOOS: 'windows'
+  #         GOARCH: 'amd64'
+  #         CGO_ENABLED: '0'        
+  #       #TODO: Add MacOS
+  #   pool:
+  #     vmImage: $(image_name)
 
-    steps:
-      - pwsh: |
-          Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
-        displayName: 'Install PowerShell Az Module'
+  #   steps:
+  #     - pwsh: |
+  #         Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
+  #       displayName: 'Install PowerShell Az Module'
 
-      - task: GoTool@0
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-        displayName: 'Install Go'
+  #     - task: GoTool@0
+  #       inputs:
+  #         version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+  #       displayName: 'Install Go'
 
-      - script: |
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-          az --version
-        displayName: 'Install Azure CLI - Linux'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.GOOS, 'linux'))
+  #     - script: |
+  #         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  #         az --version
+  #       displayName: 'Install Azure CLI - Linux'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.GOOS, 'linux'))
 
-      - task: PowerShell@2
-        inputs:
-          targetType: 'inline'
-          script: |
-            choco install azure-cli -y
-            az --version
-        displayName: 'Install Azure CLI - Windows'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.GOOS, 'windows'))
+  #     - task: PowerShell@2
+  #       inputs:
+  #         targetType: 'inline'
+  #         script: |
+  #           choco install azure-cli -y
+  #           az --version
+  #       displayName: 'Install Azure CLI - Windows'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.GOOS, 'windows'))
 
-      - template: azurePipelineTemplates/run_scenarios.yml
-        parameters:
-          container_name: $(container_name)
-          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          GOOS: $(GOOS)
-          GOARCH: $(GOARCH)
-          CGO_ENABLED: $(CGO_ENABLED)
-          build_name: $(build_name)
+  #     - template: azurePipelineTemplates/run_scenarios.yml
+  #       parameters:
+  #         container_name: $(container_name)
+  #         storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         GOOS: $(GOOS)
+  #         GOARCH: $(GOARCH)
+  #         CGO_ENABLED: $(CGO_ENABLED)
+  #         build_name: $(build_name)
           

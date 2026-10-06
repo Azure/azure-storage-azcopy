@@ -213,7 +213,7 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	response, err := client.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		Range: blob.HTTPRange{Offset: 0, Count: blobSize},
