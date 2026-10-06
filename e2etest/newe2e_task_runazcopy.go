@@ -197,6 +197,7 @@ var RunAzCopyDefaultInheritEnvironment = map[string]bool{
 	"homedrive":                          true,
 	"azure_config_dir":                   true,
 	"azcopy_telemetry_connection_string": true,
+	"azcopy_disable_telemetry":           true,
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {

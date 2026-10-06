@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -52,6 +53,7 @@ func SetupAppInsightsTelemetryValidation(a Asserter) {
 		return
 	}
 	if !enabled {
+		disableUnconfiguredTelemetry()
 		a.Log("Application Insights validation is disabled.")
 		return
 	}
@@ -65,6 +67,14 @@ func SetupAppInsightsTelemetryValidation(a Asserter) {
 	globalAppInsightsValidation.mu.Unlock()
 
 	a.Log("Application Insights validation enabled for run %q.", config.RunID)
+}
+
+// disableUnconfiguredTelemetry keeps E2E AzCopy processes from falling back to the
+// embedded production connection string when no telemetry instance is configured.
+func disableUnconfiguredTelemetry() {
+	if strings.TrimSpace(os.Getenv("AZCOPY_TELEMETRY_CONNECTION_STRING")) == "" && os.Getenv("AZCOPY_DISABLE_TELEMETRY") == "" {
+		_ = os.Setenv("AZCOPY_DISABLE_TELEMETRY", "true")
+	}
 }
 
 func validateAppInsightsValidationConfig(config AppInsightsValidationConfig) (bool, error) {
