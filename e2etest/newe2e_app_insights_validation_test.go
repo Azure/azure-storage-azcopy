@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -40,6 +41,17 @@ func TestValidateAppInsightsValidationConfig(t *testing.T) {
 		RunID:            strings.Repeat("x", 81),
 	})
 	assert.ErrorContains(t, err, "at most 80 bytes")
+}
+
+func TestDisableUnconfiguredTelemetry(t *testing.T) {
+	t.Setenv("AZCOPY_TELEMETRY_CONNECTION_STRING", "")
+	disableUnconfiguredTelemetry()
+	assert.Equal(t, disabledTelemetryConnectionString, os.Getenv("AZCOPY_TELEMETRY_CONNECTION_STRING"))
+
+	t.Setenv("AZCOPY_TELEMETRY_CONNECTION_STRING", "InstrumentationKey=11111111-2222-3333-4444-555555555555")
+	disableUnconfiguredTelemetry()
+	assert.Equal(t, "InstrumentationKey=11111111-2222-3333-4444-555555555555", os.Getenv("AZCOPY_TELEMETRY_CONNECTION_STRING"))
+	assert.True(t, RunAzCopyDefaultInheritEnvironment["azcopy_telemetry_connection_string"])
 }
 
 func TestAzCopyVerbProducesJobFinishedTelemetry(t *testing.T) {

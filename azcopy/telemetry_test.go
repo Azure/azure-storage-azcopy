@@ -776,7 +776,8 @@ func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
 }
 
 func TestConfiguredTelemetryConnectionString(t *testing.T) {
-	assert.Empty(t, telemetryConnectionString)
+	assert.True(t, strings.HasPrefix(telemetryConnectionString, "InstrumentationKey=2c4d1db5-8231-4f37-b4d8-d0cf9d3988b1;"))
+	assert.Contains(t, telemetryConnectionString, ";IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;")
 	noEnv := func(string) string { return "" }
 	assert.Equal(t, telemetryConnectionString, configuredTelemetryConnectionString(noEnv, telemetryConnectionString))
 	assert.Equal(t, telemetryConnectionString, configuredTelemetryConnectionString(func(string) string { return " \t " }, telemetryConnectionString))
@@ -822,6 +823,14 @@ func TestTelemetryEmbeddedDefaultHonorsOptOut(t *testing.T) {
 	assert.False(t, agent.enabled)
 	assert.Nil(t, agent.reporter)
 	assert.Empty(t, agent.resource.InstallationID)
+}
+
+func TestTelemetryTestBinariesIgnoreEmbeddedDefault(t *testing.T) {
+	t.Setenv(common.EEnvironmentVariable.TelemetryConnectionString().Name, "")
+
+	agent := newTelemetryAgent(true)
+	assert.False(t, agent.enabled)
+	assert.Nil(t, agent.reporter)
 }
 
 func TestTerminalAttemptStatus(t *testing.T) {

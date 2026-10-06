@@ -180,12 +180,13 @@ func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 }
 
 var RunAzCopyDefaultInheritEnvironment = map[string]bool{
-	"path":             true,
-	"home":             true,
-	"userprofile":      true,
-	"homepath":         true,
-	"homedrive":        true,
-	"azure_config_dir": true,
+	"path":                               true,
+	"home":                               true,
+	"userprofile":                        true,
+	"homepath":                           true,
+	"homedrive":                          true,
+	"azure_config_dir":                   true,
+	"azcopy_telemetry_connection_string": true,
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {

@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"errors"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -44,6 +45,7 @@ func SetupAppInsightsTelemetryValidation(a Asserter) {
 		return
 	}
 	if !enabled {
+		disableUnconfiguredTelemetry()
 		a.Log("Application Insights validation is disabled.")
 		return
 	}
@@ -57,6 +59,17 @@ func SetupAppInsightsTelemetryValidation(a Asserter) {
 	globalAppInsightsValidation.mu.Unlock()
 
 	a.Log("Application Insights validation enabled for run %q.", config.RunID)
+}
+
+// disabledTelemetryConnectionString uses the all-zero key, which AzCopy treats as unconfigured.
+const disabledTelemetryConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000"
+
+// disableUnconfiguredTelemetry keeps E2E AzCopy processes from falling back to the
+// embedded production connection string when no telemetry instance is configured.
+func disableUnconfiguredTelemetry() {
+	if strings.TrimSpace(os.Getenv("AZCOPY_TELEMETRY_CONNECTION_STRING")) == "" {
+		_ = os.Setenv("AZCOPY_TELEMETRY_CONNECTION_STRING", disabledTelemetryConnectionString)
+	}
 }
 
 func validateAppInsightsValidationConfig(config AppInsightsValidationConfig) (bool, error) {

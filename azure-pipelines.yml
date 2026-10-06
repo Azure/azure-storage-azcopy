@@ -326,6 +326,9 @@ jobs:
 
   - job: Additional_E2E_Tests
     timeoutInMinutes: 360
+    # Temporary until the E2E telemetry setup step: keeps these AzCopy runs out of production telemetry.
+    variables:
+      AZCOPY_TELEMETRY_CONNECTION_STRING: 'InstrumentationKey=00000000-0000-0000-0000-000000000000'
     strategy:
       matrix:
         Linux:
