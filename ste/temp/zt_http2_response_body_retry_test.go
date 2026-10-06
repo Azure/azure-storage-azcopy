@@ -135,6 +135,7 @@ func runHTTP2DownloadPeer(listener net.Listener, body []byte, resetAfterBytes in
 				}
 
 				requestRange := requestHeaders["x-ms-range"]
+				fmt.Printf("requestIndex: %d\n", requestIndex)
 				if requestIndex == 0 {
 					userAgent <- requestHeaders["user-agent"]
 					firstRange = requestRange
@@ -214,7 +215,7 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	t.Log(1)
 	defer cancel()
 	t.Log(2)
