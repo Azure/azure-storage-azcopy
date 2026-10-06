@@ -153,15 +153,20 @@ func runHTTP2DownloadPeer(listener net.Listener, body []byte, resetAfterBytes in
 					if err = writeHTTP2DownloadHeaders(framer, frame.StreamID, resetAfterBytes, int64(len(remaining)), int64(len(body))); err != nil {
 						return err
 					}
+					fmt.Println("A")
 					if err = writeHTTP2Data(framer, frame.StreamID, remaining, true); err != nil {
 						return err
 					}
+					fmt.Println("B")
 					result <- http2DownloadResult{firstRange: firstRange, secondRange: requestRange}
+					fmt.Println("C")
 				}
 				requestComplete = true
 			}
 		}
+		fmt.Println("D")
 		_ = connection.Close()
+		fmt.Println("E")
 	}
 	return nil
 }
@@ -215,7 +220,7 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Log(1)
 	defer cancel()
 	t.Log(2)
