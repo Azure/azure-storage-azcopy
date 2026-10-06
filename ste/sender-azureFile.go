@@ -248,11 +248,9 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	// Disable readonly temporarily
-	props := createOptions.SMBProperties
-	if props != nil && props.Attributes != nil {
-		props.Attributes.ReadOnly = false
-	}
+	// Use a minimal last-write-time until epilogue restores the source value, so an
+	// interrupted sync sees the incomplete destination as stale and retries it.
+	createOptions.SMBProperties = prepareSMBPropertiesForFileCreation(createOptions.SMBProperties, info.PreserveInfo)
 
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
@@ -269,9 +267,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
 
-		if props != nil && props.Attributes != nil {
-			createOptions.SMBProperties = props
-		}
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
