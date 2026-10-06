@@ -3,6 +3,7 @@ package e2etest
 import (
 	"bytes"
 	"encoding/base64"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,6 +20,108 @@ type SyncTestSuite struct{}
 
 func init() {
 	suiteManager.RegisterSuite(&SyncTestSuite{})
+}
+
+func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestination(svm *ScenarioVariationManager) {
+	if svm.Dryrun() {
+		return
+	}
+
+	const objectName = "incomplete.dat"
+	body := NewRandomObjectContentContainer(SizeFromString("10M"))
+	sourceLastWriteTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	sourceCreationTime := sourceLastWriteTime.Add(-time.Hour)
+	sourceProperties := ObjectProperties{
+		EntityType: common.EEntityType.File(),
+		FileProperties: FileProperties{
+			FileCreationTime:  &sourceCreationTime,
+			FileLastWriteTime: &sourceLastWriteTime,
+		},
+	}
+
+	source := CreateResource[ContainerResourceManager](
+		svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{},
+	)
+	sourceObject := CreateResource[ObjectResourceManager](
+		svm,
+		source,
+		ResourceDefinitionObject{
+			ObjectName:       pointerTo(objectName),
+			Body:             body,
+			ObjectProperties: sourceProperties,
+		},
+	)
+	sourceObject.SetObjectProperties(svm, sourceProperties)
+
+	destination := CreateResource[ContainerResourceManager](
+		svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{},
+	)
+	destinationObject := destination.GetObject(svm, objectName, common.EEntityType.File())
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{source, destination},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:    pointerTo(true),
+				PreserveInfo: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					CancelFromStdin: pointerTo(true),
+					CapMbps:         pointerTo(float64(1)),
+				},
+			},
+		},
+		AfterStart: func(stdin io.WriteCloser) {
+			go func() {
+				deadline := time.Now().Add(30 * time.Second)
+				for !destinationObject.Exists() && time.Now().Before(deadline) {
+					time.Sleep(100 * time.Millisecond)
+				}
+				_, _ = io.WriteString(stdin, "cancel\n")
+				time.Sleep(500 * time.Millisecond)
+				_, _ = io.WriteString(stdin, "y\n")
+			}()
+		},
+		ShouldFail: true,
+	})
+
+	svm.AssertNow("cancelled sync must create the destination file", Equal{}, destinationObject.Exists(), true)
+	incompleteProperties := destinationObject.GetProperties(svm)
+	svm.AssertNow("incomplete destination must have a last-write-time", Not{IsNil{}}, incompleteProperties.FileProperties.FileLastWriteTime)
+	svm.Assert(
+		"incomplete destination must use the minimum last-write-time",
+		Equal{},
+		incompleteProperties.FileProperties.FileLastWriteTime.Equal(time.Unix(0, 0)),
+		true,
+	)
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{source, destination},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:    pointerTo(true),
+				PreserveInfo: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource[ContainerResourceManager](svm, destination, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			objectName: {
+				Body:             body,
+				ObjectProperties: sourceProperties,
+			},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+		fromTo:                common.EFromTo.FileSMBFileSMB(),
+		preserveInfo:          true,
+	})
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationManager) {
