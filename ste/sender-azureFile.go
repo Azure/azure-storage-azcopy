@@ -248,9 +248,26 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	// Use a minimal last-write-time until epilogue restores the source value, so an
-	// interrupted sync sees the incomplete destination as stale and retries it.
-	createOptions.SMBProperties = prepareSMBPropertiesForFileCreation(createOptions.SMBProperties, info.PreserveInfo)
+	creationProperties := createOptions.SMBProperties
+	if creationProperties != nil {
+		creationPropertiesCopy := *creationProperties
+		creationProperties = &creationPropertiesCopy
+		if creationProperties.Attributes != nil {
+			attrsCopy := *creationProperties.Attributes
+			creationProperties.Attributes = &attrsCopy
+			creationProperties.Attributes.ReadOnly = false
+		}
+
+		// Set last write time to the minimum time to enable retry copy on next sync.
+		// Epilogue will set the last-write-time to the correct value.
+		if info.PreserveInfo && creationProperties.LastWriteTime != nil {
+			minimalLwt := time.Unix(0, 0)
+			creationProperties.LastWriteTime = &minimalLwt
+		}
+	}
+
+	// Set this before file creation
+	createOptions.SMBProperties = creationProperties
 
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
