@@ -1,0 +1,2247 @@
+{
+  "$schema": "https://dataexplorer.azure.com/static/d/schema/60/dashboard.json",
+  "id": "8b643690-696c-e135-643d-ec4bb9cf62b1",
+  "eTag": "7e881b75-7f63-f0c3-50df-cd32d72867c3",
+  "title": "AzCopy Telemetry Metrics - Telemetry Prod",
+  "schema_version": "60",
+  "tiles": [
+    {
+      "id": "64778f1f-78db-6f73-8a15-b649d76cba7d",
+      "title": "Lifecycle activity",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "26167ce6-df72-b593-7069-635b9cbebb5e",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "5a3f4955-6e9e-c3ba-5536-16d68e3da095"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "4bff2013-15e6-ab61-fb24-362b4cc53472",
+      "title": "Complete metric catalog",
+      "description": "azcopy.bytes_enumerated (scheduled source bytes): Sum of source sizes in scheduled job-plan entries after traversal filters and copy/sync selection. Unchanged sync objects are not included; work that later fails or is skipped can remain included. This is not successful-transfer volume. Resume summary counters can be job-cumulative.\n\nazcopy.source_bytes_scanned (source bytes examined after filters): Sum of listed sizes of eligible source payload objects reaching the scan callback after traversal filters, before sync comparison selects transfers. BytesScanned and Source bytes scanned name this same counter, not separate metrics. It includes unchanged sync objects, excludes destination scanning and folder-property operations, and is not payload bytes read or total account size. Symlink/hardlink eligibility follows the configured handling mode.\n\nazcopy.source_max_directory_depth: Maximum directory nesting of eligible scanned payload objects relative to the selected source root, after traversal filters. file.txt = 0; child/file.txt = 1; a/b/file.txt = 2. The selected root is not counted. Folder-property entries, including empty directories, do not contribute; zero can also mean no eligible payload objects were observed. One root-folder transfer plus one direct file can correctly report zero.\n\nazcopy.hardlinks_converted_scheduled: Recognized hardlink entries scheduled as independent file copies with --hardlinks=follow (the default), for transfers involving Azure Files NFS. Hardlinks are filenames sharing one underlying file/inode, not symbolic links. Two recognized selected names sharing an inode count as two conversions. preserve and skip do not increment this counter; scheduled does not mean completed. Zero is expected for BlobBlob and does not prove a filesystem contains no hardlinks.\n\nazcopy.storage_http_attempt_count: Total returned attempts counted by the instrumented Storage HTTP pipeline, including retries and failed attempts. It is a count, not a rate or number of files. Application Insights sends and local disk operations are excluded. Charts that sum this metric count observed attempts, not successful transactions.\n\nazcopy.avg_iops: Integer-truncated average instrumented Storage HTTP attempts per second since the pipeline statistics object was initialized. It uses the same counter as storage_http_attempt_count, including retries/failures, but a separate timer whose start loses fractional seconds. It is not disk IOPS or successful files/second. count / job_duration_seconds gives a reproducible job-wide rate, not necessarily this exact value; the timer is not transfer-phase duration. Dashboard averages of job rates are not a fleet-wide rate.",
+      "visualType": "table",
+      "pageId": "26167ce6-df72-b593-7069-635b9cbebb5e",
+      "layout": {
+        "x": 12,
+        "y": 0,
+        "width": 10,
+        "height": 18
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "21be2f51-35bd-470f-1fd9-87e2de0bd0aa"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "e65e1e65-70d3-3853-fa69-94e5dde19bf8",
+      "title": "Transfer dimension mix",
+      "description": "SourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.\n\nDestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.",
+      "visualType": "bar",
+      "pageId": "26167ce6-df72-b593-7069-635b9cbebb5e",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "848df28a-0228-5a25-623b-0eaf8be516f2"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "36b7048b-81eb-b505-1dd2-a758b947ac11",
+      "title": "Bytes",
+      "description": "azcopy.bytes_enumerated is the sum of source sizes in job-plan transfer entries selected after filters and copy/sync comparison; it is not every source byte scanned. Use azcopy.source_bytes_scanned for traversal volume.\nazcopy.bytes_expected: successful payload plus work still expected to succeed; never exceeds enumerated bytes.\nazcopy.bytes_transferred: logical payload bytes successfully transferred, without retry duplication.\nazcopy.bytes_over_wire: physical payload traffic including retries and failed or incomplete transfer traffic; never below transferred bytes and may exceed enumerated bytes.\n\nazcopy.bytes_enumerated (scheduled source bytes): Sum of source sizes in scheduled job-plan entries after traversal filters and copy/sync selection. Unchanged sync objects are not included; work that later fails or is skipped can remain included. This is not successful-transfer volume. Resume summary counters can be job-cumulative.\n\nazcopy.source_bytes_scanned (source bytes examined after filters): Sum of listed sizes of eligible source payload objects reaching the scan callback after traversal filters, before sync comparison selects transfers. BytesScanned and Source bytes scanned name this same counter, not separate metrics. It includes unchanged sync objects, excludes destination scanning and folder-property operations, and is not payload bytes read or total account size. Symlink/hardlink eligibility follows the configured handling mode.",
+      "visualType": "timechart",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "f64e10b8-0af3-c008-80ad-73f3e903e04d"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "9f6361dc-3f48-24de-6f26-4943086c9323",
+      "title": "Byte metric definitions",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 22,
+        "height": 8
+      },
+      "markdownText": "**How to read the byte series**\r\n\r\n- **azcopy.bytes_enumerated**: Legacy name for the sum of source sizes in transfer entries added to job plans after filters and copy/sync comparison. For sync, it represents items selected as needing transfer, not every file examined.\r\n- **azcopy.bytes_expected**: Successful payload plus work still expected to succeed. This never exceeds enumerated bytes.\r\n- **azcopy.bytes_transferred**: Logical payload bytes successfully transferred. Retries are not counted again.\r\n- **azcopy.bytes_over_wire**: Physical payload traffic, including retries and failed or incomplete transfer traffic. This is never below transferred bytes and can exceed enumerated bytes.\r\n\r\nExpected relationship: `bytes_transferred <= bytes_expected <= bytes_enumerated`; `bytes_over_wire >= bytes_transferred`.\r\n\r\n**azcopy.source_bytes_scanned** sums listed sizes of eligible source payload objects after traversal filters, before sync decides which need transfer. It includes unchanged sync objects, not filtered-out objects, destination scanning, or folder-property operations. It is not payload bytes read or total account size. **BytesScanned** and **Source bytes scanned** name this same counter.\r\n\r\nExample: 100 GiB of source files, 20 GiB excluded by filters, and 60 GiB already up to date gives 80 GiB source bytes scanned and 20 GiB bytes enumerated (scheduled), assuming ordinary files and a complete scan. Resume summary counters can be job-cumulative.",
+      "visualOptions": {}
+    },
+    {
+      "id": "d7bab252-8f38-0335-000b-376b44f762c7",
+      "title": "Scheduled object composition",
+      "description": "azcopy.hardlinks_converted_scheduled: Recognized hardlink entries scheduled as independent file copies with --hardlinks=follow (the default), for transfers involving Azure Files NFS. Hardlinks are filenames sharing one underlying file/inode, not symbolic links. Two recognized selected names sharing an inode count as two conversions. preserve and skip do not increment this counter; scheduled does not mean completed. Zero is expected for BlobBlob and does not prove a filesystem contains no hardlinks.",
+      "visualType": "timechart",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "layout": {
+        "x": 0,
+        "y": 17,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "5b282924-45eb-3d29-de99-1be4ed063dfd"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "cbf2cc64-4d11-a043-f8c5-fafd93055795",
+      "title": "Object and folder outcomes",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "layout": {
+        "x": 11,
+        "y": 17,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "7764a741-2c40-5fba-9fd0-9504052c063c"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "8b776115-c0a6-3fc9-90a1-eb750b19b434",
+      "title": "Outcome metric relationships",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "layout": {
+        "x": 0,
+        "y": 26,
+        "width": 22,
+        "height": 6
+      },
+      "markdownText": "**How the outcome panels relate**\r\n\r\n- **Transfer outcomes** is the rollup of all scheduled job-plan entries.\r\n- **Object and folder outcomes** splits the same entries into payload objects and folder-property operations.\r\n- For each outcome: `transfers_* = objects_* + folder_properties_*`.\r\n- Also: `transfers_total = objects_scheduled + folder_properties_scheduled`.\r\n\r\nUnchanged sync objects are compared and scanned but are not scheduled, so they do not appear as skipped transfers.",
+      "visualOptions": {}
+    },
+    {
+      "id": "e7bc88f1-9d08-5422-a992-991e2e07f8e0",
+      "title": "Transfer outcomes",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "layout": {
+        "x": 0,
+        "y": 32,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "01f8e34c-faa4-e0f9-ffb7-aaa127d880b9"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "5902f68d-67e9-2ac6-0cea-64bf81eb9b6a",
+      "title": "Scanned and touched inventory",
+      "description": "azcopy.source_bytes_scanned (source bytes examined after filters): Sum of listed sizes of eligible source payload objects reaching the scan callback after traversal filters, before sync comparison selects transfers. BytesScanned and Source bytes scanned name this same counter, not separate metrics. It includes unchanged sync objects, excludes destination scanning and folder-property operations, and is not payload bytes read or total account size. Symlink/hardlink eligibility follows the configured handling mode.",
+      "visualType": "multistat",
+      "pageId": "83659a23-3877-6d35-a64b-97e003e42d42",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 6
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "9b6f5cdd-22ec-2bb3-4d56-b97fb2543fb3"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "large",
+        "multiStat__valueColumn": "Value",
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Metric",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 2
+        },
+        "colorRules": []
+      }
+    },
+    {
+      "id": "27e32887-f03a-932d-4f91-0e9f907f90d8",
+      "title": "Scanned source object-size statistics",
+      "description": "",
+      "visualType": "table",
+      "pageId": "83659a23-3877-6d35-a64b-97e003e42d42",
+      "layout": {
+        "x": 0,
+        "y": 6,
+        "width": 12,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "dfa8f64e-c9de-e4bf-14d5-64040e781ac1"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "890b8c86-105b-2757-ef7b-4c583d87bafb",
+      "title": "Scanned source small-object share and directory depth",
+      "description": "azcopy.source_max_directory_depth: Maximum directory nesting of eligible scanned payload objects relative to the selected source root, after traversal filters. file.txt = 0; child/file.txt = 1; a/b/file.txt = 2. The selected root is not counted. Folder-property entries, including empty directories, do not contribute; zero can also mean no eligible payload objects were observed. One root-folder transfer plus one direct file can correctly report zero.",
+      "visualType": "table",
+      "pageId": "83659a23-3877-6d35-a64b-97e003e42d42",
+      "layout": {
+        "x": 12,
+        "y": 6,
+        "width": 10,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4da4d088-62c8-53d8-f3d1-eab87b4b4b23"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "4938b1fc-0818-c3a8-2427-1ae2abcd853c",
+      "title": "Phase durations",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "6ae42c86-78e6-1660-a1ee-b95ada6a2f45"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "dc627fc5-a9a7-9b3d-1c8c-c35dceadb342",
+      "title": "Throughput",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 12,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "45234a05-9edc-871f-80d8-94dc33699226"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "98e84ac5-e86a-6c54-443f-17d23f7daab5",
+      "title": "Storage latency and IOPS",
+      "description": "azcopy.storage_http_attempt_count: Total returned attempts counted by the instrumented Storage HTTP pipeline, including retries and failed attempts. It is a count, not a rate or number of files. Application Insights sends and local disk operations are excluded. Charts that sum this metric count observed attempts, not successful transactions.\n\nazcopy.avg_iops: Integer-truncated average instrumented Storage HTTP attempts per second since the pipeline statistics object was initialized. It uses the same counter as storage_http_attempt_count, including retries/failures, but a separate timer whose start loses fractional seconds. It is not disk IOPS or successful files/second. count / job_duration_seconds gives a reproducible job-wide rate, not necessarily this exact value; the timer is not transfer-phase duration. Dashboard averages of job rates are not a fleet-wide rate.",
+      "visualType": "table",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 12,
+        "y": 9,
+        "width": 10,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "2de19872-aea2-e3b4-23ce-23cce79096ae"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "57f3deb2-243f-9eaf-32fa-50833c8c71b3",
+      "title": "Performance constraint",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "ca53dc33-a7d7-9146-7c6b-ca4b27e3b16d"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "1f8346b0-af84-ec14-e1c7-bd51575a8936",
+      "title": "Performance advice codes",
+      "description": "",
+      "visualType": "column",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 11,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "47c2fa43-e258-e944-6931-9bd72081b0fd"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "63b302e5-ae3d-99b2-b559-27092d023cbc",
+      "title": "Configured concurrency",
+      "description": "Distribution of AZCOPY_CONCURRENCY_VALUE recorded in OptConcurrency. Runs without an explicit setting appear as 'not set'.",
+      "visualType": "column",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 0,
+        "y": 27,
+        "width": 22,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "8f7fde31-a0c1-6a9f-aff0-5ecb4571fd77"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "b5f6986d-a442-ada5-d230-fd3e244599bd",
+      "title": "Configured buffer size (GB)",
+      "description": "Distribution of AZCOPY_BUFFER_GB recorded in OptBufferGB. Runs without an explicit setting appear as 'not set'.",
+      "visualType": "column",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 0,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "3c9cec7e-1463-7b45-0669-e25d4415efa4"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "cd0adfbd-aa48-5f3b-da63-0e6b565e85fb",
+      "title": "Configured throughput cap (Mbps)",
+      "description": "Distribution of --cap-mbps recorded in OptCapMbps. Runs without an explicit setting appear as 'not set'.",
+      "visualType": "column",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "layout": {
+        "x": 11,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "bf8003a5-c101-4cd5-3928-33ace887f8bc"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "a2b60954-bc0c-3125-5e16-d58b57666ba4",
+      "title": "Reliability panel guide",
+      "description": "",
+      "visualType": "markdownCard",
+      "pageId": "1be668c3-a0c5-bc97-7eb0-12a116590557",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 22,
+        "height": 9
+      },
+      "markdownText": "**How to read the reliability panels**\r\n\r\n- **HTTP, network, and overflow error counts**: Hourly raw totals. `storage_http_attempt_count` counts instrumented Storage HTTP attempts, including retries; `network_error_attempt_count` counts attempts that ended in a non-cancellation network error; `failure_error_other_count` counts failed-transfer errors omitted from the bounded top error-code histogram, not HTTP attempts.\r\n- **Server busy counts**: Hourly Storage 503 attempts. `server_busy_503_count` is the total; throughput, IOPS, and other are its reason categories, so the total should equal their sum.\r\n- **Error and completion percentages**: Hourly unweighted averages of per-job values. Server-busy and network-error percentages use Storage HTTP attempts as their denominator. Percent complete is transfer progress, especially useful for cancelled jobs; it is not an error rate.\r\n- **Job error distribution**: Count of finished job attempts grouped by terminal error category/code, terminal reason, and stage. This is job-level failure context, not a count of individual failed files or HTTP attempts.\r\n\r\nCounts are received telemetry observations. Percentage lines are averages across jobs, not ratios recomputed from the hourly count totals.",
+      "visualOptions": {}
+    },
+    {
+      "id": "0037fb99-3a50-49ff-16e6-043c0f24cbf0",
+      "title": "HTTP, network, and overflow error counts",
+      "description": "azcopy.storage_http_attempt_count: Total returned attempts counted by the instrumented Storage HTTP pipeline, including retries and failed attempts. It is a count, not a rate or number of files. Application Insights sends and local disk operations are excluded. Charts that sum this metric count observed attempts, not successful transactions.\n\nazcopy.avg_iops: Integer-truncated average instrumented Storage HTTP attempts per second since the pipeline statistics object was initialized. It uses the same counter as storage_http_attempt_count, including retries/failures, but a separate timer whose start loses fractional seconds. It is not disk IOPS or successful files/second. count / job_duration_seconds gives a reproducible job-wide rate, not necessarily this exact value; the timer is not transfer-phase duration. Dashboard averages of job rates are not a fleet-wide rate.",
+      "visualType": "timechart",
+      "pageId": "1be668c3-a0c5-bc97-7eb0-12a116590557",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "3063634e-5356-5170-cc1e-a9afe0b7de22"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "d3016017-6c04-9fbb-992d-16d1e97c5fe4",
+      "title": "Server busy counts",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "1be668c3-a0c5-bc97-7eb0-12a116590557",
+      "layout": {
+        "x": 11,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "70fe301c-e2b8-6baf-364e-03ec781ad8af"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "154b12ff-5da1-4969-ac55-335bd3027e97",
+      "title": "Error and completion percentages",
+      "description": "",
+      "visualType": "timechart",
+      "pageId": "1be668c3-a0c5-bc97-7eb0-12a116590557",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a042369a-6fe5-f958-1032-c1c6079614e4"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "3d0fd8e0-3faa-d959-4c32-8c465d70092d",
+      "title": "Job error distribution",
+      "description": "",
+      "visualType": "bar",
+      "pageId": "1be668c3-a0c5-bc97-7eb0-12a116590557",
+      "layout": {
+        "x": 11,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "cc129880-5195-50ca-e9f8-f9f13b0a1eba"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": null,
+        "yColumns": null,
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "eb262a44-664b-11a4-1bfd-dc0ff0422371",
+      "title": "AzCopy version",
+      "description": "",
+      "visualType": "column",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "9bc306a2-5c6e-b2a5-d1a8-c11903ae2be2"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "2f1f4a4a-cd47-ef96-96a5-e61969f17a85",
+      "title": "Telemetry schema version",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 11,
+        "y": 0,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a4663f7d-48e6-934c-90d4-a2f444cb0c98"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "d3553f52-7112-f2b3-e024-698ed6ec0871",
+      "title": "Operating system",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "ac168b59-50f4-a593-deca-5ff471e7a8a9"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "2f3b0e41-2d92-1ffd-2758-cffe1c2542b3",
+      "title": "Operating system version",
+      "description": "",
+      "visualType": "column",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 11,
+        "y": 9,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "f53a037a-9a15-7831-0341-11bb4ce82ba5"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "ebdde2ca-6c39-22b6-f564-3942fbbfe90d",
+      "title": "Host architecture",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "b5c2bee3-dbe5-af03-0d27-8d7834e24ed7"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "5c6e0418-6dc1-6517-0113-8f727d9e5c02",
+      "title": "Logical CPU count",
+      "description": "",
+      "visualType": "column",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 11,
+        "y": 18,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "23e0957d-23d9-db86-9a02-3af9c5d7ffc6"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "477f09ba-d99a-0d6a-b886-cca4d2abf447",
+      "title": "CPU model",
+      "description": "",
+      "visualType": "column",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 27,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d5d59c2f-87f3-1ec4-fbda-0142c3b74c76"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "f8f81973-0b98-8194-169e-87aa2014ee70",
+      "title": "Host memory",
+      "description": "",
+      "visualType": "column",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 11,
+        "y": 27,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a7ce326d-1329-d31a-7e2f-47878c044b04"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "1e69130b-a2c4-482e-58fe-080f38ee2cec",
+      "title": "Azure VM detected",
+      "description": "",
+      "visualType": "pie",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 11,
+        "y": 36,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "bb2fb1d8-330f-8a2e-1b14-9fadde60249d"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "58a86a4e-1609-9729-b3fe-42162c1925fe",
+      "title": "Country or region (IP-derived)",
+      "description": "",
+      "visualType": "column",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 45,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "b5a44fa2-7b72-ab1c-aa34-69d4b979537b"
+      },
+      "visualOptions": {
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "label": "",
+            "columns": [],
+            "yAxisMaximumValue": null,
+            "yAxisMinimumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumnTitle": "",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "xAxisScale": "linear",
+        "verticalLine": "",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 20
+        },
+        "dataPointsTooltip": {
+          "all": false,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "cb3f4ef1-730d-ac3e-3785-22ae526de32b",
+      "title": "Invocation context",
+      "description": "InvocationContext: ci when any of TF_BUILD, GITHUB_ACTIONS, CI, JENKINS_URL, GITLAB_CI, or BUILD_BUILDID is nonempty in the AzCopy process; otherwise interactive. Even CI=false counts as ci. interactive means no recognized CI marker, not proof of a human or terminal session. No SDK or parent-process detection is performed. E2ETestRunID does not affect this field; a controlled child environment can omit CI markers.",
+      "visualType": "pie",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 11,
+        "y": 45,
+        "width": 11,
+        "height": 9
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "dbea2340-f634-a004-86a3-60c0dd27964e"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "legendLocation": "bottom",
+        "xColumn": "Value",
+        "yColumns": [
+          "Attempts"
+        ],
+        "seriesColumns": null,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "labelDisabled": false,
+        "pie__label": [
+          "name",
+          "percentage"
+        ],
+        "tooltipDisabled": false,
+        "pie__tooltip": [
+          "name",
+          "percentage",
+          "value"
+        ],
+        "pie__orderBy": "size",
+        "pie__kind": "pie",
+        "pie__topNSlices": null,
+        "crossFilter": [],
+        "drillthrough": []
+      }
+    },
+    {
+      "id": "0445cc1c-9154-9fce-37a2-6d068cdc6e54",
+      "title": "Combined host and runtime details",
+      "description": "InvocationContext: ci when any of TF_BUILD, GITHUB_ACTIONS, CI, JENKINS_URL, GITLAB_CI, or BUILD_BUILDID is nonempty in the AzCopy process; otherwise interactive. Even CI=false counts as ci. interactive means no recognized CI marker, not proof of a human or terminal session. No SDK or parent-process detection is performed. E2ETestRunID does not affect this field; a controlled child environment can omit CI markers.",
+      "visualType": "table",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 54,
+        "width": 22,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c432876f-5a89-6fc9-dd1b-020aecaf0863"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "94b15d70-3b35-9d75-2488-3ca424176c47",
+      "title": "Recent finished attempts and dimensions",
+      "description": "SourceProtocol: Backend-derived access category: Blob/BlobFS/File/FileNFS = https (Azure Files uses REST for SMB and NFS shares), Local = local, S3 = s3, GCP = gcs. This is not observed network traffic; a mounted network path classified as Local still reports local.\n\nSourceMountType: Source backing-store category: cloud-azure, cloud-s3, cloud-gcs, local-disk, nas-smb, or nas-nfs. Local paths are refined using OS mount information where supported; unavailable mount detection falls back to local-disk.\n\nSourceScope: Level of the selected source root: service, container, share, bucket, object-or-prefix, local-directory, local-object, stream, or benchmark. This is not authorization scope or directory depth. The selected root is excluded from source-relative depth.\n\nSourceEndpointKind: Azure source hostname heuristic: private-endpoint when the hostname contains .privatelink., public for other recognized Azure storage hostnames, and unknown for unrecognized or unparseable hosts such as the emulator; empty for non-Azure sources. No DNS or route inspection is performed. A normal hostname resolving privately can still report public. Historical events without this field display unknown, not public. Source and destination are classified independently.\n\nSourceCloudType: Azure environment inferred from the source hostname suffix: public, usgov, china, ussec, usnat, bleu (France), delos (Germany), or govsg (Singapore); unknown for unrecognized Azure hosts and empty for non-Azure sources. This is not public/private network classification.\n\nSourceAuthMechanism: Source credential category, not credential material. SAS is reported when a SAS is present, PublicAnonymous for anonymous remote access, NotApplicable for local/stream/benchmark endpoints, otherwise the selected credential-type name (for example OAuthToken). It is not an authorization scope or proof of successful authentication.\n\nDestProtocol: Backend-derived access category: Blob/BlobFS/File/FileNFS = https (Azure Files uses REST for SMB and NFS shares), Local = local, S3 = s3, GCP = gcs. This is not observed network traffic; OS-mounted network paths classified as Local still report local.\n\nDestScope: Resource level inferred from the supplied destination path: service, container, share, bucket, object-or-prefix, local-directory, or local-object (with stream/none/unknown for special cases). This is not an authorization scope; object-or-prefix does not distinguish an individual object from a virtual directory. Local destination classification is syntax-based, not verified filesystem type.\n\nDestEndpointKind: Azure destination hostname heuristic: private-endpoint when the hostname contains .privatelink., public for other recognized Azure storage hostnames, and unknown for unrecognized or unparseable hosts such as the emulator; empty for non-Azure destinations. No DNS or route inspection is performed, so a normal hostname resolving privately can still report public. This is not the Azure cloud environment.",
+      "visualType": "table",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "layout": {
+        "x": 0,
+        "y": 64,
+        "width": 22,
+        "height": 12
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "91e06ce7-1678-8f89-aeab-55e2108ca92d"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": true,
+        "colorRulesDisabled": true,
+        "colorStyle": "light",
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "table__renderLinks": [],
+        "colorRules": []
+      }
+    },
+    {
+      "id": "1fd667d5-8d1f-9085-61f5-3f1f173e4b0e",
+      "title": "Field definitions",
+      "description": "",
+      "pageId": "26167ce6-df72-b593-7069-635b9cbebb5e",
+      "visualType": "markdownCard",
+      "markdownText": "**SourceType**\n\nSourceType: Source storage backend, such as Local, Blob, BlobFS (Data Lake Storage), File, FileNFS, S3, or GCP, derived from FromTo. Aggregate Sources lists the observed source backend types.\n\n**DestType**\n\nDestType: Destination storage backend, such as Local, Blob, BlobFS, File, FileNFS, S3, or GCP; derived from the destination half of FromTo.\n\n**azcopy.bytes_enumerated**\n\nazcopy.bytes_enumerated (scheduled source bytes): Sum of source sizes in scheduled job-plan entries after traversal filters and copy/sync selection. Unchanged sync objects are not included; work that later fails or is skipped can remain included. This is not successful-transfer volume. Resume summary counters can be job-cumulative.\n\n**azcopy.source_bytes_scanned**\n\nazcopy.source_bytes_scanned (source bytes examined after filters): Sum of listed sizes of eligible source payload objects reaching the scan callback after traversal filters, before sync comparison selects transfers. BytesScanned and Source bytes scanned name this same counter, not separate metrics. It includes unchanged sync objects, excludes destination scanning and folder-property operations, and is not payload bytes read or total account size. Symlink/hardlink eligibility follows the configured handling mode.\n\n**azcopy.source_max_directory_depth**\n\nazcopy.source_max_directory_depth: Maximum directory nesting of eligible scanned payload objects relative to the selected source root, after traversal filters. file.txt = 0; child/file.txt = 1; a/b/file.txt = 2. The selected root is not counted. Folder-property entries, including empty directories, do not contribute; zero can also mean no eligible payload objects were observed. One root-folder transfer plus one direct file can correctly report zero.\n\n**azcopy.hardlinks_converted_scheduled**\n\nazcopy.hardlinks_converted_scheduled: Recognized hardlink entries scheduled as independent file copies with --hardlinks=follow (the default), for transfers involving Azure Files NFS. Hardlinks are filenames sharing one underlying file/inode, not symbolic links. Two recognized selected names sharing an inode count as two conversions. preserve and skip do not increment this counter; scheduled does not mean completed. Zero is expected for BlobBlob and does not prove a filesystem contains no hardlinks.\n\n**azcopy.storage_http_attempt_count**\n\nazcopy.storage_http_attempt_count: Total returned attempts counted by the instrumented Storage HTTP pipeline, including retries and failed attempts. It is a count, not a rate or number of files. Application Insights sends and local disk operations are excluded. Charts that sum this metric count observed attempts, not successful transactions.\n\n**azcopy.avg_iops**\n\nazcopy.avg_iops: Integer-truncated average instrumented Storage HTTP attempts per second since the pipeline statistics object was initialized. It uses the same counter as storage_http_attempt_count, including retries/failures, but a separate timer whose start loses fractional seconds. It is not disk IOPS or successful files/second. count / job_duration_seconds gives a reproducible job-wide rate, not necessarily this exact value; the timer is not transfer-phase duration. Dashboard averages of job rates are not a fleet-wide rate.",
+      "visualOptions": {},
+      "layout": {
+        "x": 0,
+        "y": 18.0,
+        "width": 22.0,
+        "height": 60
+      }
+    },
+    {
+      "id": "ecde0e2f-833d-b340-0bc1-ca58052690b4",
+      "title": "Field definitions",
+      "description": "",
+      "pageId": "75f1a26e-7422-5b4f-1579-de42d5811e10",
+      "visualType": "markdownCard",
+      "markdownText": "**azcopy.bytes_enumerated**\n\nazcopy.bytes_enumerated (scheduled source bytes): Sum of source sizes in scheduled job-plan entries after traversal filters and copy/sync selection. Unchanged sync objects are not included; work that later fails or is skipped can remain included. This is not successful-transfer volume. Resume summary counters can be job-cumulative.\n\n**azcopy.source_bytes_scanned**\n\nazcopy.source_bytes_scanned (source bytes examined after filters): Sum of listed sizes of eligible source payload objects reaching the scan callback after traversal filters, before sync comparison selects transfers. BytesScanned and Source bytes scanned name this same counter, not separate metrics. It includes unchanged sync objects, excludes destination scanning and folder-property operations, and is not payload bytes read or total account size. Symlink/hardlink eligibility follows the configured handling mode.\n\n**azcopy.hardlinks_converted_scheduled**\n\nazcopy.hardlinks_converted_scheduled: Recognized hardlink entries scheduled as independent file copies with --hardlinks=follow (the default), for transfers involving Azure Files NFS. Hardlinks are filenames sharing one underlying file/inode, not symbolic links. Two recognized selected names sharing an inode count as two conversions. preserve and skip do not increment this counter; scheduled does not mean completed. Zero is expected for BlobBlob and does not prove a filesystem contains no hardlinks.",
+      "visualOptions": {},
+      "layout": {
+        "x": 0,
+        "y": 41.0,
+        "width": 22.0,
+        "height": 26
+      }
+    },
+    {
+      "id": "61689602-3a33-516b-6bbf-aa26a2cf7646",
+      "title": "Field definitions",
+      "description": "",
+      "pageId": "83659a23-3877-6d35-a64b-97e003e42d42",
+      "visualType": "markdownCard",
+      "markdownText": "**azcopy.source_bytes_scanned**\n\nazcopy.source_bytes_scanned (source bytes examined after filters): Sum of listed sizes of eligible source payload objects reaching the scan callback after traversal filters, before sync comparison selects transfers. BytesScanned and Source bytes scanned name this same counter, not separate metrics. It includes unchanged sync objects, excludes destination scanning and folder-property operations, and is not payload bytes read or total account size. Symlink/hardlink eligibility follows the configured handling mode.\n\n**azcopy.source_max_directory_depth**\n\nazcopy.source_max_directory_depth: Maximum directory nesting of eligible scanned payload objects relative to the selected source root, after traversal filters. file.txt = 0; child/file.txt = 1; a/b/file.txt = 2. The selected root is not counted. Folder-property entries, including empty directories, do not contribute; zero can also mean no eligible payload objects were observed. One root-folder transfer plus one direct file can correctly report zero.",
+      "visualOptions": {},
+      "layout": {
+        "x": 0,
+        "y": 16.0,
+        "width": 22.0,
+        "height": 19
+      }
+    },
+    {
+      "id": "6928179d-d3dc-63b6-b5e7-633b528cf3f9",
+      "title": "Field definitions",
+      "description": "",
+      "pageId": "a68acf48-a2a5-0829-cccc-8b44f9838ac7",
+      "visualType": "markdownCard",
+      "markdownText": "**azcopy.storage_http_attempt_count**\n\nazcopy.storage_http_attempt_count: Total returned attempts counted by the instrumented Storage HTTP pipeline, including retries and failed attempts. It is a count, not a rate or number of files. Application Insights sends and local disk operations are excluded. Charts that sum this metric count observed attempts, not successful transactions.\n\n**azcopy.avg_iops**\n\nazcopy.avg_iops: Integer-truncated average instrumented Storage HTTP attempts per second since the pipeline statistics object was initialized. It uses the same counter as storage_http_attempt_count, including retries/failures, but a separate timer whose start loses fractional seconds. It is not disk IOPS or successful files/second. count / job_duration_seconds gives a reproducible job-wide rate, not necessarily this exact value; the timer is not transfer-phase duration. Dashboard averages of job rates are not a fleet-wide rate.",
+      "visualOptions": {},
+      "layout": {
+        "x": 0,
+        "y": 45.0,
+        "width": 22.0,
+        "height": 18
+      }
+    },
+    {
+      "id": "f90b612e-2f83-0964-a0d3-4a833742a908",
+      "title": "Field definitions",
+      "description": "",
+      "pageId": "1be668c3-a0c5-bc97-7eb0-12a116590557",
+      "visualType": "markdownCard",
+      "markdownText": "**azcopy.storage_http_attempt_count**\n\nazcopy.storage_http_attempt_count: Total returned attempts counted by the instrumented Storage HTTP pipeline, including retries and failed attempts. It is a count, not a rate or number of files. Application Insights sends and local disk operations are excluded. Charts that sum this metric count observed attempts, not successful transactions.\n\n**azcopy.avg_iops**\n\nazcopy.avg_iops: Integer-truncated average instrumented Storage HTTP attempts per second since the pipeline statistics object was initialized. It uses the same counter as storage_http_attempt_count, including retries/failures, but a separate timer whose start loses fractional seconds. It is not disk IOPS or successful files/second. count / job_duration_seconds gives a reproducible job-wide rate, not necessarily this exact value; the timer is not transfer-phase duration. Dashboard averages of job rates are not a fleet-wide rate.",
+      "visualOptions": {},
+      "layout": {
+        "x": 0,
+        "y": 27.0,
+        "width": 22.0,
+        "height": 18
+      }
+    },
+    {
+      "id": "a3ce79cb-291c-7519-fdd2-c0d4df69f7ac",
+      "title": "Field definitions",
+      "description": "",
+      "pageId": "667a2d72-b4dd-197b-256e-b5e737e48b13",
+      "visualType": "markdownCard",
+      "markdownText": "**SourceProtocol**\n\nSourceProtocol: Backend-derived access category: Blob/BlobFS/File/FileNFS = https (Azure Files uses REST for SMB and NFS shares), Local = local, S3 = s3, GCP = gcs. This is not observed network traffic; a mounted network path classified as Local still reports local.\n\n**SourceScope**\n\nSourceScope: Level of the selected source root: service, container, share, bucket, object-or-prefix, local-directory, local-object, stream, or benchmark. This is not authorization scope or directory depth. The selected root is excluded from source-relative depth.\n\n**SourceMountType**\n\nSourceMountType: Source backing-store category: cloud-azure, cloud-s3, cloud-gcs, local-disk, nas-smb, or nas-nfs. Local paths are refined using OS mount information where supported; unavailable mount detection falls back to local-disk.\n\n**SourceEndpointKind**\n\nSourceEndpointKind: Azure source hostname heuristic: private-endpoint when the hostname contains .privatelink., public for other recognized Azure storage hostnames, and unknown for unrecognized or unparseable hosts such as the emulator; empty for non-Azure sources. No DNS or route inspection is performed. A normal hostname resolving privately can still report public. Historical events without this field display unknown, not public. Source and destination are classified independently.\n\n**SourceCloudType**\n\nSourceCloudType: Azure environment inferred from the source hostname suffix: public, usgov, china, ussec, usnat, bleu (France), delos (Germany), or govsg (Singapore); unknown for unrecognized Azure hosts and empty for non-Azure sources. This is not public/private network classification.\n\n**SourceAuthMechanism**\n\nSourceAuthMechanism: Source credential category, not credential material. SAS is reported when a SAS is present, PublicAnonymous for anonymous remote access, NotApplicable for local/stream/benchmark endpoints, otherwise the selected credential-type name (for example OAuthToken). It is not an authorization scope or proof of successful authentication.\n\n**DestProtocol**\n\nDestProtocol: Backend-derived access category: Blob/BlobFS/File/FileNFS = https (Azure Files uses REST for SMB and NFS shares), Local = local, S3 = s3, GCP = gcs. This is not observed network traffic; OS-mounted network paths classified as Local still report local.\n\n**DestScope**\n\nDestScope: Resource level inferred from the supplied destination path: service, container, share, bucket, object-or-prefix, local-directory, or local-object (with stream/none/unknown for special cases). This is not an authorization scope; object-or-prefix does not distinguish an individual object from a virtual directory. Local destination classification is syntax-based, not verified filesystem type.\n\n**DestEndpointKind**\n\nDestEndpointKind: Azure destination hostname heuristic: private-endpoint when the hostname contains .privatelink., public for other recognized Azure storage hostnames, and unknown for unrecognized or unparseable hosts such as the emulator; empty for non-Azure destinations. No DNS or route inspection is performed, so a normal hostname resolving privately can still report public. This is not the Azure cloud environment.\n\n**InvocationContext**\n\nInvocationContext: ci when any of TF_BUILD, GITHUB_ACTIONS, CI, JENKINS_URL, GITLAB_CI, or BUILD_BUILDID is nonempty in the AzCopy process; otherwise interactive. Even CI=false counts as ci. interactive means no recognized CI marker, not proof of a human or terminal session. No SDK or parent-process detection is performed. E2ETestRunID does not affect this field; a controlled child environment can omit CI markers.",
+      "visualOptions": {},
+      "layout": {
+        "x": 0,
+        "y": 76.0,
+        "width": 22.0,
+        "height": 70
+      }
+    }
+  ],
+  "baseQueries": [],
+  "parameters": [
+    {
+      "kind": "duration",
+      "id": "3e089cfa-9d5f-89c3-23f1-beedfd17fa0a",
+      "displayName": "Time range",
+      "description": "",
+      "beginVariableName": "_startTime",
+      "endVariableName": "_endTime",
+      "defaultValue": {
+        "kind": "dynamic",
+        "count": 24,
+        "unit": "hours"
+      },
+      "showOnPages": {
+        "kind": "all"
+      }
+    }
+  ],
+  "dataSources": [
+    {
+      "id": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1",
+      "kind": "manual-kusto",
+      "scopeId": "kusto",
+      "name": "AzCopy Telemetry - Telemetry Prod",
+      "clusterUri": "https://azcore.centralus.kusto.windows.net/",
+      "database": "Xstore"
+    }
+  ],
+  "pages": [
+    {
+      "name": "Overview",
+      "id": "26167ce6-df72-b593-7069-635b9cbebb5e"
+    },
+    {
+      "name": "Data Volume",
+      "id": "75f1a26e-7422-5b4f-1579-de42d5811e10"
+    },
+    {
+      "name": "Source Profile",
+      "id": "83659a23-3877-6d35-a64b-97e003e42d42"
+    },
+    {
+      "name": "Performance",
+      "id": "a68acf48-a2a5-0829-cccc-8b44f9838ac7"
+    },
+    {
+      "name": "Reliability",
+      "id": "1be668c3-a0c5-bc97-7eb0-12a116590557"
+    },
+    {
+      "name": "Environment",
+      "id": "667a2d72-b4dd-197b-256e-b5e737e48b13"
+    }
+  ],
+  "queries": [
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.command.invoked', 'azcopy.job.started', 'azcopy.job.finished')\n| summarize Value = count() by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "5a3f4955-6e9e-c3ba-5536-16d68e3da095",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| summarize\n    Samples = count(),\n    NonZeroSamples = countif(value != 0),\n    Minimum = min(value),\n    Average = avg(value),\n    P50 = percentile(value, 50),\n    P95 = percentile(value, 95),\n    Maximum = max(value)\n  by Metric = name\n| project Metric, Samples, NonZeroSamples, Minimum, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "21be2f51-35bd-470f-1fd9-87e2de0bd0aa",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend\n    Command = tostring(customDimensions.Command),\n    FromTo = tostring(customDimensions.FromTo),\n    SourceType = tostring(customDimensions.SourceType),\n    DestType = tostring(customDimensions.DestType),\n    LegacyDirection = tostring(customDimensions.TransferDirection),\n    LegacyTopology = tostring(customDimensions.TransferTopology)\n| extend\n    Direction = iif(isnotempty(LegacyDirection), LegacyDirection, case(\n        DestType == 'Trash', 'delete',\n        SourceType in ('Local', 'Benchmark', 'Pipe'), 'upload',\n        DestType in ('Local', 'Pipe'), 'download',\n        SourceType !in ('', 'None') and DestType !in ('', 'None'), 's2s',\n        'unknown')),\n    Topology = iif(isnotempty(LegacyTopology), LegacyTopology, case(\n        SourceType == 'S3' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'aws-to-azure',\n        SourceType == 'GCP' and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'gcs-to-azure',\n        SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'intra-azure',\n        DestType == 'Trash', 'azure-delete',\n        SourceType in ('Local', 'Benchmark', 'Pipe') and DestType in ('Blob', 'BlobFS', 'File', 'FileNFS'), 'local-to-azure',\n        SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and DestType in ('Local', 'Pipe'), 'azure-to-local',\n        SourceType !in ('', 'Local', 'Benchmark', 'Pipe', 'None') and DestType !in ('', 'Local', 'Pipe', 'Trash', 'None'), 'cross-cloud',\n        'unknown'))\n| summarize Attempts = count() by Command, FromTo, Direction, Topology, SourceType, DestType\n| top 30 by Attempts desc",
+      "id": "848df28a-0228-5a25-623b-0eaf8be516f2",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.bytes_enumerated', 'azcopy.bytes_expected', 'azcopy.bytes_transferred', 'azcopy.bytes_over_wire')\n| summarize Bytes = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "f64e10b8-0af3-c008-80ad-73f3e903e04d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.objects_scheduled',\n    'azcopy.regular_files_scheduled',\n    'azcopy.symlinks_scheduled',\n    'azcopy.hardlinks_converted_scheduled',\n    'azcopy.hardlinks_preserved_scheduled',\n    'azcopy.folder_properties_scheduled')\n| summarize Objects = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "5b282924-45eb-3d29-de99-1be4ed063dfd",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.objects_completed',\n    'azcopy.objects_failed',\n    'azcopy.objects_skipped',\n    'azcopy.folder_properties_completed',\n    'azcopy.folder_properties_failed',\n    'azcopy.folder_properties_skipped')\n| summarize Objects = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "7764a741-2c40-5fba-9fd0-9504052c063c",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.transfers_completed', 'azcopy.transfers_failed', 'azcopy.transfers_skipped', 'azcopy.transfers_total')\n| summarize Transfers = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "01f8e34c-faa4-e0f9-ffb7-aaa127d880b9",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name == 'azcopy.job.finished'\n| where timestamp between (_startTime .. _endTime)\n| extend ContainersScannedValue = todouble(customMeasurements['azcopy.containers_scanned']),\n    ContainersTouchedValue = todouble(customMeasurements['azcopy.containers_touched']),\n    BucketsScannedValue = todouble(customMeasurements['azcopy.buckets_scanned']),\n    BucketsTouchedValue = todouble(customMeasurements['azcopy.buckets_touched'])\n| summarize\n    SourceObjectsScanned = sum(todouble(customMeasurements['azcopy.source_objects_scanned'])),\n    SourceBytesScanned = sum(todouble(customMeasurements['azcopy.source_bytes_scanned'])),\n    ContainersScanned = sumif(ContainersScannedValue, ContainersScannedValue >= 0),\n    ContainersTouched = sumif(ContainersTouchedValue, ContainersTouchedValue >= 0),\n    BucketsScanned = sumif(BucketsScannedValue, BucketsScannedValue >= 0),\n    BucketsTouched = sumif(BucketsTouchedValue, BucketsTouchedValue >= 0),\n    UnknownContainersScanned = countif(isnull(ContainersScannedValue) or ContainersScannedValue < 0),\n    UnknownContainersTouched = countif(isnull(ContainersTouchedValue) or ContainersTouchedValue < 0),\n    UnknownBucketsScanned = countif(isnull(BucketsScannedValue) or BucketsScannedValue < 0),\n    UnknownBucketsTouched = countif(isnull(BucketsTouchedValue) or BucketsTouchedValue < 0)\n| project\n    Metrics = pack_array('Source objects scanned', 'Source bytes scanned', 'Known containers scanned', 'Known containers touched', 'Known buckets scanned', 'Known buckets touched', 'Attempts missing containers scanned', 'Attempts missing containers touched', 'Attempts missing buckets scanned', 'Attempts missing buckets touched'),\n    Values = pack_array(SourceObjectsScanned, SourceBytesScanned, ContainersScanned, ContainersTouched, BucketsScanned, BucketsTouched, UnknownContainersScanned, UnknownContainersTouched, UnknownBucketsScanned, UnknownBucketsTouched)\n| mv-expand Metric = Metrics to typeof(string), Value = Values to typeof(real)\n| project Metric, Value",
+      "id": "9b6f5cdd-22ec-2bb3-4d56-b97fb2543fb3",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.source_average_object_size_bytes',\n    'azcopy.source_object_size_p50_bytes_approx',\n    'azcopy.source_object_size_p90_bytes_approx',\n    'azcopy.source_object_size_p95_bytes_approx')\n| summarize SampleSize = count(), Average = avg(value), P50 = percentile(value, 50), P95 = percentile(value, 95), Maximum = max(value) by Metric = name\n| project Metric, SampleSize, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "dfa8f64e-c9de-e4bf-14d5-64040e781ac1",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.source_objects_under_1_mib', 'azcopy.source_objects_under_1_mib_ratio_pct', 'azcopy.source_max_directory_depth')\n| summarize SampleSize = count(), Average = avg(value), P50 = percentile(value, 50), P95 = percentile(value, 95), Maximum = max(value) by Metric = name\n| project Metric, SampleSize, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "4da4d088-62c8-53d8-f3d1-eab87b4b4b23",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job_duration_seconds', 'azcopy.enumeration_phase_duration_seconds', 'azcopy.transfer_phase_duration_seconds')\n| summarize AverageSeconds = avg(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "6ae42c86-78e6-1660-a1ee-b95ada6a2f45",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.job_throughput_mbps', 'azcopy.transfer_phase_throughput_mbps')\n| summarize AverageMbps = avg(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "45234a05-9edc-871f-80d8-94dc33699226",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.average_storage_http_attempt_e2e_ms', 'azcopy.avg_iops')\n| summarize SampleSize = count(), Average = avg(value), P50 = percentile(value, 50), P95 = percentile(value, 95), Maximum = max(value) by Metric = name\n| project Metric, SampleSize, Average = round(Average, 2), P50 = round(P50, 2), P95 = round(P95, 2), Maximum\n| order by Metric asc",
+      "id": "2de19872-aea2-e3b4-23ce-23cce79096ae",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.PerformanceConstraint)\n| extend Value = iif(isempty(Value), 'none', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "ca53dc33-a7d7-9146-7c6b-ca4b27e3b16d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend AdviceCodes = split(tostring(customDimensions.PerformanceAdviceCodes), ',')\n| mv-expand Value = AdviceCodes to typeof(string)\n| extend Value = iif(isempty(Value), 'none', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "47c2fa43-e258-e944-6931-9bd72081b0fd",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OptConcurrency)\n| extend Value = iif(isempty(Value), 'not set', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "8f7fde31-a0c1-6a9f-aff0-5ecb4571fd77",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OptBufferGB)\n| extend Value = iif(isempty(Value), 'not set', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "3c9cec7e-1463-7b45-0669-e25d4415efa4",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OptCapMbps)\n| extend Value = iif(isempty(Value), 'not set', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "bf8003a5-c101-4cd5-3928-33ace887f8bc",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.storage_http_attempt_count', 'azcopy.network_error_attempt_count', 'azcopy.failure_error_other_count')\n| summarize Attempts = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "3063634e-5356-5170-cc1e-a9afe0b7de22",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in (\n    'azcopy.server_busy_503_count',\n    'azcopy.server_busy_throughput_count',\n    'azcopy.server_busy_iops_count',\n    'azcopy.server_busy_other_count')\n| summarize Responses = sum(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "70fe301c-e2b8-6baf-364e-03ec781ad8af",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| mv-expand MetricName = bag_keys(customMeasurements)\n| extend name = tostring(MetricName)\n| extend value = todouble(customMeasurements[name])\n| project-away MetricName\n| where timestamp between (_startTime .. _endTime)\n| where name in ('azcopy.server_busy_pct', 'azcopy.network_error_pct', 'azcopy.percent_complete')\n| summarize AveragePct = avg(value) by bin(timestamp, 1h), Metric = name\n| order by timestamp asc",
+      "id": "a042369a-6fe5-f958-1032-c1c6079614e4",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend\n    Category = tostring(customDimensions.JobErrorCategory),\n    Code = tostring(customDimensions.JobErrorCode),\n    JobStatus = tostring(customDimensions.JobStatus),\n    TerminalStage = tostring(customDimensions.TerminalStage)\n| extend Error = strcat(iif(isempty(Category), 'none', Category), ' / ', iif(isempty(Code), 'none', Code))\n| summarize Attempts = count() by Error, JobStatus, TerminalStage\n| top 30 by Attempts desc",
+      "id": "cc129880-5195-50ca-e9f8-f9f13b0a1eba",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion))\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "9bc306a2-5c6e-b2a5-d1a8-c11903ae2be2",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.SchemaVersion)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "a4663f7d-48e6-934c-90d4-a2f444cb0c98",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OSType)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "ac168b59-50f4-a593-deca-5ff471e7a8a9",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.OSVersion)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "f53a037a-9a15-7831-0341-11bb4ce82ba5",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.HostArch)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "b5c2bee3-dbe5-af03-0d27-8d7834e24ed7",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend NumericValue = toint(customDimensions.HostNumCPU)\n| extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', tostring(NumericValue))\n| summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))\n| order by SortValue asc\n| project Value, Attempts",
+      "id": "23e0957d-23d9-db86-9a02-3af9c5d7ffc6",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.HostCPUModel)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "d5d59c2f-87f3-1ec4-fbda-0142c3b74c76",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend NumericValue = toint(customDimensions.HostMemoryTotalGB)\n| extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', strcat(tostring(NumericValue), ' GB'))\n| summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))\n| order by SortValue asc\n| project Value, Attempts",
+      "id": "a7ce326d-1329-d31a-7e2f-47878c044b04",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend NewValue = tostring(customDimensions.AzureVMDetected)\n| extend Value = case(\n    isnotempty(NewValue), NewValue,\n    tostring(customDimensions.HostVirtualization) == 'azure-vm' or tostring(customDimensions.NetworkRunContext) == 'azure-vm', 'true',\n    isnotempty(tostring(customDimensions.HostVirtualization)) or isnotempty(tostring(customDimensions.NetworkRunContext)), 'false',\n    'unknown')\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "bb2fb1d8-330f-8a2e-1b14-9fadde60249d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(client_CountryOrRegion)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| top 20 by Attempts desc\n| order by Attempts desc",
+      "id": "b5a44fa2-7b72-ab1c-aa34-69d4b979537b",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend Value = tostring(customDimensions.InvocationContext)\n| extend Value = iif(isempty(Value), 'unknown', Value)\n| summarize Attempts = count() by Value\n| order by Attempts desc",
+      "id": "dbea2340-f634-a004-86a3-60c0dd27964e",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| extend\n    Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),\n    SchemaVersion = tostring(customDimensions.SchemaVersion),\n    OSType = tostring(customDimensions.OSType),\n    OSVersion = tostring(customDimensions.OSVersion),\n    Architecture = tostring(customDimensions.HostArch),\n    CPUCount = toint(customDimensions.HostNumCPU),\n    CPUModel = tostring(customDimensions.HostCPUModel),\n    MemoryGB = toint(customDimensions.HostMemoryTotalGB),\n    AzureVMDetectedNew = tostring(customDimensions.AzureVMDetected),\n    CountryOrRegion = tostring(client_CountryOrRegion),\n    InvocationContext = tostring(customDimensions.InvocationContext)\n| extend AzureVMDetected = case(\n    isnotempty(AzureVMDetectedNew), AzureVMDetectedNew,\n    tostring(customDimensions.HostVirtualization) == 'azure-vm' or tostring(customDimensions.NetworkRunContext) == 'azure-vm', 'true',\n    isnotempty(tostring(customDimensions.HostVirtualization)) or isnotempty(tostring(customDimensions.NetworkRunContext)), 'false',\n    'unknown')\n| project-away AzureVMDetectedNew\n| summarize Attempts = count() by Version, SchemaVersion, OSType, OSVersion, Architecture, CPUCount, CPUModel, MemoryGB, AzureVMDetected, CountryOrRegion, InvocationContext\n| top 100 by Attempts desc",
+      "id": "c432876f-5a89-6fc9-dd1b-020aecaf0863",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "01ff53e8-6d93-9ee3-2ca2-83f24cb7e1c1"
+      },
+      "text": "cluster('https://adx.monitor.azure.com/subscriptions/bdc2378a-413b-4b55-bf7b-e97b7fd361cc/resourcegroups/azcopy-telemetry-prod-rg/providers/microsoft.insights/components/azcopy-telemetry-prod-ai').database('azcopy-telemetry-prod-ai').customEvents\n| where name startswith 'azcopy.'\n| where timestamp between (_startTime .. _endTime)\n| where name == 'azcopy.job.finished'\n| project\n    timestamp,\n    InvocationID = tostring(customDimensions.InvocationID),\n    JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),\n    Command = tostring(customDimensions.Command),\n    SummaryCounterScope = tostring(coalesce(customDimensions.SummaryCounterScope, iif(tostring(customDimensions.MeasurementScope) == 'job-cumulative', 'job-cumulative', ''))),\n    JobStatus = tostring(customDimensions.JobStatus),\n    TerminalStage = tostring(customDimensions.TerminalStage),\n    PerformanceConstraint = tostring(customDimensions.PerformanceConstraint),\n    SourceProtocol = tostring(customDimensions.SourceProtocol),\n    SourceMountType = tostring(customDimensions.SourceMountType),\n    SourceScope = tostring(customDimensions.SourceScope),\n    SourceEndpointKind = tostring(coalesce(customDimensions.SourceEndpointKind, 'unknown')),\n    SourceCloud = tostring(customDimensions.SourceCloudType),\n    SourceAuth = tostring(customDimensions.SourceAuthMechanism),\n    DestProtocol = tostring(customDimensions.DestProtocol),\n    DestScope = tostring(customDimensions.DestScope),\n    DestEndpointKind = tostring(customDimensions.DestEndpointKind),\n    DestCloud = tostring(customDimensions.DestCloudType),\n    DestAuth = tostring(customDimensions.DestAuthMechanism),\n    FailureErrorCodes = tostring(customDimensions.FailureErrorCodes),\n    PerformanceAdviceCodes = tostring(customDimensions.PerformanceAdviceCodes),\n    FlagsSet = tostring(customDimensions.OptFlagsSet),\n    EnvVarsSet = tostring(customDimensions.OptEnvVarsSet)\n| top 200 by timestamp desc",
+      "id": "91e06ce7-1678-8f89-aeab-55e2108ca92d",
+      "usedVariables": [
+        "_startTime",
+        "_endTime"
+      ]
+    }
+  ]
+}
