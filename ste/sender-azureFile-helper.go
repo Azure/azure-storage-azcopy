@@ -51,6 +51,25 @@ func (u *azureFileSenderBase) prepareSMBProperties(creation, lastWrite *time.Tim
 	}
 }
 
+func prepareSMBPropertiesForFileCreation(properties *file.SMBProperties, preserveInfo bool) *file.SMBProperties {
+	if properties == nil {
+		return nil
+	}
+
+	creationProperties := *properties
+	if properties.Attributes != nil {
+		attributes := *properties.Attributes
+		attributes.ReadOnly = false
+		creationProperties.Attributes = &attributes
+	}
+	if preserveInfo && properties.LastWriteTime != nil {
+		minimalLastWriteTime := time.Unix(0, 0)
+		creationProperties.LastWriteTime = &minimalLastWriteTime
+	}
+
+	return &creationProperties
+}
+
 func (u *azureFileSenderBase) applyNFSHeaders(info *TransferInfo) error {
 	if stage, err := u.addNFSPropertiesToHeaders(info); err != nil {
 		u.jptm.FailActiveSend(stage, err)
