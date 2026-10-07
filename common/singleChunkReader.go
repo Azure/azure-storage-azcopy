@@ -266,6 +266,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// We can continue, so use the data we have read
 	cr.buffer = targetBuffer
 
+	// TODO: change this to check if the source is a mounted NFS file share, not the target; or enable it for all jobs, or for all Mover jobs
 	if IsNFSCopy() {
 		if file, ok := fileReader.(*os.File); ok {
 			_ = FadviseDontNeed(file, cr.chunkId.OffsetInFile(), cr.length)
