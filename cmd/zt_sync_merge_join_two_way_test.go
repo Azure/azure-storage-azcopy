@@ -36,6 +36,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestResolveMergeJoinMaxQueueDirs(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{
+		{"", 50_000_000},
+		{"   ", 50_000_000},
+		{"50000000", 50_000_000},
+		{"100000000", 100_000_000},
+		{" 1234567 ", 1_234_567},
+		{"0", 50_000_000},
+		{"-1", 50_000_000},
+		{"invalid", 50_000_000},
+		{"999999999999999999999", 50_000_000},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("MOVER_SYNC_MJ_MAX_QUEUE_DIRS", tc.value)
+			if got := resolveMergeJoinMaxQueueDirs(); got != tc.want {
+				t.Fatalf("resolved threshold = %d, want %d", got, tc.want)
+			}
+		})
+	}
+	t.Setenv("MOVER_SYNC_MJ_MAX_QUEUE_DIRS", "17")
+	if got := resolveMergeJoinMaxQueueDirs(); got != 17 {
+		t.Fatalf("per-job override was not reread: got %d", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Shared test helpers for the streaming (two-way) merge-join tests.
 // ---------------------------------------------------------------------------
@@ -362,7 +390,7 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 			objs = append(objs, mjTestVirtualFolder(fmt.Sprintf("d%06d", i)))
 		}
 	}
-	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}      // fast
+	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}          // fast
 	dst := &delayingFakeTraverser{objects: append([]StoredObject(nil), objs...), delay: 0} // same content
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -491,4 +519,3 @@ func TestTwoWaySyncDir_DestRealErrorStillFatal(t *testing.T) {
 		a.Equal(cca.fromTo.To(), mjErr.location, "error must be attributed to the destination")
 	}
 }
-

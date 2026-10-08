@@ -58,10 +58,8 @@ type ChannelStats struct {
 	XferDoneUsed              int
 	XferDoneSize              int
 
-	// Diagnostic counters for identifying scheduler-starvation bottlenecks. All are cumulative
-	// since job start; dividing by elapsed seconds gives a per-second rate.
-	ChunkStarveCount    int64 // chunkProcessor goroutines that hit the empty-channel sleep path
-	TransferStarveCount int64 // transferProcessor goroutines that hit the empty-channel sleep path
+	ChunkStarveCount    int64 // cumulative entries into the blocking empty-chunk-queue wait
+	TransferStarveCount int64 // cumulative empty-transfer-queue polling cycles
 	CurrentMainPoolSize int32 // current chunkProcessor goroutine pool size (auto-tuned)
 	NumGoroutines       int   // process-wide runtime.NumGoroutine() at sample time
 }
@@ -418,12 +416,9 @@ type jobMgr struct {
 	atomicCurrentConcurrentConnections int64
 	/* Pool sizer related values */
 	atomicSuccessfulBytesInActiveFiles int64 // atomic 64-bit values should always be at the start of a struct to ensure alignment
-	// Diagnostic counters: number of times chunkProcessor / transferProcessor hit the
-	// empty-channel time.Sleep fallback. High values indicate worker starvation
-	// (workers spinning on idle channels rather than running chunks/transfers).
-	atomicChunkStarveCount    int64
-	atomicTransferStarveCount int64
-	atomicCurrentMainPoolSize int32
+	atomicChunkStarveCount             int64
+	atomicTransferStarveCount          int64
+	atomicCurrentMainPoolSize          int32
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
@@ -1269,9 +1264,7 @@ func (jm *jobMgr) chunkProcessor(workerID int) {
 		case chunkFunc := <-jm.xferChannels.normalChunckCh:
 			chunkFunc(workerID)
 		default:
-			// Normal channel is empty — block on all three channels.
-			// Goroutines park here with zero CPU overhead until work arrives
-			// (no polling, no sleep, instant wake-up).
+			// Check all channels before counting an empty-queue wait.
 			select {
 			case <-jm.poolSizingChannels.scalebackRequestCh:
 				return
@@ -1279,6 +1272,17 @@ func (jm *jobMgr) chunkProcessor(workerID int) {
 				chunkFunc(workerID)
 			case chunkFunc := <-jm.xferChannels.lowChunkCh:
 				chunkFunc(workerID)
+			default:
+				atomic.AddInt64(&jm.atomicChunkStarveCount, 1)
+				// Count once per wait; remain parked without polling.
+				select {
+				case <-jm.poolSizingChannels.scalebackRequestCh:
+					return
+				case chunkFunc := <-jm.xferChannels.normalChunckCh:
+					chunkFunc(workerID)
+				case chunkFunc := <-jm.xferChannels.lowChunkCh:
+					chunkFunc(workerID)
+				}
 			}
 		}
 	}
@@ -1323,7 +1327,6 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 			case jptm := <-jm.xferChannels.lowTransferCh:
 				startTransfer(jptm)
 			default:
-				// Diagnostic: count transferProcessor starvation events.
 				atomic.AddInt64(&jm.atomicTransferStarveCount, 1)
 				time.Sleep(10 * time.Millisecond) // Sleep before looping around
 			}

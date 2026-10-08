@@ -31,8 +31,10 @@ import (
 // CrawlStats exposes live counters for a running crawl. All fields are
 // atomically updated and safe to read from any goroutine.
 type CrawlStats struct {
-	ActiveWorkers int64 // number of workers currently processing a directory
-	QueuedDirs    int64 // approximate number of directories waiting to be processed
+	ActiveWorkers       int64 // number of workers currently processing a directory
+	QueuedDirs          int64 // approximate number of directories waiting to be processed
+	PeakQueuedDirs      int64 // maximum observed queue depth
+	MaxQueueDirectories int64 // effective threshold; initialized before the crawl starts
 }
 
 type crawler struct {
@@ -110,7 +112,7 @@ func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirF
 	if maxQueueDirs <= 0 {
 		maxQueueDirs = defaultMaxQueueDirectories
 	}
-	stats := &CrawlStats{}
+	stats := &CrawlStats{MaxQueueDirectories: int64(maxQueueDirs)}
 	c := &crawler{
 		unstartedDirs:       make([]Directory, 0, 1024),
 		output:              make(chan CrawlResult, 1000),
@@ -258,6 +260,9 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 	// Update live stats
 	atomic.AddInt64(&c.stats.ActiveWorkers, -1)
 	atomic.StoreInt64(&c.stats.QueuedDirs, int64(len(c.unstartedDirs)))
+	if queued := int64(len(c.unstartedDirs)); queued > atomic.LoadInt64(&c.stats.PeakQueuedDirs) {
+		atomic.StoreInt64(&c.stats.PeakQueuedDirs, queued)
+	}
 	c.cond.Broadcast() // let other workers know that the state has changed
 
 	// If our queue of unstarted stuff is getting really huge,

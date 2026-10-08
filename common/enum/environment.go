@@ -176,7 +176,7 @@ func (eEnvironmentVariable) MoverSyncMergeJoinTraversers() EnvironmentVariable {
 func (eEnvironmentVariable) MoverSyncMergeJoinMaxQueueDirs() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:            "MOVER_SYNC_MJ_MAX_QUEUE_DIRS",
-		Description:     "Sync orchestrator (streaming merge-join, high-perf only): directory-queue depth at which the crawler begins reducing parallelism to bound memory. Positive integer; defaults to 100000000. Does not affect the indexMap sync path or non-high-perf builds.",
+		Description:     "Sync orchestrator (streaming merge-join, high-perf only): directory-queue depth at which the crawler begins reducing parallelism to bound memory. Positive integer; defaults to 50000000. Does not affect the indexMap sync path or non-high-perf builds.",
 		DeveloperOption: true,
 	}
 }

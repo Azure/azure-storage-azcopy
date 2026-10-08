@@ -435,7 +435,7 @@ func resolveMergeJoinParallelTraversers() int32 {
 // generic 1M default because the mover high-perf worker has ample RAM (e.g. 128 GiB) and a flat
 // blob namespace can legitimately enqueue tens of millions of virtual directories. Override with
 // MOVER_SYNC_MJ_MAX_QUEUE_DIRS (set per-job by the mover from featureConfig).
-const mergeJoinDefaultMaxQueueDirs = 100_000_000
+const mergeJoinDefaultMaxQueueDirs = 50_000_000
 
 // resolveMergeJoinMaxQueueDirs returns the crawler queue-depth self-shutdown threshold for high-perf
 // streaming merge-join jobs. Override with MOVER_SYNC_MJ_MAX_QUEUE_DIRS as a positive integer.
@@ -445,6 +445,9 @@ func resolveMergeJoinMaxQueueDirs() int {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
+		syncOrchestratorLog(common.LogWarning, fmt.Sprintf(
+			"Invalid MOVER_SYNC_MJ_MAX_QUEUE_DIRS=%q; expected a positive integer, using default %d",
+			v, mergeJoinDefaultMaxQueueDirs), true)
 	}
 	return mergeJoinDefaultMaxQueueDirs
 }
