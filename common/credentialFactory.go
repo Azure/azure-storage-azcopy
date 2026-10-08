@@ -85,7 +85,7 @@ func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 		return minio.BucketLookupPath
 	default:
 		// Default behavior for AWS S3 endpoints.
-		return minio.BucketLookupDNS
+		return minio.BucketLookupAuto
 	}
 }
 
