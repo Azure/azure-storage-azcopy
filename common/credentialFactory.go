@@ -23,6 +23,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	gcpUtils "cloud.google.com/go/storage"
@@ -124,8 +125,14 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 			minioEndpoint = s3Host
 		}
 	} else {
-		// AWS S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
-		s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+		if strings.Contains(privateNetworkArgs.BucketName, ".") {
+			// A dotted bucket name adds extra labels that the *.s3.<region>.amazonaws.com wildcard
+			// cert cannot match, so address the bucket through the path instead of the hostname.
+			s3Host = credInfo.S3CredentialInfo.Endpoint
+		} else {
+			// AWS S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
+			s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+		}
 		// AWS certs support *.s3.<region>.amazonaws.com, so use s3Host for TLS
 		tlsHost = s3Host
 	}
