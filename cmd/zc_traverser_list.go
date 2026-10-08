@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sync/atomic"
@@ -43,7 +44,21 @@ type listTraverser struct {
 	entryErrorChannel chan<- TraverserErrorItemInfo
 	location          common.Location
 	ctx               context.Context
+
+	// directoriesSelfOnly: see
+	// InitResourceTraverserOptions.ListOfFilesDirectoriesSelfOnly.
+	directoriesSelfOnly bool
 }
+
+// selfTraverser is implemented by traversers that can enumerate only the
+// entity their root names, without listing what is under it.
+type selfTraverser interface {
+	TraverseSelf(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error
+}
+
+// errDirectoryNotSelfTraversable is reported for a directory entry, in
+// self-only mode, on a source that cannot enumerate a directory alone.
+var errDirectoryNotSelfTraversable = errors.New("list entry is a directory, and this source cannot transfer a directory without its contents")
 
 type childTraverserGenerator func(childPath string) (ResourceTraverser, error)
 
@@ -121,6 +136,19 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			continue // skip over directories
 		}
 
+		// In self-only mode a directory entry yields the directory itself,
+		// never its contents.
+		traverse := childTraverser.Traverse
+		if isDir && l.directoriesSelfOnly {
+			self, ok := childTraverser.(selfTraverser)
+			if !ok {
+				l.skipEntry(childPath, errDirectoryNotSelfTraversable,
+					fmt.Sprintf("Skipping %s: %s", childPath, errDirectoryNotSelfTraversable))
+				continue
+			}
+			traverse = self.TraverseSelf
+		}
+
 		// when scanning a child path under the parent, we need to make sure that the relative paths of
 		// the results are indeed starting right under the parent
 		// ex: parent = /usr/foo
@@ -141,15 +169,18 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			return processor(object)
 		}
 
-		err = childTraverser.Traverse(preProcessorForThisChild, countingProcessor, filters)
+		err = traverse(preProcessorForThisChild, countingProcessor, filters)
 		if err != nil {
 			if ctxErr := l.ctx.Err(); ctxErr != nil {
 				return ctxErr
 			}
 			l.skipEntry(childPath, err, fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
-		} else if l.entryErrorChannel != nil && atomic.LoadInt64(&found) == 0 {
+		} else if l.entryErrorChannel != nil && atomic.LoadInt64(&found) == 0 && !(isDir && l.directoriesSelfOnly) {
 			// Most likely deleted since the list was made, but a wrong path
-			// (e.g. encoding) looks the same, so leave a trace.
+			// (e.g. encoding) looks the same, so leave a trace. A directory
+			// in self-only mode yields nothing by design when the transfer
+			// does not carry folders (e.g. a flat-namespace directory stub
+			// copied to a flat namespace, which a full traversal skips too).
 			emptyEntries++
 			listEntryWarn(fmt.Sprintf("List entry %s matched nothing on the source (not found, or excluded by filters); skipping", childPath))
 		}
@@ -222,6 +253,7 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 		childTraverserGenerator: traverserGenerator,
 		location:                resourceLocation,
 		ctx:                     ctx,
+		directoriesSelfOnly:     options.ListOfFilesDirectoriesSelfOnly,
 	}
 	if reportEntryErrors {
 		t.entryErrorChannel = options.ErrorChannel

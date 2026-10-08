@@ -448,6 +448,18 @@ type InitResourceTraverserOptions struct {
 	// other than not found. Set by the list traverser for its entries when
 	// ReportListOfFilesEntryErrors is on.
 	FailOnSingleBlobLookupError bool
+
+	// ListOfFilesDirectoriesSelfOnly makes a ListOfFiles entry that names a
+	// directory transfer the directory itself (created at the destination
+	// with its properties, as a full traversal would create it) without
+	// enumerating anything under it. Entries naming files are unaffected.
+	// For lists that already name every changed entity individually, such
+	// as XDM's change-detected lists, where expanding a directory would
+	// re-transfer its whole subtree. An entry naming a directory on a
+	// source that cannot enumerate a directory alone is skipped, or reported
+	// as an error with ReportListOfFilesEntryErrors, never expanded. Used by
+	// XDM.
+	ListOfFilesDirectoriesSelfOnly bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers

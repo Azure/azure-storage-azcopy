@@ -81,6 +81,21 @@ type blobTraverser struct {
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
 	// is not folder aware.
 	includeDirectoryOrPrefix bool
+
+	// selfOnly stops Traverse after the entity the root URL names, without
+	// listing anything under it. Set by TraverseSelf.
+	selfOnly bool
+}
+
+var _ selfTraverser = (*blobTraverser)(nil)
+
+// TraverseSelf enumerates only the entity the traverser's root names: the
+// blob, or the directory itself (a folder, when directory stubs are
+// included), never the directory's contents. Implements selfTraverser.
+func (t *blobTraverser) TraverseSelf(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	self := *t
+	self.selfOnly = true
+	return self.Traverse(preprocessor, processor, filters)
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -414,6 +429,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if err != nil {
 			return err
 		}
+	}
+
+	if t.selfOnly {
+		return nil
 	}
 
 	// get the container URL so that we can list the blobs
