@@ -4,9 +4,11 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -75,55 +77,53 @@ func TestChunkStarvationCounter(t *testing.T) {
 	for _, priority := range []string{"normal", "low"} {
 		for _, initialState := range []string{"ready", "empty"} {
 			t.Run(priority+"/"+initialState, func(t *testing.T) {
-				jm := newStarvationTestJobMgr()
-				queue := jm.xferChannels.normalChunckCh
-				if priority == "low" {
-					queue = jm.xferChannels.lowChunkCh
-				}
-				started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-				var releaseOnce sync.Once
-				unblock := func() { releaseOnce.Do(func() { close(release) }) }
-				work := func(int) { close(started); <-release }
-				if initialState == "ready" {
-					queue <- work
-				}
-				go func() { jm.chunkProcessor(0); close(done) }()
-				t.Cleanup(func() {
-					close(jm.poolSizingChannels.scalebackRequestCh)
-					unblock()
-					waitForStarvationTestSignal(t, done)
-				})
-
-				var expected int64
-				if initialState == "empty" {
-					expected = 1
-					if !assert.Eventually(t, func() bool {
-						return jm.GetChannelStats().ChunkStarveCount == expected
-					}, 5*time.Second, time.Millisecond) {
-						t.FailNow()
+				synctest.Test(t, func(t *testing.T) {
+					jm := newStarvationTestJobMgr()
+					queue := jm.xferChannels.normalChunckCh
+					if priority == "low" {
+						queue = jm.xferChannels.lowChunkCh
 					}
+					started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+					var releaseOnce sync.Once
+					unblock := func() { releaseOnce.Do(func() { close(release) }) }
+					work := func(int) { close(started); <-release }
+					if initialState == "ready" {
+						queue <- work
+					}
+					go func() { jm.chunkProcessor(0); close(done) }()
+					defer func() {
+						close(jm.poolSizingChannels.scalebackRequestCh)
+						unblock()
+						waitForStarvationTestSignal(t, done)
+					}()
+
+					var expected int64
+					if buildmode.HighPerf() && (initialState == "empty" || priority == "low") {
+						expected = 1
+					}
+					if initialState == "empty" {
+						synctest.Wait()
+						time.Sleep(35 * time.Millisecond)
+						assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount, "blocked workers must not poll")
+						queue <- work
+					}
+					waitForStarvationTestSignal(t, started)
+					assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount, "only high-perf normal-queue-empty fallbacks are counted")
+					unblock()
+					if buildmode.HighPerf() {
+						expected++
+					}
+					synctest.Wait()
 					time.Sleep(35 * time.Millisecond)
-					assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount, "blocked workers must not poll")
-					queue <- work
-				}
-				waitForStarvationTestSignal(t, started)
-				assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount, "ready/executing work must not count as starvation")
-				unblock()
-				expected++
-				if !assert.Eventually(t, func() bool {
-					return jm.GetChannelStats().ChunkStarveCount == expected
-				}, 5*time.Second, time.Millisecond) {
-					t.FailNow()
-				}
-				time.Sleep(35 * time.Millisecond)
-				assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount)
-				select {
-				case jm.poolSizingChannels.scalebackRequestCh <- struct{}{}:
-				case <-time.After(5 * time.Second):
-					t.Fatal("idle worker did not accept scaleback")
-				}
-				waitForStarvationTestSignal(t, done)
-				assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount, "shutdown must not decrement the counter")
+					assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount)
+					select {
+					case jm.poolSizingChannels.scalebackRequestCh <- struct{}{}:
+					case <-time.After(5 * time.Second):
+						t.Fatal("idle worker did not accept scaleback")
+					}
+					waitForStarvationTestSignal(t, done)
+					assert.Equal(t, expected, jm.GetChannelStats().ChunkStarveCount, "shutdown must not decrement the counter")
+				})
 			})
 		}
 	}

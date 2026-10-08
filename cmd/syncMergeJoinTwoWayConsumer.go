@@ -405,7 +405,7 @@ type mergeJoinTraversalError struct {
 }
 
 func (e *mergeJoinTraversalError) Error() string { return e.err.Error() }
-func (e *mergeJoinTraversalError) Unwrap() error { return e.err }
+func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
 
 // mergeJoinDefaultParallelTraversers is the default directory-crawl parallelism used ONLY for
 // streaming merge-join jobs. It is intentionally separate from (and lower than) the indexMap

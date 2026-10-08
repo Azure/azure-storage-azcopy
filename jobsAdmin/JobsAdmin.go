@@ -522,6 +522,7 @@ func getSTEStats() []common.CustomStatEntry {
 	var totalPartsCreatedSize int
 	var totalXferDoneUsed int
 	var totalXferDoneSize int
+	// Diagnostic counters
 	var totalChunkStarveCount int64
 	var totalTransferStarveCount int64
 	var maxMainPoolSize int32
@@ -590,7 +591,9 @@ func getSTEStats() []common.CustomStatEntry {
 		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
 		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
 		{Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
-		// Cumulative wait entries (chunks) and empty polling cycles (transfers), not idle-worker counts.
+		// Diagnostic counters: cumulative starvation events. Sustained high values indicate
+		// the worker pool is idle waiting for new chunks/transfers (dispatcher is the bottleneck);
+		// near-zero values indicate workers are saturated.
 		{Key: "chunk_starve", Value: fmt.Sprintf("%d", totalChunkStarveCount)},
 		{Key: "xfer_starve", Value: fmt.Sprintf("%d", totalTransferStarveCount)},
 		{Key: "pool_size", Value: fmt.Sprintf("%d", maxMainPoolSize)},

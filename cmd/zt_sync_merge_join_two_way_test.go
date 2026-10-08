@@ -362,7 +362,7 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 			objs = append(objs, mjTestVirtualFolder(fmt.Sprintf("d%06d", i)))
 		}
 	}
-	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}          // fast
+	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}      // fast
 	dst := &delayingFakeTraverser{objects: append([]StoredObject(nil), objs...), delay: 0} // same content
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -491,3 +491,4 @@ func TestTwoWaySyncDir_DestRealErrorStillFatal(t *testing.T) {
 		a.Equal(cca.fromTo.To(), mjErr.location, "error must be attributed to the destination")
 	}
 }
+
