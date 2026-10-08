@@ -71,6 +71,7 @@ func TestCrawlQueueLimitShutdown(t *testing.T) {
 		{"protected worker", 4, 5, 2, false, false},
 		{"gradual shutdown", 4, 5, 7, true, false},
 		{"old million limit", 1_000_000, 1_000_001, 7, false, true},
+		{"raised fifty million limit", 50_000_000, 1_000_001, 7, false, false},
 		{"raised hundred million limit", 100_000_000, 1_000_001, 7, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

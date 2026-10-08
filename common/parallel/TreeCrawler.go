@@ -85,7 +85,7 @@ type CrawlOptions struct {
 
 	// MaxQueueDirectories overrides the queue-depth threshold above which the crawler starts shedding
 	// workers (down to parallelism/4) to bound RAM. Zero keeps the default (defaultMaxQueueDirectories).
-	// The mover high-perf profile raises this (MOVER_SYNC_MJ_MAX_QUEUE_DIRS) because on a large worker the
+	// The mover high-perf profile raises this (MOVER_HIGH_PERF_MAX_QUEUED_DIRS) because on a large worker the
 	// directory queue can safely grow far beyond the default; the parallelism/4 shutdown is retained as a
 	// deadlock-safe last resort at the raised threshold.
 	MaxQueueDirectories int

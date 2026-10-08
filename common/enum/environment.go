@@ -173,10 +173,10 @@ func (eEnvironmentVariable) MoverSyncMergeJoinTraversers() EnvironmentVariable {
 	}
 }
 
-func (eEnvironmentVariable) MoverSyncMergeJoinMaxQueueDirs() EnvironmentVariable {
+func (eEnvironmentVariable) HighPerfMaxQueuedDirs() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:            "MOVER_SYNC_MJ_MAX_QUEUE_DIRS",
-		Description:     "Sync orchestrator (streaming merge-join, high-perf only): directory-queue depth at which the crawler begins reducing parallelism to bound memory. Positive integer; defaults to 50000000. Does not affect the indexMap sync path or non-high-perf builds.",
+		Name:            "MOVER_HIGH_PERF_MAX_QUEUED_DIRS",
+		Description:     "High-perf Blob parallel enumeration (including copy) and streaming merge-join: queued-directory threshold above which the crawler begins shedding workers. Positive integer; defaults to 50000000. Not a hard queue or memory cap. Ignored outside high-perf mode.",
 		DeveloperOption: true,
 	}
 }
