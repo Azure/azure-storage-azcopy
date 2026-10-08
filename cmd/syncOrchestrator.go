@@ -1144,9 +1144,19 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	}
 	randomDequeue := buildmode.HighPerf() && isAzureBlobLocation(cca.fromTo.From()) && isAzureBlobLocation(cca.fromTo.To())
 
+	// In the mover high-perf profile, raise the crawler's queue-depth self-shutdown threshold
+	// (MOVER_SYNC_MJ_MAX_QUEUE_DIRS, default 200M) so a flat blob namespace with tens of millions of
+	// virtual directories keeps full crawl parallelism instead of collapsing to parallelism/4. Left at
+	// the generic 1M default for the default CLI and mover-default builds. The parallelism/4 shutdown is
+	// retained as a deadlock-safe last resort at this raised threshold.
+	maxQueueDirs := 0
+	if buildmode.HighPerf() {
+		maxQueueDirs = resolveMergeJoinMaxQueueDirs()
+	}
+
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
 	// merge-join producers) has returned — the drain signal we use on cancellation below.
-	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue})
+	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: maxQueueDirs})
 
 	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
 	// workers, queued directories, in-flight merge-join directory syncs, and goroutine count. This

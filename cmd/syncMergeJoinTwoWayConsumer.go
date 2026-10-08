@@ -405,7 +405,7 @@ type mergeJoinTraversalError struct {
 }
 
 func (e *mergeJoinTraversalError) Error() string { return e.err.Error() }
-func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
+func (e *mergeJoinTraversalError) Unwrap() error { return e.err }
 
 // mergeJoinDefaultParallelTraversers is the default directory-crawl parallelism used ONLY for
 // streaming merge-join jobs. It is intentionally separate from (and lower than) the indexMap
@@ -428,6 +428,25 @@ func resolveMergeJoinParallelTraversers() int32 {
 		}
 	}
 	return mergeJoinDefaultParallelTraversers
+}
+
+// mergeJoinDefaultMaxQueueDirs is the default directory-queue depth at which the crawler begins
+// shedding workers, used ONLY for high-perf streaming merge-join jobs. It is far higher than the
+// generic 1M default because the mover high-perf worker has ample RAM (e.g. 128 GiB) and a flat
+// blob namespace can legitimately enqueue tens of millions of virtual directories. Override with
+// MOVER_SYNC_MJ_MAX_QUEUE_DIRS (set per-job by the mover from featureConfig).
+const mergeJoinDefaultMaxQueueDirs = 100_000_000
+
+// resolveMergeJoinMaxQueueDirs returns the crawler queue-depth self-shutdown threshold for high-perf
+// streaming merge-join jobs. Override with MOVER_SYNC_MJ_MAX_QUEUE_DIRS as a positive integer.
+// Resolved per call (per job) so the mover's featureConfig runtime tuning (os.Setenv) is honored.
+func resolveMergeJoinMaxQueueDirs() int {
+	if v := strings.TrimSpace(enum.EEnvironmentVariable.MoverSyncMergeJoinMaxQueueDirs().Get()); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return mergeJoinDefaultMaxQueueDirs
 }
 
 // useStreamingMergeJoin reports whether the streaming merge-join should be used for
