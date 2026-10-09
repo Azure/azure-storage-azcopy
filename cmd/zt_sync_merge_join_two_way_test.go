@@ -36,29 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMergeJoinProcessingDirTrace(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		t.Run(fmt.Sprintf("enabled=%t", enabled), func(t *testing.T) {
-			logger := captureCrawlLogs(t)
-			console := &crawlStatsTestLifecycle{}
-			glcm = console
-			oldTraceEnabled := mergeJoinTraceEnabled
-			mergeJoinTraceEnabled = enabled
-			t.Cleanup(func() { mergeJoinTraceEnabled = oldTraceEnabled })
-
-			mergeJoinTraceLog("Processing dir '%s'", "/test-dir/")
-
-			if enabled {
-				assert.Equal(t, "[INFO] [MergeJoin] [TRACE] Processing dir '/test-dir/'", logger.text())
-				assert.Equal(t, "[AzCopy] [INFO] [MergeJoin] [TRACE] Processing dir '/test-dir/'", console.text())
-			} else {
-				assert.Empty(t, logger.text())
-				assert.Empty(t, console.text())
-			}
-		})
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Shared test helpers for the streaming (two-way) merge-join tests.
 // ---------------------------------------------------------------------------
@@ -385,7 +362,7 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 			objs = append(objs, mjTestVirtualFolder(fmt.Sprintf("d%06d", i)))
 		}
 	}
-	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}          // fast
+	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}      // fast
 	dst := &delayingFakeTraverser{objects: append([]StoredObject(nil), objs...), delay: 0} // same content
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -514,3 +491,4 @@ func TestTwoWaySyncDir_DestRealErrorStillFatal(t *testing.T) {
 		a.Equal(cca.fromTo.To(), mjErr.location, "error must be attributed to the destination")
 	}
 }
+

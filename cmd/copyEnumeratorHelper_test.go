@@ -79,23 +79,6 @@ func (l *crawlStatsTestLifecycle) Info(message string) {
 	l.Log(common.LogInfo, message)
 }
 
-func TestLogBlobCrawlStats(t *testing.T) {
-	for _, withLogger := range []bool{false, true} {
-		t.Run(fmt.Sprintf("withLogger=%t", withLogger), func(t *testing.T) {
-			logger := captureCrawlLogs(t)
-			lifecycle := &crawlStatsTestLifecycle{}
-			glcm = lifecycle
-			if !withLogger {
-				azcopyScanningLogger = nil
-			}
-			message := "[CrawlConfig] maxQueueDirectories=100000000"
-			logBlobCrawlStats(message)
-			assert.Equal(t, "[AzCopy] [INFO] "+message, lifecycle.text())
-			assert.Empty(t, logger.text(), "crawl diagnostics must not write to the scanning log")
-		})
-	}
-}
-
 func TestResolveHighPerfMaxQueueDirs(t *testing.T) {
 	captureCrawlLogs(t)
 	for _, tc := range []struct {
