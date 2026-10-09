@@ -142,6 +142,9 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // execution failed. No point in running validation
 	}
+	if s.p.sigtermDuringEnumeration {
+		return // this scenario validates process cancellation rather than transfer results
+	}
 
 	// resume if needed
 	if s.needResume {
@@ -339,6 +342,10 @@ func (s *scenario) runAzCopy(logDirectory string) {
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
+	}
+	if s.p.sigtermDuringEnumeration {
+		s.a.Assert(strings.Contains(result.rawOutput, "The enumeration is not complete; cancelling the job at this point means it cannot be resumed."), equals(), true,
+			"SIGTERM must be sent before enumeration completes")
 	}
 
 	// Generally, a cancellation is done when auth fails.

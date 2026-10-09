@@ -1,5 +1,7 @@
 package common
 
+import "context"
+
 // JobErrorHandler defines a simple interface for handling errors that occur
 // during the job lifecycle.
 //
@@ -30,10 +32,11 @@ type JobErrorHandler interface {
 //   h.Warn("this uses the custom override")
 
 type JobUIHooks struct {
-	Prompt                 func(message string, details PromptDetails) ResponseOption
-	Info                   func(string)
-	Warn                   func(string)
-	E2EAwaitAllowOpenFiles func()
+	Prompt                   func(message string, details PromptDetails) ResponseOption
+	Info                     func(string)
+	Warn                     func(string)
+	E2EAwaitAllowOpenFiles   func()
+	E2EAwaitEnumerationStart func(context.Context)
 }
 
 func NewJobUIHooks() *JobUIHooks {
@@ -48,6 +51,9 @@ func NewJobUIHooks() *JobUIHooks {
 			// default: no-op
 		},
 		E2EAwaitAllowOpenFiles: func() {
+			// default: no-op
+		},
+		E2EAwaitEnumerationStart: func(context.Context) {
 			// default: no-op
 		},
 	}
