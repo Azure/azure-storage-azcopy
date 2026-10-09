@@ -24,7 +24,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -72,7 +74,8 @@ type BlobTraverser struct {
 	errorChannel chan<- TraverserErrorItemInfo
 
 	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
-	isSyncDestination bool
+	isSyncDestination  bool
+	suppressCrawlStats bool
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
@@ -467,13 +470,13 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
 	if t.ParallelListing {
-		return t.parallelList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+		return t.ParallelList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 	}
 
 	return t.serialList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 }
 
-func (t *BlobTraverser) parallelList(containerClient *container.Client, containerName string, searchPrefix string,
+func (t *BlobTraverser) ParallelList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	emptyPrefix := true
 
@@ -657,7 +660,12 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 	// Blob/BlobFS -> Local, File, S3, etc.
 	randomDequeue := buildmode.HighPerf() && t.destResourceType != nil &&
 		(*t.destResourceType == common.ELocation.Blob() || *t.destResourceType == common.ELocation.BlobFS())
-	cCrawled, _ := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, parallel.CrawlOptions{RandomDequeue: randomDequeue})
+	cCrawled, crawlStats := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism,
+		parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: ResolveHighPerfMaxQueueDirs()})
+	if !t.suppressCrawlStats {
+		stopStats := StartBlobCrawlStats(workerContext, crawlStats, EnumerationParallelism, randomDequeue)
+		defer stopStats()
+	}
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
@@ -697,6 +705,43 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 	}
 
 	return nil
+}
+
+func StartBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {
+	if !buildmode.HighPerf() {
+		return func() {}
+	}
+	common.GetLifecycleMgr().Info(
+		fmt.Sprintf("[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
+			parallelism, stats.MaxQueueDirectories, randomDequeue),
+	)
+	statsCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		logStats := func(final bool) {
+			common.GetLifecycleMgr().Info(
+				fmt.Sprintf("[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
+					atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
+					runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final),
+			)
+		}
+		for {
+			select {
+			case <-statsCtx.Done():
+				logStats(true)
+				return
+			case <-ticker.C:
+				logStats(false)
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func GetEntityType(metadata map[string]*string) common.EntityType {
@@ -822,6 +867,7 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:           opts.IsSyncDestination,
+		suppressCrawlStats:          opts.SuppressCrawlStats,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive

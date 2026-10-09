@@ -1334,7 +1334,7 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		}
 	}
 
-	traverser := localTraverser{
+	localTraverser := localTraverser{
 		fullPath:                           CleanLocalPath(fullPath),
 		recursive:                          opts.Recursive,
 		symlinkHandling:                    opts.SymlinkHandling,
@@ -1349,12 +1349,12 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		fromTo:                             opts.FromTo,
 	}
 
-	traverser.includeDirectoryOrPrefix = UseSyncOrchestrator && !traverser.recursive
+	localTraverser.includeDirectoryOrPrefix = UseSyncOrchestrator && !localTraverser.recursive
 
 	// This is scoped to only linux system as we depend on POSIX CTime/MTime.
-	traverser.getExtendedProperties = UseSyncOrchestrator && runtime.GOOS == "linux" && !traverser.recursive
+	localTraverser.getExtendedProperties = UseSyncOrchestrator && runtime.GOOS == "linux" && !localTraverser.recursive
 
-	return &traverser, nil
+	return &localTraverser, nil
 }
 
 func logSpecialFileWarning(fileName string) {

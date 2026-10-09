@@ -31,17 +31,20 @@ import (
 // CrawlStats exposes live counters for a running crawl. All fields are
 // atomically updated and safe to read from any goroutine.
 type CrawlStats struct {
-	ActiveWorkers int64 // number of workers currently processing a directory
-	QueuedDirs    int64 // approximate number of directories waiting to be processed
+	ActiveWorkers       int64 // number of workers currently processing a directory
+	QueuedDirs          int64 // approximate number of directories waiting to be processed
+	PeakQueuedDirs      int64 // maximum observed queue depth
+	MaxQueueDirectories int64 // effective threshold; initialized before the crawl starts
 }
 
 type crawler struct {
-	output        chan CrawlResult
-	workerBody    EnumerateOneDirFunc
-	parallelism   int
-	stats         *CrawlStats
-	randomDequeue bool // if true, use random dequeue instead of the default BFS/DFS-hybrid dequeue
-	cond          *sync.Cond
+	output              chan CrawlResult
+	workerBody          EnumerateOneDirFunc
+	parallelism         int
+	stats               *CrawlStats
+	randomDequeue       bool // if true, use random dequeue instead of the default BFS/DFS-hybrid dequeue
+	maxQueueDirectories int  // queue-depth threshold for the gradual self-shutdown; 0 means defaultMaxQueueDirectories
+	cond                *sync.Cond
 	// the following are protected by cond (and must only be accessed when cond.L is held)
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
@@ -63,6 +66,11 @@ func (r CrawlResult) Item() (interface{}, error) {
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
 type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error
 
+// defaultMaxQueueDirectories is the queue-depth threshold above which the crawler gradually sheds
+// workers (down to parallelism/4) to bound RAM growth (see processOneDirectory).
+// CrawlOptions.MaxQueueDirectories overrides it per crawl.
+const defaultMaxQueueDirectories = 1000 * 1000
+
 // CrawlOptions carries optional, non-default crawl behavior. The zero value preserves the original
 // crawl behavior, so callers only populate the fields they want to change.
 type CrawlOptions struct {
@@ -74,6 +82,13 @@ type CrawlOptions struct {
 	// other cases (default azcopy CLI, mover-default builds, and non-Blob/BlobFS pairs even in
 	// mover-high-perf) leave it false to preserve the original dequeue behavior.
 	RandomDequeue bool
+
+	// MaxQueueDirectories overrides the queue-depth threshold above which the crawler starts shedding
+	// workers (down to parallelism/4) to bound RAM. Zero keeps the default (defaultMaxQueueDirectories).
+	// The mover high-perf profile raises this (MOVER_HIGH_PERF_MAX_QUEUED_DIRS) because on a large worker the
+	// directory queue can safely grow far beyond the default; the parallelism/4 shutdown is retained as a
+	// deadlock-safe last resort at the raised threshold.
+	MaxQueueDirectories int
 }
 
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
@@ -93,15 +108,20 @@ func CrawlWithStats(ctx context.Context, root Directory, worker EnumerateOneDirF
 	if len(opts) > 0 {
 		o = opts[len(opts)-1]
 	}
-	stats := &CrawlStats{}
+	maxQueueDirs := o.MaxQueueDirectories
+	if maxQueueDirs <= 0 {
+		maxQueueDirs = defaultMaxQueueDirectories
+	}
+	stats := &CrawlStats{MaxQueueDirectories: int64(maxQueueDirs)}
 	c := &crawler{
-		unstartedDirs: make([]Directory, 0, 1024),
-		output:        make(chan CrawlResult, 1000),
-		workerBody:    worker,
-		parallelism:   parallelism,
-		stats:         stats,
-		randomDequeue: o.RandomDequeue,
-		cond:          sync.NewCond(&sync.Mutex{}),
+		unstartedDirs:       make([]Directory, 0, 1024),
+		output:              make(chan CrawlResult, 1000),
+		workerBody:          worker,
+		parallelism:         parallelism,
+		stats:               stats,
+		randomDequeue:       o.RandomDequeue,
+		maxQueueDirectories: maxQueueDirs,
+		cond:                sync.NewCond(&sync.Mutex{}),
 	}
 	go c.start(ctx, root)
 	return c.output, stats
@@ -151,7 +171,6 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerInde
 }
 
 func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (bool, error) {
-	const maxQueueDirectories = 1000 * 1000
 	const maxQueueDirsForBreadthFirst = 100 * 1000 // figure is somewhat arbitrary.  Want it big, but not huge
 
 	var toExamine Directory
@@ -241,6 +260,9 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 	// Update live stats
 	atomic.AddInt64(&c.stats.ActiveWorkers, -1)
 	atomic.StoreInt64(&c.stats.QueuedDirs, int64(len(c.unstartedDirs)))
+	if queued := int64(len(c.unstartedDirs)); queued > atomic.LoadInt64(&c.stats.PeakQueuedDirs) {
+		atomic.StoreInt64(&c.stats.PeakQueuedDirs, queued)
+	}
 	c.cond.Broadcast() // let other workers know that the state has changed
 
 	// If our queue of unstarted stuff is getting really huge,
@@ -250,7 +272,7 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 	// next contain mostly child directories or if they are "leaf" directories containing mostly just files.  But,
 	// if we slowly reduce parallelism the end state is closer to a single-threaded depth-first traversal, which
 	// is generally fine in terms of memory usage on most folder structures)
-	shouldShutSelfDown := len(c.unstartedDirs) > maxQueueDirectories && // we are getting way too much stuff queued up
+	shouldShutSelfDown := len(c.unstartedDirs) > c.maxQueueDirectories && // we are getting way too much stuff queued up
 		workerIndex > (c.parallelism/4) && // never shut down the last ones, since we need something left to clear the queue
 		time.Since(c.lastAutoShutdown) > time.Second // adjust somewhat gradually
 	if shouldShutSelfDown {

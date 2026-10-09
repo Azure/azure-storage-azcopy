@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,8 @@ import (
 
 var EnumerationParallelism = 1
 var EnumerationParallelStatFiles = false
+
+const highPerfDefaultMaxQueueDirs = 50_000_000
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
 // the following interfaces and structs allow the sync enumerator
@@ -434,6 +437,9 @@ type InitResourceTraverserOptions struct {
 	// Used to return specific not-found errors that the sync orchestrator handles gracefully,
 	// and to keep per-share throttling stats polling on the source share only.
 	IsSyncDestination bool
+
+	// SuppressCrawlStats avoids per-directory diagnostics when an outer sync crawler reports them.
+	SuppressCrawlStats bool
 
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
 	// (List, GetProperties) issued during enumeration, so scanning respects the
@@ -889,6 +895,24 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 		ObjectDispatcher: objectDispatcher,
 		Finalize:         finalizer,
 	}
+}
+
+// Resolve per job to honor feature-config overrides; zero preserves the generic default.
+func ResolveHighPerfMaxQueueDirs() int {
+	if !buildmode.HighPerf() {
+		return 0
+	}
+	setting := enum.EEnvironmentVariable.HighPerfMaxQueuedDirs()
+	v := strings.TrimSpace(setting.Get())
+	if v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+		WarnStdoutAndScanningLog(fmt.Sprintf(
+			"Invalid %s=%q; expected a positive integer, using default %d",
+			setting.Name, v, highPerfDefaultMaxQueueDirs))
+	}
+	return highPerfDefaultMaxQueueDirs
 }
 
 func WarnStdoutAndScanningLog(toLog string) {

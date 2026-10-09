@@ -154,14 +154,23 @@ func (r *syncRun) initializeLimits(orchestratorOptions *SyncOrchestratorOptions)
 	}
 
 	// Validate if the crawl parallelism is within acceptable limits
-	// We need to check how many directories can be enumerated in parallel based on system memory
-	safeParallelismLimit := GetSafeParallelismLimit(r.maxActiveFiles, maxDirectoryDirectChildCount, r.orchestratorOptions.fromTo)
-	if r.crawlParallelism > safeParallelismLimit {
+	// We need to check how many directories can be enumerated in parallel based on system memory.
+	// The high-perf mover profile opts out: callers set crawlParallelism explicitly (MOVER_SYNC_MJ_TRAV)
+	// and accept the memory tradeoff, so honor the requested value verbatim instead of clamping.
+	if buildmode.HighPerf() {
 		r.syncOrchestratorLog(
-			common.LogWarning,
-			fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", r.crawlParallelism, safeParallelismLimit),
+			common.LogInfo,
+			fmt.Sprintf("High-perf profile: bypassing GetSafeParallelismLimit, using crawl parallelism = %d", r.crawlParallelism),
 			true)
-		r.crawlParallelism = safeParallelismLimit
+	} else {
+		safeParallelismLimit := GetSafeParallelismLimit(r.maxActiveFiles, maxDirectoryDirectChildCount, r.orchestratorOptions.fromTo)
+		if r.crawlParallelism > safeParallelismLimit {
+			r.syncOrchestratorLog(
+				common.LogWarning,
+				fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", r.crawlParallelism, safeParallelismLimit),
+				true)
+			r.crawlParallelism = safeParallelismLimit
+		}
 	}
 
 	r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
