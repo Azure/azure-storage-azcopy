@@ -143,6 +143,9 @@ func runHTTP2DownloadPeer(listener net.Listener, body []byte, resetAfterBytes in
 					if err = writeHTTP2Data(framer, frame.StreamID, body[:resetAfterBytes], false); err != nil {
 						return err
 					}
+					if err = framer.WriteGoAway(frame.StreamID, http2.ErrCodeNo, nil); err != nil {
+						return err
+					}
 					if err = framer.WriteRSTStream(frame.StreamID, http2.ErrCodeProtocol); err != nil {
 						return err
 					}
