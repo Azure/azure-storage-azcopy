@@ -577,7 +577,7 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersCompleted, 1)
 	case common.ETransferStatus.Failed(), common.ETransferStatus.BlobTierFailure():
 		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
-	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
+	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots(), common.ETransferStatus.SkippedEntityHasInvalidName():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	case common.ETransferStatus.Restarted(): // When a job is resumed, number of failed should reset to 0
 		atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
