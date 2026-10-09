@@ -144,6 +144,10 @@ func (*mockedLifecycleManager) E2EEnableAwaitAllowOpenFiles(_ bool) {
 	// not implemented in mocked version
 }
 
+func (*mockedLifecycleManager) SanitizeLogMessage(msg string) string {
+	return common.NewAzCopyLogSanitizer().SanitizeLogMessage(msg)
+}
+
 func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []string) {
 	close(channel)
 	for line := range channel {
