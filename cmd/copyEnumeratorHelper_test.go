@@ -42,13 +42,15 @@ type crawlTestLogger struct {
 	common.ILoggerResetable
 	mu       sync.Mutex
 	messages []string
+	levels   []common.LogLevel
 }
 
 func (l *crawlTestLogger) ShouldLog(common.LogLevel) bool { return false }
-func (l *crawlTestLogger) Log(_ common.LogLevel, message string) {
+func (l *crawlTestLogger) Log(level common.LogLevel, message string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.messages = append(l.messages, message)
+	l.levels = append(l.levels, level)
 }
 func (l *crawlTestLogger) text() string {
 	l.mu.Lock()
@@ -68,6 +70,37 @@ func captureCrawlLogs(t *testing.T) *crawlTestLogger {
 	azcopyScanningLogger, glcm = logger, &crawlTestLifecycle{}
 	t.Cleanup(func() { azcopyScanningLogger, glcm = oldLogger, oldLCM })
 	return logger
+}
+
+type crawlStatsTestLifecycle struct {
+	common.LifecycleMgr
+	messages []string
+}
+
+func (l *crawlStatsTestLifecycle) Info(message string) {
+	l.messages = append(l.messages, message)
+}
+
+func TestLogBlobCrawlStats(t *testing.T) {
+	for _, withLogger := range []bool{false, true} {
+		t.Run(fmt.Sprintf("withLogger=%t", withLogger), func(t *testing.T) {
+			logger := captureCrawlLogs(t)
+			lifecycle := &crawlStatsTestLifecycle{}
+			glcm = lifecycle
+			if !withLogger {
+				azcopyScanningLogger = nil
+			}
+			message := "[CrawlConfig] maxQueueDirectories=100000000"
+			logBlobCrawlStats(message)
+			assert.Equal(t, []string{"[AzCopy] [INFO] " + message}, lifecycle.messages)
+			if withLogger {
+				assert.Equal(t, []string{"[INFO] " + message}, logger.messages)
+				assert.Equal(t, []common.LogLevel{common.LogError}, logger.levels)
+			} else {
+				assert.Empty(t, logger.messages)
+			}
+		})
+	}
 }
 
 func TestResolveHighPerfMaxQueueDirs(t *testing.T) {
