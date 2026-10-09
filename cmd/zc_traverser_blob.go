@@ -666,12 +666,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 }
 
 func logBlobCrawlStats(message string) {
-	message = "[INFO] " + message
-	if azcopyScanningLogger != nil {
-		// Mover configures the scanning logger at Error level.
-		azcopyScanningLogger.Log(common.LogError, message)
-	}
-	glcm.Info("[AzCopy] " + message)
+	glcm.Info("[AzCopy] [INFO] " + message)
 }
 
 func startBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {

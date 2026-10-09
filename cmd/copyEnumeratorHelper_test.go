@@ -42,15 +42,13 @@ type crawlTestLogger struct {
 	common.ILoggerResetable
 	mu       sync.Mutex
 	messages []string
-	levels   []common.LogLevel
 }
 
 func (l *crawlTestLogger) ShouldLog(common.LogLevel) bool { return false }
-func (l *crawlTestLogger) Log(level common.LogLevel, message string) {
+func (l *crawlTestLogger) Log(_ common.LogLevel, message string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.messages = append(l.messages, message)
-	l.levels = append(l.levels, level)
 }
 func (l *crawlTestLogger) text() string {
 	l.mu.Lock()
@@ -74,11 +72,11 @@ func captureCrawlLogs(t *testing.T) *crawlTestLogger {
 
 type crawlStatsTestLifecycle struct {
 	common.LifecycleMgr
-	messages []string
+	crawlTestLogger
 }
 
 func (l *crawlStatsTestLifecycle) Info(message string) {
-	l.messages = append(l.messages, message)
+	l.Log(common.LogInfo, message)
 }
 
 func TestLogBlobCrawlStats(t *testing.T) {
@@ -92,13 +90,8 @@ func TestLogBlobCrawlStats(t *testing.T) {
 			}
 			message := "[CrawlConfig] maxQueueDirectories=100000000"
 			logBlobCrawlStats(message)
-			assert.Equal(t, []string{"[AzCopy] [INFO] " + message}, lifecycle.messages)
-			if withLogger {
-				assert.Equal(t, []string{"[INFO] " + message}, logger.messages)
-				assert.Equal(t, []common.LogLevel{common.LogError}, logger.levels)
-			} else {
-				assert.Empty(t, logger.messages)
-			}
+			assert.Equal(t, "[AzCopy] [INFO] "+message, lifecycle.text())
+			assert.Empty(t, logger.text(), "crawl diagnostics must not write to the scanning log")
 		})
 	}
 }
@@ -134,6 +127,8 @@ func TestBlobCrawlStatsLifecycle(t *testing.T) {
 	for _, cancelParent := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cancelParent=%t", cancelParent), func(t *testing.T) {
 			logger := captureCrawlLogs(t)
+			console := &crawlStatsTestLifecycle{}
+			glcm = console
 			synctest.Test(t, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -144,9 +139,9 @@ func TestBlobCrawlStatsLifecycle(t *testing.T) {
 				time.Sleep(30 * time.Second)
 				synctest.Wait()
 				if buildmode.HighPerf() {
-					assert.Contains(t, logger.text(), "[CrawlConfig] mode=blob-parallel, crawlParallelism=100, maxQueueDirectories=50000000, randomDequeue=true")
-					assert.Contains(t, logger.text(), "[CrawlStats] mode=blob-parallel, activeWorkers=7/100, queuedDirs=42")
-					assert.Contains(t, logger.text(), "peakQueuedDirs=123, final=false")
+					assert.Contains(t, console.text(), "[CrawlConfig] mode=blob-parallel, crawlParallelism=100, maxQueueDirectories=50000000, randomDequeue=true")
+					assert.Contains(t, console.text(), "[CrawlStats] mode=blob-parallel, activeWorkers=7/100, queuedDirs=42")
+					assert.Contains(t, console.text(), "peakQueuedDirs=123, final=false")
 				}
 				if cancelParent {
 					cancel()
@@ -154,14 +149,15 @@ func TestBlobCrawlStatsLifecycle(t *testing.T) {
 				}
 				stop()
 				if buildmode.HighPerf() {
-					assert.Contains(t, logger.text(), "peakQueuedDirs=123, final=true")
+					assert.Contains(t, console.text(), "peakQueuedDirs=123, final=true")
 				} else {
-					assert.Empty(t, logger.text())
+					assert.Empty(t, console.text())
 				}
-				before := logger.text()
+				before := console.text()
 				time.Sleep(60 * time.Second)
 				synctest.Wait()
-				assert.Equal(t, before, logger.text(), "monitor must stop when enumeration exits")
+				assert.Equal(t, before, console.text(), "monitor must stop when enumeration exits")
+				assert.Empty(t, logger.text(), "crawl diagnostics must not write to the scanning log")
 			})
 		})
 	}
@@ -184,6 +180,8 @@ func TestBlobParallelCrawlConfiguration(t *testing.T) {
 		for _, suppress := range []bool{false, true} {
 			t.Run(fmt.Sprintf("override=%s/suppress=%t", override, suppress), func(t *testing.T) {
 				logger := captureCrawlLogs(t)
+				console := &crawlStatsTestLifecycle{}
+				glcm = console
 				t.Setenv("MOVER_HIGH_PERF_MAX_QUEUED_DIRS", override)
 				traverser := newBlobTraverser(server.URL+"/container", nil, context.Background(),
 					InitResourceTraverserOptions{Recursive: true, SuppressCrawlStats: suppress})
@@ -197,13 +195,15 @@ func TestBlobParallelCrawlConfiguration(t *testing.T) {
 					if override != "" {
 						want = override
 					}
-					assert.Contains(t, logger.text(), "crawlParallelism=100, maxQueueDirectories="+want)
-					assert.Contains(t, logger.text(), "activeWorkers=0/100, queuedDirs=0")
-					assert.Contains(t, logger.text(), "final=true")
+					assert.Contains(t, console.text(), "crawlParallelism=100, maxQueueDirectories="+want)
+					assert.Contains(t, console.text(), "activeWorkers=0/100, queuedDirs=0")
+					assert.Contains(t, console.text(), "final=true")
 				} else {
-					assert.NotContains(t, logger.text(), "[CrawlConfig]")
-					assert.NotContains(t, logger.text(), "[CrawlStats]")
+					assert.NotContains(t, console.text(), "[CrawlConfig]")
+					assert.NotContains(t, console.text(), "[CrawlStats]")
 				}
+				assert.NotContains(t, logger.text(), "[CrawlConfig]")
+				assert.NotContains(t, logger.text(), "[CrawlStats]")
 			})
 		}
 	}
