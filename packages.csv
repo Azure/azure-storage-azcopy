@@ -1,7 +1,5 @@
 # Do not remove these comments
 # Format of the file : <Distro Name>,<Fuse Version, Architecture, File Type>,<Repo Name>,<Release Name(for deb repos only)>
-Mariner-2.0-x86_64,marinerAmdRpm,cbl-mariner-2.0-prod-Microsoft-x86_64-yum,
-Mariner-2.0-aarch64,marinerAarchRpm,cbl-mariner-2.0-prod-Microsoft-aarch64-yum,
 Ubuntu-18.04,azcopyAmdDeb,microsoft-ubuntu-bionic-prod-apt,bionic
 Ubuntu-20.04,azcopyAmdDeb,microsoft-ubuntu-focal-prod-apt,focal
 Ubuntu-22.04,azcopyAmdDeb,microsoft-ubuntu-jammy-prod-apt,jammy
@@ -25,7 +23,7 @@ CentOS-8.0,azcopyAmdRpm,microsoft-centos8-prod-yum,
 SUSE-15Gen2,azcopyAmdRpm,microsoft-sles15-prod-yum,
 Rocky-8.0,azcopyAmdRpm,microsoft-el8-prod-yum,
 Rocky-9.0,azcopyAmdRpm,microsoft-el9-prod-yum,
-Mariner-3.0-x86_64,marinerAmdRpm,azurelinux-3.0-prod-ms-oss-x86_64-yum,
-Mariner-3.0-aarch64,marinerAarchRpm,azurelinux-3.0-prod-ms-oss-aarch64-yum,
-Mariner-3.0-x86_64,azcopyFipsAmdRpm,azurelinux-3.0-prod-ms-oss-x86_64-yum,
-Mariner-3.0-aarch64,azcopyFipsArmRpm,azurelinux-3.0-prod-ms-oss-aarch64-yum,
+Azure-Linux-3.0,azureLinuxAmdRpm,azurelinux-3.0-prod-ms-oss-x86_64-yum,
+Azure-Linux-3.0,azureLinuxArmRpm,azurelinux-3.0-prod-ms-oss-aarch64-yum,
+Azure-Linux-3.0,azureLinuxFipsAmdRpm,azurelinux-3.0-prod-ms-oss-x86_64-yum,
+Azure-Linux-3.0,azureLinuxFipsArmRpm,azurelinux-3.0-prod-ms-oss-aarch64-yum,

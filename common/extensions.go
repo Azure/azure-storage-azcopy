@@ -1,10 +1,8 @@
 package common
 
 import (
-	"bytes"
 	"encoding/base64"
 	"fmt"
-	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
@@ -84,39 +82,6 @@ func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) 
 	}
 
 	return sigFound, values.Encode()
-}
-
-// ///////////////////////////////////////////////////////////////////////////////////////////////
-type HTTPResponseExtension struct {
-	*http.Response
-}
-
-// IsSuccessStatusCode checks if response's status code is contained in specified success status codes.
-func (r HTTPResponseExtension) IsSuccessStatusCode(successStatusCodes ...int) bool {
-	if r.Response == nil {
-		return false
-	}
-	for _, i := range successStatusCodes {
-		if i == r.StatusCode {
-			return true
-		}
-	}
-	return false
-}
-
-// ///////////////////////////////////////////////////////////////////////////////////////////////
-type ByteSlice []byte
-type ByteSliceExtension struct {
-	ByteSlice
-}
-
-// RemoveBOM removes any BOM from the byte slice
-func (bs ByteSliceExtension) RemoveBOM() []byte {
-	if bs.ByteSlice == nil {
-		return nil
-	}
-	// UTF8
-	return bytes.TrimPrefix(bs.ByteSlice, []byte("\xef\xbb\xbf"))
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
