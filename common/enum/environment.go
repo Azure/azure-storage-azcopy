@@ -173,6 +173,14 @@ func (eEnvironmentVariable) MoverSyncMergeJoinTraversers() EnvironmentVariable {
 	}
 }
 
+func (eEnvironmentVariable) HighPerfMaxQueuedDirs() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:            "MOVER_HIGH_PERF_MAX_QUEUED_DIRS",
+		Description:     "High-perf Blob parallel enumeration (including copy) and streaming merge-join: queued-directory threshold above which the crawler begins shedding workers. Positive integer; defaults to 50000000. Not a hard queue or memory cap. Ignored outside high-perf mode.",
+		DeveloperOption: true,
+	}
+}
+
 const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
 
 func (eEnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
@@ -454,7 +462,6 @@ func (eEnvironmentVariable) AppDir() EnvironmentVariable {
 		DeveloperOption: true,
 	}
 }
-
 
 // Lookup returns the value of the environment variable and whether it was set.
 // If not set, the default value and false are returned.

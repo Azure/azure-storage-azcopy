@@ -3,13 +3,37 @@ package cmd
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
 var EnumerationParallelism = 1
 var EnumerationParallelStatFiles = false
+
+const highPerfDefaultMaxQueueDirs = 50_000_000
+
+// Resolve per job to honor feature-config overrides; zero preserves the generic default.
+func resolveHighPerfMaxQueueDirs() int {
+	if !buildmode.HighPerf() {
+		return 0
+	}
+	setting := enum.EEnvironmentVariable.HighPerfMaxQueuedDirs()
+	v := strings.TrimSpace(setting.Get())
+	if v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+		WarnStdoutAndScanningLog(fmt.Sprintf(
+			"Invalid %s=%q; expected a positive integer, using default %d",
+			setting.Name, v, highPerfDefaultMaxQueueDirs))
+	}
+	return highPerfDefaultMaxQueueDirs
+}
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {

@@ -27,12 +27,80 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 var windowsSystemDirectory = ""
+
+func TestCrawlQueueLimitOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int
+		want  int64
+	}{
+		{"default", 0, 1_000_000},
+		{"negative", -1, 1_000_000},
+		{"override", 100_000_000, 100_000_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output, stats := CrawlWithStats(context.Background(), "root",
+				func(Directory, func(Directory), func(DirectoryEntry, error)) error { return nil },
+				8, CrawlOptions{MaxQueueDirectories: tc.limit})
+			for range output {
+			}
+			if stats.MaxQueueDirectories != tc.want {
+				t.Fatalf("effective threshold = %d, want %d", stats.MaxQueueDirectories, tc.want)
+			}
+		})
+	}
+}
+
+func TestCrawlQueueLimitShutdown(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		limit, queued, worker int
+		recentShutdown        bool
+		wantShutdown          bool
+	}{
+		{"at threshold", 4, 4, 7, false, false},
+		{"above threshold", 4, 5, 7, false, true},
+		{"protected worker", 4, 5, 2, false, false},
+		{"gradual shutdown", 4, 5, 7, true, false},
+		{"old million limit", 1_000_000, 1_000_001, 7, false, true},
+		{"raised fifty million limit", 50_000_000, 1_000_001, 7, false, false},
+		{"raised hundred million limit", 100_000_000, 1_000_001, 7, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &crawler{
+				unstartedDirs:       []Directory{"root"},
+				parallelism:         8,
+				maxQueueDirectories: tc.limit,
+				stats:               &CrawlStats{},
+				cond:                sync.NewCond(&sync.Mutex{}),
+				workerBody: func(_ Directory, enqueue func(Directory), _ func(DirectoryEntry, error)) error {
+					for i := 0; i < tc.queued; i++ {
+						enqueue("child")
+					}
+					return nil
+				},
+			}
+			if tc.recentShutdown {
+				c.lastAutoShutdown = time.Now()
+			}
+			keepWorking, err := c.processOneDirectory(context.Background(), tc.worker)
+			if err != nil || keepWorking == tc.wantShutdown {
+				t.Fatalf("keepWorking=%t, err=%v, want shutdown=%t", keepWorking, err, tc.wantShutdown)
+			}
+			if c.stats.PeakQueuedDirs != int64(tc.queued) || c.stats.QueuedDirs != int64(tc.queued) || c.stats.ActiveWorkers != 0 {
+				t.Fatalf("unexpected stats: %+v", c.stats)
+			}
+		})
+	}
+}
 
 func TestParallelEnumerationFindsTheRightFiles(t *testing.T) {
 	a := assert.New(t)
