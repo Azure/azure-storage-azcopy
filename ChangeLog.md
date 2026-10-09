@@ -1,6 +1,30 @@
 
 # Change Log
 
+## Version 10.32.8
+
+### Dependency updates
+
+1. Golang 1.25.11 -> 1.25.13
+2. cloud.google.com/go/storage v1.64.0 -> v1.65.1, google.golang.org/api v0.289.0 -> v0.294.0
+3. Azure Storage SDKs: azcore v1.22.0 -> v1.23.0
+4. github.com/Azure/go-autorest/autorest/date v0.3.0 -> v0.3.1, github.com/AzureAD/microsoft-authentication-library-for-go v1.7.2 -> v1.9.0
+5. github.com/minio/minio-go/v7 v7.2.1 -> v7.3.0
+6. golang.org/x/crypto v0.54.0 -> v0.55.0
+7. golang.org/x/net v0.57.0 -> v0.58.0
+8. golang.org/x/text v0.40.0 -> v0.41.0
+9. go.opentelemetry.io/otel v1.44.0 -> v1.46.0, go.opentelemetry.io/otel/metric v1.44.0 -> v1.46.0, go.opentelemetry.io/otel/sdk v1.44.0 -> v1.46.0, go.opentelemetry.io/otel/sdk/metric v1.44.0 -> v1.46.0, go.opentelemetry.io/otel/trace v1.44.0 -> v1.46.0, go.opentelemetry.io/contrib/detectors/gcp v1.43.0 -> v1.46.0, go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.68.0 -> v0.71.0, go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 -> v0.71.0
+10. google.golang.org/grpc v1.82.0 -> v1.83.2, google.golang.org/protobuf v1.36.11 -> v1.36.12, google.golang.org/genproto v0.0.0-20260519071638-aa98bba5eb94 -> v0.0.0-20260825221802-da73d73af1c5, google.golang.org/genproto/googleapis/api v0.0.0-20260630182238-925bb5da69e7 -> v0.0.0-20260825221802-da73d73af1c5, google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 -> v0.0.0-20260825221802-da73d73af1c5
+11. github.com/envoyproxy/go-control-plane/envoy v1.37.0 -> v1.39.0
+12. github.com/klauspost/compress v1.18.6 -> v1.19.2, github.com/klauspost/cpuid/v2 v2.2.11 -> v2.4.0
+13. cel.dev/expr v0.25.2 -> v0.25.3, github.com/felixge/httpsnoop v1.0.4 -> v1.1.0, github.com/googleapis/enterprise-certificate-proxy v0.3.18 -> v0.3.21, github.com/googleapis/gax-go/v2 v2.23.0 -> v2.24.0, github.com/spiffe/go-spiffe/v2 v2.6.0 -> v2.8.1, github.com/tinylib/msgp v1.6.1 -> v1.6.4, go.yaml.in/yaml/v3 v3.0.4 -> v3.0.5, gopkg.in/ini.v1 v1.67.2 -> v1.67.3
+14. github.com/stretchr/testify v1.11.1 -> v1.12.1
+
+### Bug Fixes
+
+1. Fixed a bug where calling Close concurrently with a read on singleChunkReader could cause a panic; the reader now correctly handles concurrent Close during reads. ([#3506](https://github.com/Azure/azure-storage-azcopy/pull/3506))
+   1. Resolves an issue when interacting with storage accounts behind an Azure Front Door
+
 ## Version 10.32.7
 
 ### Dependency updates
