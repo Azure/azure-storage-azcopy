@@ -85,6 +85,11 @@ type blobTraverser struct {
 	// selfOnly stops Traverse after the entity the root URL names, without
 	// listing anything under it. Set by TraverseSelf.
 	selfOnly bool
+
+	// cacheLookup reuses the first getPropertiesIfSingleBlob result; see
+	// InitResourceTraverserOptions.cacheSingleBlobLookup.
+	cacheLookup bool
+	lookup      *singleBlobLookup
 }
 
 var _ selfTraverser = (*blobTraverser)(nil)
@@ -236,7 +241,31 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 	return true, nil
 }
 
+// singleBlobLookup is one result of lookupSingleBlob.
+type singleBlobLookup struct {
+	response  *blob.GetPropertiesResponse
+	isBlob    bool
+	isDirStub bool
+	blobName  string
+	err       error
+}
+
+// getPropertiesIfSingleBlob reads the properties of the blob the root URL
+// names, if there is one. With cacheLookup set the first result is reused,
+// so IsDirectory followed by Traverse costs one request instead of two.
 func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertiesResponse, isBlob bool, isDirStub bool, blobName string, err error) {
+	if t.cacheLookup && t.lookup != nil {
+		l := t.lookup
+		return l.response, l.isBlob, l.isDirStub, l.blobName, l.err
+	}
+	response, isBlob, isDirStub, blobName, err = t.lookupSingleBlob()
+	if t.cacheLookup && t.ctx.Err() == nil {
+		t.lookup = &singleBlobLookup{response: response, isBlob: isBlob, isDirStub: isDirStub, blobName: blobName, err: err}
+	}
+	return response, isBlob, isDirStub, blobName, err
+}
+
+func (t *blobTraverser) lookupSingleBlob() (response *blob.GetPropertiesResponse, isBlob bool, isDirStub bool, blobName string, err error) {
 	// trim away the trailing slash before we check whether it's a single blob
 	// so that we can detect the directory stub in case there is one
 	blobURLParts, err := blob.ParseURL(t.rawURL)
@@ -812,6 +841,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:          opts.IsSyncDestination,
 		failOnLookupError:           opts.FailOnSingleBlobLookupError,
+		cacheLookup:                 opts.cacheSingleBlobLookup,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive

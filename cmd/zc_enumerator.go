@@ -467,6 +467,12 @@ type InitResourceTraverserOptions struct {
 	// latency. Values below 2 enumerate one at a time, in list order. Calls
 	// to the processor are serialized either way. Used by XDM.
 	ListOfFilesParallelism int
+
+	// cacheSingleBlobLookup makes a blob traverser read the properties of
+	// the blob its root names once, however often it is asked (IsDirectory,
+	// then Traverse). Set by the list traverser for its entries, which are
+	// traversed right after the check.
+	cacheSingleBlobLookup bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers

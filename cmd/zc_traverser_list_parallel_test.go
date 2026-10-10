@@ -5,11 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -150,4 +154,49 @@ func TestNewListTraverserParallelism(t *testing.T) {
 	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
 		t.Fatalf("Traverse() over an empty list = %v", err)
 	}
+}
+
+// heads counts the HEAD (properties) requests the transport saw for path.
+func (tr *hnsDirTransport) heads(path string) int {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	n := 0
+	for _, r := range tr.requests {
+		if strings.HasPrefix(r, "HEAD /c/"+path+"?") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestBlobTraverserCachesSingleBlobLookup(t *testing.T) {
+	for _, cache := range []bool{false, true} {
+		tr := &hnsDirTransport{}
+		sc, err := service.NewClientWithNoCredential("https://acct.blob.core.windows.net/", &service.ClientOptions{
+			ClientOptions: azcore.ClientOptions{Transport: tr, Retry: policy.RetryOptions{MaxRetries: -1}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bt := newBlobTraverser("https://acct.blob.core.windows.net/c/file.txt", sc, context.Background(), InitResourceTraverserOptions{
+			Recursive:             true,
+			IncrementEnumeration:  enumerationCounterFuncNoop,
+			cacheSingleBlobLookup: cache,
+		})
+		if isDir, err := bt.IsDirectory(true); err != nil || isDir {
+			t.Fatalf("IsDirectory() = %v, %v", isDir, err)
+		}
+		var got []string
+		if err := bt.Traverse(nil, func(o StoredObject) error { got = append(got, o.name); return nil }, nil); err != nil {
+			t.Fatalf("Traverse() = %v", err)
+		}
+		want := 2
+		if cache {
+			want = 1
+		}
+		if n := tr.heads("file.txt"); n != want || len(got) != 1 {
+			t.Errorf("cache=%v: %d properties requests and %d objects, want %d and 1", cache, n, len(got), want)
+		}
+	}
+
 }

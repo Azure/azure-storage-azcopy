@@ -217,6 +217,8 @@ func newHnsDirListTraverser(t *testing.T, entries []string, includeDirStubs, sel
 			Recursive:             true,
 			IncludeDirectoryStubs: includeDirStubs,
 			IncrementEnumeration:  enumerationCounterFuncNoop,
+			// As the list traverser configures its entries.
+			cacheSingleBlobLookup: true,
 		}), nil
 	}
 	l := newTestListTraverser(entries, gen, nil)
