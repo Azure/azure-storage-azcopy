@@ -382,7 +382,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if t.s2sPreserveSourceTags {
 			blobTagsMap, err := t.getBlobTags()
 			if err != nil {
-				panic("Couldn't fetch blob tags due to error: " + err.Error())
+				// An error, not a panic: a canceled job, throttling or a missing
+				// tag-read permission is an ordinary enumeration failure.
+				return fmt.Errorf("cannot get tags of blob %s: %w", blobURLParts.BlobName, err)
 			}
 			if len(blobTagsMap) > 0 {
 				storedObject.blobTags = blobTagsMap
