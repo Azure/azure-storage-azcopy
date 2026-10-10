@@ -460,6 +460,13 @@ type InitResourceTraverserOptions struct {
 	// as an error with ReportListOfFilesEntryErrors, never expanded. Used by
 	// XDM.
 	ListOfFilesDirectoriesSelfOnly bool
+
+	// ListOfFilesParallelism is how many ListOfFiles entries are enumerated
+	// at once. Each entry costs at least one round trip to the source (its
+	// properties), so a long list enumerated one entry at a time is bound by
+	// latency. Values below 2 enumerate one at a time, in list order. Calls
+	// to the processor are serialized either way. Used by XDM.
+	ListOfFilesParallelism int
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers
