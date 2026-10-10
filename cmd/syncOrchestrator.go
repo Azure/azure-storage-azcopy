@@ -190,9 +190,7 @@ func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncO
 			}
 		}()
 
-		select {
-		case errorChannel <- err:
-		default:
+		if !sendScanError(errorChannel, err) {
 			// Channel might be full, log the error instead
 			syncOrchestratorLog(
 				common.LogError,

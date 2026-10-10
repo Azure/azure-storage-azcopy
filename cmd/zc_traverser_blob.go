@@ -164,9 +164,7 @@ func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
 			}
 		}()
-		select {
-		case t.errorChannel <- err:
-		default:
+		if !sendScanError(t.errorChannel, err) {
 			// Channel might be full, log the error instead
 			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
 		}
