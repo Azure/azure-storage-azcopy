@@ -772,8 +772,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// listings are lexicographically sorted; keep the existing indexMap-based flow for
 		// local filesystem sources (which do not guarantee sorted listing order).
 		if useStreamingMergeJoin(cca) {
-			mergeJoinSyncOneDirLog(common.LogDebug,
-				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
+			mergeJoinTraceLog("Processing dir '%s'", dir.(minimalStoredObject).relativePath)
 
 			var subDirs []minimalStoredObject
 			var mergeErr error

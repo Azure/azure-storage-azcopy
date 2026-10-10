@@ -665,13 +665,17 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	return nil
 }
 
+func logBlobCrawlStats(message string) {
+	glcm.Info("[AzCopy] [INFO] " + message)
+}
+
 func startBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {
 	if !buildmode.HighPerf() {
 		return func() {}
 	}
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+	logBlobCrawlStats(fmt.Sprintf(
 		"[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
-		parallelism, stats.MaxQueueDirectories, randomDequeue), true)
+		parallelism, stats.MaxQueueDirectories, randomDequeue))
 	statsCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -679,10 +683,10 @@ func startBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parall
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		logStats := func(final bool) {
-			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			logBlobCrawlStats(fmt.Sprintf(
 				"[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
 				atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
-				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final), true)
+				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final))
 		}
 		for {
 			select {
