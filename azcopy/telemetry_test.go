@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -764,6 +765,21 @@ func TestBuildResourceAttributesSchemaVersion(t *testing.T) {
 	resource := buildResourceAttributes()
 	assert.Equal(t, "1", resource.SchemaVersion)
 	assert.Equal(t, probeAzureVM(), resource.AzureVMDetected)
+	assert.Equal(t, osArchitecture(), resource.OSArch)
+}
+
+func TestOSArchitectureIsNative(t *testing.T) {
+	arch := osArchitecture()
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		assert.Empty(t, arch)
+		return
+	}
+	// A 64-bit build cannot run on a 32-bit OS.
+	if runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64" {
+		assert.Contains(t, []string{"amd64", "arm64"}, arch)
+	} else {
+		assert.NotEmpty(t, arch)
+	}
 }
 
 func TestBuildResourceAttributesE2ETestRunID(t *testing.T) {
