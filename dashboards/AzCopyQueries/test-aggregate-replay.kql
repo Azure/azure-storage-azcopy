@@ -43,7 +43,7 @@ let Fixtures = datatable(Scenario:string, timestamp:datetime, Job:string, Attemp
 let Events = materialize(Fixtures
 | extend customDimensions = bag_pack('InstallationID', iff(Scenario == 'missing-identity', '', Scenario),
     'JobID', Job, 'InvocationID', Attempt, 'Command', Command, 'SchemaVersion', Schema,
-    'FromTo', 'LocalBlob', 'SourceType', 'Local', 'DestType', 'Blob', 'JobStatus', 'Completed')
+    'SourceType', 'Local', 'DestType', 'Blob', 'JobStatus', 'Completed')
 | extend customDimensions = iff(AccountMode == 'absent', customDimensions,
     bag_merge(customDimensions, bag_pack('SourceStorageAccount', '', 'DestStorageAccount', Account)))
 | project timestamp, name = 'azcopy.job.finished', customDimensions,

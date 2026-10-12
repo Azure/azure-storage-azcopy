@@ -124,7 +124,7 @@ let RawFixture = datatable(Offset:timespan, Invocation:string, Job:string, Statu
     customDimensions=bag_pack('InvocationID', Invocation, 'JobID', Job, 'JobStatus', Status, 'JobErrorCategory', Category,
         'JobErrorCode', Code, 'SchemaVersion', Schema, 'E2ETestRunID', RunID, 'SourceType', Source, 'DestType', Target,
         'FailureErrorCodes', iff(Invocation == 'failed-resume', '403:2', ''),
-        'TerminalStage', 'transfer', 'Command', 'copy', 'FromTo', strcat(Source, Target), 'OSType', 'linux', 'AzCopyVersion', 'test');
+        'TerminalStage', 'transfer', 'Command', 'copy', 'OSType', 'linux', 'AzCopyVersion', 'test');
 '@
 $rawSource = "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents"
 $cases = @(

@@ -129,7 +129,7 @@ let Fixture = datatable(Scenario:string, Invocation:string, Job:string, EventNam
     customMeasurements)
 | extend customDimensions = bag_pack(
     'SchemaVersion', '1', 'InvocationID', Invocation, 'JobID', Job, 'InstallationID', 'installation',
-    'Command', Command, 'JobStatus', Status, 'TerminalStage', 'completed', 'FromTo', 'LocalBlob',
+    'Command', Command, 'JobStatus', Status, 'TerminalStage', 'completed',
     'SourceType', 'Local', 'DestType', 'Blob', 'DestStorageAccount', 'account',
     'SourceStorageAccount', '', 'AzCopyVersion', 'test', 'OSType', 'linux', 'InvocationContext', 'ci',
     'SummaryCounterScope', iff(Scenario == 'resume', 'job-cumulative', ''),

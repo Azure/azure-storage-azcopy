@@ -40,7 +40,7 @@ let Events = materialize(
         SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),
         JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),
         Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),
-        Command=tostring(customDimensions.Command), FromTo=tostring(customDimensions.FromTo),
+        Command=tostring(customDimensions.Command), FromTo=strcat(tostring(customDimensions.SourceType), tostring(customDimensions.DestType)),
         OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),
         Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)
 );

@@ -5,7 +5,7 @@ customEvents
 | where name == 'azcopy.job.finished'
 | extend
     Command = tostring(customDimensions.Command),
-    FromTo = tostring(customDimensions.FromTo),
+    FromTo = strcat(tostring(customDimensions.SourceType), tostring(customDimensions.DestType)),
     SourceType = tostring(customDimensions.SourceType),
     DestType = tostring(customDimensions.DestType),
     LegacyDirection = tostring(customDimensions.TransferDirection),
