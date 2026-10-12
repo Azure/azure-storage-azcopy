@@ -30,6 +30,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// unix.Sysctl wraps sysctlbyname: https://developer.apple.com/documentation/kernel/1387446-sysctlbyname
+
 // osVersion returns the macOS product version, e.g. "macOS 14.5", from the
 // kern.osproductversion sysctl. Returns "" when unavailable.
 func osVersion() string {
@@ -52,6 +54,7 @@ func totalMemoryGB() int {
 // "nas-nfs", "nas-smb", "nas-other" (any other non-local mount, such as AFP,
 // WebDAV, or macFUSE), or "local-disk" using statfs(2). Returns "" when statfs
 // fails (caller falls back to "local-disk").
+// See https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/statfs.2.html
 func localMountType(path string) telemetry.MountType {
 	// statfs follows symlinks, so a symlink is classified by the directory that contains it.
 	var link unix.Stat_t
