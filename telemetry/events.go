@@ -50,7 +50,8 @@ type ResourceAttributes struct {
 	E2ETestRunID      string // optional correlation ID used only by AzCopy E2E validation
 	OSType            string // runtime.GOOS
 	OSVersion         string // uname / RtlGetVersion
-	HostArch          string // runtime.GOARCH
+	HostArch          string // runtime.GOARCH of the AzCopy build
+	OSArch            string // native OS architecture in GOARCH names; amd64 for a 386 build on 64-bit Windows
 	HostNumCPU        int    // runtime.NumCPU()
 	HostCPUModel      string // /proc/cpuinfo, WMI, sysctl
 	HostMemoryTotalGB int    // total physical memory
@@ -66,6 +67,7 @@ func (ra ResourceAttributes) props() map[string]string {
 		"OSType":            ra.OSType,
 		"OSVersion":         ra.OSVersion,
 		"HostArch":          ra.HostArch,
+		"OSArch":            ra.OSArch,
 		"HostNumCPU":        strconv.Itoa(ra.HostNumCPU),
 		"HostCPUModel":      ra.HostCPUModel,
 		"HostMemoryTotalGB": strconv.Itoa(ra.HostMemoryTotalGB),
@@ -495,6 +497,7 @@ var propertyValueLimits = map[string]int{
 	"OSType":                    32,
 	"OSVersion":                 maxHostValueLen,
 	"HostArch":                  32,
+	"OSArch":                    32,
 	"HostNumCPU":                32,
 	"HostCPUModel":              maxHostValueLen,
 	"HostMemoryTotalGB":         32,

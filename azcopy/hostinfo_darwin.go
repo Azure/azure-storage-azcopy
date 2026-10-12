@@ -50,6 +50,18 @@ func totalMemoryGB() int {
 	return hostinfointernal.DarwinMemoryGB(unix.SysctlUint64("hw.memsize"))
 }
 
+// osArchitecture reports arm64 on Apple silicon even when an amd64 build runs under Rosetta.
+func osArchitecture() string {
+	if arm64, err := unix.SysctlUint32("hw.optional.arm64"); err == nil && arm64 == 1 {
+		return "arm64"
+	}
+	machine, err := unix.Sysctl("hw.machine")
+	if err != nil {
+		return ""
+	}
+	return hostinfointernal.NormalizeArchitecture(machine)
+}
+
 // localMountType classifies the filesystem backing a local macOS path as
 // "nas-nfs", "nas-smb", "nas-other" (any other non-local mount, such as AFP,
 // WebDAV, or macFUSE), or "local-disk" using statfs(2). Returns "" when statfs

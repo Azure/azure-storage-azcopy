@@ -37,7 +37,8 @@ func sampleStarted() JobStartedEvent {
 			AzCopyVersion:   "10.32.2",
 			SchemaVersion:   "1",
 			OSType:          "linux",
-			HostArch:        "amd64",
+			HostArch:        "386",
+			OSArch:          "amd64",
 			HostNumCPU:      8,
 			AzureVMDetected: true,
 			InstallationID:  "abc123",
@@ -307,6 +308,8 @@ func TestAttributesIncludeResourceAndDimensions(t *testing.T) {
 	assert.False(t, hasServiceVersion)
 	assert.Equal(t, "1", attrs["SchemaVersion"])
 	assert.Equal(t, "true", attrs["AzureVMDetected"])
+	assert.Equal(t, "386", attrs["HostArch"])
+	assert.Equal(t, "amd64", attrs["OSArch"])
 	_, hasHostVirtualization := attrs["HostVirtualization"]
 	assert.False(t, hasHostVirtualization)
 	_, hasNetworkRunContext := attrs["NetworkRunContext"]
