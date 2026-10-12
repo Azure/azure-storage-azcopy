@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// See https://learn.microsoft.com/en-us/azure/virtual-machines/identify-azure-vm-from-guest
 const azurePublicCloudAssetTag = "7783-7084-3265-9085-8269-3286-77"
 const maxSMBIOSTableBytes = 1024 * 1024
 const maxChassisAssetTagBytes = 128
@@ -39,6 +40,8 @@ func isAzurePublicCloudAssetTag(tag string) bool {
 	return len(tag) <= maxChassisAssetTagBytes && strings.TrimSpace(tag) == azurePublicCloudAssetTag
 }
 
+// raw is a RawSMBIOSData buffer: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemfirmwaretable
+// Structure headers, Type 3 (System Enclosure) and string sets: https://www.dmtf.org/standards/smbios
 func azurePublicCloudFromSMBIOS(raw []byte) bool {
 	if len(raw) < 8 || len(raw) > maxSMBIOSTableBytes {
 		return false
