@@ -91,6 +91,8 @@ func (*HostHardwareSuite) Scenario_NativeProbes(svm *ScenarioVariationManager) {
 	hardware := azcopy.ProbeHostHardware()
 	svm.Assert("OS version should be available on supported E2E agents", Empty{Invert: true}, hardware.OSVersion)
 	svm.Assert("physical memory should be available on supported E2E agents", Equal{}, true, hardware.MemoryTotalGB > 0)
+	svm.Assert("E2E agents should report a 64-bit OS architecture", Equal{}, true, hardware.OSArch == "amd64" || hardware.OSArch == "arm64")
+	svm.Log("AzCopy build architecture %s on OS architecture %s", runtime.GOARCH, hardware.OSArch)
 	if runtime.GOOS == "windows" || runtime.GOARCH == "amd64" || runtime.GOARCH == "386" {
 		svm.Assert("CPU model should be available on supported E2E agents", Empty{Invert: true}, hardware.CPUModel)
 	}
