@@ -80,6 +80,7 @@ func (r *Reporter) httpClient() httpDoer {
 
 // parseConnectionString extracts key-value pairs from an Application Insights
 // connection string (e.g. "InstrumentationKey=abc;IngestionEndpoint=https://...").
+// See https://learn.microsoft.com/en-us/azure/azure-monitor/app/connection-strings
 func parseConnectionString(cs string) map[string]string {
 	m := make(map[string]string)
 	for _, part := range strings.Split(cs, ";") {
@@ -134,6 +135,7 @@ func (r *Reporter) endpointAndKey() (endpoint, ikey string, err error) {
 
 // ---------------------------------------------------------------------------
 // App Insights /v2.1/track envelope types
+// Example request and response: https://learn.microsoft.com/en-us/troubleshoot/azure/azure-monitor/app-insights/telemetry/investigate-missing-telemetry
 // ---------------------------------------------------------------------------
 
 // appInsightsEnvelope is the telemetry envelope for the /v2.1/track API.

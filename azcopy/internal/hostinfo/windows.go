@@ -126,6 +126,7 @@ func classifyWindowsDriveType(kind int) telemetry.MountType {
 	}
 }
 
+// GetDriveType return values: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdrivetypew
 const (
 	driveUnknown   = 0
 	driveNoRootDir = 1
@@ -136,6 +137,7 @@ const (
 	driveRAMDisk   = 6
 )
 
+// Extended-length and UNC prefixes: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#win32-file-namespaces
 func stripExtendedLengthPrefix(path string) string {
 	if rest, ok := strings.CutPrefix(path, `\\?\UNC\`); ok {
 		return `\\` + rest

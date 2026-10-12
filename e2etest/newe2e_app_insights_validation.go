@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	// https://learn.microsoft.com/en-us/azure/azure-monitor/logs/api/request-format
 	appInsightsQueryEndpoint       = "https://api.loganalytics.azure.com/v1/workspaces"
 	appInsightsQueryRequestTimeout = 30 * time.Second
 	appInsightsPollInterval        = 15 * time.Second
