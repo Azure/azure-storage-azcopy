@@ -28,6 +28,7 @@ import (
 
 	hostinfointernal "github.com/Azure/azure-storage-azcopy/v10/azcopy/internal/hostinfo"
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
+	"golang.org/x/sys/unix"
 )
 
 // osVersion returns a human-readable OS version derived from /etc/os-release
@@ -67,6 +68,16 @@ func totalMemoryGB() int {
 	defer func() { _ = f.Close() }()
 
 	return hostinfointernal.ParseLinuxMemoryGB(f)
+}
+
+// osArchitecture reports the kernel's machine, so a 386 build on an x86_64 kernel returns amd64.
+// See https://man7.org/linux/man-pages/man2/uname.2.html
+func osArchitecture() string {
+	var name unix.Utsname
+	if err := unix.Uname(&name); err != nil {
+		return ""
+	}
+	return hostinfointernal.NormalizeArchitecture(unix.ByteSliceToString(name.Machine[:]))
 }
 
 // localMountType inspects /proc/self/mountinfo to classify the filesystem backing

@@ -26,6 +26,7 @@ package azcopy
 // platform-specific hostinfo_*.go files.
 type hostHardwareInfo struct {
 	osVersion     string // e.g. "Ubuntu 22.04.4 LTS" / "Windows 10 Pro 19045"
+	osArch        string // native OS architecture in GOARCH names, e.g. "amd64"; "" when unknown
 	cpuModel      string // e.g. "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"
 	memoryTotalGB int    // total physical memory rounded to GiB, -1 when unknown
 }
@@ -35,6 +36,7 @@ type hostHardwareInfo struct {
 func probeHostHardware() hostHardwareInfo {
 	return hostHardwareInfo{
 		osVersion:     osVersion(),
+		osArch:        osArchitecture(),
 		cpuModel:      cpuModel(),
 		memoryTotalGB: totalMemoryGB(),
 	}
@@ -43,6 +45,7 @@ func probeHostHardware() hostHardwareInfo {
 // HostHardwareInfo is the read-only host probe snapshot exposed to E2E tests.
 type HostHardwareInfo struct {
 	OSVersion     string
+	OSArch        string
 	CPUModel      string
 	MemoryTotalGB int
 }
@@ -53,6 +56,7 @@ func ProbeHostHardware() HostHardwareInfo {
 	hardware := probeHostHardware()
 	return HostHardwareInfo{
 		OSVersion:     hardware.osVersion,
+		OSArch:        hardware.osArch,
 		CPUModel:      hardware.cpuModel,
 		MemoryTotalGB: hardware.memoryTotalGB,
 	}
