@@ -70,6 +70,7 @@ func LinuxMountTypeFromReader(path string, reader io.Reader) telemetry.MountType
 	return classifyLinuxMount(bestFSType, bestSource)
 }
 
+// Mount tables escape these bytes as octal: https://man7.org/linux/man-pages/man3/getmntent.3.html
 var mountinfoPathUnescaper = strings.NewReplacer(
 	`\040`, " ",
 	`\011`, "\t",
@@ -77,6 +78,7 @@ var mountinfoPathUnescaper = strings.NewReplacer(
 	`\134`, `\`,
 )
 
+// Field layout: https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html
 // Example: "36 35 98:0 / /mnt/nas\040share rw,noatime - nfs4 server:/export rw".
 // Returns: mountPoint="/mnt/nas share", fsType="nfs4", source="server:/export", ok=true.
 func parseMountinfoLine(line string) (mountPoint, fsType, source string, ok bool) {

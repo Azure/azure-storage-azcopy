@@ -32,6 +32,7 @@ import (
 
 // osVersion returns a human-readable OS version derived from /etc/os-release
 // (PRETTY_NAME), e.g. "Ubuntu 22.04.4 LTS". Returns "" when unavailable.
+// See https://man7.org/linux/man-pages/man5/os-release.5.html
 func osVersion() string {
 	f, err := os.Open("/etc/os-release")
 	if err != nil {
@@ -44,6 +45,7 @@ func osVersion() string {
 
 // cpuModel returns the CPU model name from /proc/cpuinfo ("model name").
 // Returns "" when unavailable.
+// See https://man7.org/linux/man-pages/man5/proc_cpuinfo.5.html
 func cpuModel() string {
 	f, err := os.Open("/proc/cpuinfo")
 	if err != nil {
@@ -56,6 +58,7 @@ func cpuModel() string {
 
 // totalMemoryGB returns total physical memory in GiB from /proc/meminfo
 // (MemTotal, reported in kB). Returns -1 when unavailable.
+// See https://man7.org/linux/man-pages/man5/proc_meminfo.5.html
 func totalMemoryGB() int {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
@@ -72,6 +75,7 @@ func totalMemoryGB() int {
 // or "local-disk". Returns "" when
 // the mount table cannot be read or the path cannot be resolved (caller falls
 // back to "local-disk").
+// See https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html
 func localMountType(path string) telemetry.MountType {
 	abs, err := filepath.Abs(path)
 	if err != nil {

@@ -744,6 +744,10 @@ func createInstallationID(path, appDataDir string) string {
 // detectInvocationContext infers how AzCopy was invoked. getenv is injected for
 // testability.
 func detectInvocationContext(getenv func(string) string) string {
+	// CI variables: https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables
+	// https://docs.github.com/en/actions/reference/workflows-and-actions/variables
+	// https://docs.gitlab.com/ci/variables/predefined_variables/
+	// https://www.jenkins.io/doc/book/pipeline/jenkinsfile/#using-environment-variables
 	for _, k := range []string{"TF_BUILD", "GITHUB_ACTIONS", "CI", "JENKINS_URL", "GITLAB_CI", "BUILD_BUILDID"} {
 		if getenv(k) != "" {
 			return "ci"
@@ -851,6 +855,8 @@ func mountProbePath(localPath string) string {
 }
 
 // Public-cloud Blob, Data Lake, and Files hosts only; sovereign-cloud account names stay in their cloud.
+// Endpoint formats: https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview#storage-account-endpoints
+// Private endpoints: https://learn.microsoft.com/en-us/azure/storage/common/storage-private-endpoints#dns-changes-for-private-endpoints
 var publicStorageAccountHost = regexp.MustCompile(`^([a-z0-9]{3,24})\.(?:(?:privatelink\.)?(?:blob|dfs|file)\.core\.windows\.net|z[1-9][0-9]?\.(?:blob|dfs|file)\.storage\.azure\.net)$`)
 
 func storageAccountName(resource common.ResourceString, location common.Location) string {

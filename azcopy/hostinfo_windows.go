@@ -77,6 +77,7 @@ var (
 
 // totalMemoryGB returns total physical memory in GiB via GlobalMemoryStatusEx.
 // Returns -1 when the call fails.
+// See https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex
 func totalMemoryGB() int {
 	var ms memoryStatusEx
 	ms.cbSize = uint32(unsafe.Sizeof(ms))
@@ -145,6 +146,7 @@ func queryVolumeFileSystemName(root string) string {
 var procGetDriveTypeW = modkernel32.NewProc("GetDriveTypeW")
 
 // driveType wraps GetDriveTypeW for a volume root path such as `C:\`.
+// See https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdrivetypew
 func driveType(root string) int {
 	p, err := windows.UTF16PtrFromString(root)
 	if err != nil {
