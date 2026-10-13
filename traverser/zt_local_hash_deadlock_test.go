@@ -2,6 +2,7 @@ package traverser
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,17 +17,53 @@ import (
 )
 
 // Repros for IcM 21000002127226: sync --compare-hash hangs in the local scan once no hashing thread is taking
-// files off the 1,000-slot hash queue. The test times out while the bug is present.
+// files off the 1,000-slot hash queue.
 
-// A failed read makes the hashing thread exit, so none are left to take files.
+const hashingScanReadableFiles = 1_500 // more than the hash queue holds
+
+// hashingScanBadFiles is one bad file per hashing thread.
+func hashingScanBadFiles() int { return max(1, runtime.NumCPU()/2) }
+
+// A file that can't be read is indexed without a hash, and the hashing threads move on to the next file.
 func TestLocalHashingScanDoesNotHangWhenReadsFail(t *testing.T) {
-	runHashingScan(t, createUnreadableFile)
+	var warnings atomic.Int32
+	hooks := common.NewJobUIHooks()
+	hooks.Warn = func(string) { warnings.Add(1) }
+	prevHooks := common.GetLifecycleMgr()
+	common.SetUIHooks(hooks)
+	t.Cleanup(func() { common.SetUIHooks(prevHooks) })
+
+	res := runHashingScan(t, createUnreadableFile)
+	require.NoError(t, res.err)
+	require.EqualValues(t, 1, warnings.Load(), "one console warning covers every file that can't be hashed")
+
+	files := 0
+	for relPath, obj := range res.indexer.IndexMap {
+		if obj.EntityType != common.EEntityType.File() {
+			continue
+		}
+		files++
+		if strings.HasPrefix(relPath, "bad-") {
+			require.Nil(t, obj.Md5, "%s can't be read, so it has no hash", relPath)
+		} else {
+			require.Len(t, obj.Md5, md5.Size, relPath)
+		}
+	}
+	require.Equal(t, hashingScanBadFiles()+hashingScanReadableFiles, files)
 }
 
-// runHashingScan scans one bad file per hashing thread followed by more readable files than the hash queue holds.
-func runHashingScan(t *testing.T, createBadFile func(t *testing.T, path string)) {
-	const readable = 1_500
-	bad := max(1, runtime.NumCPU()/2) // prepareHashingThreads starts NumCPU/2 threads
+type hashingScanResult struct {
+	root    string
+	indexer *ObjectIndexer
+	err     error
+}
+
+// runHashingScan scans the bad files followed by the readable ones, failing the test if Traverse doesn't return.
+func runHashingScan(t *testing.T, createBadFile func(t *testing.T, path string)) hashingScanResult {
+	bad, readable := hashingScanBadFiles(), hashingScanReadableFiles
+	if common.GetLifecycleMgr() == nil {
+		common.SetUIHooks(common.NewJobUIHooks()) // sync sets these before it scans; hashing warnings need them
+	}
 
 	root := tempDir(t)
 	prevMode, prevDir := common.LocalHashStorageMode, common.LocalHashDir
@@ -68,11 +105,12 @@ func runHashingScan(t *testing.T, createBadFile func(t *testing.T, path string))
 	const timeout = 30 * time.Second
 	select {
 	case err := <-done:
-		t.Logf("Traverse returned %v; scanned %d of %d files; indexed %d objects", err, scanned.Load(), bad+readable, len(indexer.IndexMap))
+		return hashingScanResult{root: root, indexer: indexer, err: err}
 	case <-time.After(timeout):
-		t.Fatalf("Traverse did not return within %v. Files scanned froze at %d of %d.\n%s",
-			timeout, scanned.Load(), bad+readable, hashingGoroutineReport())
 	}
+	t.Fatalf("Traverse did not return within %v. Files scanned froze at %d of %d.\n%s",
+		timeout, scanned.Load(), bad+readable, hashingGoroutineReport())
+	return hashingScanResult{}
 }
 
 // tempDir is t.TempDir without failing the test when files the hashing threads left open block removal.
