@@ -86,6 +86,9 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Transferred: %v
+Number of Hardlinks Completed: %v
+Number of Hardlinks Failed: %v
 Number of Hardlinks Skipped: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
@@ -97,14 +100,17 @@ Final Job Status: %v%s%s
 		result.FolderPropertyTransfers,
 		result.SymlinkTransfers,
 		result.TotalTransfers,
-		result.TransfersCompleted-result.FoldersCompleted,
+		result.TransfersCompleted-result.FoldersCompleted-result.HardlinksCompleted,
 		result.FoldersCompleted,
-		result.TransfersFailed-result.FoldersFailed,
+		result.TransfersFailed-result.FoldersFailed-result.HardlinksFailed,
 		result.FoldersFailed,
-		result.TransfersSkipped-result.FoldersSkipped,
+		result.TransfersSkipped-result.FoldersSkipped-result.HardlinksSkipped,
 		result.FoldersSkipped,
 		result.SkippedSymlinkCount,
 		result.HardlinksConvertedCount,
+		result.HardlinksTransferCount,
+		result.HardlinksCompleted,
+		result.HardlinksFailed,
 		result.SkippedHardlinkCount,
 		result.SkippedSpecialFileCount,
 		result.TotalBytesTransferred,
@@ -154,6 +160,7 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
+Number of Hardlinks Transferred: %v
 Number of Hardlinks Converted: %v
 Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
@@ -173,6 +180,7 @@ Final Job Status: %v%s%s
 		result.DeleteTransfersCompleted,
 		result.SkippedSymlinkCount,
 		result.SkippedSpecialFileCount,
+		result.HardlinksTransferCount,
 		result.HardlinksConvertedCount,
 		result.SkippedHardlinkCount,
 		result.TotalBytesTransferred,

@@ -697,7 +697,7 @@ func (*BasicFunctionalitySuite) Scenario_DisabledCheckVersion(svm *ScenarioVaria
 		versionAssertion.False(foundVersionInOutput())
 	}
 
-	ValidateMessageOutput(svm, stdout, "version", false)
+	ValidateMessageOutput(svm, stdout, "INFO: ", false)
 }
 
 // Scenario_SkipVersionCheckDisabledBackCompat validates we are backwards compatible with skip-version-check now deprecated.

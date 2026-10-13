@@ -75,6 +75,17 @@ type IJobPartMgr interface {
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
+//
+// Production data-plane code does NOT use this constructor; it uses the process-wide
+// client common.GetGlobalHTTPClient(), initialized once at startup from
+// ConcurrencySettings.MaxIdleConnections. See common/azHttpClient.go.
+//
+// This constructor is retained for tests (ste/sender-*_test.go,
+// ste/testJobPartTransferManager_test.go) and for the standalone testSuite/cmd
+// binary, all of which run outside the azcopy command and therefore cannot rely on
+// the global client being initialized. Tests want their own isolated transport so
+// they don't depend on package-level startup wiring from another package.
+//
 // We must minimize use of this, and instead maximize reuse of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
@@ -379,19 +390,19 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		}
 		// ===== TEST KNOB
 		jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
-
-		// This sets the atomic variable atomicAllTransfersScheduled to 1
-		// atomicAllTransfersScheduled variables is used in case of resume job
-		// Since iterating the JobParts and scheduling transfer is independent
-		// a variable is required which defines whether last part is resumed or not
-		if plan.IsFinalPart {
-			jpm.jobMgr.ConfirmAllTransfersScheduled()
-		}
 	}
 
+	// This sets the atomic variable atomicAllTransfersScheduled to 1.
+	// It must be outside the transfer loop so that it is called even when
+	// every transfer in the final part was already Success (resume scenario).
+	// atomicAllTransfersScheduled is used in case of resume job:
+	// since iterating the JobParts and scheduling transfers is independent,
+	// a variable is required which defines whether the last part is resumed or not.
 	if plan.IsFinalPart {
+		jpm.jobMgr.ConfirmAllTransfersScheduled()
 		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
+
 }
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {

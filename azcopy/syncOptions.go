@@ -57,6 +57,18 @@ type cookedSyncOptions struct {
 	symlinks                common.SymlinkHandlingType
 	hardlinks               common.HardlinkHandlingType
 
+	// destSymlinks is the destination symlink handling mode.
+	// This was introduced because of a bug with sync --delete-destination.
+	// It handles extra symlinks present at the dest (that did not exist on the source) are no longer being ignored and are deleted.
+	// It is used only for the dest traverser and is gotten from symlinks field.
+	// We set it to `Preserve` when the user sets `--delete-destination`
+	destSymlinks common.SymlinkHandlingType
+
+	// srcSymLinkTracker is the source symlink handling mode used for comparison with the destination.
+	// This is needed when --delete-destination is set with NFS syncs. Source symlinks need to be tracked so they are not
+	// wrongly classified as extras and deleted.
+	srcSymLinkTracker common.SymlinkHandlingType
+
 	// AzCopy internal use only
 	dryrun                           bool
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
@@ -206,6 +218,21 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 		s.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
+	s.destSymlinks = s.symlinks
+	s.srcSymLinkTracker = s.symlinks
+	// If delete-destination is set, track and delete any extra symlinks on the dest, regardless of the symlink handling mode set by the user.
+	// This is needed to ensure that the destination is an exact mirror of the source,
+	// and doesn't contain any extra symlinks that are not present on the source.
+
+	// Evaluate the negative equality check on False to handle Prompt case
+	// Only preserve destination symlinks automatically for NFS-aware syncs
+	if s.deleteDestination != common.EDeleteDestination.False() && s.fromTo.IsNFS() {
+		s.destSymlinks = common.ESymlinkHandlingType.Preserve()
+		// We also set srcSymLink to Preserve to
+		// track but NOT delete any symlinks on the dest that also exist on the source.
+		s.srcSymLinkTracker = common.ESymlinkHandlingType.Preserve()
+	}
+
 	return nil
 }
 
@@ -268,13 +295,13 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 	}
 
 	if AreBothLocationsNFSAware(s.fromTo) {
-		err = PerformNFSSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, &s.hardlinks, s.symlinks)
+		err = PerformNFSSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.symlinks, s.hardlinks)
 		if err != nil {
 			return err
 		}
+
 	} else {
-		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties,
-			s.posixPropertiesStyle)
+		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties, s.posixPropertiesStyle, s.hardlinks)
 		if err != nil {
 			return err
 		}

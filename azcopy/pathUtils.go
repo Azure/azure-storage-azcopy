@@ -152,8 +152,8 @@ func DetermineLocationLevel(location string, locationType common.Location, sourc
 	}
 }
 
-func StartsWith(s string, t string) bool {
-	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
+func StartsWith(s string, potentialPrefix string) bool {
+	return len(s) >= len(potentialPrefix) && strings.EqualFold(s[0:len(potentialPrefix)], potentialPrefix)
 }
 
 // Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.

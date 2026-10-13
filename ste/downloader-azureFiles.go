@@ -165,7 +165,7 @@ func (bd *azureFilesDownloader) preservePermissions(info *TransferInfo) (string,
 		if spdl, ok := interface{}(bd).(nfsPermissionsAwareDownloader); ok {
 			// We don't need to worry about the sip not being a INFSPropertyBearingSourceInfoProvider as Azure Files always is.
 			err := spdl.PutNFSPermissions(bd.sip.(INFSPropertyBearingSourceInfoProvider), bd.txInfo)
-			if err == errorNoNFSPermissionsFound {
+			if errors.Is(err, errorNoNFSPermissionsFound) {
 				bd.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No NFS permissions were downloaded because none were found at the source")
 			} else if err != nil {
 				return "Setting destination file nfs permissions", err
@@ -220,3 +220,33 @@ func (bd *azureFilesDownloader) preserveProperties(info *TransferInfo) (string, 
 	}
 	return "", nil
 }
+
+//func getFullPath(relativePath, root string) string {
+//	// 1. Convert backslashes to forward slashes immediately for cross-platform safety
+//	rel := filepath.ToSlash(relativePath)
+//	rt := filepath.ToSlash(root)
+//
+//	// 2. Use "/" for splitting now that we've normalized
+//	relParts := strings.Split(rel, "/")
+//	fullPathParts := strings.Split(rt, "/")
+//
+//	prefixParts := []string{}
+//	var j int
+//	for j = 0; j < len(fullPathParts)-1; j++ {
+//		if relParts[0] != fullPathParts[j] {
+//			prefixParts = append(prefixParts, fullPathParts[j])
+//		} else {
+//			break
+//		}
+//	}
+//
+//	var fullParts []string
+//	if j == len(fullPathParts)-1 {
+//		fullParts = append(prefixParts, relParts[len(relParts)-1])
+//	} else {
+//		fullParts = append(prefixParts, relParts...)
+//	}
+//
+//	// 3. Use path.Join instead of filepath.Join to force forward slashes
+//	return "/" + path.Join(fullParts...)
+//}

@@ -1,0 +1,178 @@
+// Copyright © 2026 Microsoft <azcopydev@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+package ste
+
+import (
+	"fmt"
+	"net/url"
+	"path"
+	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+)
+
+func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+	// Check if cancelled
+	if jptm.WasCanceled() {
+		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	// Create SIP
+	srcInfoProvider, err := sipf(jptm)
+	if err != nil {
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	if srcInfoProvider.EntityType() != common.EEntityType.Hardlink() {
+		panic("configuration error. Source Info Provider does not have hardlink entity type")
+	}
+
+	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
+	if err != nil {
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	s, ok := baseSender.(hardlinkSender)
+	if !ok {
+		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support hardlinks", 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	// check overwrite option
+	// if the force Write flags is set to false or prompt
+	// then check the file exists at the remote location
+	// if it does, react accordingly
+	shouldOverwrite := common.Iff(jptm.GetOverwriteOption() == common.EOverwriteOption.True(), true, false)
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
+		exists, dstLmt, existenceErr := s.RemoteFileExists()
+		if existenceErr != nil {
+			jptm.LogSendError(info.Source, info.Destination, "Could not check destination file existence. "+existenceErr.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
+			jptm.ReportTransferDone()
+			return
+		}
+		if exists {
+			shouldOverwrite = false
+
+			// if necessary, prompt to confirm user's intent
+			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
+				// remove the SAS before prompting the user
+				parsed, _ := url.Parse(info.Destination)
+				parsed.RawQuery = ""
+				shouldOverwrite = jptm.GetOverwritePrompter().ShouldOverwrite(parsed.String(), common.EEntityType.File())
+			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
+				// only overwrite if source lmt is newer (after) the destination
+				if jptm.LastModifiedTime().After(dstLmt) {
+					shouldOverwrite = true
+				}
+			}
+
+			if !shouldOverwrite {
+				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
+				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
+				jptm.ReportTransferDone()
+				return
+			}
+		}
+	}
+
+	targetHardlinkFullPath := computeAnyToRemoteHardlinkTarget(info, jptm)
+	if targetHardlinkFullPath == "" {
+		// computeAnyToRemoteHardlinkTarget has already logged the specific error via jptm.FailActiveSend.
+		// Avoid calling CreateHardlink with an empty path, which could cause a secondary, less-informative failure.
+		commonSenderCompletion(jptm, baseSender, info)
+		return
+	}
+	// If the hardlink file already exists on the destination,
+	// we need to handle the case where it might be part of a different hardlink group than the source.
+	// E.g source (A+B) destination (B+C)
+	// So, we proactively unlink the file from the previous group (with Delete())
+	// before calling creating to reattach it to the correct group on the destination
+	if jptm.GetOverwriteOption() == common.EOverwriteOption.True() || shouldOverwrite {
+		if azFileSender, ok := baseSender.(interface{ DeleteDestInOverwrite() error }); ok {
+			if delErr := azFileSender.DeleteDestInOverwrite(); delErr != nil {
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning,
+					fmt.Sprintf("Could not delete the destination hardlink %s before creation: %s",
+						jptm.Info().Destination, delErr.Error()))
+				// Don't fail the transfer, let retry logic in DoWithCreateHardlinkOnAzureFilesNFS() take a shot
+			}
+		}
+	}
+	err = s.CreateHardlink(targetHardlinkFullPath)
+	if err != nil {
+		jptm.FailActiveSend("Creating hardlink", err)
+	}
+
+	commonSenderCompletion(jptm, baseSender, info)
+}
+
+// computeAnyToRemoteHardlinkTarget computes the full remote path for the target
+// hardlink. It supports both upload (Local → Azure Files NFS) and S2S
+// (Azure Files NFS → Azure Files NFS) directions.
+//
+// For local sources, It derives the destination-side prefix
+// by stripping the current file's traversal-root-relative path from the destination URL,
+// then joins that prefix with info.TargetHardlinkFilePath.
+// info.Source is a local file path, so a simple string
+// subtraction against the source root works.
+//
+// For remote sources, info.Source is a URL that may carry query parameters
+// (sharesnapshot, etc.), so we must work in URL path space:
+// file.ParseURL gives us the source root's path-only portion too.
+func computeAnyToRemoteHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) string {
+
+	var fileRelPath string
+	// For S2S copies
+	if jptm.FromTo().From().IsFile() {
+		srcRootURLParts, err := file.ParseURL(jptm.GetSourceRoot())
+		if err != nil {
+			jptm.FailActiveSend("Parsing source root URL", err)
+			return ""
+		}
+		srcRootDir := strings.TrimSuffix(srcRootURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		fileRelPath = strings.TrimPrefix(strings.TrimPrefix(info.SrcFilePath, srcRootDir), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	} else {
+		// For Local->FileNFS
+		sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
+		fileRelPath = strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
+	}
+	destURLParts, err := file.ParseURL(info.Destination)
+	if err != nil {
+		jptm.FailActiveSend("Parsing destination URL", err)
+		return ""
+	}
+	destPrefix := strings.TrimSuffix(destURLParts.DirectoryOrFilePath, fileRelPath)
+	targetHardlinkFullPath := "/" + path.Join(destPrefix, info.TargetHardlinkFilePath)
+	return targetHardlinkFullPath
+}

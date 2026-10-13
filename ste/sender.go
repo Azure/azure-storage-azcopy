@@ -109,6 +109,16 @@ type symlinkSender interface {
 	RemoteFileExists() (bool, time.Time, error)
 }
 
+// ///////////////////////////////////////////////////////////////////////////////////////////////
+// hardlinkSender is a sender that also knows how to send hardlink properties
+// ///////////////////////////////////////////////////////////////////////////////////////////////
+type hardlinkSender interface {
+	CreateHardlink(linkData string) error
+	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
+	// the lmt is returned if the file exists
+	RemoteFileExists() (bool, time.Time, error)
+}
+
 type senderFactory func(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

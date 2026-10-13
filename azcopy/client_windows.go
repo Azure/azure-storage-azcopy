@@ -21,10 +21,12 @@
 package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go"
+	"fmt"
 	"math"
 	"net/http"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/v7"
 )
 
 // processOSSpecificInitialization changes the soft limit for filedescriptor for process
@@ -43,5 +45,16 @@ func processOSSpecificInitialization() (int, error) {
 func init() {
 	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
 	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
-	minio.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
+	minioDefault := minio.DefaultTransport
+	minio.DefaultTransport = func(secure bool) (*http.Transport, error) {
+		basis, err := minioDefault(secure)
+		if err != nil {
+			common.GetLifecycleMgr().Info(fmt.Sprintf("failed to set up a default minio transport (falling back to http.DefaultTransport): %s", err))
+			return http.DefaultTransport.(*http.Transport), nil
+		}
+
+		basis.Proxy = common.GlobalProxyLookup
+
+		return basis, nil
+	}
 }

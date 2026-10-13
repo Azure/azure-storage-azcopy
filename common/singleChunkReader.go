@@ -23,8 +23,10 @@ package common
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
+	"runtime"
 	"sync"
 )
 
@@ -76,6 +78,17 @@ type CloseableReaderAt interface {
 
 // Factory method for data source for singleChunkReader
 type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
+
+// callerAt returns "file:line" of the caller `skip` levels above the caller of
+// this function (skip=1 => direct caller). Used to attribute unexpected early
+// closes to their source (e.g. HTTP transport vs. AzCopy-side cleanup).
+func callerAt(skip int) string {
+	_, file, line, ok := runtime.Caller(skip + 1)
+	if !ok {
+		return "?"
+	}
+	return fmt.Sprintf("%s:%d", file, line)
+}
 
 func DocumentationForDependencyOnChangeDetection() {
 	// This function does nothing, except remind you to read the following, which is essential
@@ -240,6 +253,16 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	targetBuffer := cr.slicePool.RentSlice(cr.length)
 
+	// Clear any "closed" state left over from a previous attempt before starting THIS read.
+	// isClosed exists solely to detect a Close() that races with the unlocked ReadAt below
+	// (see the post-read check). A Close() from a previous attempt (e.g. the HTTP transport
+	// reacting to a server-side connection reset such as an AFD 240s idle recycle) must NOT
+	// prevent the azcore retry policy from re-driving this reader via RewindBody+Read; otherwise
+	// every retry fails with "closed while reading" and exhausts the retry budget without ever
+	// retransmitting the chunk. We must clear it while still holding muClose so that any Close()
+	// arriving during the unlocked ReadAt window is unambiguously observed as a concurrent close.
+	cr.isClosed = false
+
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
 	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
 	cr.muClose.Unlock()
@@ -249,6 +272,9 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// now that we have the lock again, see if any error means we can't continue
 	if readErr == nil {
 		if cr.isClosed {
+			// Close() ran concurrently with ReadAt for THIS attempt; abort. We must NOT stash
+			// targetBuffer into cr.buffer, because the Close() that just ran has already finished
+			// and won't free it - that would leak the cacheLimiter budget and can deadlock AzCopy.
 			readErr = errors.New("closed while reading")
 		} else if cr.ctx.Err() != nil {
 			readErr = cr.ctx.Err() // context cancelled
@@ -403,7 +429,13 @@ func (cr *singleChunkReader) Close() error {
 	// This check originates from issue 191. Even tho we think we've now resolved that issue,
 	// we'll keep this code just to make sure.
 	if cr.positionInChunk < cr.length && cr.ctx.Err() == nil {
-		cr.generalLogger.Log(LogInfo, "Early close of chunk in singleChunkReader with context still active")
+		// Log the immediate caller (typically a wrapper Close such as pacedReadSeeker.Close)
+		// and its caller, so unexpected early closes can be attributed to their source.
+		if cr.generalLogger != nil && cr.generalLogger.ShouldLog(LogInfo) {
+			cr.generalLogger.Log(LogInfo, fmt.Sprintf(
+				"Early close of chunk in singleChunkReader with context still active; caller=%s <- %s",
+				callerAt(1), callerAt(2)))
+		}
 		// cannot panic here, since this code path is NORMAL in the case of sparse files to Azure Files and Page Blobs
 	}
 

@@ -934,7 +934,10 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		JobErrorHandler: glcm,
+		JobErrorHandler:      glcm,
+		JobPartType:          common.EJobPartType.Mixed(), // Default to Mixed, will be determined per part based on transfers
+		JobProcessingMode:    azcopy.GetJobProcessingMode(cca.FromTo),
+		HardlinkHandlingType: cca.hardlinks,
 	}
 
 	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
@@ -1453,7 +1456,8 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
-		"False by default. Follow symbolic links when uploading from local file system.")
+		"False by default. Follow symbolic links when uploading from local file system.\n"+
+			"If neither --follow-symlinks nor --preserve-symlinks is set, symlinks are skipped.")
 
 	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "",
 		"Include only those files were modified before or on the given date/time. \n "+
@@ -1789,5 +1793,13 @@ func init() {
 		"Specifies how hardlinks should be handled. "+
 			"\n This flag is only applicable when downloading from an Azure NFS file share, uploading "+
 			"to an Azure Files NFS share, or performing service-to-service copies involving Azure Files NFS. \n"+
-			"\n The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
+			"\n The supported options are 'follow' (default), 'skip' and 'preserve'. \n"+
+			"  'follow' means that the hardlinked files are transferred as separate files. \n"+
+			"  'skip' means that all the hardlinked files are skipped. \n"+
+			"  'preserve' means that hardlink relationships are maintained at the destination where supported. \n"+
+			"\n Note: \n"+
+			"  When using 'preserve', the source and destination must be on a file system that supports hardlinks.\n"+
+			"Behavior may differ based on the transfer direction. For uploads or service-to-service transfers \n"+
+			"(Azure Files NFS as destination), out-of-scope hardlinks are preserved since file updates occur in place. \n"+
+			"  For downloads (local filesystem as destination), out-of-scope hardlinks may be broken due to the default temp-file and rename behavior.")
 }

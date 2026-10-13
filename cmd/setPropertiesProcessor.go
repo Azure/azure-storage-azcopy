@@ -50,7 +50,8 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		JobErrorHandler: glcm,
+		JobErrorHandler:      glcm,
+		HardlinkHandlingType: cca.hardlinks,
 	}
 
 	reportFirstPart := func(jobStarted bool) {

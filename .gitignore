@@ -342,3 +342,6 @@ venv*
 
 # ignore the latest_version.txt
 /latest_version.txt
+
+# ignore resource.syso files
+*.syso
