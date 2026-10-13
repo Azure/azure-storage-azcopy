@@ -487,6 +487,9 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	hashError := make(chan error, hashingThreadCount)
 	wg := &sync.WaitGroup{}
 	immediateStopHashing := int32(0)
+	warnHashFailure := sync.OnceFunc(func() {
+		common.GetLifecycleMgr().Warn("Failed to hash one or more files, so sync can't compare them by hash. Check the scanning log for details.")
+	})
 
 	// create return wrapper to handle hashing errors
 	finalizer = func(existingErr error) error {
@@ -524,6 +527,26 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	}
 	processor = mutexProcessor(processor)
 
+	hashFile := func(fullPath string) ([]byte, error) {
+		f, err := os.OpenFile(fullPath, os.O_RDONLY, 0644) // perm is not used here since it's RO
+		if err != nil {
+			return nil, fmt.Errorf("failed to open file for reading: %w", err)
+		}
+
+		var hasher hash.Hash // set up hasher
+		switch t.targetHashType {
+		case common.ESyncHashType.MD5():
+			hasher = md5.New()
+		}
+
+		// hash.Hash provides a writer type, allowing us to do a (small, 32MB to be precise) buffered write into the hasher and avoid memory concerns
+		if _, err = io.Copy(hasher, f); err != nil {
+			return nil, fmt.Errorf("failed to read file into hasher: %w", err)
+		}
+
+		return hasher.Sum([]byte{}), nil
+	}
+
 	// spin up hashing threads
 	for i := 0; i < hashingThreadCount; i++ {
 		wg.Add(1)
@@ -548,41 +571,26 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 					panic(relPath)
 				}
 
-				f, err := os.OpenFile(fullPath, os.O_RDONLY, 0644) // perm is not used here since it's RO
+				sum, err := hashFile(fullPath)
 				if err != nil {
-					err = fmt.Errorf("failed to open file for reading result %s: %w", relPath, err)
-					hashError <- err
-					return
-				}
-
-				var hasher hash.Hash // set up hasher
-				switch t.targetHashType {
-				case common.ESyncHashType.MD5():
-					hasher = md5.New()
-				}
-
-				// hash.Hash provides a writer type, allowing us to do a (small, 32MB to be precise) buffered write into the hasher and avoid memory concerns
-				_, err = io.Copy(hasher, f)
-				if err != nil {
-					err = fmt.Errorf("failed to read file into hasher result %s: %w", relPath, err)
-					hashError <- err
-					return
-				}
-
-				sum := hasher.Sum([]byte{})
-
-				hashData := common.SyncHashData{
-					Mode: t.targetHashType,
-					Data: base64.StdEncoding.EncodeToString(sum),
-					LMT:  fi.ModTime(),
-				}
-
-				// failing to store hash data doesn't mean we can't transfer (e.g. RO directory)
-				err = t.hashAdapter.SetHashData(relPath, &hashData)
-				if err != nil {
-					common.LogHashStorageFailure()
+					warnHashFailure()
 					if common.AzcopyScanningLogger != nil {
-						common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
+						common.AzcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to hash %s, so sync can't compare it by hash: %v", relPath, err))
+					}
+				} else {
+					hashData := common.SyncHashData{
+						Mode: t.targetHashType,
+						Data: base64.StdEncoding.EncodeToString(sum),
+						LMT:  fi.ModTime(),
+					}
+
+					// failing to store hash data doesn't mean we can't transfer (e.g. RO directory)
+					err = t.hashAdapter.SetHashData(relPath, &hashData)
+					if err != nil {
+						common.LogHashStorageFailure()
+						if common.AzcopyScanningLogger != nil {
+							common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
+						}
 					}
 				}
 
@@ -590,10 +598,9 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 					NewStoredObject(
 						func(storedObject *StoredObject) {
 							// apply the hash data
-							// storedObject.hashData = hashData
-							switch hashData.Mode {
+							switch t.targetHashType {
 							case common.ESyncHashType.MD5():
-								storedObject.Md5 = sum
+								storedObject.Md5 = sum // nil if hashing failed
 							default: // no-op
 							}
 
