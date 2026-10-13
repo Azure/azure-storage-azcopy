@@ -57,6 +57,8 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
+	hashingStopped    chan struct{} // closed once a hashing error ends the scan
+	hashingErr        error
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
 	basePath          string
@@ -441,8 +443,14 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 		}
 
 		// defer hashing to the goroutine
-		t.hashTargetChannel <- relPath
-		return nil, ErrorHashAsyncCalculation
+		select {
+		case t.hashTargetChannel <- relPath:
+			return nil, ErrorHashAsyncCalculation
+		case <-t.hashingStopped:
+			return nil, t.hashingErr
+		case <-t.appCtx.Done():
+			return nil, t.appCtx.Err()
+		}
 	}
 
 	// attempt to grab existing hash data, and ensure it's validity.
@@ -482,11 +490,18 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 
 	// set up for threaded hashing
 	t.hashTargetChannel = make(chan string, 1_000) // "reasonable" backlog
+	t.hashingStopped = make(chan struct{})
 	// Use half of the available CPU cores for hashing to prevent throttling the STE too hard if hashing is still occurring when the first job part gets sent out
 	hashingThreadCount := runtime.NumCPU() / 2
-	hashError := make(chan error, hashingThreadCount)
 	wg := &sync.WaitGroup{}
 	immediateStopHashing := int32(0)
+	stopOnce := &sync.Once{}
+	stopHashing := func(err error) {
+		stopOnce.Do(func() {
+			t.hashingErr = err
+			close(t.hashingStopped)
+		})
+	}
 	warnHashFailure := sync.OnceFunc(func() {
 		common.GetLifecycleMgr().Warn("Failed to hash one or more files, so sync can't compare them by hash. Check the scanning log for details.")
 	})
@@ -502,15 +517,8 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 		} else {
 			close(t.hashTargetChannel) // stop sending hashes
 
-			wg.Wait()                    // Await the finalization of all hashing
-			close(hashError)             // close out the error channel
-			for err := range hashError { // inspect all hashing errors
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
+			wg.Wait() // Await the finalization of all hashing
+			return t.hashingErr
 		}
 	}
 
@@ -554,17 +562,28 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 		go func() {
 			defer wg.Done() // mark the hashing thread as completed
 
+			// Keep taking files until the channel closes, so the scan never waits on a queue nobody drains.
 			for relPath := range t.hashTargetChannel {
 				if atomic.LoadInt32(&immediateStopHashing) == 1 { // should we stop hashing?
 					return
 				}
+				select {
+				case <-t.hashingStopped:
+					continue // the scan is ending, so drain without hashing
+				default:
+				}
 
 				fullPath := filepath.Join(t.fullPath, relPath)
 				fi, err := os.Stat(fullPath) // query LMT & if it's a directory
-				if err != nil {
-					err = fmt.Errorf("failed to get properties of file result %s: %w", relPath, err)
-					hashError <- err
-					return
+				if errors.Is(err, fs.ErrNotExist) {
+					// Skip it as a scan that started now would, rather than end the scan.
+					if common.AzcopyScanningLogger != nil {
+						common.AzcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Skipped %s because it was removed after the scan listed it: %v", relPath, err))
+					}
+					continue
+				} else if err != nil {
+					stopHashing(fmt.Errorf("failed to get properties of file result %s: %w", relPath, err))
+					continue
 				}
 
 				if fi.IsDir() { // this should never happen
@@ -625,8 +644,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 				)
 				_, err = getProcessingError(err)
 				if err != nil {
-					hashError <- err
-					return
+					stopHashing(err)
 				}
 			}
 		}()
