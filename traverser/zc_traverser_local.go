@@ -492,7 +492,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	t.hashTargetChannel = make(chan string, 1_000) // "reasonable" backlog
 	t.hashingStopped = make(chan struct{})
 	// Use half of the available CPU cores for hashing to prevent throttling the STE too hard if hashing is still occurring when the first job part gets sent out
-	hashingThreadCount := runtime.NumCPU() / 2
+	hashingThreadCount := max(1, runtime.NumCPU()/2)
 	wg := &sync.WaitGroup{}
 	immediateStopHashing := int32(0)
 	stopOnce := &sync.Once{}
