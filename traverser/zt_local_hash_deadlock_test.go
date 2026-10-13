@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -87,6 +88,27 @@ func TestLocalHashingScanSkipsFilesRemovedBeforeHashing(t *testing.T) {
 		}
 	}
 	require.ElementsMatch(t, []string{"kept-1.dat", "kept-2.dat"}, files)
+}
+
+// A file left open can't be deleted or renamed by anyone else on Windows.
+func TestLocalHashingScanClosesHashedFiles(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("an open file only blocks deletion on Windows")
+	}
+	defer debug.SetGCPercent(debug.SetGCPercent(-1)) // keeps finalizers from closing leaked files before the check
+	res := runHashingScan(t, createReadableFile, nil)
+	require.NoError(t, res.err)
+
+	dataDir := filepath.Join(res.root, "data")
+	entries, err := os.ReadDir(dataDir)
+	require.NoError(t, err)
+	open := 0
+	for _, e := range entries {
+		if os.Remove(filepath.Join(dataDir, e.Name())) != nil {
+			open++
+		}
+	}
+	require.Zero(t, open, "files still open after Traverse returned")
 }
 
 type hashingScanResult struct {

@@ -540,6 +540,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 		if err != nil {
 			return nil, fmt.Errorf("failed to open file for reading: %w", err)
 		}
+		defer f.Close()
 
 		var hasher hash.Hash // set up hasher
 		switch t.targetHashType {
