@@ -207,19 +207,21 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 	}()
 
 	transport := &countingTransporter{client: &http.Client{Transport: clientTransport}}
+	clientOptions := ste.NewClientOptions(
+		policy.RetryOptions{
+			MaxRetries:    1,
+			RetryDelay:    time.Millisecond,
+			MaxRetryDelay: time.Millisecond,
+		},
+		policy.TelemetryOptions{},
+		transport,
+		ste.LogOptions{},
+		nil,
+		nil,
+	)
+	clientOptions.PerRetryPolicies = append(clientOptions.PerRetryPolicies, RetryPolicy())
 	client, err := blockblob.NewClientWithNoCredential("https://"+tlsListener.Addr().String()+"/container/blob", &blockblob.ClientOptions{
-		ClientOptions: ste.NewClientOptions(
-			policy.RetryOptions{
-				MaxRetries:    1,
-				RetryDelay:    time.Millisecond,
-				MaxRetryDelay: time.Millisecond,
-			},
-			policy.TelemetryOptions{},
-			transport,
-			ste.LogOptions{},
-			nil,
-			nil,
-		),
+		ClientOptions: clientOptions,
 	})
 	require.NoError(t, err)
 
@@ -256,4 +258,14 @@ func TestHTTP2ProtocolErrorRetriesRemainingDownloadRange(t *testing.T) {
 	require.Equal(t, int32(2), transport.calls.Load(),
 		"the resumed range must be requested by azblob RetryReader")
 	t.Log(14)
+}
+
+type retryPolicy struct{}
+
+func RetryPolicy() policy.Policy {
+	return &retryPolicy{}
+}
+
+func (r *retryPolicy) Do(req *policy.Request) (*http.Response, error) {
+	return req.Next()
 }
