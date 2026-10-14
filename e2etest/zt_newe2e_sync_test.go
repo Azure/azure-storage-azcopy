@@ -3,7 +3,6 @@ package e2etest
 import (
 	"bytes"
 	"encoding/base64"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
 )
@@ -27,8 +27,15 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 		return
 	}
 
+	sourceLocation := ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})
+	if sourceLocation == common.ELocation.Local() && runtime.GOOS != "windows" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	const objectName = "incomplete.dat"
-	body := NewRandomObjectContentContainer(SizeFromString("10M"))
+	body := NewRandomObjectContentContainer(SizeFromString("16M"))
+	body.(*ObjectContentContainerBuffer).Data[0] = 1
 	sourceLastWriteTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	sourceCreationTime := sourceLastWriteTime.Add(-time.Hour)
 	sourceProperties := ObjectProperties{
@@ -41,7 +48,7 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 
 	source := CreateResource[ContainerResourceManager](
 		svm,
-		GetRootResource(svm, common.ELocation.File()),
+		GetRootResource(svm, sourceLocation),
 		ResourceDefinitionContainer{},
 	)
 	sourceObject := CreateResource[ObjectResourceManager](
@@ -61,6 +68,8 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 		ResourceDefinitionContainer{},
 	)
 	destinationObject := destination.GetObject(svm, objectName, common.EEntityType.File())
+	destinationFile := destinationObject.(*FileObjectResourceManager)
+	rangeUploaded := make(chan bool, 1)
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbSync,
@@ -70,26 +79,38 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 				Recursive:    pointerTo(true),
 				PreserveInfo: pointerTo(true),
 				GlobalFlags: GlobalFlags{
-					CancelFromStdin: pointerTo(true),
-					CapMbps:         pointerTo(float64(1)),
+					CapMbps: pointerTo(float64(4)),
 				},
 			},
 		},
-		AfterStart: func(stdin io.WriteCloser) {
+		AfterStartProcess: func(process *os.Process) {
 			go func() {
-				deadline := time.Now().Add(30 * time.Second)
-				for !destinationObject.Exists() && time.Now().Before(deadline) {
+				uploaded := false
+				deadline := time.Now().Add(time.Minute)
+				for time.Now().Before(deadline) {
+					response, err := destinationFile.getFileClient().DownloadStream(ctx, &file.DownloadStreamOptions{
+						Range: file.HTTPRange{Offset: 0, Count: 1},
+					})
+					if err == nil {
+						firstByte := []byte{0}
+						bytesRead, _ := response.Body.Read(firstByte)
+						_ = response.Body.Close()
+						if bytesRead == 1 && firstByte[0] == 1 {
+							uploaded = true
+							break
+						}
+					}
 					time.Sleep(100 * time.Millisecond)
 				}
-				_, _ = io.WriteString(stdin, "cancel\n")
-				time.Sleep(500 * time.Millisecond)
-				_, _ = io.WriteString(stdin, "y\n")
+				rangeUploaded <- uploaded
+				_ = process.Kill()
 			}()
 		},
 		ShouldFail: true,
 	})
 
-	svm.AssertNow("cancelled sync must create the destination file", Equal{}, destinationObject.Exists(), true)
+	svm.AssertNow("at least one range must be uploaded before termination", Equal{}, <-rangeUploaded, true)
+	svm.AssertNow("terminated sync must leave the destination file", Equal{}, destinationObject.Exists(), true)
 	incompleteProperties := destinationObject.GetProperties(svm)
 	svm.AssertNow("incomplete destination must have a last-write-time", Not{IsNil{}}, incompleteProperties.FileProperties.FileLastWriteTime)
 	svm.Assert(
@@ -119,9 +140,10 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 		},
 	}, ValidateResourceOptions{
 		validateObjectContent: true,
-		fromTo:                common.EFromTo.FileSMBFileSMB(),
-		preserveInfo:          true,
 	})
+
+	finalProperties := destinationObject.GetProperties(svm)
+	ValidateTimePtr(svm, "last-write-time after retry", &sourceLastWriteTime, finalProperties.FileProperties.FileLastWriteTime)
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationManager) {
