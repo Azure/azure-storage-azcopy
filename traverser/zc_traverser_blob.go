@@ -707,14 +707,17 @@ func (t *BlobTraverser) ParallelList(containerClient *container.Client, containe
 	return nil
 }
 
+func logBlobCrawlStats(message string) {
+	common.GetLifecycleMgr().Info("[AzCopy] [INFO] " + message)
+}
+
 func StartBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {
 	if !buildmode.HighPerf() {
 		return func() {}
 	}
-	common.GetLifecycleMgr().Info(
-		fmt.Sprintf("[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
-			parallelism, stats.MaxQueueDirectories, randomDequeue),
-	)
+	logBlobCrawlStats(fmt.Sprintf(
+		"[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
+		parallelism, stats.MaxQueueDirectories, randomDequeue))
 	statsCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -722,11 +725,10 @@ func StartBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parall
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		logStats := func(final bool) {
-			common.GetLifecycleMgr().Info(
-				fmt.Sprintf("[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
-					atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
-					runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final),
-			)
+			logBlobCrawlStats(fmt.Sprintf(
+				"[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
+				atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
+				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final))
 		}
 		for {
 			select {

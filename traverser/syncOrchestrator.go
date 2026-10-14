@@ -739,8 +739,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		// listings are lexicographically sorted; keep the existing indexMap-based flow for
 		// local filesystem sources (which do not guarantee sorted listing order).
 		if useStreamingMergeJoin(cca) {
-			r.mergeJoinSyncOneDirLog(common.LogDebug,
-				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).RelativePath))
+			r.mergeJoinTraceLog("Processing dir '%s'", dir.(minimalStoredObject).RelativePath)
 
 			var subDirs []minimalStoredObject
 			var mergeErr error
