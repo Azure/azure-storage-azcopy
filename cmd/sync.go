@@ -119,6 +119,7 @@ type rawSyncCmdArgs struct {
 	// is allowlisted for the feature OR the MOVER_SYNC_MJ env var is set (the mover
 	// combines both into this single flag; azcopy does not read any enablement env var itself).
 	useStreamingMergeJoin bool
+	useFlatListing        bool
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -152,6 +153,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
 		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
+		useFlatListing:                   raw.useFlatListing && buildmode.HighPerf(),
 
 		SrcCredName: raw.SrcCredName,
 		DstCredName: raw.DstCredName,
@@ -163,6 +165,13 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
+	}
+	if cooked.useFlatListing {
+		if cooked.fromTo != common.EFromTo.BlobBlob() || !UseSyncOrchestrator {
+			return cooked, errors.New("flat sync requires FNS-to-FNS Blob transfers and the sync orchestrator")
+		}
+		// Flat sync must never fall back to the whole-tree indexMap path.
+		cooked.useStreamingMergeJoin = true
 	}
 
 	switch cooked.fromTo {
@@ -565,6 +574,7 @@ type cookedSyncCmdArgs struct {
 	// useStreamingMergeJoin opts this job into the streaming merge-join sync path (per-job,
 	// set by the mover from featureConfig; see useStreamingMergeJoin()).
 	useStreamingMergeJoin bool
+	useFlatListing        bool
 
 	// cancellation for sync orchestrator
 	orchestratorCancel context.CancelFunc

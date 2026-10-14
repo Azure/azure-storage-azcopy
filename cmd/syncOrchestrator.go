@@ -608,6 +608,9 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 	if cca.recursive {
 		return errors.New("sync orchestrator does not support recursive traversal. Use --recursive=false.")
 	}
+	if cca.useFlatListing && (cca.fromTo != common.EFromTo.BlobBlob() || !useStreamingMergeJoin(cca)) {
+		return errors.New("flat sync requires the Blob-to-Blob streaming merge-join")
+	}
 
 	if orchestratorOptions == nil {
 		return errors.New("orchestrator options are required for sync orchestrator")
@@ -675,6 +678,9 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	// Initialize resource limits based on source/destination types
+	if cca.useFlatListing {
+		syncOrchestratorLog(common.LogInfo, "Flat FNS-to-FNS sync enabled: recursive blob streams, no child-directory queue", true)
+	}
 	initializeLimits(orchestratorOptions)
 	return cca.runSyncOrchestrator(enumerator, ctx)
 }
@@ -763,6 +769,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		stt := enumerator.secondaryTraverserTemplate
 		ptt.options.SuppressCrawlStats = true
 		stt.options.SuppressCrawlStats = true
+		configureFlatSyncTraversers(cca, &ptt.options, &stt.options)
 
 		var errMsg string
 
@@ -1223,6 +1230,20 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	}
 
 	return err
+}
+
+func configureFlatSyncTraversers(cca *cookedSyncCmdArgs, source, destination *InitResourceTraverserOptions) {
+	if !buildmode.HighPerf() || !cca.useFlatListing || cca.fromTo != common.EFromTo.BlobBlob() {
+		return
+	}
+	// List the entire selected prefix once. No virtual directories are emitted,
+	// so the root is the only crawl task and the existing file merge streams all blobs.
+	for _, options := range []*InitResourceTraverserOptions{source, destination} {
+		location := common.ELocation.Blob()
+		options.FlatListing = true
+		options.Recursive = true
+		options.DestResourceType = &location
+	}
 }
 
 // custom logging function for the sync orchestrator

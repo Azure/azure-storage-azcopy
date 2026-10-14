@@ -841,6 +841,9 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.parallelListing = false
 	}
+	if buildmode.HighPerf() && opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
+		t.parallelListing = false
+	}
 	return
 }
 

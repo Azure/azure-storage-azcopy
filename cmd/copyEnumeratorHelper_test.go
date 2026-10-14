@@ -23,19 +23,24 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type crawlTestLogger struct {
@@ -209,4 +214,144 @@ func TestRelativePath(t *testing.T) {
 	// assert
 	a.Equal("/c.txt", srcRelPath)
 	a.Equal("/c.txt", destRelPath)
+}
+
+func TestFlatListingSelection(t *testing.T) {
+	t.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "")
+	blob := common.ELocation.Blob()
+	for _, tc := range []struct {
+		name string
+		flat bool
+		hns  bool
+		dest common.Location
+		want bool
+	}{
+		{"FNS-FNS opt in", true, false, blob, true},
+		{"unknown source", false, false, blob, false},
+		{"HNS-FNS", true, true, blob, false},
+		{"FNS-HNS", true, false, common.ELocation.BlobFS(), false},
+		{"FNS-Files", true, false, common.ELocation.File(), false},
+		{"FNS-local", true, false, common.ELocation.Local(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			traverser := newBlobTraverser("https://example.blob.core.windows.net/c", nil, context.Background(),
+				InitResourceTraverserOptions{FlatListing: tc.flat, Recursive: true, DestResourceType: &tc.dest},
+				BlobTraverserOptions{isDFS: &tc.hns})
+			require.Equal(t, !(tc.want && buildmode.HighPerf()), traverser.parallelListing)
+		})
+	}
+}
+
+// flatTestListing exercises the real SDK pager and blob object construction, without Azure access.
+type flatTestListing struct {
+	traverser *blobTraverser
+}
+
+func (f *flatTestListing) IsDirectory(bool) (bool, error) { return true, nil }
+
+func (f *flatTestListing) Traverse(pre objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	return f.traverser.Traverse(pre, processor, filters)
+}
+
+func newFlatTestListing(t *testing.T, ctx context.Context, pages [][]string, prefix string,
+	beforePage func(int, http.ResponseWriter, *http.Request) bool) (*flatTestListing, *atomic.Int32) {
+	t.Helper()
+	if !buildmode.HighPerf() {
+		t.Skip("flat enumeration requires the high-performance mover profile")
+	}
+	calls := &atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("x-ms-error-code", "BlobNotFound")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		calls.Add(1)
+		require.Equal(t, "list", r.URL.Query().Get("comp"))
+		require.Empty(t, r.URL.Query().Get("delimiter"))
+		require.Equal(t, prefix, r.URL.Query().Get("prefix"))
+		page := 0
+		if marker := r.URL.Query().Get("marker"); marker != "" {
+			var err error
+			page, err = strconv.Atoi(marker)
+			require.NoError(t, err)
+		}
+		if beforePage != nil && !beforePage(page, w, r) {
+			return
+		}
+		if page >= len(pages) {
+			t.Errorf("unexpected page %d", page)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, `<EnumerationResults><Blobs>`)
+		for _, name := range pages[page] {
+			fmt.Fprintf(w, `<Blob><Name>%s</Name><Properties><Last-Modified>Sun, 13 Sep 2020 12:26:40 GMT</Last-Modified><Etag>etag</Etag><Content-Length>1</Content-Length><BlobType>BlockBlob</BlobType></Properties></Blob>`,
+				html.EscapeString(prefix+name))
+		}
+		fmt.Fprint(w, `</Blobs><NextMarker>`)
+		if page+1 < len(pages) {
+			fmt.Fprint(w, page+1)
+		}
+		fmt.Fprint(w, `</NextMarker></EnumerationResults>`)
+	}))
+	t.Cleanup(server.Close)
+	// localhost avoids the SDK's IP-address emulator URL parsing rules.
+	endpoint := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
+	client, err := service.NewClientWithNoCredential(endpoint, nil)
+	require.NoError(t, err)
+	location := common.ELocation.Blob()
+	traverser := newBlobTraverser(endpoint+"/c/"+prefix, client, ctx,
+		InitResourceTraverserOptions{FlatListing: true, Recursive: true, DestResourceType: &location})
+	return &flatTestListing{traverser}, calls
+}
+
+func TestFlatCopyNestedBlobsAcrossPages(t *testing.T) {
+	listing, calls := newFlatTestListing(t, context.Background(),
+		[][]string{{"a", "a-1/item", "a/deep/blob"}, {"b space/%literal", "z/end"}}, "selected/", nil)
+	var paths []string
+	var scanned int
+	listing.traverser.incrementEnumerationCounter = func(kind common.EntityType) {
+		require.Equal(t, common.EEntityType.File(), kind)
+		scanned++
+	}
+	err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
+		require.False(t, obj.isVirtualPrefix)
+		paths = append(paths, obj.relativePath)
+		return nil
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "a-1/item", "a/deep/blob", "b space/%literal", "z/end"}, paths)
+	require.Equal(t, 5, scanned)
+	require.EqualValues(t, 2, calls.Load())
+}
+
+func TestFlatCopyFiltersMarkerAndPropagatesProcessorError(t *testing.T) {
+	listing, _ := newFlatTestListing(t, context.Background(),
+		[][]string{{"__AZURE_STORAGE_MOVER_MARKER", "nested/file"}}, "", nil)
+	wantErr := fmt.Errorf("stop scheduling")
+	var paths []string
+	err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
+		paths = append(paths, obj.relativePath)
+		return wantErr
+	}, buildRegexFilters([]string{".*__AZURE_STORAGE_MOVER_MARKER.*"}, false))
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, []string{"nested/file"}, paths)
+}
+
+func TestFlatListingPageFailure(t *testing.T) {
+	listing, _ := newFlatTestListing(t, context.Background(), [][]string{{"a/file"}, {}}, "",
+		func(page int, w http.ResponseWriter, r *http.Request) bool {
+			if page == 1 {
+				w.Header().Set("x-ms-error-code", "AuthorizationPermissionMismatch")
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprint(w, `<Error><Code>AuthorizationPermissionMismatch</Code><Message>denied</Message></Error>`)
+				return false
+			}
+			return true
+		})
+	err := listing.Traverse(noPreProccessor, func(StoredObject) error { return nil }, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "AuthorizationPermissionMismatch"))
 }
