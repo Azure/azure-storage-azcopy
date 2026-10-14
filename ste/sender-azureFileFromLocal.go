@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
@@ -71,7 +72,13 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.ctx, reader, u.pacer)
-		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
+		var options *file.UploadRangeOptions
+		if jptm.Info().PreserveInfo && jptm.FromTo().To() == common.ELocation.File() {
+			options = &file.UploadRangeOptions{
+				LastWrittenMode: to.Ptr(file.LastWrittenModePreserve),
+			}
+		}
+		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), body, options)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
