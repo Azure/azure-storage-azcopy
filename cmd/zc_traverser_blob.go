@@ -23,13 +23,16 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -53,7 +56,8 @@ type blobTraverser struct {
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization in the name of saving costs
-	parallelListing bool
+	parallelListing     bool
+	flatListDiagnostics bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -745,9 +749,68 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bo
 	return util.doesBlobRepresentAFolder(metadata) // We should ignore these, because we pick them up in other ways.
 }
 
+type flatListTimingKey struct{}
+
+type flatListPageTiming struct {
+	attempts, throttles   int
+	attemptTime, retryGap time.Duration
+	lastAttemptEnd        time.Time
+}
+
+type flatListTimingPolicy struct{}
+
+func (flatListTimingPolicy) Do(req *policy.Request) (*http.Response, error) {
+	timing, _ := req.Raw().Context().Value(flatListTimingKey{}).(*flatListPageTiming)
+	if timing == nil {
+		return req.Next()
+	}
+	start := time.Now()
+	if !timing.lastAttemptEnd.IsZero() {
+		timing.retryGap += start.Sub(timing.lastAttemptEnd)
+	}
+	timing.attempts++
+	resp, err := req.Next()
+	timing.lastAttemptEnd = time.Now()
+	timing.attemptTime += timing.lastAttemptEnd.Sub(start)
+	if resp != nil && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable) {
+		timing.throttles++
+	}
+	return resp, err
+}
+
+func flatListDiagnosticsEnabled() bool {
+	return buildmode.HighPerf() && strings.EqualFold(os.Getenv("MOVER_FLAT_LIST_DIAGNOSTICS"), "true")
+}
+
+type flatListTimingStats struct {
+	started, lastLog                                    time.Time
+	pages, blobs, minPage, maxPage, attempts, throttles int
+	nextTime, attemptTime, retryGap, processingTime     time.Duration
+}
+
+func (s *flatListTimingStats) log(destination, final bool) {
+	now := time.Now()
+	if !final && now.Sub(s.lastLog) < 30*time.Second {
+		return
+	}
+	s.lastLog = now
+	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+		"[FlatListTiming] destination=%t final=%t pages=%d blobs=%d minPage=%d maxPage=%d attempts=%d throttles=%d elapsed_ms=%d next_ms=%d attempt_ms=%d between_attempt_ms=%d outside_attempt_ms=%d processing_ms=%d",
+		destination, final, s.pages, s.blobs, s.minPage, s.maxPage, s.attempts, s.throttles,
+		now.Sub(s.started).Milliseconds(), s.nextTime.Milliseconds(), s.attemptTime.Milliseconds(),
+		s.retryGap.Milliseconds(), (s.nextTime-s.attemptTime-s.retryGap).Milliseconds(), s.processingTime.Milliseconds()), true)
+}
+
 func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 
+	diagnostics := t.flatListDiagnostics
+	var timings flatListTimingStats
+	if diagnostics {
+		timings.started = time.Now()
+		timings.lastLog = timings.started
+		defer timings.log(t.isSyncDestination, true)
+	}
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
@@ -756,9 +819,36 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
 	})
 	for pager.More() {
-		resp, err := pager.NextPage(t.ctx)
+		pageCtx := t.ctx
+		var pageTiming flatListPageTiming
+		var pageStart time.Time
+		if diagnostics {
+			pageCtx = context.WithValue(pageCtx, flatListTimingKey{}, &pageTiming)
+			pageStart = time.Now()
+		}
+		resp, err := pager.NextPage(pageCtx)
+		if diagnostics {
+			timings.nextTime += time.Since(pageStart)
+			timings.attempts += pageTiming.attempts
+			timings.throttles += pageTiming.throttles
+			timings.attemptTime += pageTiming.attemptTime
+			timings.retryGap += pageTiming.retryGap
+		}
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+		}
+		var processingStart time.Time
+		if diagnostics {
+			processingStart = time.Now()
+			count := len(resp.Segment.BlobItems)
+			timings.pages++
+			timings.blobs += count
+			if timings.pages == 1 || count < timings.minPage {
+				timings.minPage = count
+			}
+			if count > timings.maxPage {
+				timings.maxPage = count
+			}
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
@@ -796,8 +886,15 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 			processErr := processIfPassedFilters(filters, storedObject, processor)
 			_, processErr = getProcessingError(processErr)
 			if processErr != nil {
+				if diagnostics {
+					timings.processingTime += time.Since(processingStart)
+				}
 				return processErr
 			}
+		}
+		if diagnostics {
+			timings.processingTime += time.Since(processingStart)
+			timings.log(t.isSyncDestination, false)
 		}
 	}
 
@@ -817,6 +914,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		include:                     common.EBlobTraverserIncludeOption.FromInputs(opts.PermanentDelete, opts.ListVersions, opts.IncludeDirectoryStubs),
 		incrementEnumerationCounter: opts.IncrementEnumeration,
 		parallelListing:             true,
+		flatListDiagnostics:         opts.FlatListing && flatListDiagnosticsEnabled(),
 		s2sPreserveSourceTags:       opts.PreserveBlobTags,
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,

@@ -507,6 +507,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 	}
 
 	options := createClientOptions(azcopyScanningLogger, nil, opts.Credential.TokenCredential)
+	if opts.FlatListing && flatListDiagnosticsEnabled() {
+		options.PerRetryPolicies = append(options.PerRetryPolicies, flatListTimingPolicy{})
+	}
 
 	switch resourceLocation {
 	case common.ELocation.Local():

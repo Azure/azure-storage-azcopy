@@ -160,6 +160,14 @@ virtual directories. This does not cap transfer-plan or scheduler memory.
 Each flat stream uses sequential continuation tokens, so listing throughput
 depends on page latency and occupancy.
 
+For a bounded diagnostic run, set `MOVER_FLAT_LIST_DIAGNOSTICS=true` to emit
+cumulative `[FlatListTiming]` console records approximately every 30 seconds
+and at traversal exit. Records include page sizes, `NextPage` time, HTTP-policy
+attempt time, time between retry attempts, and object-processing time.
+`outside_attempt_ms` includes SDK decoding and pipeline setup; it is not a
+CPU-only decoding measurement. Diagnostics are off by default and do not
+change retry policy, page size, or enumeration behavior.
+
 Do not enable `AZCOPY_DISABLE_HIERARCHICAL_SCAN` globally to implement this:
 non-recursive directory-based sync would skip nested blobs. The new selection
 is explicit and per traverser; it does not change that existing CLI override.

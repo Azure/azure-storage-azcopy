@@ -34,6 +34,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -47,6 +49,39 @@ type crawlTestLogger struct {
 	common.ILoggerResetable
 	mu       sync.Mutex
 	messages []string
+}
+
+func TestFlatListTimingMeasuresRetries(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			w.Header().Set("x-ms-error-code", "ServerBusy")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, `<Error><Code>ServerBusy</Code><Message>busy</Message></Error>`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, `<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>`)
+	}))
+	defer server.Close()
+	client, err := container.NewClientWithNoCredential(server.URL+"/container", &container.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Retry:            policy.RetryOptions{MaxRetries: 1, RetryDelay: time.Millisecond, MaxRetryDelay: time.Millisecond},
+			PerRetryPolicies: []policy.Policy{flatListTimingPolicy{}},
+		},
+	})
+	require.NoError(t, err)
+	var timing flatListPageTiming
+	ctx := context.WithValue(context.Background(), flatListTimingKey{}, &timing)
+	start := time.Now()
+	_, err = client.NewListBlobsFlatPager(nil).NextPage(ctx)
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	require.Equal(t, 2, timing.attempts)
+	require.Equal(t, 1, timing.throttles)
+	require.Positive(t, timing.attemptTime)
+	require.Positive(t, timing.retryGap)
+	require.LessOrEqual(t, timing.attemptTime+timing.retryGap, elapsed)
 }
 
 func (l *crawlTestLogger) ShouldLog(common.LogLevel) bool { return false }
