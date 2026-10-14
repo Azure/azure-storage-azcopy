@@ -56,8 +56,9 @@ type blobTraverser struct {
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization in the name of saving costs
-	parallelListing     bool
-	flatListDiagnostics bool
+	parallelListing      bool
+	flatListDiagnostics  bool
+	flatListRetryOptions *policy.RetryOptions
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -820,6 +821,9 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	})
 	for pager.More() {
 		pageCtx := t.ctx
+		if t.flatListRetryOptions != nil {
+			pageCtx = policy.WithRetryOptions(pageCtx, *t.flatListRetryOptions)
+		}
 		var pageTiming flatListPageTiming
 		var pageStart time.Time
 		if diagnostics {
@@ -941,6 +945,11 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	}
 	if buildmode.HighPerf() && opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
 		t.parallelListing = false
+		// This changes the base delay for all SDK-retryable failures on these page
+		// requests, not only 503s. Preserve eligibility, limits and Retry-After handling.
+		retryOptions := opts.retryOptions
+		retryOptions.RetryDelay = 100 * time.Millisecond
+		t.flatListRetryOptions = &retryOptions
 	}
 	return
 }

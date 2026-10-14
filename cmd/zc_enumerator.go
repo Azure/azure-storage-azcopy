@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
@@ -434,6 +435,9 @@ type InitResourceTraverserOptions struct {
 	// FlatListing is a per-job opt-in for confirmed FNS-to-FNS transfers.
 	FlatListing bool
 
+	// Snapshot of the client's complete retry policy for page-scoped overrides.
+	retryOptions policy.RetryOptions
+
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
 	// (List, GetProperties) issued during enumeration, so scanning respects the
 	// same storage IOPS budget as the transfer phase. Currently wired for Azure
@@ -507,6 +511,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 	}
 
 	options := createClientOptions(azcopyScanningLogger, nil, opts.Credential.TokenCredential)
+	opts.retryOptions = options.Retry
 	if opts.FlatListing && flatListDiagnosticsEnabled() {
 		options.PerRetryPolicies = append(options.PerRetryPolicies, flatListTimingPolicy{})
 	}

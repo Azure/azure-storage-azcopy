@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -40,7 +41,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +86,175 @@ func TestFlatListTimingMeasuresRetries(t *testing.T) {
 	require.Positive(t, timing.attemptTime)
 	require.Positive(t, timing.retryGap)
 	require.LessOrEqual(t, timing.attemptTime+timing.retryGap, elapsed)
+}
+
+type flatRetryTransport func(*http.Request) (*http.Response, error)
+
+func (f flatRetryTransport) Do(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestFlatListRetryOptionsWiring(t *testing.T) {
+	captureCrawlLogs(t)
+	t.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "")
+	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
+	destination := common.ELocation.Blob()
+	baseline := createClientOptions(azcopyScanningLogger, nil, nil).Retry
+	traverser, err := InitResourceTraverser(
+		common.ResourceString{Value: "https://example.blob.core.windows.net/c"},
+		common.ELocation.Blob(), context.Background(), InitResourceTraverserOptions{
+			Credential: &cred.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
+			Recursive:  true, FlatListing: true, DestResourceType: &destination,
+		})
+	require.NoError(t, err)
+	blobTraverser, ok := traverser.(*blobTraverser)
+	require.True(t, ok)
+	require.False(t, blobTraverser.flatListDiagnostics)
+	if !buildmode.HighPerf() {
+		require.Nil(t, blobTraverser.flatListRetryOptions)
+		return
+	}
+	require.NotNil(t, blobTraverser.flatListRetryOptions)
+	actual := *blobTraverser.flatListRetryOptions
+	require.Equal(t, 100*time.Millisecond, actual.RetryDelay)
+	require.Equal(t, ste.UploadMaxTries, int(actual.MaxRetries))
+	require.Equal(t, ste.UploadTryTimeout, actual.TryTimeout)
+	require.Equal(t, ste.UploadMaxRetryDelay, actual.MaxRetryDelay)
+	require.Equal(t, baseline.StatusCodes, actual.StatusCodes)
+	require.Equal(t, baseline.ShouldRetry == nil, actual.ShouldRetry == nil)
+	require.Equal(t, time.Second, createClientOptions(azcopyScanningLogger, nil, nil).Retry.RetryDelay)
+}
+
+func TestFlatListPageRetries(t *testing.T) {
+	captureCrawlLogs(t)
+	t.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "")
+	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
+	for _, tc := range []struct {
+		name          string
+		noOptIn       bool
+		status        int
+		failures      int
+		retries       int32
+		cap           time.Duration
+		header        string
+		headerValue   string
+		headerDelay   time.Duration
+		cancelBackoff bool
+		rejectRetry   bool
+		statusCodes   []int
+		wantCalls     int
+		wantError     bool
+		checkShared   bool
+	}{
+		{name: "503 then success", status: 503, failures: 1, retries: 3, wantCalls: 2, checkShared: true},
+		{name: "without flat opt in", noOptIn: true, status: 503, failures: 1, retries: 3, wantCalls: 2},
+		{name: "repeated 503 increasing delays", status: 503, failures: 10, retries: 3, wantCalls: 4, wantError: true},
+		{name: "twenty retries preserved", status: 503, failures: 30, retries: 20, cap: 50 * time.Millisecond, wantCalls: 21, wantError: true},
+		{name: "disabled retries preserved", status: 503, failures: 1, retries: -1, wantCalls: 1, wantError: true},
+		{name: "retry after seconds", status: 503, failures: 1, retries: 3, header: "Retry-After", headerValue: "2", headerDelay: 2 * time.Second, wantCalls: 2},
+		{name: "retry after date", status: 503, failures: 1, retries: 3, header: "Retry-After", headerValue: "date", headerDelay: 3 * time.Second, wantCalls: 2},
+		{name: "retry after milliseconds", status: 503, failures: 1, retries: 3, header: "retry-after-ms", headerValue: "250", headerDelay: 250 * time.Millisecond, wantCalls: 2},
+		{name: "x ms retry after", status: 503, failures: 1, retries: 3, header: "x-ms-retry-after-ms", headerValue: "350", headerDelay: 350 * time.Millisecond, wantCalls: 2},
+		{name: "retry after exceeds cap", status: 503, failures: 1, retries: 3, cap: time.Second, header: "Retry-After", headerValue: "2", wantCalls: 1, wantError: true},
+		{name: "cancellation during backoff", status: 503, failures: 10, retries: 3, cancelBackoff: true, wantCalls: 1, wantError: true},
+		{name: "retry predicate preserved", status: 503, failures: 1, retries: 3, rejectRetry: true, wantCalls: 1, wantError: true},
+		{name: "status eligibility preserved", status: 503, failures: 1, retries: 3, statusCodes: []int{429}, wantCalls: 1, wantError: true},
+		{name: "429 remains retryable", status: 429, failures: 1, retries: 3, wantCalls: 2},
+		{name: "500 remains retryable", status: 500, failures: 1, retries: 3, wantCalls: 2},
+		{name: "403 not retried", status: 403, failures: 1, retries: 3, wantCalls: 1, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				options := policy.RetryOptions{
+					MaxRetries: tc.retries, RetryDelay: time.Second,
+					MaxRetryDelay: time.Minute, TryTimeout: 12 * time.Second, StatusCodes: tc.statusCodes,
+				}
+				if tc.cap != 0 {
+					options.MaxRetryDelay = tc.cap
+				}
+				predicateCalls := 0
+				if tc.rejectRetry {
+					options.ShouldRetry = func(*http.Response, error) bool {
+						predicateCalls++
+						return false
+					}
+				}
+				var attempts []time.Time
+				transport := flatRetryTransport(func(req *http.Request) (*http.Response, error) {
+					attempts = append(attempts, time.Now())
+					deadline, ok := req.Context().Deadline()
+					require.True(t, ok, "per-attempt timeout must survive the override")
+					require.Equal(t, options.TryTimeout, deadline.Sub(time.Now()))
+					status := http.StatusOK
+					body := `<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>`
+					headers := http.Header{"Content-Type": []string{"application/xml"}}
+					if len(attempts) <= tc.failures {
+						status = tc.status
+						body = `<Error><Code>ServerBusy</Code><Message>fixture</Message></Error>`
+						headers.Set("x-ms-error-code", "ServerBusy")
+						if tc.header != "" {
+							value := tc.headerValue
+							if value == "date" {
+								value = time.Now().Add(tc.headerDelay).Format(http.TimeFormat)
+							}
+							headers.Set(tc.header, value)
+						}
+					}
+					return &http.Response{StatusCode: status, Header: headers,
+						Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+				})
+				client, err := container.NewClientWithNoCredential("https://example.blob.core.windows.net/c",
+					&container.ClientOptions{ClientOptions: azcore.ClientOptions{Retry: options, Transport: transport}})
+				require.NoError(t, err)
+				destination := common.ELocation.Blob()
+				traverser := newBlobTraverser(client.URL(), nil, ctx, InitResourceTraverserOptions{
+					FlatListing: !tc.noOptIn, Recursive: true, DestResourceType: &destination, retryOptions: options,
+				})
+				if tc.cancelBackoff {
+					time.AfterFunc(50*time.Millisecond, cancel)
+				}
+				start := time.Now()
+				err = traverser.serialList(client, "c", "", "", nil, func(StoredObject) error { return nil }, nil)
+				if tc.wantError {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+				require.Len(t, attempts, tc.wantCalls)
+				if tc.rejectRetry {
+					require.Equal(t, 1, predicateCalls)
+				}
+				if tc.cancelBackoff {
+					require.ErrorContains(t, err, "context canceled")
+					require.Equal(t, 50*time.Millisecond, time.Since(start))
+				}
+				base := options.RetryDelay
+				if buildmode.HighPerf() && !tc.noOptIn {
+					base = 100 * time.Millisecond
+				}
+				for i := 1; i < len(attempts); i++ {
+					gap := attempts[i].Sub(attempts[i-1])
+					if tc.headerDelay > 0 {
+						require.Equal(t, tc.headerDelay, gap)
+					} else {
+						delay := time.Duration((1<<i)-1) * base
+						minimum := min(time.Duration(float64(delay)*0.8), options.MaxRetryDelay)
+						maximum := min(time.Duration(float64(delay)*1.3), options.MaxRetryDelay)
+						require.GreaterOrEqual(t, gap, minimum)
+						require.LessOrEqual(t, gap, maximum)
+					}
+				}
+				if tc.checkShared {
+					attempts = nil
+					_, err := client.NewListBlobsFlatPager(nil).NextPage(ctx)
+					require.NoError(t, err)
+					require.Len(t, attempts, 2)
+					require.GreaterOrEqual(t, attempts[1].Sub(attempts[0]), 800*time.Millisecond)
+					require.Less(t, attempts[1].Sub(attempts[0]), 1300*time.Millisecond)
+				}
+			})
+		})
+	}
 }
 
 func (l *crawlTestLogger) ShouldLog(common.LogLevel) bool { return false }
@@ -273,8 +446,16 @@ func TestFlatListingSelection(t *testing.T) {
 				InitResourceTraverserOptions{FlatListing: tc.flat, Recursive: true, DestResourceType: &tc.dest},
 				BlobTraverserOptions{isDFS: &tc.hns})
 			require.Equal(t, !(tc.want && buildmode.HighPerf()), traverser.parallelListing)
+			require.Equal(t, tc.want && buildmode.HighPerf(), traverser.flatListRetryOptions != nil)
 		})
 	}
+	t.Run("legacy forced serial without opt in", func(t *testing.T) {
+		t.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
+		traverser := newBlobTraverser("https://example.blob.core.windows.net/c", nil, context.Background(),
+			InitResourceTraverserOptions{Recursive: true, DestResourceType: &blob})
+		require.False(t, traverser.parallelListing)
+		require.Nil(t, traverser.flatListRetryOptions)
+	})
 }
 
 // flatTestListing exercises the real SDK pager and blob object construction, without Azure access.
