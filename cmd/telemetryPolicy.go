@@ -23,6 +23,7 @@ package cmd
 import (
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -229,13 +230,15 @@ var telemetryCategoryValues = map[string]string{
 func telemetryCategoryAllowed(flag, value string) bool {
 	allowed, category := telemetryCategoryValues[flag]
 	if !category {
+		// Not a list-type flag: its normalizer has already validated the value.
 		return true
 	}
 	if flag != "exclude-blob-type" && strings.Contains(value, ",") {
 		return false
 	}
+	allowedValues := strings.Fields(allowed)
 	for _, item := range strings.Split(value, ",") {
-		if item == "" || strings.ContainsAny(item, " \t\r\n") || !strings.Contains(" "+allowed+" ", " "+item+" ") {
+		if !slices.Contains(allowedValues, item) {
 			return false
 		}
 	}
