@@ -114,9 +114,9 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 	incompleteProperties := destinationObject.GetProperties(svm)
 	svm.AssertNow("incomplete destination must have a last-write-time", Not{IsNil{}}, incompleteProperties.FileProperties.FileLastWriteTime)
 	svm.Assert(
-		"incomplete destination must use the minimum last-write-time",
+		"incomplete destination must use the Unix epoch last-write-time",
 		Equal{},
-		incompleteProperties.FileProperties.FileLastWriteTime.Equal(time.Date(1601, time.January, 1, 0, 0, 0, 0, time.UTC)),
+		incompleteProperties.FileProperties.FileLastWriteTime.Equal(time.Unix(0, 0).UTC()),
 		true,
 	)
 
