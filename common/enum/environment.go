@@ -338,10 +338,11 @@ func (eEnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
 	}
 }
 
+// Set the default service API version to 2026-06-06 to enable Photon feature
 func (eEnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2025-05-05",
+		DefaultValue: "2026-06-06",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }

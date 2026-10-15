@@ -43,7 +43,9 @@ func IsSourcePublicBlob(sourceURI string, ctx context.Context) bool {
 			panic("Container client was unable to be created.")
 		}
 
-		pager := containerClient.NewListBlobsFlatPager(nil)
+		pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+			ResponseFormat: container.StorageResponseFormatArrow,
+		})
 		_, err = pager.NextPage(ctx)
 		if err == nil {
 			return true

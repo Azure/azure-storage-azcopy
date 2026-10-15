@@ -169,7 +169,10 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		if blobURLParts.ContainerName != "" && blobURLParts.BlobName == "" {
 			// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
 			containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
-			p := containerClient.NewListBlobsFlatPager(nil)
+			p := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+				ResponseFormat: container.StorageResponseFormatArrow,
+			})
+			azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("isDirDirect: StorageResponseFormatArrow option was used for listing blobs in container %s.", blobURLParts.ContainerName))
 			_, err = p.NextPage(t.ctx)
 
 			if bloberror.HasCode(err, bloberror.AuthorizationPermissionMismatch) {
@@ -202,7 +205,12 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
 	maxResults := int32(1)
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix, MaxResults: &maxResults})
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix:         &searchPrefix,
+		MaxResults:     &maxResults,
+		ResponseFormat: container.StorageResponseFormatArrow,
+	})
+	azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("StorageResponseFormatArrow option was used for listing blobs. searchPrefix: %s, MaxResults: %d", searchPrefix, maxResults))
 	resp, err := pager.NextPage(t.ctx)
 	if err != nil {
 		if azcopyScanningLogger != nil {
@@ -752,9 +760,11 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		Prefix:         &prefix,
+		Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		ResponseFormat: container.StorageResponseFormatArrow,
 	})
+	azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("serialList: list blobs with prefix: %s", prefix))
 	for pager.More() {
 		resp, err := pager.NextPage(t.ctx)
 		if err != nil {
