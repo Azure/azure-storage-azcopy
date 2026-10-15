@@ -122,6 +122,10 @@ def init():
             or check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL') or check_env_not_exist('S2S_SRC_GCP_SERVICE_URL'):
         parse_config_file_set_env()
 
+    # The all-zero key keeps smoke-test runs out of production telemetry.
+    if not os.environ.get('AZCOPY_TELEMETRY_CONNECTION_STRING', '').strip():
+        os.environ['AZCOPY_TELEMETRY_CONNECTION_STRING'] = 'InstrumentationKey=00000000-0000-0000-0000-000000000000'
+
     # Get the environment variables value
     # test_dir_path is the location where test_data folder will be created and test files will be created further.
     test_dir_path = get_env_logged('TEST_DIRECTORY_PATH')

@@ -857,7 +857,7 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 
 func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, mockDelete azcopy.ObjectDeleter, verifier func(err error)) {
 	// the simulated user input should parse properly
-	opts, err := raw.toOptions()
+	opts, err := raw.toOptions(&cobra.Command{})
 	a.Nil(err)
 	opts.SetInternalOptions(true, raw.deleteDestinationFileIfNecessary, "", mockTransfer, mockDelete)
 	// create the client if it is not already created
