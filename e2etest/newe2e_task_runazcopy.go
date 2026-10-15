@@ -80,6 +80,7 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
 	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
+	AzCopyVerbBenchmark   AzCopyVerb = "bench"
 )
 
 type AzCopyTarget struct {
@@ -179,12 +180,13 @@ func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 }
 
 var RunAzCopyDefaultInheritEnvironment = map[string]bool{
-	"path":             true,
-	"home":             true,
-	"userprofile":      true,
-	"homepath":         true,
-	"homedrive":        true,
-	"azure_config_dir": true,
+	"path":                               true,
+	"home":                               true,
+	"userprofile":                        true,
+	"homepath":                           true,
+	"homedrive":                          true,
+	"azure_config_dir":                   true,
+	"azcopy_telemetry_connection_string": true,
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
@@ -541,4 +543,38 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	})
 
 	return out, &AzCopyJobPlan{}
+}
+
+func azCopyVerbProducesJobFinishedTelemetry(verb AzCopyVerb) bool {
+	switch verb {
+	case AzCopyVerbCopy, AzCopyVerbSync, AzCopyVerbJobsResume:
+		return true
+	default:
+		return false
+	}
+}
+
+func azCopyCommandProducesJobFinishedTelemetry(verb AzCopyVerb, flags map[string]string) bool {
+	return azCopyVerbProducesJobFinishedTelemetry(verb) &&
+		!telemetryExpectsNoEvents(verb, flags)
+}
+
+type appInsightsJobValidationDecision struct {
+	missingJobID bool
+	jobID        string
+}
+
+func decideAppInsightsJobValidation(
+	verb AzCopyVerb,
+	flags map[string]string,
+	shouldFail bool,
+	jobID string,
+) appInsightsJobValidationDecision {
+	if !azCopyCommandProducesJobFinishedTelemetry(verb, flags) {
+		return appInsightsJobValidationDecision{}
+	}
+	if jobID != "" {
+		return appInsightsJobValidationDecision{jobID: jobID}
+	}
+	return appInsightsJobValidationDecision{missingJobID: !shouldFail}
 }

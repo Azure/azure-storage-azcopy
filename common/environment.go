@@ -477,3 +477,17 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
 	}
 }
+
+func (EnvironmentVariable) TelemetryConnectionString() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_TELEMETRY_CONNECTION_STRING",
+		Description: "Overrides the Application Insights connection string that usage telemetry is sent to.",
+	}
+}
+
+func (EnvironmentVariable) E2ETelemetryRunID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_E2E_TELEMETRY_RUN_ID",
+		Description: "Correlates usage telemetry from one AzCopy E2E test run. Unset in normal use.",
+	}
+}

@@ -38,13 +38,21 @@ type ObjectDeleter func(rootPath string, target common.Location, object traverse
 func (s *syncer) newSyncTransferProcessor(
 	numOfTransfersPerPart int,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
-	reportFirstPart := func(jobStarted bool) { s.spt.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
+	// for compatibility with the way sync has always worked, firstPartOrdered doesn't check jobStarted
+	reportFirstPart := func(jobStarted bool) {
+		if jobStarted {
+			s.spt.markTransferStart()
+		}
+		s.spt.setFirstPartOrdered()
+	}
 	reportFinalPart := func() { s.spt.setScanningComplete() }
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return NewCopyTransferProcessor(false, copyJobTemplate, numOfTransfersPerPart, s.opts.source, s.opts.destination,
+	processor := NewCopyTransferProcessor(false, copyJobTemplate, numOfTransfersPerPart, s.opts.source, s.opts.destination,
 		reportFirstPart, reportFinalPart, s.opts.s2SPreserveAccessTier, s.opts.dryrun, s.opts.dryrunJobPartOrderHandler)
+	processor.SetTransferScheduledObserver(s.spt.shapeTracker.recordScheduled)
+	return processor
 }
 
 // base for delete processors targeting different resources
