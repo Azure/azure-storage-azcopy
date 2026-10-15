@@ -34,7 +34,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -715,8 +714,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			cca.destination.Value,
 			orchestratorOptions.ToStringMap()))
 
-	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
-
 	// syncOneDir processes a single directory by creating source and destination traversers,
 	// enumerating files, comparing them, and scheduling transfers. It also discovers
 	// subdirectories and enqueues them for further processing.
@@ -724,8 +721,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		dir parallel.Directory,
 		enqueueDir func(parallel.Directory),
 		enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		defer crawlWg.Done() // Signal this task is done when it finishes
-
 		// Track that this directory entered the processing queue
 		defer totalDirectoriesProcessed.Add(1)
 
@@ -880,7 +875,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			// Enqueue discovered subdirectories for processing
 			for _, sub_dir := range subDirs {
-				crawlWg.Add(1)
 				enqueueDir(minimalStoredObject{
 					relativePath:           sub_dir.relativePath,
 					changeTime:             sub_dir.changeTime,
@@ -1082,7 +1076,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		// Enqueue discovered subdirectories for processing
 		for _, sub_dir := range stra.sub_dirs {
-			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
 			enqueueDir(minimalStoredObject{
 				relativePath:           sub_dir.relativePath,
 				changeTime:             sub_dir.changeTime,
@@ -1142,8 +1135,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	}
 	defer cleanupFunc()
 
-	crawlWg.Add(1) // Add the root directory to the WaitGroup
-
 	// Random dequeue is only used for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers: it helps
 	// avoid partition hotspotting when writing to Azure Blob Storage. Fall back to the original
 	// BFS/DFS-hybrid dequeue for everything else (default azcopy CLI, mover-default builds, and
@@ -1161,7 +1152,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	maxQueueDirs := resolveHighPerfMaxQueueDirs()
 
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
-	// merge-join producers) has returned — the drain signal we use on cancellation below.
+	// merge-join producers) has returned, on both completion and cancellation.
 	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: maxQueueDirs})
 
 	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
@@ -1195,28 +1186,16 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}()
 	}
 
-	// Cancellation-aware wait
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		crawlWg.Wait() // Wait for all goroutines in background
-	}()
-
-	select {
-	case <-done:
-		// All goroutines completed normally
-		syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
-
-	case <-mainCtx.Done():
-		// On cancel, drain crawlOutput until it closes so no producer is still alive to write to the
-		// caller-owned sync ErrorChannel after it is closed. (crawlWg can't be used here: the crawler
-		// abandons queued dirs on cancel, so it would never reach zero.)
-		syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected; waiting for in-flight traversers to drain.")
-		for range crawlOutput {
-		}
+	// syncOneDir already reports failures through ErrorChannel. Consume the crawler's duplicate
+	// error results continuously so its bounded output cannot block workers from taking the next
+	// directory. Closure also guarantees no traverser can write to ErrorChannel after we return.
+	for range crawlOutput {
+	}
+	if mainCtx.Err() != nil {
 		syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
 	}
+	syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
 
 	// Always try to finalize the enumerator. This will set cancellation complete and dispatch final part
 	syncOrchestratorLog(common.LogInfo, "Finalizing enumerator.")
