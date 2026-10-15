@@ -82,6 +82,47 @@ type blobTraverser struct {
 	includeDirectoryOrPrefix bool
 }
 
+func traceListBlobResponseContentType(contentType *string) {
+	if azcopyScanningLogger == nil {
+		return
+	}
+
+	value := "<missing>"
+	if contentType != nil {
+		value = *contentType
+	}
+	azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("ListBlob response Content-Type: %s", value))
+}
+
+func traceListBlobFlatPageScanRate(contentType *string, serviceVersion *string, blobCount int, elapsed time.Duration) {
+	if azcopyScanningLogger == nil {
+		return
+	}
+
+	value := "<missing>"
+	if contentType != nil {
+		value = *contentType
+	}
+	version := "<missing>"
+	if serviceVersion != nil {
+		version = *serviceVersion
+	}
+
+	elapsedSeconds := elapsed.Seconds()
+	scanRate := float64(0)
+	if elapsedSeconds > 0 {
+		scanRate = float64(blobCount) / elapsedSeconds
+	}
+
+	azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf(
+		"ListBlob FlatPage scan rate: %.2f blobs/sec (%d blobs in %.3f seconds, Content-Type: %s, Service-Version: %s).",
+		scanRate,
+		blobCount,
+		elapsedSeconds,
+		value,
+		version))
+}
+
 // ErrorFileInfo holds information about files and folders that failed enumeration.
 type ErrorBlobInfo struct {
 	BlobPath             string
@@ -173,7 +214,12 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 				ResponseFormat: container.StorageResponseFormatArrow,
 			})
 			azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("isDirDirect: StorageResponseFormatArrow option was used for listing blobs in container %s.", blobURLParts.ContainerName))
-			_, err = p.NextPage(t.ctx)
+			pageStart := time.Now()
+			resp, listErr := p.NextPage(t.ctx)
+			if listErr == nil {
+				traceListBlobFlatPageScanRate(resp.ContentType, resp.Version, len(resp.Segment.BlobItems), time.Since(pageStart))
+			}
+			err = listErr
 
 			if bloberror.HasCode(err, bloberror.AuthorizationPermissionMismatch) {
 				// Maybe we don't have the ability to list? Can we get container properties as a fallback?
@@ -211,6 +257,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		ResponseFormat: container.StorageResponseFormatArrow,
 	})
 	azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("StorageResponseFormatArrow option was used for listing blobs. searchPrefix: %s, MaxResults: %d", searchPrefix, maxResults))
+	pageStart := time.Now()
 	resp, err := pager.NextPage(t.ctx)
 	if err != nil {
 		if azcopyScanningLogger != nil {
@@ -219,6 +266,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		}
 		return false, nil
 	}
+	traceListBlobFlatPageScanRate(resp.ContentType, resp.Version, len(resp.Segment.BlobItems), time.Since(pageStart))
 
 	if len(resp.Segment.BlobItems) == 0 {
 		// Not a directory, but there was also no file on site. Therefore, there's nothing.
@@ -770,10 +818,12 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	})
 	azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("serialList: list blobs with prefix: %s", prefix))
 	for pager.More() {
+		pageStart := time.Now()
 		resp, err := pager.NextPage(t.ctx)
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
+		traceListBlobFlatPageScanRate(resp.ContentType, resp.Version, len(resp.Segment.BlobItems), time.Since(pageStart))
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
 			// if the blob represents a hdi folder, then skip it
