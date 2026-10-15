@@ -33,7 +33,12 @@ type telemetryExpectation struct {
 	TerminalStages          []string
 	IncompleteProgress      bool
 	DeliveryFailureExpected bool
+	// DeliveryStopped means the job log shows telemetry stopped, so the process's events are optional.
+	DeliveryStopped bool
 }
+
+// Tolerated delivery stops hide missing events, so more than this share of jobs fails the run.
+const maxTelemetryDeliveryStopPercent = 5
 
 type observedTelemetryEvent struct {
 	Name         string
@@ -93,7 +98,7 @@ func validateTelemetryDeliveryFailure(evidence telemetryDeliveryEvidence) error 
 	return nil
 }
 
-func logTelemetryDeliveryEvidence(a Asserter, processRunID, jobID, jobLogPath string) {
+func logTelemetryDeliveryEvidence(a Asserter, processRunID, jobID, jobLogPath string) telemetryDeliveryEvidence {
 	var reader io.Reader
 	if file, err := os.Open(jobLogPath); err == nil {
 		defer file.Close()
@@ -103,6 +108,38 @@ func logTelemetryDeliveryEvidence(a Asserter, processRunID, jobID, jobLogPath st
 	a.Log("Telemetry delivery process=%s job=%s startedSends=%d finishedSends=%d flushDrops=%d stops=%d deadlines=%d otherErrors=%d jobLogReadable=%t",
 		processRunID, jobID, evidence.StartedSends, evidence.FinishedSends, evidence.FlushDrops, evidence.StopMessages,
 		evidence.DeadlineErrors, evidence.OtherErrors, evidence.JobLogReadable)
+	return evidence
+}
+
+// A send failure or exit-flush drop may have lost the process's events, so they become optional.
+func markTelemetryDeliveryStopped(processRunID string, evidence telemetryDeliveryEvidence) {
+	if evidence.StopMessages == 0 && evidence.FlushDrops == 0 {
+		return
+	}
+	globalAppInsightsValidation.mu.Lock()
+	defer globalAppInsightsValidation.mu.Unlock()
+	for i := range globalAppInsightsValidation.expectedAttempts {
+		if globalAppInsightsValidation.expectedAttempts[i].ProcessRunID == processRunID {
+			globalAppInsightsValidation.expectedAttempts[i].DeliveryStopped = true
+		}
+	}
+}
+
+func checkTelemetryDeliveryStops(expected []telemetryExpectation) error {
+	stopped, jobs := 0, 0
+	for _, attempt := range expected {
+		if attempt.JobID == "" {
+			continue
+		}
+		jobs++
+		if attempt.DeliveryStopped {
+			stopped++
+		}
+	}
+	if stopped*100 > jobs*maxTelemetryDeliveryStopPercent {
+		return fmt.Errorf("telemetry delivery stopped in %d of %d AzCopy jobs, above the %d%% limit", stopped, jobs, maxTelemetryDeliveryStopPercent)
+	}
+	return nil
 }
 
 func checkTelemetryManifest(expected []telemetryExpectation, events []observedTelemetryEvent) ([]string, error) {
@@ -224,7 +261,7 @@ func checkTelemetryManifest(expected []telemetryExpectation, events []observedTe
 			}
 		}
 		for _, name := range names {
-			if counts[name] == 0 {
+			if counts[name] == 0 && !attempt.DeliveryStopped {
 				missing = append(missing, attempt.ProcessRunID+"/"+name)
 			}
 		}
@@ -395,6 +432,9 @@ func (v telemetryManifestVerifier) Verify(ctx context.Context, workspaceID, runI
 	if v.queryClient == nil || v.pollInterval <= 0 || v.timeout <= 0 || len(expected) == 0 {
 		return errors.New("invalid telemetry manifest verifier configuration or empty manifest")
 	}
+	if err := checkTelemetryDeliveryStops(expected); err != nil {
+		return err
+	}
 	parentContext := ctx
 	observeAbsence := false
 	for _, attempt := range expected {
@@ -404,10 +444,12 @@ func (v telemetryManifestVerifier) Verify(ctx context.Context, workspaceID, runI
 	absenceDeadline := time.Now().Add(v.absenceWait)
 	ctx, cancel := context.WithTimeout(ctx, v.timeout)
 	defer cancel()
+	// Azure Monitor's ingestion retries can store one item twice; separate sends still have distinct item IDs.
 	query := fmt.Sprintf(`AppEvents
 | where TimeGenerated >= datetime(%s)
 | extend EventProperties = todynamic(Properties)
 | where tostring(EventProperties.E2ETestRunID) startswith_cs "%s/"
+| summarize arg_min(TimeGenerated, Name, EventProperties, Measurements) by _ItemId
 | project Name, Properties=EventProperties, Measurements=todynamic(Measurements)`, startedAt.Add(-5*time.Minute).UTC().Format(time.RFC3339Nano), escapeKQLString(runID))
 	var missing []string
 	var lastErr error
