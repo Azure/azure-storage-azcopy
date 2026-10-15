@@ -323,8 +323,10 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 		if s.compareHash != common.ESyncHashType.None() {
 			return errors.New("the '--decompress' flag cannot be combined with '--compare-hash', because the hash of the compressed source never matches the decompressed destination")
 		}
-		if len(s.filterOptions.IncludePatterns) > 0 || len(s.filterOptions.ExcludePatterns) > 0 {
-			return errors.New("the '--decompress' flag cannot be combined with '--include-pattern' or '--exclude-pattern', because filename filters do not match decompressed destination names")
+		if len(s.filterOptions.IncludePatterns) > 0 || len(s.filterOptions.ExcludePatterns) > 0 ||
+			len(s.filterOptions.IncludeRegex) > 0 || len(s.filterOptions.ExcludeRegex) > 0 ||
+			len(s.filterOptions.ExcludePaths) > 0 {
+			return errors.New("the '--decompress' flag cannot be combined with '--include-pattern', '--exclude-pattern', '--include-regex', '--exclude-regex', or '--exclude-path', because filename/path filters do not match decompressed destination names")
 		}
 	}
 
