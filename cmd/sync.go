@@ -293,6 +293,13 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return err
 	}
 
+	// Reject unsupported --preserve-symlinks combinations (e.g. LocalFile) at cook time
+	// so sync fails fast instead of mishandling symlinks later in the transfer. Preservation
+	// is only supported for Blob/BlobFS <-> Blob/BlobFS and Local <-> Blob/BlobFS fromTo pairs.
+	if err = validateSymlinkHandlingMode(cooked.symlinkHandling, cooked.fromTo); err != nil {
+		return err
+	}
+
 	// NFS/SMB validation
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
