@@ -36,8 +36,8 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 	const objectName = "incomplete.dat"
 	body := NewRandomObjectContentContainer(SizeFromString("16M"))
 	body.(*ObjectContentContainerBuffer).Data[0] = 1
-	sourceLastWriteTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	sourceCreationTime := sourceLastWriteTime.Add(-time.Hour)
+	sourceLastWriteTime := time.Date(1960, time.January, 1, 0, 0, 0, 0, time.UTC)
+	sourceCreationTime := time.Date(1950, time.January, 1, 0, 0, 0, 0, time.UTC)
 	sourceProperties := ObjectProperties{
 		EntityType: common.EEntityType.File(),
 		FileProperties: FileProperties{
@@ -116,7 +116,7 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 	svm.Assert(
 		"incomplete destination must use the minimum last-write-time",
 		Equal{},
-		incompleteProperties.FileProperties.FileLastWriteTime.Equal(time.Unix(0, 0)),
+		incompleteProperties.FileProperties.FileLastWriteTime.Equal(time.Date(1601, time.January, 1, 0, 0, 0, 0, time.UTC)),
 		true,
 	)
 
