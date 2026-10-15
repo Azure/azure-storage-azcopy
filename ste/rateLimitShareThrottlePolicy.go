@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -28,39 +29,48 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// azureFilesThrottlePolicy is a per-retry pipeline policy that feeds every
-// Azure Files HTTP outcome into that share's RateLimitController fast path
-// (HandleResponse). This is the real-time reactive signal that lets a share's
-// bandwidth/IOPS targets drop before the next ~30s GetShareStats poll.
-//
-// It is shared across all clients (blob included) but is a cheap no-op for any
-// request that is not an Azure Files endpoint, or whose share has no controller
-// registered yet.
-type azureFilesThrottlePolicy struct{}
+// storageThrottlePolicy feeds Azure Files and registered destination Blob
+// responses into their resource controllers. Blob requests also consume one
+// account TPS token per retry attempt.
+type storageThrottlePolicy struct{}
 
-func newAzureFilesThrottlePolicy() policy.Policy { return azureFilesThrottlePolicy{} }
+func newStorageThrottlePolicy() policy.Policy { return storageThrottlePolicy{} }
 
-func (azureFilesThrottlePolicy) Do(req *policy.Request) (*http.Response, error) {
+func newAzureFilesThrottlePolicy() policy.Policy { return newStorageThrottlePolicy() }
+
+func (storageThrottlePolicy) Do(req *policy.Request) (*http.Response, error) {
+	rawURL := req.Raw().URL.String()
+	shareKey := common.ShareKeyFromRawURL(rawURL)
+	blobKey := common.BlobAccountKeyFromRawURL(rawURL)
+	blobPacer := common.GetBlobPacer(rawURL)
+	if blobPacer != nil {
+		if err := blobPacer.AcquireIO(req.Raw().Context(), 0, 1); err != nil {
+			return nil, fmt.Errorf("acquiring destination Blob account TPS token: %w", err)
+		}
+	}
+
 	response, err := req.Next()
 	if response == nil {
 		return response, err
 	}
 
-	shareKey := common.ShareKeyFromRawURL(req.Raw().URL.String())
-	if shareKey == "" {
-		return response, err // not an Azure Files request
+	if shareKey == "" && (blobKey == "" || blobPacer == nil) {
+		return response, err
 	}
 
-	// Only read the (short XML error) body on throttle responses; successes are
-	// reported as ThrottleNone so the controller can track the success ratio.
 	var body string
 	if response.StatusCode == http.StatusServiceUnavailable || response.StatusCode == http.StatusTooManyRequests {
 		body = transparentlyReadBody(response)
 	}
 
-	// Classify here (Azure Files-specific) and hand the controller a neutral kind.
 	kind := classifyAzureFilesThrottle(response.StatusCode, body)
-	common.HandleShareResponse(shareKey, kind, parseRetryAfterSeconds(response))
+	retryAfter := parseRetryAfterSeconds(response)
+	if shareKey != "" {
+		common.HandleShareResponse(shareKey, kind, retryAfter)
+	}
+	if blobPacer != nil {
+		common.HandleBlobResponse(blobKey, kind, retryAfter)
+	}
 	return response, err
 }
 

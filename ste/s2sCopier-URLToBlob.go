@@ -59,6 +59,8 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 		})
 	}
 
+	pacer = newBlobScopedPacer(pacer, destination)
+
 	var targetBlobType blob.BlobType
 
 	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user

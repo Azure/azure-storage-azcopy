@@ -36,10 +36,10 @@ func init() {
 	})
 }
 
-// shareScopedPacer routes pacing for a single Azure Files destination share.
+// shareScopedPacer routes pacing for a single Azure Storage resource.
 // Bandwidth is charged against BOTH the global job pacer (preserving the user's
-// --cap-mbps aggregate) and the per-share pacer (the share's dynamically
-// computed bandwidth), while IOPS is charged only against the per-share pacer.
+// --cap-mbps aggregate) and the resource pacer, while IOPS is charged only
+// against the resource pacer.
 // A caller must satisfy both, so the effective rate is the min of the two.
 //
 // It embeds the global pacer so it inherits every pacer/PacerAdmin method
@@ -48,16 +48,32 @@ func init() {
 // through it.
 type shareScopedPacer struct {
 	pacer
-	share common.IOPSPacer
+	resource common.IOPSPacer
 }
 
 // newShareScopedPacer wraps global with per-share scoping. When share is nil it
 // returns the global pacer unchanged, so non-Files paths are untouched.
 func newShareScopedPacer(global pacer, share common.IOPSPacer) pacer {
-	if share == nil {
+	return newResourceScopedPacer(global, share)
+}
+
+// newBlobScopedPacer wraps the global job pacer with the destination Blob
+// account's reactive controller.
+func newBlobScopedPacer(global pacer, destination string) pacer {
+	return newResourceScopedPacer(global, common.GetOrCreateBlobPacer(destination, 1))
+}
+
+func newResourceScopedPacer(global pacer, resource common.IOPSPacer) pacer {
+	if resource == nil {
 		return global
 	}
-	return &shareScopedPacer{pacer: global, share: share}
+	return &shareScopedPacer{pacer: global, resource: resource}
+}
+
+// RequestTrafficAllocation ensures streamed request bodies and S2S requests
+// consume both global and resource-scoped bandwidth.
+func (s *shareScopedPacer) RequestTrafficAllocation(ctx context.Context, bytes int64) error {
+	return s.AcquireIO(ctx, bytes, 0)
 }
 
 func (s *shareScopedPacer) AcquireIO(ctx context.Context, bytes, ops int64) error {
@@ -68,7 +84,7 @@ func (s *shareScopedPacer) AcquireIO(ctx context.Context, bytes, ops int64) erro
 		}
 	}
 	// Per-share dynamic bandwidth + IOPS.
-	if err := s.share.AcquireIO(ctx, bytes, ops); err != nil {
+	if err := s.resource.AcquireIO(ctx, bytes, ops); err != nil {
 		if bytes > 0 {
 			s.pacer.UndoRequest(bytes) // roll back the global reservation to stay consistent
 		}

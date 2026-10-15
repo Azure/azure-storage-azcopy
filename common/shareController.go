@@ -162,20 +162,25 @@ type shareControl struct {
 	stop  context.CancelFunc
 }
 
-// ControllerFactory builds the per-resource ResourceController for a resource
-// key. It is swappable so a future Blob path can register NewBlobController
-// without changing the registry or the core engine.
-type ControllerFactory func(sink RateLimitSink, source ResourceStatsSource, workers int64) ResourceController
+// ControllerFactory builds the per-resource ResourceController for an Azure
+// Storage location.
+type ControllerFactory func(location Location, sink RateLimitSink, source ResourceStatsSource, workers int64) ResourceController
 
-// controllerFactory defaults to the AzureFiles strategy (the only active path
-// today). Register a different factory to change how per-resource controllers
-// are built.
-var controllerFactory ControllerFactory = func(sink RateLimitSink, source ResourceStatsSource, workers int64) ResourceController {
-	return NewAzureFilesController(sink, source, int(workers), DefaultRateLimitConfig())
+// controllerFactory selects the service-specific controller while preserving
+// the shared registry and rate-limit engine.
+var controllerFactory ControllerFactory = func(location Location, sink RateLimitSink, source ResourceStatsSource, workers int64) ResourceController {
+	switch location {
+	case ELocation.File(), ELocation.FileNFS():
+		return NewAzureFilesController(sink, source, int(workers), DefaultRateLimitConfig())
+	case ELocation.Blob(), ELocation.BlobFS():
+		return NewBlobController(sink, source, int(workers), DefaultRateLimitConfig())
+	default:
+		panic(fmt.Sprintf("no resource controller registered for location %s", location))
+	}
 }
 
-// RegisterControllerFactory injects the per-resource controller constructor
-// (e.g. NewBlobController for a Blob path). Passing nil is ignored.
+// RegisterControllerFactory replaces the controller selector. Passing nil is
+// ignored.
 func RegisterControllerFactory(f ControllerFactory) {
 	if f != nil {
 		controllerFactory = f
@@ -261,7 +266,7 @@ func getOrCreateShareControl(rawURL string, workers int64) *shareControl {
 	}
 	pacer := sharePacerFactory()
 	statsSource := shareStatsSourceFactory(shareKey, ShareURLFromRawURL(rawURL), GetShareCredential(shareKey))
-	ctrl := controllerFactory(pacer, statsSource, workers)
+	ctrl := controllerFactory(ELocation.File(), pacer, statsSource, workers)
 
 	traceWiringOnce(pacer, statsSource, shareKey)
 
@@ -314,7 +319,7 @@ func startShareStatsPoller(ctx context.Context, shareKey string, ctrl ResourceCo
 				traceShare(LogError, "poll loop for %s stopped after panic, this share will never update again: %v", shareKey, r)
 			}
 		}()
-		pollShareStats(ctx, shareKey, ctrl)
+		pollResourceStats(ctx, shareKey, ctrl)
 	}()
 }
 
@@ -362,10 +367,10 @@ func describeRates(ctrl ResourceController) string {
 	return fmt.Sprintf("iops=%d bw=%d", iops, bw)
 }
 
-// pollShareStats drives the authoritative stats refresh on a ticker,
+// pollResourceStats drives a controller refresh on a ticker,
 // sleeping any backoff the controller requests.
-func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceController) {
-	traceShare(LogDebug, "poll loop started for %s (interval=%s)", shareKey, GetShareStatsPollInterval)
+func pollResourceStats(ctx context.Context, resourceKey string, ctrl ResourceController) {
+	traceShare(LogDebug, "poll loop started for %s (interval=%s)", resourceKey, GetShareStatsPollInterval)
 	ticker := time.NewTicker(GetShareStatsPollInterval)
 	defer ticker.Stop()
 	tick := 0
@@ -373,7 +378,7 @@ func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceControlle
 	for {
 		select {
 		case <-ctx.Done():
-			traceShare(LogDebug, "poll loop stopped for %s after %d tick(s)", shareKey, tick)
+			traceShare(LogDebug, "poll loop stopped for %s after %d tick(s)", resourceKey, tick)
 			return
 		case <-ticker.C:
 			tick++
@@ -384,16 +389,16 @@ func pollShareStats(ctx context.Context, shareKey string, ctrl ResourceControlle
 				// that always fails leaves the pacer frozen at its primed targets.
 				if consecutiveFailures == 1 || consecutiveFailures%10 == 0 {
 					traceShare(LogError, "poll #%d failed for %s (%d consecutive): %v",
-						tick, shareKey, consecutiveFailures, err)
+						tick, resourceKey, consecutiveFailures, err)
 				}
 				continue
 			}
 			if consecutiveFailures > 0 {
-				traceShare(LogInfo, "poll for %s recovered after %d consecutive failure(s)", shareKey, consecutiveFailures)
+				traceShare(LogInfo, "poll for %s recovered after %d consecutive failure(s)", resourceKey, consecutiveFailures)
 				consecutiveFailures = 0
 			}
 			traceShare(LogDebug, "poll #%d for %s: mode=%s rates(%s) backoff=%s",
-				tick, shareKey, ctrl.Mode(), describeRates(ctrl), backoff)
+				tick, resourceKey, ctrl.Mode(), describeRates(ctrl), backoff)
 			if backoff > 0 {
 				select {
 				case <-ctx.Done():

@@ -288,6 +288,7 @@ func StartSystemStatsMonitorForJob() {
 		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
 		common.GlobalSystemStatsMonitor.Stop()
 		common.StopShareControls()
+		common.StopBlobRateLimitControls()
 	})
 }
 

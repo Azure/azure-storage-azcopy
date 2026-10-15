@@ -213,6 +213,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 
 // newBlobUploader detects blob type and creates a uploader manually
 func newBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	pacer = newBlobScopedPacer(pacer, destination)
 	override := jptm.BlobTypeOverride()
 	intendedType := override.ToBlobType()
 
