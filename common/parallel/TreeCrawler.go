@@ -78,13 +78,15 @@ type CrawlOptions struct {
 
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
+// Callers must consume the results while crawling to avoid blocking workers on the bounded output.
+// The output closes after all workers have exited, including on cancellation.
 func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
 	ch, _ := CrawlWithStats(ctx, root, worker, parallelism)
 	return ch
 }
 
 // CrawlWithStats is like Crawl but also returns live CrawlStats that the caller can poll to observe
-// active worker count and queue depth.
+// active worker count and queue depth. The same output-consumption requirement applies.
 //
 // Optional CrawlOptions may be supplied to opt into non-default behavior (e.g. random dequeue); when
 // omitted the crawl uses the default BFS/DFS-hybrid dequeue. Only the last CrawlOptions is used.
@@ -144,7 +146,11 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerInde
 	for mayHaveMore && ctx.Err() == nil {
 		mayHaveMore, err = c.processOneDirectory(ctx, workerIndex)
 		if err != nil {
-			c.output <- CrawlResult{err: err}
+			select {
+			case c.output <- CrawlResult{err: err}:
+			case <-ctx.Done():
+				return
+			}
 			// output the error, but we don't necessarily stop the enumeration (e.g. it might be one unreadable dir)
 		}
 	}
