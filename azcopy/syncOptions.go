@@ -56,6 +56,7 @@ type cookedSyncOptions struct {
 	preservePermissions     common.PreservePermissionsOption
 	symlinks                common.SymlinkHandlingType
 	hardlinks               common.HardlinkHandlingType
+	autoDecompress          bool
 
 	// destSymlinks is the destination symlink handling mode.
 	// This was introduced because of a bug with sync --delete-destination.
@@ -194,6 +195,7 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.preservePermissions = common.NewPreservePermissionsOption(opts.PreservePermissions, preserveOwner, s.fromTo)
 	s.symlinks = opts.Symlinks
 	s.hardlinks = opts.Hardlinks
+	s.autoDecompress = opts.AutoDecompress
 	s.dryrun = opts.dryrun
 	s.deleteDestinationFileIfNecessary = opts.deleteDestinationFileIfNecessary
 	s.commandString = opts.commandString
@@ -309,6 +311,20 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 			return fmt.Errorf("the '--follow-symlinks' flag is not applicable for sync operations")
 		} else if s.symlinks == common.ESymlinkHandlingType.Preserve() {
 			return fmt.Errorf("the '--preserve-symlinks' flag is not applicable for sync operations")
+		}
+	}
+
+	if s.autoDecompress {
+		// as with copy, ADLS Gen 2 listings do not include content-encoding, so decompression is not supported there.
+		// NFS is excluded because hardlink-aware sync comparisons rely on source and destination sizes matching.
+		if s.fromTo != common.EFromTo.BlobLocal() && s.fromTo != common.EFromTo.FileLocal() {
+			return errors.New("automatic decompression in sync is only supported for downloads from Blob and Azure Files (SMB)")
+		}
+		if s.compareHash != common.ESyncHashType.None() {
+			return errors.New("the '--decompress' flag cannot be combined with '--compare-hash', because the hash of the compressed source never matches the decompressed destination")
+		}
+		if len(s.filterOptions.IncludePatterns) > 0 || len(s.filterOptions.ExcludePatterns) > 0 {
+			return errors.New("the '--decompress' flag cannot be combined with '--include-pattern' or '--exclude-pattern', because filename filters do not match decompressed destination names")
 		}
 	}
 

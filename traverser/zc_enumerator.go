@@ -193,7 +193,7 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 	}
 
 	if steWillAutoDecompress {
-		Destination = stripCompressionExtension(Destination, s.ContentEncoding)
+		Destination = StripCompressionExtension(Destination, s.ContentEncoding)
 	}
 
 	t := common.CopyTransfer{
@@ -223,13 +223,13 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 	return t, true
 }
 
-// stripCompressionExtension strips any file extension that corresponds to the
+// StripCompressionExtension strips any file extension that corresponds to the
 // compression indicated by the encoding type.
 // Why remove this extension here, at enumeration time, instead of just doing it
 // in the STE when we are about to save the file?
 // Because by doing it here we get the accurate name in things that
 // directly read the Plan files, like the jobs show command
-func stripCompressionExtension(dest string, contentEncoding string) string {
+func StripCompressionExtension(dest string, contentEncoding string) string {
 	// Ignore error getting compression type. We can't easily report it now, and we don't need to know about the error
 	// cases here when deciding renaming.  STE will log error on the error cases
 	ct, _ := common.GetCompressionType(contentEncoding)

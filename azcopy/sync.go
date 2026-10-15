@@ -69,6 +69,9 @@ type SyncOptions struct {
 	Symlinks                common.SymlinkHandlingType
 	PreservePermissions     bool
 	Hardlinks               common.HardlinkHandlingType
+	// AutoDecompress, if true, decompresses downloaded files whose content-encoding indicates compression (gzip/deflate).
+	// Only supported for downloads from Blob and Azure Files (SMB).
+	AutoDecompress bool
 
 	dryrun                           bool
 	deleteDestinationFileIfNecessary bool

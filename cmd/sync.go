@@ -102,6 +102,8 @@ type rawSyncCmdArgs struct {
 	preserveInfo bool
 	hardlinks    string
 	hashMetaDir  string
+	// automatically decompress files when downloading, if their content-encoding indicates compression
+	autoDecompress bool
 }
 
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
@@ -123,6 +125,7 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		IncludeRoot:             raw.includeRoot,
 		HashMetaDir:             raw.hashMetaDir,
 		PreservePermissions:     raw.preservePermissions,
+		AutoDecompress:          raw.autoDecompress,
 	}
 	opts.FromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
@@ -438,6 +441,12 @@ func init() {
 		"Defines whether to delete extra files from the destination that are not present at the source. "+
 			"\n Could be set to true, false, or prompt. "+
 			"\n If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
+
+	syncCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false,
+		"False by default. Automatically decompress files when downloading, if their content-encoding indicates "+
+			"that they are compressed.\n  The supported content-encoding values are 'gzip' and 'deflate'. "+
+			"\n File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present."+
+			"\n Only supported for downloads from Blob and Azure Files (SMB), and cannot be combined with --compare-hash.")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false,
 		"Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. "+

@@ -108,7 +108,7 @@ func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedOb
 
 func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePath string,
 	storedObject traverser.StoredObject) (err error) {
-	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath,
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(s.CopyJobTemplate.AutoDecompress && s.CopyJobTemplate.FromTo.IsDownload(), srcRelativePath, dstRelativePath,
 		s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
 	// set properties specific code
