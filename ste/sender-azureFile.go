@@ -261,7 +261,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		// Set last write time to the minimum time to enable retry copy on next sync.
 		// Epilogue will set the last-write-time to the correct value.
 		if info.PreserveInfo && creationProperties.LastWriteTime != nil {
-			minimalLwt := time.Unix(0, 0)
+			minimalLwt := time.Date(1601, time.January, 1, 0, 0, 0, 0, time.UTC)
 			creationProperties.LastWriteTime = &minimalLwt
 		}
 	}
