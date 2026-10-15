@@ -58,10 +58,8 @@ type ChannelStats struct {
 	XferDoneUsed              int
 	XferDoneSize              int
 
-	// Diagnostic counters for identifying scheduler-starvation bottlenecks. All are cumulative
-	// since job start; dividing by elapsed seconds gives a per-second rate.
-	ChunkStarveCount    int64 // chunkProcessor goroutines that hit the empty-channel sleep path
-	TransferStarveCount int64 // transferProcessor goroutines that hit the empty-channel sleep path
+	ChunkStarveCount    int64 // high-perf cumulative normal-queue-empty fallbacks
+	TransferStarveCount int64 // cumulative empty-transfer-queue polling cycles
 	CurrentMainPoolSize int32 // current chunkProcessor goroutine pool size (auto-tuned)
 	NumGoroutines       int   // process-wide runtime.NumGoroutine() at sample time
 }
@@ -418,12 +416,9 @@ type jobMgr struct {
 	atomicCurrentConcurrentConnections int64
 	/* Pool sizer related values */
 	atomicSuccessfulBytesInActiveFiles int64 // atomic 64-bit values should always be at the start of a struct to ensure alignment
-	// Diagnostic counters: number of times chunkProcessor / transferProcessor hit the
-	// empty-channel time.Sleep fallback. High values indicate worker starvation
-	// (workers spinning on idle channels rather than running chunks/transfers).
-	atomicChunkStarveCount    int64
-	atomicTransferStarveCount int64
-	atomicCurrentMainPoolSize int32
+	atomicChunkStarveCount             int64
+	atomicTransferStarveCount          int64
+	atomicCurrentMainPoolSize          int32
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
@@ -1269,6 +1264,9 @@ func (jm *jobMgr) chunkProcessor(workerID int) {
 		case chunkFunc := <-jm.xferChannels.normalChunckCh:
 			chunkFunc(workerID)
 		default:
+			if buildmode.HighPerf() {
+				atomic.AddInt64(&jm.atomicChunkStarveCount, 1)
+			}
 			// Normal channel is empty — block on all three channels.
 			// Goroutines park here with zero CPU overhead until work arrives
 			// (no polling, no sleep, instant wake-up).

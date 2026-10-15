@@ -25,7 +25,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -34,8 +36,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/pkg/errors"
 
@@ -72,7 +74,8 @@ type blobTraverser struct {
 	errorChannel chan<- TraverserErrorItemInfo
 
 	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
-	isSyncDestination bool
+	isSyncDestination  bool
+	suppressCrawlStats bool
 
 	// failOnLookupError: see InitResourceTraverserOptions.FailOnSingleBlobLookupError.
 	failOnLookupError bool
@@ -672,7 +675,12 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	// Blob/BlobFS -> Local, File, S3, etc.
 	randomDequeue := buildmode.HighPerf() && t.destResourceType != nil &&
 		(*t.destResourceType == common.ELocation.Blob() || *t.destResourceType == common.ELocation.BlobFS())
-	cCrawled, _ := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, parallel.CrawlOptions{RandomDequeue: randomDequeue})
+	cCrawled, crawlStats := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism,
+		parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: resolveHighPerfMaxQueueDirs()})
+	if !t.suppressCrawlStats {
+		stopStats := startBlobCrawlStats(workerContext, crawlStats, EnumerationParallelism, randomDequeue)
+		defer stopStats()
+	}
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
@@ -712,6 +720,45 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	}
 
 	return nil
+}
+
+func logBlobCrawlStats(message string) {
+	glcm.Info("[AzCopy] [INFO] " + message)
+}
+
+func startBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {
+	if !buildmode.HighPerf() {
+		return func() {}
+	}
+	logBlobCrawlStats(fmt.Sprintf(
+		"[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
+		parallelism, stats.MaxQueueDirectories, randomDequeue))
+	statsCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		logStats := func(final bool) {
+			logBlobCrawlStats(fmt.Sprintf(
+				"[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
+				atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
+				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final))
+		}
+		for {
+			select {
+			case <-statsCtx.Done():
+				logStats(true)
+				return
+			case <-ticker.C:
+				logStats(false)
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func getEntityType(metadata map[string]*string) common.EntityType {
@@ -837,7 +884,8 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       ternary.DerefOrZero(ternary.FirstOrZero(blobOpts).isDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
-		isSyncDestination:          opts.IsSyncDestination,
+		isSyncDestination:           opts.IsSyncDestination,
+		suppressCrawlStats:          opts.SuppressCrawlStats,
 		failOnLookupError:           opts.FailOnSingleBlobLookupError,
 		cacheLookup:                 opts.cacheSingleBlobLookup,
 	}
