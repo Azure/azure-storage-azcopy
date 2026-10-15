@@ -432,6 +432,7 @@ type InitResourceTraverserOptions struct {
 	SuppressCrawlStats bool
 
 	// FlatListing is a per-job opt-in for confirmed FNS-to-FNS transfers.
+	// In the high-performance profile it requests Arrow with SDK-managed XML fallback.
 	FlatListing bool
 
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations

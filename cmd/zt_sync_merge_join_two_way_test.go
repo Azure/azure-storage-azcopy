@@ -554,18 +554,20 @@ func TestFlatSyncForcesStreamingAndRejectsOtherPairs(t *testing.T) {
 }
 
 func TestFlatSyncMergeNestedFiles(t *testing.T) {
-	for _, mirror := range []bool{false, true} {
-		t.Run(fmt.Sprintf("mirror=%t", mirror), func(t *testing.T) {
+	for _, tc := range []struct{ mirror, destinationArrow bool }{
+		{false, false}, {false, true}, {true, false}, {true, true},
+	} {
+		t.Run(fmt.Sprintf("mirror=%t/destinationArrow=%t", tc.mirror, tc.destinationArrow), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			src, _ := newFlatTestListing(t, ctx, [][]string{{"a/new", "b/same"}, {"d/new"}}, "source-root/", nil)
-			dst, _ := newFlatTestListing(t, ctx, [][]string{{"b/same"}, {"c/extra"}}, "destination-root/", nil)
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{"b/same"}, {"c/extra"}}, "destination-root/", nil, tc.destinationArrow)
 			var deleted []string
 			var mu sync.Mutex
 			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
 			enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
 			cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.BlobBlob(), useFlatListing: true}
-			if mirror {
+			if tc.mirror {
 				cca.deleteDestination = common.EDeleteDestination.True()
 			} else {
 				cca.deleteDestination = common.EDeleteDestination.False()
@@ -577,7 +579,7 @@ func TestFlatSyncMergeNestedFiles(t *testing.T) {
 			require.Empty(t, dirs, "flat sync must not accumulate any child-directory frontier")
 			require.Equal(t, []string{"/a/new", "/d/new"}, scheduledTransferSources(enumerator))
 			require.Equal(t, 1, unchanged)
-			if mirror {
+			if tc.mirror {
 				require.Equal(t, []string{"c/extra"}, deleted)
 			} else {
 				require.Empty(t, deleted)
@@ -600,6 +602,48 @@ func TestFlatSyncEmptyDestination(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, dirs)
 	require.Equal(t, []string{"/a/b/c", "/x/y"}, scheduledTransferSources(enumerator))
+}
+
+func TestFlatSyncPhotonDestinationBlobNotFound(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src, _ := newFlatTestListing(t, ctx, [][]string{{"a/file"}, {"z/file"}}, "", nil)
+	dst, _ := newFlatTestListing(t, ctx, [][]string{{}}, "",
+		func(_ int, w http.ResponseWriter, _ *http.Request) bool {
+			w.Header().Set("x-ms-error-code", "BlobNotFound")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `<Error><Code>BlobNotFound</Code><Message>missing</Message></Error>`)
+			return false
+		})
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
+	require.NoError(t, err)
+	require.Empty(t, dirs)
+	require.Equal(t, []string{"/a/file", "/z/file"}, scheduledTransferSources(enumerator))
+	require.Empty(t, deleted)
+}
+
+func TestFlatSyncPhotonDecodeFailureDoesNotDeleteTarget(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src, _ := newFlatTestListing(t, ctx, [][]string{{"a/same"}, {}}, "",
+		func(page int, w http.ResponseWriter, _ *http.Request) bool {
+			if page == 1 {
+				w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+				fmt.Fprint(w, "invalid Arrow stream")
+				return false
+			}
+			return true
+		})
+	dst, _ := newFlatTestListing(t, ctx, [][]string{{"a/same", "z/must-not-delete"}}, "", nil)
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
+	require.ErrorContains(t, err, "Arrow")
+	require.Empty(t, deleted)
 }
 
 func TestFlatSyncPreservesLastModifiedComparison(t *testing.T) {

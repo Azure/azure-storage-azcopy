@@ -40,6 +40,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/pkg/errors"
 
@@ -58,6 +59,7 @@ type blobTraverser struct {
 	// cx should have the option to disable this optimization in the name of saving costs
 	parallelListing     bool
 	flatListDiagnostics bool
+	flatListArrow       bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -785,6 +787,7 @@ func flatListDiagnosticsEnabled() bool {
 type flatListTimingStats struct {
 	started, lastLog                                    time.Time
 	pages, blobs, minPage, maxPage, attempts, throttles int
+	arrowPages, xmlPages                                int
 	nextTime, attemptTime, retryGap, processingTime     time.Duration
 }
 
@@ -795,10 +798,11 @@ func (s *flatListTimingStats) log(destination, final bool) {
 	}
 	s.lastLog = now
 	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[FlatListTiming] destination=%t final=%t pages=%d blobs=%d minPage=%d maxPage=%d attempts=%d throttles=%d elapsed_ms=%d next_ms=%d attempt_ms=%d between_attempt_ms=%d outside_attempt_ms=%d processing_ms=%d",
+		"[FlatListTiming] destination=%t final=%t pages=%d blobs=%d minPage=%d maxPage=%d attempts=%d throttles=%d elapsed_ms=%d next_ms=%d attempt_ms=%d between_attempt_ms=%d outside_attempt_ms=%d processing_ms=%d arrow_pages=%d xml_pages=%d",
 		destination, final, s.pages, s.blobs, s.minPage, s.maxPage, s.attempts, s.throttles,
 		now.Sub(s.started).Milliseconds(), s.nextTime.Milliseconds(), s.attemptTime.Milliseconds(),
-		s.retryGap.Milliseconds(), (s.nextTime-s.attemptTime-s.retryGap).Milliseconds(), s.processingTime.Milliseconds()), true)
+		s.retryGap.Milliseconds(), (s.nextTime-s.attemptTime-s.retryGap).Milliseconds(), s.processingTime.Milliseconds(),
+		s.arrowPages, s.xmlPages), true)
 }
 
 func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
@@ -814,12 +818,21 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
+	responseFormat := container.StorageResponseFormatAuto
+	listCtx := t.ctx
+	if t.flatListArrow {
+		responseFormat = container.StorageResponseFormatArrow
+		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.
+		listCtx = context.WithValue(listCtx, ste.ServiceAPIVersionOverride, "2026-06-06")
+	}
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		Prefix:         &prefix,
+		Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		ResponseFormat: responseFormat,
 	})
+	lastContentType := "<not received>"
 	for pager.More() {
-		pageCtx := t.ctx
+		pageCtx := listCtx
 		var pageTiming flatListPageTiming
 		var pageStart time.Time
 		if diagnostics {
@@ -835,10 +848,22 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 			timings.retryGap += pageTiming.retryGap
 		}
 		if err != nil {
-			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+			return fmt.Errorf("cannot list blobs. Failed with error %w", err)
+		}
+		contentType := ternary.DerefOrZero(resp.ContentType)
+		if t.flatListArrow && contentType != lastContentType {
+			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+				"[FlatListFormat] destination=%t requested=Arrow content_type=%q service_version=%q",
+				t.isSyncDestination, contentType, ternary.DerefOrZero(resp.Version)), true)
+			lastContentType = contentType
 		}
 		var processingStart time.Time
 		if diagnostics {
+			if strings.HasPrefix(contentType, "application/vnd.apache.arrow.stream") {
+				timings.arrowPages++
+			} else if strings.HasPrefix(contentType, "application/xml") || strings.HasPrefix(contentType, "text/xml") {
+				timings.xmlPages++
+			}
 			processingStart = time.Now()
 			count := len(resp.Segment.BlobItems)
 			timings.pages++
@@ -941,6 +966,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	}
 	if buildmode.HighPerf() && opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
 		t.parallelListing = false
+		t.flatListArrow = true
 	}
 	return
 }

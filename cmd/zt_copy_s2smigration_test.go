@@ -56,6 +56,10 @@ const (
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
 func TestMain(m *testing.M) {
+	if os.Getenv("AZCOPY_LIVE_LIST_BENCHMARK") == "true" {
+		// The opt-in listing benchmark must never run account cleanup helpers.
+		os.Exit(m.Run())
+	}
 	if !isS3Disabled() {
 		if s3Client, err := createS3ClientWithMinio(createS3ResOptions{}); err == nil {
 			cleanS3Account(s3Client)
