@@ -10,6 +10,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
 	github.com/google/uuid v1.6.0
 	github.com/hillu/go-ntdll v0.0.0-20260712105752-9cd1a6b1a84d
+	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-ieproxy v0.0.12
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/xattr v0.4.12
