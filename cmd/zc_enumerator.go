@@ -431,6 +431,10 @@ type InitResourceTraverserOptions struct {
 	// SuppressCrawlStats avoids per-directory diagnostics when an outer sync crawler reports them.
 	SuppressCrawlStats bool
 
+	// FlatListing is a per-job opt-in for confirmed FNS-to-FNS transfers.
+	// In the high-performance profile it requests Arrow with SDK-managed XML fallback.
+	FlatListing bool
+
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
 	// (List, GetProperties) issued during enumeration, so scanning respects the
 	// same storage IOPS budget as the transfer phase. Currently wired for Azure
@@ -504,6 +508,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 	}
 
 	options := createClientOptions(azcopyScanningLogger, nil, opts.Credential.TokenCredential)
+	if opts.FlatListing && flatListDiagnosticsEnabled() {
+		options.PerRetryPolicies = append(options.PerRetryPolicies, flatListTimingPolicy{})
+	}
 
 	switch resourceLocation {
 	case common.ELocation.Local():
