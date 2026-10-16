@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -146,6 +147,14 @@ func (*mockedLifecycleManager) E2EAwaitAllowOpenFiles() {
 }
 
 func (*mockedLifecycleManager) E2EEnableAwaitAllowOpenFiles(_ bool) {
+	// not implemented in mocked version
+}
+
+func (*mockedLifecycleManager) E2EAwaitEnumerationStart(context.Context) {
+	// not implemented in mocked version
+}
+
+func (*mockedLifecycleManager) E2EEnableAwaitEnumerationStart(_ bool) {
 	// not implemented in mocked version
 }
 
