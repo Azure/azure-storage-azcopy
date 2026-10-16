@@ -10,9 +10,11 @@ import (
 // directory/file name on most filesystems and could resolve outside the download target).
 //
 // On Unix-like systems, only segments of one or two dots are matched ("." and ".."),
-// since names of three or more dots (e.g. "...") are legal file/directory names there.
+// since names of three or more dots (e.g. "...") are legal file/directory names there;
+// "/" is the only path separator, so a backslash is always just part of a name.
 // On Windows, any segment consisting solely of dots is matched, since Windows strips
-// trailing dots from names and such segments cannot exist on disk.
+// trailing dots from names and such segments cannot exist on disk; both "/" and "\\"
+// are path separators there.
 func Test_PathTraversalNameRegex(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -22,7 +24,7 @@ func Test_PathTraversalNameRegex(t *testing.T) {
 	}{
 		{"leading parent traversal", "../foo", true, true},
 		{"parent traversal mid-path", "a/../foo", true, true},
-		{"backslash parent traversal", "a\\..\\foo", true, true},
+		{"backslash-separated traversal", "a\\..\\foo", true, false}, // on unix, "a\.." is a legal literal name, not ".."
 		{"current dir traversal", "./foo", true, true},
 		{"multiple dots at start", ".../foo", true, false},
 		{"multiple dots mid-path", "a/.../foo", true, false},
@@ -34,7 +36,8 @@ func Test_PathTraversalNameRegex(t *testing.T) {
 		{"trailing parent traversal", "foo/..", true, true},
 		{"trailing current dir", "foo/.", true, true},
 		{"uppercase traversal", "Foo/../Bar", true, true},
-		{"just two dots with backslash", "..\\", true, true},
+		{"trailing backslash in name", "..\\", true, false}, // legal literal name on unix
+		{"backslashes around dots in name", "\\..\\", true, false},
 
 		// Real, fully-qualified Windows paths (including long-path / UNC \\?\ form)
 		// as the downloader would produce them for info.Destination.
