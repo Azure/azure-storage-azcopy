@@ -73,6 +73,8 @@ func TestLogSanitizer(t *testing.T) {
 		{"http://foo%3Fsig%3Dsomevalue&x=y", "http://foo%3Fsig%3D-REDACTED-&x=y"},     // percent-encoded '?' and '=', real '&' separator still terminates
 		{"http://foo?sig=some%26value&x=y", "http://foo?sig=-REDACTED-&x=y"},          // percent-encoded '&' inside the value, real '&' separator still terminates
 		{"http://foo?sig%3Aasdf&x=y", "http://foo?sig%3A-REDACTED-&x=y"},              // %3a encoded : sign
+		// similar case with funny unicode characters
+		{"日本語 https://foo?sig%3Dsecret café", "日本語 https://foo?sig%3D-REDACTED- café"},
 	}
 
 	san := NewAzCopyLogSanitizer()

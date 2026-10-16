@@ -88,8 +88,8 @@ func TestMountProbePath(t *testing.T) {
 	}
 }
 
-// allLocations returns every common.ELocation value, so these tests fail when a location is added.
-func allLocations(t *testing.T) []common.Location {
+// enumerateLocations returns every common.ELocation value, so these tests fail when a location is added.
+func enumerateLocations(t *testing.T) []common.Location {
 	locationType := reflect.TypeOf(common.ELocation)
 	values := reflect.ValueOf(common.ELocation)
 	var locations []common.Location
@@ -104,7 +104,7 @@ func allLocations(t *testing.T) []common.Location {
 }
 
 func TestProtocolForLocation(t *testing.T) {
-	for _, loc := range allLocations(t) {
+	for _, loc := range enumerateLocations(t) {
 		var want string
 		switch loc {
 		case common.ELocation.Local():
@@ -126,7 +126,7 @@ func TestProtocolForLocation(t *testing.T) {
 }
 
 func TestMountTypeForLocation(t *testing.T) {
-	for _, loc := range allLocations(t) {
+	for _, loc := range enumerateLocations(t) {
 		var want telemetry.MountType
 		switch loc {
 		case common.ELocation.Local():
