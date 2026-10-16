@@ -895,11 +895,13 @@ func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-
 
 func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
-func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
+func (TransferStatus) SkippedEntityHasInvalidName() TransferStatus { return TransferStatus(-4) }
 
-func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
+func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-5) }
 
-func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
+func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-6) }
+
+func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-7) }
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }
