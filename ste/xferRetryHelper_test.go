@@ -1,14 +1,21 @@
 package ste
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetShouldRetry(t *testing.T) {
@@ -40,6 +47,12 @@ func TestGetShouldRetry(t *testing.T) {
 					"x-ms-error-code": {code},
 				},
 			},
+			ShouldRetry: retry,
+		}
+	}
+	RespWithoutErrorCodeTest := func(status int, retry bool) *ResponseRetryPair {
+		return &ResponseRetryPair{
+			Resp:        &http.Response{StatusCode: status, Header: make(http.Header)},
 			ShouldRetry: retry,
 		}
 	}
@@ -90,6 +103,28 @@ func TestGetShouldRetry(t *testing.T) {
 			},
 		},
 		{
+			Rules: ParseRules("502; 504"),
+			Tests: []*ResponseRetryPair{
+				RespWithoutErrorCodeTest(http.StatusBadGateway, true),
+				RespWithoutErrorCodeTest(http.StatusGatewayTimeout, true),
+				RespWithoutErrorCodeTest(http.StatusNotImplemented, false),
+			},
+		},
+		{
+			Rules: ParseRules("502: OriginTimeout; 504"),
+			Tests: []*ResponseRetryPair{
+				{
+					Resp: &http.Response{
+						StatusCode: http.StatusBadGateway,
+						Header: http.Header{
+							"x-ms-copy-source-status-code": {"504"},
+						},
+					},
+					ShouldRetry: true,
+				},
+			},
+		},
+		{
 			TestCond: func() bool {
 				return runtime.GOOS == "windows" || runtime.GOOS == "darwin" || runtime.GOOS == "linux"
 			},
@@ -137,6 +172,59 @@ func TestGetShouldRetry(t *testing.T) {
 			assert.Equalf(t, v.ShouldRetry, res, "expected result mismatch on entry %d test %d \n %v", entryNum, testNum,
 				matrix[entryNum].Tests[testNum])
 		}
+	}
+}
+
+func TestGetShouldRetryRetriesAFDGatewayResponse(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		errorCode  string
+	}{
+		{name: "connection aborted", statusCode: http.StatusBadGateway, errorCode: "OriginConnectionAborted"},
+		{name: "origin timeout", statusCode: http.StatusGatewayTimeout, errorCode: "OriginTimeout"},
+	}
+
+	previousRetryStatusCodes := RetryStatusCodes
+	retryStatusCodes, err := ParseRetryCodes("502; 504")
+	require.NoError(t, err)
+	RetryStatusCodes = retryStatusCodes
+	t.Cleanup(func() { RetryStatusCodes = previousRetryStatusCodes })
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var attempts int32
+			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				if atomic.AddInt32(&attempts, 1) == 1 {
+					response.Header().Set("Content-Type", "text/html")
+					response.Header().Set("X-Azure-Ref", "afd-test-reference")
+					response.WriteHeader(test.statusCode)
+					_, _ = response.Write([]byte("<html><body>" + test.errorCode + "</body></html>"))
+					return
+				}
+
+				response.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			pipeline := azruntime.NewPipeline("", "", azruntime.PipelineOptions{}, &policy.ClientOptions{
+				Retry: policy.RetryOptions{
+					MaxRetries:    1,
+					RetryDelay:    time.Millisecond,
+					MaxRetryDelay: time.Millisecond,
+					ShouldRetry:   GetShouldRetry(nil),
+				},
+				Transport: http.DefaultClient,
+			})
+			request, err := azruntime.NewRequest(context.Background(), http.MethodPut, server.URL)
+			require.NoError(t, err)
+
+			response, err := pipeline.Do(request)
+			require.NoError(t, err)
+			defer response.Body.Close()
+			assert.Equal(t, http.StatusOK, response.StatusCode)
+			assert.Equal(t, int32(2), atomic.LoadInt32(&attempts))
+		})
 	}
 }
 
