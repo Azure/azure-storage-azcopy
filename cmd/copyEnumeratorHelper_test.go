@@ -465,11 +465,14 @@ func TestFlatListHTTPTraceConcurrentCallbacks(t *testing.T) {
 }
 
 func TestFlatListPageDiagnosticsOptions(t *testing.T) {
-	t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", "false")
 	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
 	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
 	original := createClientOptions(nil, nil, nil)
-	require.Same(t, common.GetGlobalHTTPClient(nil), original.Transport)
+	if buildmode.HighPerf() {
+		require.Same(t, common.GetGlobalHTTPClient(nil), original.Transport.(*flatListPoolTransport).shared)
+	} else {
+		require.Same(t, common.GetGlobalHTTPClient(nil), original.Transport)
+	}
 	require.False(t, flatListDiagnosticsEnabled())
 	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
 	options := createClientOptions(nil, nil, nil)
@@ -477,7 +480,7 @@ func TestFlatListPageDiagnosticsOptions(t *testing.T) {
 	if buildmode.HighPerf() {
 		wrapped, ok := options.Transport.(flatListDiagnosticTransport)
 		require.True(t, ok)
-		require.Same(t, original.Transport, wrapped.inner)
+		require.Same(t, common.GetGlobalHTTPClient(nil), wrapped.inner.(*flatListPoolTransport).shared)
 	} else {
 		require.Same(t, original.Transport, options.Transport)
 	}
@@ -506,7 +509,7 @@ func TestFlatListDedicatedPoolRouting(t *testing.T) {
 		})
 		existing := pool.listing
 		if listing {
-			ctx = context.WithValue(ctx, flatListTimingKey{}, &flatListPageTiming{})
+			ctx = context.WithValue(ctx, flatListPoolKey{}, struct{}{})
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
 		require.NoError(t, err)
@@ -536,11 +539,10 @@ func TestFlatListDedicatedPoolRouting(t *testing.T) {
 func TestFlatListDedicatedPoolSettingsAndGate(t *testing.T) {
 	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
 	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
-	t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", "true")
 	options := createClientOptions(nil, nil, nil)
 	pool, enabled := options.Transport.(*flatListPoolTransport)
 	require.Equal(t, buildmode.HighPerf(), enabled)
-	require.Equal(t, buildmode.HighPerf(), flatListDiagnosticsEnabled())
+	require.False(t, flatListDiagnosticsEnabled())
 	if enabled {
 		require.Same(t, common.GetGlobalHTTPClient(nil), pool.shared)
 		require.Nil(t, pool.listing)
@@ -575,13 +577,61 @@ func TestFlatListDedicatedPoolSettingsAndGate(t *testing.T) {
 
 func TestFlatListDedicatedPoolError(t *testing.T) {
 	pool := &flatListPoolTransport{shared: &http.Client{}}
-	ctx := context.WithValue(context.Background(), flatListTimingKey{}, &flatListPageTiming{})
+	ctx := context.WithValue(context.Background(), flatListPoolKey{}, struct{}{})
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
 	require.NoError(t, err)
 	for i := 0; i < 2; i++ {
 		resp, err := pool.Do(req)
 		require.Nil(t, resp)
 		require.ErrorContains(t, err, "cannot isolate shared HTTP transport")
+	}
+}
+
+func TestFlatListDedicatedPoolWithoutDiagnostics(t *testing.T) {
+	for _, legacyFlag := range []string{"", "false", "true"} {
+		t.Run(fmt.Sprintf("legacyFlag=%q", legacyFlag), func(t *testing.T) {
+			t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", legacyFlag)
+			t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
+			t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
+			logger := captureCrawlLogs(t)
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/xml")
+				fmt.Fprint(w, `<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>`)
+			}))
+			defer server.Close()
+			options := createClientOptions(nil, nil, nil)
+			pool, enabled := options.Transport.(*flatListPoolTransport)
+			require.Equal(t, buildmode.HighPerf(), enabled)
+			if enabled {
+				pool.shared = server.Client()
+			} else {
+				options.Transport = server.Client()
+			}
+			client, err := container.NewClientWithNoCredential(server.URL+"/c", &container.ClientOptions{
+				ClientOptions: options,
+			})
+			require.NoError(t, err)
+			traverser := &blobTraverser{
+				ctx: context.Background(), recursive: true,
+				flatListArrow: buildmode.HighPerf(), flatListDiagnostics: flatListDiagnosticsEnabled(),
+			}
+			require.False(t, traverser.flatListDiagnostics)
+			err = traverser.serialList(client, "c", "", "", noPreProccessor, func(StoredObject) error {
+				t.Error("empty listing must not deliver an object")
+				return nil
+			}, nil)
+			require.NoError(t, err)
+			if enabled {
+				require.NotNil(t, pool.listing, "flat requests must use the pool without a timing context")
+				defer pool.listing.CloseIdleConnections()
+				require.Contains(t, logger.text(), "[FlatListPrefetch] enabled=true")
+			} else {
+				require.NotContains(t, logger.text(), "[FlatListPrefetch]")
+			}
+			for _, tag := range []string{"[FlatListHTTP]", "[FlatListPage]", "[FlatListTiming]"} {
+				require.NotContains(t, logger.text(), tag)
+			}
+		})
 	}
 }
 
@@ -1146,11 +1196,11 @@ func newFlatPrefetchTestClient(t *testing.T, transport policy.Transporter) *cont
 }
 
 func TestFlatListPrefetchOverlapAndBound(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
+	for _, legacyFlag := range []string{"", "false", "true"} {
 		for _, eligible := range []bool{false, true} {
 			for _, slowConsumer := range []bool{false, true} {
-				t.Run(fmt.Sprintf("enabled=%t/eligible=%t/slowConsumer=%t", enabled, eligible, slowConsumer), func(t *testing.T) {
-					t.Setenv("MOVER_FLAT_LIST_PREFETCH", strconv.FormatBool(enabled))
+				t.Run(fmt.Sprintf("legacyFlag=%q/eligible=%t/slowConsumer=%t", legacyFlag, eligible, slowConsumer), func(t *testing.T) {
+					t.Setenv("MOVER_FLAT_LIST_PREFETCH", legacyFlag)
 					t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
 					logger := captureCrawlLogs(t)
 					contentType := "application/xml"
@@ -1192,7 +1242,7 @@ func TestFlatListPrefetchOverlapAndBound(t *testing.T) {
 							}, nil
 						}))
 						traverser := &blobTraverser{ctx: context.Background(), recursive: true, flatListArrow: eligible, flatListDiagnostics: true}
-						prefetch := enabled && eligible && buildmode.HighPerf()
+						prefetch := eligible && buildmode.HighPerf()
 						var paths []string
 						start := time.Now()
 						err := traverser.serialList(client, "c", "", "", noPreProccessor, func(obj StoredObject) error {
@@ -1245,7 +1295,6 @@ func TestFlatListPrefetchDiscardsReadyPage(t *testing.T) {
 	if !buildmode.HighPerf() {
 		t.Skip("prefetch requires the high-performance profile")
 	}
-	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
 	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
 	for _, cancelParent := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cancelParent=%t", cancelParent), func(t *testing.T) {
@@ -1295,7 +1344,6 @@ func TestFlatListPrefetchDiscardsReadyPage(t *testing.T) {
 }
 
 func TestFlatListPrefetchCancelsInFlightBody(t *testing.T) {
-	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
 	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
 	for _, cancelParent := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cancelParent=%t", cancelParent), func(t *testing.T) {
@@ -1349,7 +1397,6 @@ func TestFlatListPrefetchCancelsInFlightBody(t *testing.T) {
 }
 
 func TestFlatListPrefetchPageErrorAfterEmptyPage(t *testing.T) {
-	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
 	for _, arrowResponse := range []bool{false, true} {
 		t.Run(fmt.Sprintf("arrow=%t", arrowResponse), func(t *testing.T) {
 			listing, calls := newFlatTestListing(t, context.Background(), [][]string{{"a", "b"}, {}, {"c"}, {}}, "",
@@ -1380,7 +1427,6 @@ func TestFlatListPrefetchAlreadyCanceled(t *testing.T) {
 	if !buildmode.HighPerf() {
 		t.Skip("prefetch requires the high-performance profile")
 	}
-	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
 	captureCrawlLogs(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1410,10 +1456,11 @@ func TestFlatListPrefetchExactOutputAndMetadataLifetime(t *testing.T) {
 	pages = append(pages, []string{"folder-stub/"}, nil)
 	for _, arrowResponse := range []bool{false, true} {
 		t.Run(fmt.Sprintf("arrow=%t", arrowResponse), func(t *testing.T) {
-			var serialObjects []StoredObject
-			for _, prefetch := range []bool{false, true} {
-				t.Run(fmt.Sprintf("prefetch=%t", prefetch), func(t *testing.T) {
-					t.Setenv("MOVER_FLAT_LIST_PREFETCH", strconv.FormatBool(prefetch))
+			var referenceObjects []StoredObject
+			for _, diagnostics := range []bool{false, true} {
+				t.Run(fmt.Sprintf("diagnostics=%t", diagnostics), func(t *testing.T) {
+					t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", strconv.FormatBool(diagnostics))
+					t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", strconv.FormatBool(diagnostics))
 					captureCrawlLogs(t)
 					listing, calls := newFlatTestListing(t, context.Background(), pages, "root/", nil, arrowResponse)
 					listing.traverser.s2sPreserveSourceTags = true
@@ -1443,10 +1490,10 @@ func TestFlatListPrefetchExactOutputAndMetadataLifetime(t *testing.T) {
 						wantScanned--
 					}
 					require.Equal(t, wantScanned, scanned)
-					if prefetch {
-						require.Equal(t, serialObjects, objects, "prefetch must preserve every StoredObject field")
+					if diagnostics {
+						require.Equal(t, referenceObjects, objects, "diagnostics must not change prefetched objects")
 					} else {
-						serialObjects = objects
+						referenceObjects = objects
 					}
 				})
 			}

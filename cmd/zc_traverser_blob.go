@@ -757,6 +757,8 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bo
 
 type flatListTimingKey struct{}
 
+type flatListPoolKey struct{}
+
 type flatListHTTPKey struct{}
 
 var flatListDiagnosticSequence atomic.Uint64
@@ -880,8 +882,7 @@ type flatListPoolTransport struct {
 }
 
 func (t *flatListPoolTransport) Do(req *http.Request) (*http.Response, error) {
-	page, _ := req.Context().Value(flatListTimingKey{}).(*flatListPageTiming)
-	if page == nil {
+	if req.Context().Value(flatListPoolKey{}) == nil {
 		return t.shared.Do(req)
 	}
 	t.once.Do(func() {
@@ -1002,15 +1003,7 @@ func (flatListTimingPolicy) Do(req *policy.Request) (*http.Response, error) {
 
 func flatListDiagnosticsEnabled() bool {
 	return buildmode.HighPerf() && (strings.EqualFold(os.Getenv("MOVER_FLAT_LIST_DIAGNOSTICS"), "true") ||
-		flatListPageDiagnosticsEnabled() || flatListDedicatedPoolEnabled())
-}
-
-func flatListDedicatedPoolEnabled() bool {
-	return buildmode.HighPerf() && strings.EqualFold(os.Getenv("MOVER_FLAT_LIST_DEDICATED_POOL"), "true")
-}
-
-func flatListPrefetchEnabled() bool {
-	return buildmode.HighPerf() && strings.EqualFold(os.Getenv("MOVER_FLAT_LIST_PREFETCH"), "true")
+		flatListPageDiagnosticsEnabled())
 }
 
 // Detailed logs emit one entry per HTTP attempt and page, in addition to summaries.
@@ -1092,7 +1085,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	if pageDiagnostics {
 		listing = flatListDiagnosticSequence.Add(1)
 	}
-	prefetch := t.flatListArrow && flatListPrefetchEnabled()
+	prefetch := t.flatListArrow && buildmode.HighPerf()
 	timings := flatListTimingStats{prefetch: prefetch}
 	if diagnostics {
 		timings.started = time.Now()
@@ -1104,6 +1097,9 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	prefix := searchPrefix + extraSearchPrefix
 	responseFormat := container.StorageResponseFormatAuto
 	listCtx := t.ctx
+	if buildmode.HighPerf() {
+		listCtx = context.WithValue(listCtx, flatListPoolKey{}, struct{}{})
+	}
 	if t.flatListArrow {
 		responseFormat = container.StorageResponseFormatArrow
 		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.

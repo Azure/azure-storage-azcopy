@@ -732,7 +732,6 @@ func TestFlatSyncStreamsBeforeListingCompletesAndCancels(t *testing.T) {
 }
 
 func TestFlatSyncPrefetchAsymmetricSetOracle(t *testing.T) {
-	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
 	splitPages := func(names []string, size int) [][]string {
 		pages := [][]string{{}}
 		for len(names) > 0 {
@@ -793,9 +792,10 @@ func TestFlatSyncPrefetchAsymmetricSetOracle(t *testing.T) {
 }
 
 func TestFlatSyncPrefetchPreservesLeadingSlashKeys(t *testing.T) {
-	for _, prefetch := range []bool{false, true} {
-		t.Run(fmt.Sprintf("prefetch=%t", prefetch), func(t *testing.T) {
-			t.Setenv("MOVER_FLAT_LIST_PREFETCH", fmt.Sprintf("%t", prefetch))
+	for _, diagnostics := range []bool{false, true} {
+		t.Run(fmt.Sprintf("diagnostics=%t", diagnostics), func(t *testing.T) {
+			t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", fmt.Sprintf("%t", diagnostics))
+			t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", fmt.Sprintf("%t", diagnostics))
 			captureCrawlLogs(t)
 			root, err := validateAndGetRootObject("https://example.blob.core.windows.net/c", common.EFromTo.BlobBlob())
 			require.NoError(t, err)

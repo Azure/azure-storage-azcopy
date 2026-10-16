@@ -526,7 +526,7 @@ func createClientOptions(logger common.ILoggerResetable, srcCred, targetCred azc
 	// Job-level/global client if available so we reuse connections and transports.
 	client := common.GetGlobalHTTPClient(logger)
 	var transport policy.Transporter = client
-	if flatListDedicatedPoolEnabled() {
+	if buildmode.HighPerf() {
 		transport = &flatListPoolTransport{shared: client}
 	}
 
