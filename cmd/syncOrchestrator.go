@@ -1212,7 +1212,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 }
 
 func configureFlatSyncTraversers(cca *cookedSyncCmdArgs, source, destination *InitResourceTraverserOptions) {
-	if !buildmode.HighPerf() || !cca.useFlatListing || cca.fromTo != common.EFromTo.BlobBlob() {
+	if !cca.useFlatListing || cca.fromTo != common.EFromTo.BlobBlob() {
 		return
 	}
 	// List the entire selected prefix once. No virtual directories are emitted,

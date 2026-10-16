@@ -1085,7 +1085,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	if pageDiagnostics {
 		listing = flatListDiagnosticSequence.Add(1)
 	}
-	prefetch := t.flatListArrow && buildmode.HighPerf()
+	prefetch := t.flatListArrow
 	timings := flatListTimingStats{prefetch: prefetch}
 	if diagnostics {
 		timings.started = time.Now()
@@ -1336,7 +1336,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.parallelListing = false
 	}
-	if buildmode.HighPerf() && opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
+	if opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
 		t.parallelListing = false
 		t.flatListArrow = true
 	}

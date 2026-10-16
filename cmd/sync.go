@@ -153,7 +153,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
 		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
-		useFlatListing:                   raw.useFlatListing && buildmode.HighPerf(),
+		useFlatListing:                   raw.useFlatListing,
 
 		SrcCredName: raw.SrcCredName,
 		DstCredName: raw.DstCredName,

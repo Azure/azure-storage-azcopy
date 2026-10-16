@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -509,7 +508,7 @@ func TestFlatSyncTraverserConfiguration(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/flat=%t", pair, flat), func(t *testing.T) {
 				src, dst := InitResourceTraverserOptions{}, InitResourceTraverserOptions{}
 				configureFlatSyncTraversers(&cookedSyncCmdArgs{fromTo: pair, useFlatListing: flat}, &src, &dst)
-				want := buildmode.HighPerf() && flat && pair == common.EFromTo.BlobBlob()
+				want := flat && pair == common.EFromTo.BlobBlob()
 				for _, opts := range []InitResourceTraverserOptions{src, dst} {
 					require.Equal(t, want, opts.FlatListing)
 					require.Equal(t, want, opts.Recursive)
@@ -534,14 +533,6 @@ func TestFlatSyncForcesStreamingAndRejectsOtherPairs(t *testing.T) {
 			raw.useFlatListing = true
 			raw.useStreamingMergeJoin = false
 			cooked, err := raw.toOptions()
-			if !buildmode.HighPerf() {
-				if pair == common.EFromTo.BlobBlob() {
-					require.NoError(t, err)
-				}
-				require.False(t, cooked.useFlatListing)
-				require.False(t, cooked.useStreamingMergeJoin)
-				return
-			}
 			if pair == common.EFromTo.BlobBlob() {
 				require.NoError(t, err)
 				require.True(t, cooked.useFlatListing)

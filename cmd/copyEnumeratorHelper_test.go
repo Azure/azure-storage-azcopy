@@ -652,10 +652,19 @@ func TestFlatListPageDiagnosticsLogs(t *testing.T) {
 			text := logger.text()
 			if fail {
 				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			if !flatListPageDiagnosticsEnabled() {
+				for _, tag := range []string{"[FlatListHTTP]", "[FlatListPage]", "[FlatListTiming]"} {
+					require.NotContains(t, text, tag)
+				}
+				return
+			}
+			if fail {
 				require.Contains(t, text, `stage="processing" failed=true`)
 				require.Equal(t, 1, strings.Count(text, "[FlatListPage]")-strings.Count(text, `stage="prefetch-discarded"`))
 			} else {
-				require.NoError(t, err)
 				require.Contains(t, text, `stage="complete" failed=false`)
 				require.Equal(t, 2, strings.Count(text, "[FlatListPage]"))
 			}
@@ -697,7 +706,11 @@ func TestFlatListPageDiagnosticsLogs(t *testing.T) {
 			return nil
 		}, nil)
 		require.Error(t, err)
-		require.Contains(t, logger.text(), `stage="next" failed=true blobs=0 attempts=1 observed_http_attempts=1`)
+		if flatListPageDiagnosticsEnabled() {
+			require.Contains(t, logger.text(), `stage="next" failed=true blobs=0 attempts=1 observed_http_attempts=1`)
+		} else {
+			require.NotContains(t, logger.text(), "[FlatListPage]")
+		}
 	})
 }
 
@@ -889,8 +902,8 @@ func TestFlatListingSelection(t *testing.T) {
 			traverser := newBlobTraverser("https://example.blob.core.windows.net/c", nil, context.Background(),
 				InitResourceTraverserOptions{FlatListing: tc.flat, Recursive: true, DestResourceType: &tc.dest},
 				BlobTraverserOptions{isDFS: &tc.hns})
-			require.Equal(t, !(tc.want && buildmode.HighPerf()), traverser.parallelListing)
-			require.Equal(t, tc.want && buildmode.HighPerf(), traverser.flatListArrow)
+			require.Equal(t, !tc.want, traverser.parallelListing)
+			require.Equal(t, tc.want, traverser.flatListArrow)
 		})
 	}
 	t.Run("legacy flat scan is not opted in", func(t *testing.T) {
@@ -921,9 +934,6 @@ func (f *flatTestListing) Traverse(pre objectMorpher, processor objectProcessor,
 func newFlatTestListing(t *testing.T, ctx context.Context, pages [][]string, prefix string,
 	beforePage func(int, http.ResponseWriter, *http.Request) bool, arrowResponse ...bool) (*flatTestListing, *atomic.Int32) {
 	t.Helper()
-	if !buildmode.HighPerf() {
-		t.Skip("flat enumeration requires the high-performance mover profile")
-	}
 	calls := &atomic.Int32{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
@@ -1242,7 +1252,7 @@ func TestFlatListPrefetchOverlapAndBound(t *testing.T) {
 							}, nil
 						}))
 						traverser := &blobTraverser{ctx: context.Background(), recursive: true, flatListArrow: eligible, flatListDiagnostics: true}
-						prefetch := eligible && buildmode.HighPerf()
+						prefetch := eligible
 						var paths []string
 						start := time.Now()
 						err := traverser.serialList(client, "c", "", "", noPreProccessor, func(obj StoredObject) error {
@@ -1292,9 +1302,6 @@ func TestFlatListPrefetchOverlapAndBound(t *testing.T) {
 }
 
 func TestFlatListPrefetchDiscardsReadyPage(t *testing.T) {
-	if !buildmode.HighPerf() {
-		t.Skip("prefetch requires the high-performance profile")
-	}
 	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
 	for _, cancelParent := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cancelParent=%t", cancelParent), func(t *testing.T) {
@@ -1334,10 +1341,12 @@ func TestFlatListPrefetchDiscardsReadyPage(t *testing.T) {
 				}
 				require.Equal(t, 1, processed)
 				require.EqualValues(t, 2, calls.Load(), "cleanup must not fetch another page")
-				require.Contains(t, logger.text(), `stage="prefetch-discarded"`)
+				if flatListPageDiagnosticsEnabled() {
+					require.Contains(t, logger.text(), `stage="prefetch-discarded"`)
+					require.Equal(t, 2, strings.Count(logger.text(), "[FlatListHTTP]"))
+				}
 				require.Contains(t, logger.text(), "attempts=2")
 				require.Contains(t, logger.text(), "discarded_pages=1")
-				require.Equal(t, 2, strings.Count(logger.text(), "[FlatListHTTP]"))
 			})
 		})
 	}
@@ -1391,7 +1400,9 @@ func TestFlatListPrefetchCancelsInFlightBody(t *testing.T) {
 			}
 			require.Equal(t, []string{"a"}, paths)
 			require.EqualValues(t, 2, calls.Load())
-			require.Contains(t, logger.text(), `stage="prefetch-discarded" failed=true`)
+			if flatListPageDiagnosticsEnabled() {
+				require.Contains(t, logger.text(), `stage="prefetch-discarded" failed=true`)
+			}
 		})
 	}
 }
@@ -1424,9 +1435,6 @@ func TestFlatListPrefetchPageErrorAfterEmptyPage(t *testing.T) {
 }
 
 func TestFlatListPrefetchAlreadyCanceled(t *testing.T) {
-	if !buildmode.HighPerf() {
-		t.Skip("prefetch requires the high-performance profile")
-	}
 	captureCrawlLogs(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
