@@ -36,8 +36,8 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 	const objectName = "incomplete.dat"
 	body := NewRandomObjectContentContainer(SizeFromString("16M"))
 	body.(*ObjectContentContainerBuffer).Data[0] = 1
-	sourceLastWriteTime := time.Date(1960, time.January, 1, 0, 0, 0, 0, time.UTC)
-	sourceCreationTime := time.Date(1950, time.January, 1, 0, 0, 0, 0, time.UTC)
+	sourceLastWriteTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	sourceCreationTime := sourceLastWriteTime.Add(-time.Hour)
 	sourceProperties := ObjectProperties{
 		EntityType: common.EEntityType.File(),
 		FileProperties: FileProperties{
@@ -78,6 +78,7 @@ func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestinatio
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive:    pointerTo(true),
 				PreserveInfo: pointerTo(true),
+				BlockSizeMB:  pointerTo(float64(0.25)),
 				GlobalFlags: GlobalFlags{
 					CapMbps: pointerTo(float64(4)),
 				},
