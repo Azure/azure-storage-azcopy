@@ -23,6 +23,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"os"
 	"runtime"
 	"strconv"
@@ -64,10 +66,10 @@ type crawlTestLogger struct {
 }
 
 type liveFlatListMetrics struct {
-	format                        string
+	format                         string
 	attempts, throttles, responses int64
-	bytes                         int64
-	attemptTime                   time.Duration
+	bytes                          int64
+	attemptTime                    time.Duration
 }
 
 type liveFlatListGuardError struct{}
@@ -233,6 +235,7 @@ func TestFlatListTimingMeasuresRetries(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if calls.Add(1) == 1 {
 			w.Header().Set("x-ms-error-code", "ServerBusy")
+			w.Header().Set("x-ms-retry-after-ms", "25")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			fmt.Fprint(w, `<Error><Code>ServerBusy</Code><Message>busy</Message></Error>`)
 			return
@@ -243,12 +246,13 @@ func TestFlatListTimingMeasuresRetries(t *testing.T) {
 	defer server.Close()
 	client, err := container.NewClientWithNoCredential(server.URL+"/container", &container.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
-			Retry:            policy.RetryOptions{MaxRetries: 1, RetryDelay: time.Millisecond, MaxRetryDelay: time.Millisecond},
+			Retry:            policy.RetryOptions{MaxRetries: 1, RetryDelay: time.Millisecond, MaxRetryDelay: time.Second},
 			PerRetryPolicies: []policy.Policy{flatListTimingPolicy{}},
+			Transport:        flatListDiagnosticTransport{inner: server.Client()},
 		},
 	})
 	require.NoError(t, err)
-	var timing flatListPageTiming
+	timing := flatListPageTiming{details: true}
 	ctx := context.WithValue(context.Background(), flatListTimingKey{}, &timing)
 	start := time.Now()
 	_, err = client.NewListBlobsFlatPager(nil).NextPage(ctx)
@@ -259,6 +263,392 @@ func TestFlatListTimingMeasuresRetries(t *testing.T) {
 	require.Positive(t, timing.attemptTime)
 	require.Positive(t, timing.retryGap)
 	require.LessOrEqual(t, timing.attemptTime+timing.retryGap, elapsed)
+	require.GreaterOrEqual(t, timing.retryGap, 25*time.Millisecond)
+	require.Len(t, timing.http, 2)
+	require.Equal(t, http.StatusServiceUnavailable, timing.http[0].snapshot().status)
+	require.Equal(t, http.StatusOK, timing.http[1].snapshot().status)
+	require.Positive(t, timing.http[0].snapshot().bodyBytes)
+	require.Positive(t, timing.http[1].snapshot().bodyBytes)
+}
+
+func TestFlatListHTTPPhasesAndReuse(t *testing.T) {
+	for _, format := range []string{"xml", "arrow", "xml-fallback"} {
+		t.Run(format, func(t *testing.T) {
+			body := []byte(`<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>`)
+			contentType := "application/xml"
+			requestFormat := container.StorageResponseFormatAuto
+			if format != "xml" {
+				requestFormat = container.StorageResponseFormatArrow
+			}
+			if format == "arrow" {
+				body = flatTestArrowPage(t, nil, "", "")
+				contentType = "application/vnd.apache.arrow.stream"
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(25 * time.Millisecond)
+				w.Header().Set("Content-Type", contentType)
+				w.Header().Set("x-ms-request-id", "request-for-phase-test")
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+				w.WriteHeader(http.StatusOK)
+				w.(http.Flusher).Flush()
+				time.Sleep(25 * time.Millisecond)
+				_, _ = w.Write(body[:len(body)/2])
+				w.(http.Flusher).Flush()
+				time.Sleep(25 * time.Millisecond)
+				_, _ = w.Write(body[len(body)/2:])
+			}))
+			defer server.Close()
+			client, err := container.NewClientWithNoCredential(server.URL+"/c", &container.ClientOptions{
+				ClientOptions: azcore.ClientOptions{
+					Transport:        flatListDiagnosticTransport{inner: server.Client()},
+					PerRetryPolicies: []policy.Policy{flatListTimingPolicy{}},
+					Retry:            policy.RetryOptions{MaxRetries: -1},
+				},
+			})
+			require.NoError(t, err)
+			var priorTraceCalls atomic.Int32
+			for page := 0; page < 2; page++ {
+				p := flatListPageTiming{details: true}
+				ctx := context.WithValue(context.Background(), flatListTimingKey{}, &p)
+				ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+					GotConn: func(httptrace.GotConnInfo) { priorTraceCalls.Add(1) },
+				})
+				start := time.Now()
+				_, err := client.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{ResponseFormat: requestFormat}).NextPage(ctx)
+				elapsed := time.Since(start)
+				require.NoError(t, err)
+				require.Len(t, p.http, 1)
+				v := p.http[0].snapshot()
+				require.Equal(t, int64(len(body)), v.bodyBytes)
+				require.Equal(t, contentType, v.contentType)
+				require.Equal(t, "request-for-phase-test", v.requestID)
+				require.Equal(t, http.StatusOK, v.status)
+				require.Equal(t, "HTTP/1.1", v.proto)
+				require.GreaterOrEqual(t, v.ttfb, 20*time.Millisecond)
+				require.GreaterOrEqual(t, v.bodyRead, 40*time.Millisecond)
+				require.LessOrEqual(t, v.transportTime+v.bodyRead, elapsed)
+				require.GreaterOrEqual(t, v.bodyWall, v.bodyRead)
+				require.True(t, v.bodyClosed)
+				require.False(t, v.transportFailed || v.bodyFailed)
+				require.Equal(t, page, v.reusedConns)
+				require.Equal(t, 1-page, v.newConns)
+				if format == "xml" {
+					require.GreaterOrEqual(t, p.attemptTime, v.transportTime+v.bodyRead)
+				} else {
+					require.GreaterOrEqual(t, elapsed-p.attemptTime, v.bodyRead,
+						"Arrow requests stream both Arrow and XML-fallback bodies outside the pipeline")
+				}
+			}
+			require.EqualValues(t, 2, priorTraceCalls.Load(), "existing trace callbacks must still run")
+		})
+	}
+}
+
+func TestFlatListHTTPCancelBody(t *testing.T) {
+	for _, format := range []string{"xml", "arrow", "xml-fallback"} {
+		t.Run(format, func(t *testing.T) {
+			contentType := "application/xml"
+			body := []byte(`<EnumerationResults>`)
+			requestFormat := container.StorageResponseFormatAuto
+			if format != "xml" {
+				requestFormat = container.StorageResponseFormatArrow
+			}
+			if format == "arrow" {
+				contentType = "application/vnd.apache.arrow.stream"
+				body = flatTestArrowPage(t, []string{"file"}, "", "")[:4]
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", contentType)
+				_, _ = w.Write(body)
+				w.(http.Flusher).Flush()
+				<-r.Context().Done()
+			}))
+			defer server.Close()
+			client, err := container.NewClientWithNoCredential(server.URL+"/c", &container.ClientOptions{
+				ClientOptions: azcore.ClientOptions{
+					Transport:        flatListDiagnosticTransport{inner: server.Client()},
+					PerRetryPolicies: []policy.Policy{flatListTimingPolicy{}},
+					Retry:            policy.RetryOptions{MaxRetries: -1},
+				},
+			})
+			require.NoError(t, err)
+			p := flatListPageTiming{details: true}
+			ctx = context.WithValue(ctx, flatListTimingKey{}, &p)
+			ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+				GotFirstResponseByte: func() { time.AfterFunc(25*time.Millisecond, cancel) },
+			})
+			_, err = client.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{ResponseFormat: requestFormat}).NextPage(ctx)
+			require.ErrorIs(t, ctx.Err(), context.Canceled)
+			if format == "arrow" {
+				// The SDK's Arrow parser formats the cause without preserving its error chain.
+				require.ErrorContains(t, err, context.Canceled.Error())
+			} else {
+				require.ErrorIs(t, err, context.Canceled)
+			}
+			require.Len(t, p.http, 1)
+			v := p.http[0].snapshot()
+			require.Equal(t, http.StatusOK, v.status)
+			require.Positive(t, v.bodyBytes)
+			require.True(t, v.bodyFailed)
+			require.True(t, v.bodyClosed)
+			require.False(t, v.bodyEOF)
+		})
+	}
+}
+
+func TestFlatListHTTPBodyPreservesReadError(t *testing.T) {
+	reader, writer := io.Pipe()
+	require.NoError(t, writer.CloseWithError(context.Canceled))
+	m := &flatListHTTPMetrics{headersAt: time.Now()}
+	body := &flatListDiagnosticBody{ReadCloser: reader, metrics: m}
+	n, err := body.Read(make([]byte, 1))
+	require.Zero(t, n)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NoError(t, body.Close())
+	v := m.snapshot()
+	require.True(t, v.bodyFailed)
+	require.True(t, v.bodyClosed)
+	require.False(t, v.bodyEOF)
+}
+
+type flatListTestTransport func(*http.Request) (*http.Response, error)
+
+func (f flatListTestTransport) Do(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestFlatListHTTPTransportErrorAndPassthrough(t *testing.T) {
+	sentinel := errors.New("transport unavailable")
+	req, err := http.NewRequest(http.MethodGet, "https://example.com/c?sig=not-for-logs", nil)
+	require.NoError(t, err)
+	original := req
+	transport := flatListDiagnosticTransport{inner: flatListTestTransport(func(r *http.Request) (*http.Response, error) {
+		if r.Context().Value(flatListHTTPKey{}) == nil {
+			require.Same(t, original, r, "uninstrumented requests must be passed through unchanged")
+			require.Nil(t, httptrace.ContextClientTrace(r.Context()))
+		}
+		return nil, sentinel
+	})}
+	_, err = transport.Do(req)
+	require.ErrorIs(t, err, sentinel)
+	m := &flatListHTTPMetrics{}
+	req = req.WithContext(context.WithValue(req.Context(), flatListHTTPKey{}, m))
+	_, err = transport.Do(req)
+	require.ErrorIs(t, err, sentinel)
+	v := m.snapshot()
+	require.True(t, v.transportFailed)
+	require.Zero(t, v.status)
+	require.Zero(t, v.bodyBytes)
+}
+
+func TestFlatListHTTPTraceConcurrentCallbacks(t *testing.T) {
+	m := &flatListHTTPMetrics{}
+	trace := m.trace()
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Go(func() {
+			trace.GetConn("")
+			trace.GotConn(httptrace.GotConnInfo{Reused: true})
+			trace.DNSStart(httptrace.DNSStartInfo{})
+			trace.DNSDone(httptrace.DNSDoneInfo{})
+			trace.ConnectStart("tcp", "test")
+			trace.ConnectDone("tcp", "test", nil)
+			trace.TLSHandshakeStart()
+			trace.TLSHandshakeDone(tls.ConnectionState{}, nil)
+			trace.WroteRequest(httptrace.WroteRequestInfo{})
+			trace.GotFirstResponseByte()
+			_ = m.snapshot()
+		})
+	}
+	wg.Wait()
+	require.Equal(t, 20, m.snapshot().reusedConns)
+}
+
+func TestFlatListPageDiagnosticsOptions(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", "false")
+	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
+	original := createClientOptions(nil, nil, nil)
+	require.Same(t, common.GetGlobalHTTPClient(nil), original.Transport)
+	require.False(t, flatListDiagnosticsEnabled())
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
+	options := createClientOptions(nil, nil, nil)
+	require.Equal(t, buildmode.HighPerf(), flatListDiagnosticsEnabled())
+	if buildmode.HighPerf() {
+		wrapped, ok := options.Transport.(flatListDiagnosticTransport)
+		require.True(t, ok)
+		require.Same(t, original.Transport, wrapped.inner)
+	} else {
+		require.Same(t, original.Transport, options.Transport)
+	}
+	require.Equal(t, original.Retry.MaxRetries, options.Retry.MaxRetries)
+	require.Equal(t, original.Retry.RetryDelay, options.Retry.RetryDelay)
+}
+
+func TestFlatListDedicatedPoolRouting(t *testing.T) {
+	captureCrawlLogs(t)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "response")
+	}))
+	defer server.Close()
+	shared := server.Client()
+	pool := &flatListPoolTransport{shared: shared}
+	for _, listing := range []bool{false, true, true, false} {
+		var reused, fresh atomic.Int32
+		ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+			GotConn: func(info httptrace.GotConnInfo) {
+				if info.Reused {
+					reused.Add(1)
+				} else {
+					fresh.Add(1)
+				}
+			},
+		})
+		existing := pool.listing
+		if listing {
+			ctx = context.WithValue(ctx, flatListTimingKey{}, &flatListPageTiming{})
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+		require.NoError(t, err)
+		resp, err := pool.Do(req)
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		if existing == nil {
+			require.EqualValues(t, 1, fresh.Load(), "first listing must not reuse the transfer connection")
+		} else {
+			require.EqualValues(t, 1, reused.Load(), "each path must retain and reuse its own pool")
+		}
+		if !listing && existing == nil {
+			require.Nil(t, pool.listing, "non-listing requests must not create a pool")
+		}
+	}
+	require.NotSame(t, shared, pool.listing)
+	isolated := pool.listing.Transport.(*http.Transport)
+	defer isolated.CloseIdleConnections()
+	require.Equal(t, 4, isolated.MaxConnsPerHost)
+	require.Equal(t, 4, isolated.MaxIdleConnsPerHost)
+	require.Equal(t, 4, isolated.MaxIdleConns)
+	require.Zero(t, shared.Transport.(*http.Transport).MaxConnsPerHost)
+}
+
+func TestFlatListDedicatedPoolSettingsAndGate(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
+	t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", "true")
+	options := createClientOptions(nil, nil, nil)
+	pool, enabled := options.Transport.(*flatListPoolTransport)
+	require.Equal(t, buildmode.HighPerf(), enabled)
+	require.Equal(t, buildmode.HighPerf(), flatListDiagnosticsEnabled())
+	if enabled {
+		require.Same(t, common.GetGlobalHTTPClient(nil), pool.shared)
+		require.Nil(t, pool.listing)
+		client, err := common.NewIsolatedHTTPClient(pool.shared, 4)
+		require.NoError(t, err)
+		defer client.CloseIdleConnections()
+	}
+	source := &http.Transport{
+		DisableCompression:  true,
+		IdleConnTimeout:     180 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+		ReadBufferSize:      65536, WriteBufferSize: 65536,
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		MaxConnsPerHost: 1024,
+	}
+	shared := &http.Client{Transport: source, Timeout: time.Minute}
+	client, err := common.NewIsolatedHTTPClient(shared, 4)
+	require.NoError(t, err)
+	cloned := client.Transport.(*http.Transport)
+	require.NotSame(t, source, cloned)
+	require.Equal(t, shared.Timeout, client.Timeout)
+	require.Equal(t, source.DisableCompression, cloned.DisableCompression)
+	require.Equal(t, source.DisableKeepAlives, cloned.DisableKeepAlives)
+	require.Equal(t, source.IdleConnTimeout, cloned.IdleConnTimeout)
+	require.Equal(t, source.TLSHandshakeTimeout, cloned.TLSHandshakeTimeout)
+	require.Equal(t, source.ReadBufferSize, cloned.ReadBufferSize)
+	require.Equal(t, source.WriteBufferSize, cloned.WriteBufferSize)
+	require.Equal(t, source.TLSClientConfig.MinVersion, cloned.TLSClientConfig.MinVersion)
+	require.Equal(t, 1024, source.MaxConnsPerHost)
+	require.Equal(t, 4, cloned.MaxConnsPerHost)
+}
+
+func TestFlatListDedicatedPoolError(t *testing.T) {
+	pool := &flatListPoolTransport{shared: &http.Client{}}
+	ctx := context.WithValue(context.Background(), flatListTimingKey{}, &flatListPageTiming{})
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	for i := 0; i < 2; i++ {
+		resp, err := pool.Do(req)
+		require.Nil(t, resp)
+		require.ErrorContains(t, err, "cannot isolate shared HTTP transport")
+	}
+}
+
+func TestFlatListPageDiagnosticsLogs(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("processorFailure=%t", fail), func(t *testing.T) {
+			logger := captureCrawlLogs(t)
+			listing, _ := newFlatTestListing(t, context.Background(), [][]string{{"private-file"}, {"other-private-file"}},
+				"private-prefix/", nil)
+			err := listing.Traverse(noPreProccessor, func(StoredObject) error {
+				time.Sleep(5 * time.Millisecond)
+				if fail {
+					return errors.New("private failure text must not be logged in metrics")
+				}
+				return nil
+			}, nil)
+			text := logger.text()
+			if fail {
+				require.Error(t, err)
+				require.Contains(t, text, `stage="processing" failed=true`)
+				require.Equal(t, 1, strings.Count(text, "[FlatListPage]")-strings.Count(text, `stage="prefetch-discarded"`))
+			} else {
+				require.NoError(t, err)
+				require.Contains(t, text, `stage="complete" failed=false`)
+				require.Equal(t, 2, strings.Count(text, "[FlatListPage]"))
+			}
+			require.Contains(t, text, "blobs=1 attempts=1 observed_http_attempts=1")
+			require.Contains(t, text, "detail_log_ms=")
+			require.Contains(t, text, "[FlatListHTTP]")
+			for _, line := range strings.Split(text, "\n") {
+				if strings.Contains(line, "[FlatList") {
+					require.NotContains(t, line, "private")
+				}
+				if !strings.Contains(line, "[FlatListPage]") || strings.Contains(line, `stage="prefetch-discarded"`) {
+					continue
+				}
+				values := make(map[string]float64)
+				for _, field := range strings.Fields(line) {
+					key, value, ok := strings.Cut(field, "=")
+					if ok && strings.HasSuffix(key, "_ms") {
+						values[key], err = strconv.ParseFloat(value, 64)
+						require.NoError(t, err)
+					}
+				}
+				require.GreaterOrEqual(t, values["processor_ms"], 5.0)
+				require.GreaterOrEqual(t, values["processing_ms"], values["processor_ms"])
+				require.InDelta(t, values["next_ms"], values["transport_headers_ms"]+values["body_read_ms"]+
+					values["between_attempt_ms"]+values["next_other_ms"], 0.003)
+			}
+		})
+	}
+	t.Run("nextFailure", func(t *testing.T) {
+		logger := captureCrawlLogs(t)
+		listing, _ := newFlatTestListing(t, context.Background(), [][]string{{}}, "",
+			func(_ int, w http.ResponseWriter, _ *http.Request) bool {
+				w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+				fmt.Fprint(w, "invalid Arrow")
+				return false
+			})
+		err := listing.Traverse(noPreProccessor, func(StoredObject) error {
+			t.Error("failed decoding must not schedule transfers")
+			return nil
+		}, nil)
+		require.Error(t, err)
+		require.Contains(t, logger.text(), `stage="next" failed=true blobs=0 attempts=1 observed_http_attempts=1`)
+	})
 }
 
 func (l *crawlTestLogger) ShouldLog(common.LogLevel) bool { return false }
@@ -542,9 +932,12 @@ func newFlatTestListing(t *testing.T, ctx context.Context, pages [][]string, pre
 	t.Cleanup(server.Close)
 	// localhost avoids the SDK's IP-address emulator URL parsing rules.
 	endpoint := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
-	client, err := service.NewClientWithNoCredential(endpoint, &service.ClientOptions{
-		ClientOptions: azcore.ClientOptions{PerCallPolicies: []policy.Policy{ste.NewVersionPolicy()}},
-	})
+	options := azcore.ClientOptions{PerCallPolicies: []policy.Policy{ste.NewVersionPolicy()}}
+	if flatListPageDiagnosticsEnabled() {
+		options.Transport = flatListDiagnosticTransport{inner: server.Client()}
+		options.PerRetryPolicies = []policy.Policy{flatListTimingPolicy{}}
+	}
+	client, err := service.NewClientWithNoCredential(endpoint, &service.ClientOptions{ClientOptions: options})
 	require.NoError(t, err)
 	location := common.ELocation.Blob()
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, "2025-05-05")
@@ -664,6 +1057,7 @@ func TestFlatPhotonRetriesPreserveHeaders(t *testing.T) {
 }
 
 func TestFlatPhotonResponseFormatDiagnostics(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
 	for _, useArrow := range []bool{false, true} {
 		t.Run(fmt.Sprintf("arrow=%t", useArrow), func(t *testing.T) {
 			listing, _ := newFlatTestListing(t, context.Background(), [][]string{{"a/file"}}, "", nil, useArrow)
@@ -673,6 +1067,8 @@ func TestFlatPhotonResponseFormatDiagnostics(t *testing.T) {
 			t.Cleanup(func() { azcopyScanningLogger = previousLogger })
 			listing.traverser.flatListDiagnostics = true
 			require.NoError(t, listing.Traverse(noPreProccessor, func(StoredObject) error { return nil }, nil))
+			require.NotContains(t, logger.text(), "[FlatListPage]")
+			require.NotContains(t, logger.text(), "[FlatListHTTP]")
 			if useArrow {
 				require.Contains(t, logger.text(), `content_type="application/vnd.apache.arrow.stream"`)
 				require.Contains(t, logger.text(), "arrow_pages=1 xml_pages=0")
@@ -735,6 +1131,327 @@ func TestFlatCopyNestedBlobsAcrossPages(t *testing.T) {
 	require.Equal(t, []string{"a", "a-1/item", "a/deep/blob", "b space/%literal", "z/end"}, paths)
 	require.Equal(t, 5, scanned)
 	require.EqualValues(t, 2, calls.Load())
+}
+
+func newFlatPrefetchTestClient(t *testing.T, transport policy.Transporter) *container.Client {
+	t.Helper()
+	client, err := container.NewClientWithNoCredential("https://example.blob.core.windows.net/c", &container.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Transport:        flatListDiagnosticTransport{inner: transport},
+			PerRetryPolicies: []policy.Policy{flatListTimingPolicy{}},
+		},
+	})
+	require.NoError(t, err)
+	return client
+}
+
+func TestFlatListPrefetchOverlapAndBound(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, eligible := range []bool{false, true} {
+			for _, slowConsumer := range []bool{false, true} {
+				t.Run(fmt.Sprintf("enabled=%t/eligible=%t/slowConsumer=%t", enabled, eligible, slowConsumer), func(t *testing.T) {
+					t.Setenv("MOVER_FLAT_LIST_PREFETCH", strconv.FormatBool(enabled))
+					t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
+					logger := captureCrawlLogs(t)
+					contentType := "application/xml"
+					if eligible {
+						contentType = "application/vnd.apache.arrow.stream"
+					}
+					bodies := make([][]byte, 4)
+					for i := range bodies {
+						marker := ""
+						if i+1 < len(bodies) {
+							marker = strconv.Itoa(i + 1)
+						}
+						if eligible {
+							bodies[i] = flatTestArrowPage(t, []string{strconv.Itoa(i)}, "", marker)
+						} else {
+							bodies[i] = []byte(fmt.Sprintf(`<EnumerationResults><Blobs><Blob><Name>%d</Name><Properties><Last-Modified>Sun, 13 Sep 2020 12:26:40 GMT</Last-Modified><Etag>etag</Etag><Content-Length>1</Content-Length><BlobType>BlockBlob</BlobType></Properties></Blob></Blobs><NextMarker>%s</NextMarker></EnumerationResults>`, i, marker))
+						}
+					}
+					synctest.Test(t, func(t *testing.T) {
+						var calls, active atomic.Int32
+						client := newFlatPrefetchTestClient(t, flatListTestTransport(func(req *http.Request) (*http.Response, error) {
+							assert.EqualValues(t, 1, active.Add(1), "pager requests must remain serial")
+							defer active.Add(-1)
+							i := int(calls.Add(1)) - 1
+							if i >= len(bodies) {
+								return nil, errors.New("prefetch read past the final page")
+							}
+							marker := ""
+							if i > 0 {
+								marker = strconv.Itoa(i)
+							}
+							assert.Equal(t, marker, req.URL.Query().Get("marker"))
+							time.Sleep(100 * time.Millisecond)
+							return &http.Response{
+								StatusCode: http.StatusOK,
+								Header:     http.Header{"Content-Type": {contentType}},
+								Body:       io.NopCloser(bytes.NewReader(bodies[i])),
+								Request:    req,
+							}, nil
+						}))
+						traverser := &blobTraverser{ctx: context.Background(), recursive: true, flatListArrow: eligible, flatListDiagnostics: true}
+						prefetch := enabled && eligible && buildmode.HighPerf()
+						var paths []string
+						start := time.Now()
+						err := traverser.serialList(client, "c", "", "", noPreProccessor, func(obj StoredObject) error {
+							paths = append(paths, obj.relativePath)
+							delay := 80 * time.Millisecond
+							if slowConsumer && len(paths) == 1 {
+								delay = 500 * time.Millisecond
+							}
+							time.Sleep(delay)
+							limit := len(paths)
+							if prefetch {
+								limit++
+							}
+							require.LessOrEqual(t, int(calls.Load()), limit, "including in-flight work, at most one page may be ahead")
+							if len(paths) == 1 {
+								require.EqualValues(t, limit, calls.Load(), "next request must overlap current processing only when enabled")
+							}
+							return nil
+						}, nil)
+						require.NoError(t, err)
+						require.Equal(t, []string{"0", "1", "2", "3"}, paths)
+						require.EqualValues(t, 4, calls.Load())
+						want := 720 * time.Millisecond
+						if prefetch {
+							want = 480 * time.Millisecond
+						}
+						if slowConsumer {
+							want = 1140 * time.Millisecond
+							if prefetch {
+								want = 880 * time.Millisecond
+							}
+						}
+						require.Equal(t, want, time.Since(start), "fake-clock measurement must demonstrate actual overlap")
+						require.Zero(t, active.Load(), "no request may outlive enumeration")
+						processing := 320 * time.Millisecond
+						if slowConsumer {
+							processing = 740 * time.Millisecond
+						}
+						require.Contains(t, logger.text(), fmt.Sprintf("elapsed_ms=%d next_ms=400", want.Milliseconds()))
+						require.Contains(t, logger.text(), fmt.Sprintf("prefetch=%t page_wait_ms=%d discarded_pages=0",
+							prefetch, (want-processing).Milliseconds()))
+					})
+				})
+			}
+		}
+	}
+}
+
+func TestFlatListPrefetchDiscardsReadyPage(t *testing.T) {
+	if !buildmode.HighPerf() {
+		t.Skip("prefetch requires the high-performance profile")
+	}
+	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
+	for _, cancelParent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancelParent=%t", cancelParent), func(t *testing.T) {
+			logger := captureCrawlLogs(t)
+			body := flatTestArrowPage(t, []string{"private-file"}, "", "more")
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				var calls atomic.Int32
+				client := newFlatPrefetchTestClient(t, flatListTestTransport(func(req *http.Request) (*http.Response, error) {
+					calls.Add(1)
+					time.Sleep(time.Millisecond)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": {"application/vnd.apache.arrow.stream"}},
+						Body:       io.NopCloser(bytes.NewReader(body)),
+						Request:    req,
+					}, nil
+				}))
+				traverser := &blobTraverser{ctx: ctx, recursive: true, flatListArrow: true, flatListDiagnostics: true}
+				wantErr := errors.New("processor stopped")
+				processed := 0
+				err := traverser.serialList(client, "c", "", "", noPreProccessor, func(StoredObject) error {
+					processed++
+					time.Sleep(10 * time.Millisecond)
+					require.EqualValues(t, 2, calls.Load())
+					if cancelParent {
+						cancel()
+						return nil
+					}
+					return wantErr
+				}, nil)
+				if cancelParent {
+					require.ErrorIs(t, err, context.Canceled)
+				} else {
+					require.ErrorIs(t, err, wantErr)
+				}
+				require.Equal(t, 1, processed)
+				require.EqualValues(t, 2, calls.Load(), "cleanup must not fetch another page")
+				require.Contains(t, logger.text(), `stage="prefetch-discarded"`)
+				require.Contains(t, logger.text(), "attempts=2")
+				require.Contains(t, logger.text(), "discarded_pages=1")
+				require.Equal(t, 2, strings.Count(logger.text(), "[FlatListHTTP]"))
+			})
+		})
+	}
+}
+
+func TestFlatListPrefetchCancelsInFlightBody(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
+	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "true")
+	for _, cancelParent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancelParent=%t", cancelParent), func(t *testing.T) {
+			logger := captureCrawlLogs(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			started, canceled := make(chan struct{}), make(chan struct{})
+			listing, calls := newFlatTestListing(t, ctx, [][]string{{"a", "b"}, {"c"}}, "",
+				func(page int, w http.ResponseWriter, r *http.Request) bool {
+					if page != 1 {
+						return true
+					}
+					w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+					w.WriteHeader(http.StatusOK)
+					w.(http.Flusher).Flush()
+					close(started)
+					<-r.Context().Done()
+					close(canceled)
+					return false
+				})
+			wantErr := errors.New("stop scheduling")
+			var paths []string
+			err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
+				paths = append(paths, obj.relativePath)
+				select {
+				case <-started:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				if cancelParent {
+					cancel()
+					return nil
+				}
+				return wantErr
+			}, nil)
+			if cancelParent {
+				require.ErrorIs(t, err, context.Canceled)
+			} else {
+				require.ErrorIs(t, err, wantErr, "prefetch cancellation must not replace the processor error")
+			}
+			select {
+			case <-canceled:
+			case <-time.After(5 * time.Second):
+				t.Fatal("prefetch HTTP request outlived traversal")
+			}
+			require.Equal(t, []string{"a"}, paths)
+			require.EqualValues(t, 2, calls.Load())
+			require.Contains(t, logger.text(), `stage="prefetch-discarded" failed=true`)
+		})
+	}
+}
+
+func TestFlatListPrefetchPageErrorAfterEmptyPage(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
+	for _, arrowResponse := range []bool{false, true} {
+		t.Run(fmt.Sprintf("arrow=%t", arrowResponse), func(t *testing.T) {
+			listing, calls := newFlatTestListing(t, context.Background(), [][]string{{"a", "b"}, {}, {"c"}, {}}, "",
+				func(page int, w http.ResponseWriter, _ *http.Request) bool {
+					if page != 3 {
+						return true
+					}
+					w.Header().Set("x-ms-error-code", "AuthorizationPermissionMismatch")
+					w.WriteHeader(http.StatusForbidden)
+					fmt.Fprint(w, `<Error><Code>AuthorizationPermissionMismatch</Code><Message>denied</Message></Error>`)
+					return false
+				}, arrowResponse)
+			var paths []string
+			err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
+				paths = append(paths, obj.relativePath)
+				return nil
+			}, nil)
+			var responseErr *azcore.ResponseError
+			require.ErrorAs(t, err, &responseErr)
+			require.Equal(t, http.StatusForbidden, responseErr.StatusCode)
+			require.Equal(t, []string{"a", "b", "c"}, paths)
+			require.EqualValues(t, 4, calls.Load())
+		})
+	}
+}
+
+func TestFlatListPrefetchAlreadyCanceled(t *testing.T) {
+	if !buildmode.HighPerf() {
+		t.Skip("prefetch requires the high-performance profile")
+	}
+	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
+	captureCrawlLogs(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := newFlatPrefetchTestClient(t, flatListTestTransport(func(*http.Request) (*http.Response, error) {
+		t.Error("canceled traversal must not start a request")
+		return nil, ctx.Err()
+	}))
+	traverser := &blobTraverser{ctx: ctx, recursive: true, flatListArrow: true}
+	err := traverser.serialList(client, "c", "", "", noPreProccessor, func(StoredObject) error {
+		t.Error("canceled traversal must not process a blob")
+		return nil
+	}, nil)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestFlatListPrefetchExactOutputAndMetadataLifetime(t *testing.T) {
+	pages := [][]string{{}, {"__AZURE_STORAGE_MOVER_MARKER"}, {}}
+	var want []string
+	for _, size := range []int{137, 0, 5000, 61, 0} {
+		page := make([]string, size)
+		for i := range page {
+			page[i] = fmt.Sprintf("dir-%06d/nested/file %% + #.txt", len(want))
+			want = append(want, page[i])
+		}
+		pages = append(pages, page)
+	}
+	pages = append(pages, []string{"folder-stub/"}, nil)
+	for _, arrowResponse := range []bool{false, true} {
+		t.Run(fmt.Sprintf("arrow=%t", arrowResponse), func(t *testing.T) {
+			var serialObjects []StoredObject
+			for _, prefetch := range []bool{false, true} {
+				t.Run(fmt.Sprintf("prefetch=%t", prefetch), func(t *testing.T) {
+					t.Setenv("MOVER_FLAT_LIST_PREFETCH", strconv.FormatBool(prefetch))
+					captureCrawlLogs(t)
+					listing, calls := newFlatTestListing(t, context.Background(), pages, "root/", nil, arrowResponse)
+					listing.traverser.s2sPreserveSourceTags = true
+					scanned := 0
+					listing.traverser.incrementEnumerationCounter = func(common.EntityType) { scanned++ }
+					var objects []StoredObject
+					err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
+						objects = append(objects, obj)
+						return nil
+					}, buildRegexFilters([]string{".*__AZURE_STORAGE_MOVER_MARKER.*", "folder-stub/.*"}, false))
+					require.NoError(t, err)
+					require.EqualValues(t, len(pages), calls.Load())
+					var got []string
+					runtime.GC()
+					for _, obj := range objects {
+						got = append(got, obj.relativePath)
+						require.EqualValues(t, 1, obj.size)
+						if arrowResponse {
+							require.Equal(t, "test", *obj.Metadata["owner"])
+							require.Equal(t, common.BlobTags{"kind": "test"}, obj.blobTags)
+							require.Equal(t, make([]byte, 16), obj.md5)
+						}
+					}
+					require.Equal(t, want, got, "every surviving key must be delivered exactly once and in order")
+					wantScanned := len(want) + 2 // XML fixture has no folder metadata, so its stub reaches filters.
+					if arrowResponse {
+						wantScanned--
+					}
+					require.Equal(t, wantScanned, scanned)
+					if prefetch {
+						require.Equal(t, serialObjects, objects, "prefetch must preserve every StoredObject field")
+					} else {
+						serialObjects = objects
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestFlatCopyFiltersMarkerAndPropagatesProcessorError(t *testing.T) {

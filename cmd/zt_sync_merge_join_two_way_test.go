@@ -700,6 +700,7 @@ func TestFlatSyncStreamsBeforeListingCompletesAndCancels(t *testing.T) {
 			pages[page] = append(pages[page], fmt.Sprintf("dir-%08d/file", page*mergeJoinChannelBufferSize+i))
 		}
 	}
+
 	waitAtLastPage := func(page int, w http.ResponseWriter, r *http.Request) bool {
 		if page == 2 {
 			<-r.Context().Done()
@@ -727,5 +728,91 @@ func TestFlatSyncStreamsBeforeListingCompletesAndCancels(t *testing.T) {
 		require.Error(t, err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("flat sync did not drain after cancellation")
+	}
+}
+
+func TestFlatSyncPrefetchAsymmetricSetOracle(t *testing.T) {
+	t.Setenv("MOVER_FLAT_LIST_PREFETCH", "true")
+	splitPages := func(names []string, size int) [][]string {
+		pages := [][]string{{}}
+		for len(names) > 0 {
+			n := size
+			if n > len(names) {
+				n = len(names)
+			}
+			pages = append(pages, names[:n], nil)
+			names = names[n:]
+		}
+		return pages
+	}
+	var source, target, wantCopies, wantDeletes []string
+	wantUnchanged := 0
+	for i := 0; i < 12_000; i++ {
+		name := fmt.Sprintf("dir-%06d/nested/file", i)
+		inSource, inTarget := i%3 != 0, i%4 != 0
+		if inSource {
+			source = append(source, name)
+		}
+		if inTarget {
+			target = append(target, name)
+		}
+		switch {
+		case inSource && !inTarget:
+			wantCopies = append(wantCopies, "/"+name)
+		case inTarget && !inSource:
+			wantDeletes = append(wantDeletes, name)
+		case inSource && inTarget:
+			wantUnchanged++
+		}
+	}
+	for _, destinationArrow := range []bool{false, true} {
+		t.Run(fmt.Sprintf("destinationArrow=%t", destinationArrow), func(t *testing.T) {
+			captureCrawlLogs(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			src, srcCalls := newFlatTestListing(t, ctx, splitPages(source, 1499), "src/", nil)
+			dst, dstCalls := newFlatTestListing(t, ctx, splitPages(target, 4093), "dst/", nil, destinationArrow)
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
+			unchanged := 0
+			enumerator.primaryTraverserTemplate.options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
+			cca := mirrorSyncArgs()
+			cca.useFlatListing = true
+			dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			require.NoError(t, err)
+			require.Empty(t, dirs)
+			require.Equal(t, wantCopies, scheduledTransferSources(enumerator))
+			require.Equal(t, wantDeletes, deleted)
+			require.Equal(t, wantUnchanged, unchanged)
+			require.EqualValues(t, len(splitPages(source, 1499)), srcCalls.Load())
+			require.EqualValues(t, len(splitPages(target, 4093)), dstCalls.Load())
+		})
+	}
+}
+
+func TestFlatSyncPrefetchPreservesLeadingSlashKeys(t *testing.T) {
+	for _, prefetch := range []bool{false, true} {
+		t.Run(fmt.Sprintf("prefetch=%t", prefetch), func(t *testing.T) {
+			t.Setenv("MOVER_FLAT_LIST_PREFETCH", fmt.Sprintf("%t", prefetch))
+			captureCrawlLogs(t)
+			root, err := validateAndGetRootObject("https://example.blob.core.windows.net/c", common.EFromTo.BlobBlob())
+			require.NoError(t, err)
+			require.Equal(t, "/", root.relativePath)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src, _ := newFlatTestListing(t, ctx, [][]string{{"/a"}}, "", nil)
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{"a"}}, "", nil)
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			cca := mirrorSyncArgs()
+			cca.useFlatListing = true
+			_, err = mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, root.relativePath, src, dst, true)
+			require.NoError(t, err)
+			require.Equal(t, []string{"//a"}, scheduledTransferSources(enumerator))
+			require.Equal(t, []string{"a"}, deleted)
+		})
 	}
 }

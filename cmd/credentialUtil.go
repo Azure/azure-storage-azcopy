@@ -525,8 +525,12 @@ func createClientOptions(logger common.ILoggerResetable, srcCred, targetCred azc
 	}
 	// Job-level/global client if available so we reuse connections and transports.
 	client := common.GetGlobalHTTPClient(logger)
+	var transport policy.Transporter = client
+	if flatListDedicatedPoolEnabled() {
+		transport = &flatListPoolTransport{shared: client}
+	}
 
-	return ste.NewClientOptions(
+	options := ste.NewClientOptions(
 		policy.RetryOptions{
 			MaxRetries:    ste.UploadMaxTries,
 			TryTimeout:    ste.UploadTryTimeout,
@@ -536,10 +540,14 @@ func createClientOptions(logger common.ILoggerResetable, srcCred, targetCred azc
 		policy.TelemetryOptions{
 			ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
 		},
-		client, /*Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace*/
+		transport,
 		logOptions,
 		srcCred,
 		targetCred)
+	if flatListPageDiagnosticsEnabled() {
+		options.Transport = flatListDiagnosticTransport{inner: options.Transport}
+	}
+	return options
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
