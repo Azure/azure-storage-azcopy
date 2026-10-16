@@ -308,6 +308,13 @@ type CopySyncCommonFlags struct {
 	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
 	FollowSymlinks          *bool                        `flag:"follow-symlinks"`
 	HardlinkType            *common.HardlinkHandlingType `flag:"hardlinks"`
+
+	ContentType        *string `flag:"content-type"`
+	ContentEncoding    *string `flag:"content-encoding"`
+	ContentDisposition *string `flag:"content-disposition"`
+	ContentLanguage    *string `flag:"content-language"`
+	CacheControl       *string `flag:"cache-control"`
+	NoGuessMimeType    *bool   `flag:"no-guess-mime-type"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
@@ -324,14 +331,7 @@ type CopyFlags struct {
 	PageBlobTier    *common.PageBlobTier  `flag:"page-blob-tier"`
 	Metadata        common.Metadata       `flag:"metadata,serializer:SerializeMetadata"`
 
-	ContentType        *string `flag:"content-type"`
-	ContentEncoding    *string `flag:"content-encoding"`
-	ContentDisposition *string `flag:"content-disposition"`
-	ContentLanguage    *string `flag:"content-language"`
-	CacheControl       *string `flag:"cache-control"`
-
-	NoGuessMimeType *bool `flag:"no-guess-mime-type"`
-	PreserveLMT     *bool `flag:"preserve-last-modified-time"`
+	PreserveLMT *bool `flag:"preserve-last-modified-time"`
 
 	AsSubdir         *bool `flag:"as-subdir"`
 	PreserveOwner    *bool `flag:"preserve-owner"`

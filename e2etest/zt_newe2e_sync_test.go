@@ -858,3 +858,53 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioV
 		preserveInfo:          true,
 	})
 }
+
+// Scenario_SyncUploadContentHeaders validates that sync sets blob HTTP header
+// properties (content-type, content-encoding, content-disposition,
+// content-language, cache-control) on the destination when uploading.
+func (s *SyncTestSuite) Scenario_SyncUploadContentHeaders(svm *ScenarioVariationManager) {
+	fileName := "test_sync_content_headers"
+	body := NewRandomObjectContentContainer(512)
+
+	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
+		GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{}).
+		GetObject(svm, fileName, common.EEntityType.File())
+
+	contentType := pointerTo("test/ctype")
+	contentEncoding := pointerTo("testenc")
+	contentDisposition := pointerTo("testdisp")
+	contentLanguage := pointerTo("testlang")
+	cacheControl := pointerTo("max-age=3600")
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{srcObj, dstObj},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:          pointerTo(true),
+				ContentType:        contentType,
+				ContentEncoding:    contentEncoding,
+				ContentDisposition: contentDisposition,
+				ContentLanguage:    contentLanguage,
+				CacheControl:       cacheControl,
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		ObjectProperties: ObjectProperties{
+			HTTPHeaders: contentHeaders{
+				contentType:        contentType,
+				contentEncoding:    contentEncoding,
+				contentDisposition: contentDisposition,
+				contentLanguage:    contentLanguage,
+				cacheControl:       cacheControl,
+			},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
+}
