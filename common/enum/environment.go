@@ -173,6 +173,15 @@ func (eEnvironmentVariable) MoverSyncMergeJoinTraversers() EnvironmentVariable {
 	}
 }
 
+func (eEnvironmentVariable) MoverFlatListParallelism() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:            "MOVER_FLAT_LIST_PARALLELISM",
+		DefaultValue:    "8",
+		Description:     "Eligible high-perf FNS flat listing: maximum concurrent range tasks. Defaults to 8; integer from 1 to 37. Set 1 for serial listing; higher values process 37 static ranges with bounded concurrency.",
+		DeveloperOption: true,
+	}
+}
+
 func (eEnvironmentVariable) HighPerfMaxQueuedDirs() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:            "MOVER_HIGH_PERF_MAX_QUEUED_DIRS",

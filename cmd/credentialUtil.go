@@ -544,9 +544,6 @@ func createClientOptions(logger common.ILoggerResetable, srcCred, targetCred azc
 		logOptions,
 		srcCred,
 		targetCred)
-	if flatListPageDiagnosticsEnabled() {
-		options.Transport = flatListDiagnosticTransport{inner: options.Transport}
-	}
 	return options
 }
 

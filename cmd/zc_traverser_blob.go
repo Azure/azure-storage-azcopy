@@ -22,13 +22,9 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptrace"
 	"net/url"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -36,7 +32,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -61,9 +56,9 @@ type blobTraverser struct {
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization in the name of saving costs
-	parallelListing     bool
-	flatListDiagnostics bool
-	flatListArrow       bool
+	parallelListing    bool
+	flatListingEnabled bool
+	flatListArrow      bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -686,7 +681,7 @@ func startBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parall
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		logStats := func(final bool) {
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -755,123 +750,7 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bo
 	return util.doesBlobRepresentAFolder(metadata) // We should ignore these, because we pick them up in other ways.
 }
 
-type flatListTimingKey struct{}
-
 type flatListPoolKey struct{}
-
-type flatListHTTPKey struct{}
-
-var flatListDiagnosticSequence atomic.Uint64
-
-type flatListHTTPValues struct {
-	status                                                  int
-	requestID, clientRequestID, contentType, version, proto string
-	transportTime, connWait, dnsTime, tcpTime, tlsTime      time.Duration
-	writeTime, ttfb, bodyRead, bodyWall                     time.Duration
-	newConns, reusedConns, bodyReads                        int
-	bodyBytes                                               int64
-	transportFailed, bodyFailed, bodyEOF, bodyClosed        bool
-}
-
-type flatListHTTPMetrics struct {
-	mu sync.Mutex
-	flatListHTTPValues
-	headersAt time.Time
-}
-
-func (m *flatListHTTPMetrics) update(f func()) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	f()
-}
-
-func (m *flatListHTTPMetrics) snapshot() flatListHTTPValues {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.flatListHTTPValues
-}
-
-func (m *flatListHTTPMetrics) trace() *httptrace.ClientTrace {
-	var acquiring, acquired, dns, tlsStart, written, firstByte time.Time
-	var connects map[[2]string]time.Time
-	updateTTFB := func() {
-		if !written.IsZero() && !firstByte.IsZero() && !firstByte.Before(written) {
-			m.ttfb = firstByte.Sub(written)
-		}
-	}
-	return &httptrace.ClientTrace{
-		GetConn: func(string) {
-			m.update(func() { acquiring = time.Now() })
-		},
-		GotConn: func(info httptrace.GotConnInfo) {
-			m.update(func() {
-				acquired = time.Now()
-				if !acquiring.IsZero() {
-					m.connWait += acquired.Sub(acquiring)
-				}
-				if info.Reused {
-					m.reusedConns++
-				} else {
-					m.newConns++
-				}
-			})
-		},
-		DNSStart: func(httptrace.DNSStartInfo) {
-			m.update(func() { dns = time.Now() })
-		},
-		DNSDone: func(httptrace.DNSDoneInfo) {
-			m.update(func() {
-				if !dns.IsZero() {
-					m.dnsTime += time.Since(dns)
-				}
-			})
-		},
-		ConnectStart: func(network, addr string) {
-			m.update(func() {
-				if connects == nil {
-					connects = make(map[[2]string]time.Time)
-				}
-				connects[[2]string{network, addr}] = time.Now()
-			})
-		},
-		ConnectDone: func(network, addr string, _ error) {
-			m.update(func() {
-				key := [2]string{network, addr}
-				if start, ok := connects[key]; ok {
-					m.tcpTime += time.Since(start)
-					delete(connects, key)
-				}
-			})
-		},
-		TLSHandshakeStart: func() {
-			m.update(func() { tlsStart = time.Now() })
-		},
-		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
-			m.update(func() {
-				if !tlsStart.IsZero() {
-					m.tlsTime += time.Since(tlsStart)
-				}
-			})
-		},
-		WroteRequest: func(info httptrace.WroteRequestInfo) {
-			m.update(func() {
-				if info.Err == nil {
-					written = time.Now()
-					if !acquired.IsZero() {
-						m.writeTime += written.Sub(acquired)
-					}
-					updateTTFB()
-				}
-			})
-		},
-		GotFirstResponseByte: func() {
-			m.update(func() {
-				firstByte = time.Now()
-				updateTTFB()
-			})
-		},
-	}
-}
 
 // Only requests carrying a flat-page context use the isolated pool; STE and other calls keep theirs.
 type flatListPoolTransport struct {
@@ -886,9 +765,18 @@ func (t *flatListPoolTransport) Do(req *http.Request) (*http.Response, error) {
 		return t.shared.Do(req)
 	}
 	t.once.Do(func() {
-		t.listing, t.err = common.NewIsolatedHTTPClient(t.shared, 4)
+		workers, err := flatListParallelism()
+		if err != nil {
+			t.err = err
+			return
+		}
+		connections := 4
+		if workers > 1 {
+			connections = 2 * workers
+		}
+		t.listing, t.err = common.NewIsolatedHTTPClient(t.shared, connections)
 		if t.err == nil {
-			syncOrchestratorLog(common.LogInfo, "[FlatListPool] mode=dedicated pools=1 max_connections_per_host=4", true)
+			syncOrchestratorLog(common.LogInfo, fmt.Sprintf("[FlatListPool] mode=dedicated pools=1 max_connections_per_host=%d", connections), true)
 		}
 	})
 	if t.err != nil {
@@ -897,201 +785,52 @@ func (t *flatListPoolTransport) Do(req *http.Request) (*http.Response, error) {
 	return t.listing.Do(req)
 }
 
-// Delegate to the selected pooled client; wrap before SDK buffering or streaming decode.
-type flatListDiagnosticTransport struct{ inner policy.Transporter }
-
-func (t flatListDiagnosticTransport) Do(req *http.Request) (*http.Response, error) {
-	m, _ := req.Context().Value(flatListHTTPKey{}).(*flatListHTTPMetrics)
-	if m == nil {
-		return t.inner.Do(req)
-	}
-	start := time.Now()
-	resp, err := t.inner.Do(req.WithContext(httptrace.WithClientTrace(req.Context(), m.trace())))
-	m.update(func() {
-		m.headersAt = time.Now()
-		m.transportTime = m.headersAt.Sub(start)
-		m.transportFailed = err != nil
-		m.clientRequestID = req.Header.Get("x-ms-client-request-id")
-		if resp != nil {
-			m.status = resp.StatusCode
-			m.requestID = resp.Header.Get("x-ms-request-id")
-			m.contentType = resp.Header.Get("Content-Type")
-			m.version = resp.Header.Get("x-ms-version")
-			m.proto = resp.Proto
-		}
-	})
-	if resp != nil && resp.Body != nil {
-		resp.Body = &flatListDiagnosticBody{ReadCloser: resp.Body, metrics: m}
-	}
-	return resp, err
-}
-
-type flatListDiagnosticBody struct {
-	io.ReadCloser
-	metrics *flatListHTTPMetrics
-}
-
-func (b *flatListDiagnosticBody) Read(p []byte) (int, error) {
-	start := time.Now()
-	n, err := b.ReadCloser.Read(p)
-	end := time.Now()
-	b.metrics.update(func() {
-		b.metrics.bodyRead += end.Sub(start)
-		b.metrics.bodyWall = end.Sub(b.metrics.headersAt)
-		b.metrics.bodyBytes += int64(n)
-		b.metrics.bodyReads++
-		b.metrics.bodyEOF = b.metrics.bodyEOF || err == io.EOF
-		b.metrics.bodyFailed = b.metrics.bodyFailed || (err != nil && err != io.EOF)
-	})
-	return n, err
-}
-
-func (b *flatListDiagnosticBody) Close() error {
-	err := b.ReadCloser.Close()
-	b.metrics.update(func() {
-		b.metrics.bodyClosed = true
-		b.metrics.bodyFailed = b.metrics.bodyFailed || err != nil
-	})
-	return err
-}
-
-type flatListPageTiming struct {
-	attempts, throttles                     int
-	attemptTime, retryGap                   time.Duration
-	lastAttemptEnd                          time.Time
-	details                                 bool
-	http                                    []*flatListHTTPMetrics
-	started                                 time.Time
-	nextTime, processingTime, processorTime time.Duration
-	waitTime, handoffTime                   time.Duration
-	blobs                                   int
-}
-
 type flatListPage struct {
 	response container.ListBlobsFlatResponse
-	timing   flatListPageTiming
 	err      error
-	number   int
-}
-
-type flatListTimingPolicy struct{}
-
-func (flatListTimingPolicy) Do(req *policy.Request) (*http.Response, error) {
-	timing, _ := req.Raw().Context().Value(flatListTimingKey{}).(*flatListPageTiming)
-	if timing == nil {
-		return req.Next()
-	}
-	start := time.Now()
-	if !timing.lastAttemptEnd.IsZero() {
-		timing.retryGap += start.Sub(timing.lastAttemptEnd)
-	}
-	timing.attempts++
-	if timing.details {
-		m := &flatListHTTPMetrics{}
-		timing.http = append(timing.http, m)
-		req = req.WithContext(context.WithValue(req.Raw().Context(), flatListHTTPKey{}, m))
-	}
-	resp, err := req.Next()
-	timing.lastAttemptEnd = time.Now()
-	// XML buffers here; Arrow requests stream bodies later, including XML fallback.
-	timing.attemptTime += timing.lastAttemptEnd.Sub(start)
-	if resp != nil && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable) {
-		timing.throttles++
-	}
-	return resp, err
-}
-
-func flatListDiagnosticsEnabled() bool {
-	return buildmode.HighPerf() && (strings.EqualFold(os.Getenv("MOVER_FLAT_LIST_DIAGNOSTICS"), "true") ||
-		flatListPageDiagnosticsEnabled())
-}
-
-// Detailed logs emit one entry per HTTP attempt and page, in addition to summaries.
-func flatListPageDiagnosticsEnabled() bool {
-	return buildmode.HighPerf() && strings.EqualFold(os.Getenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS"), "true")
-}
-
-func flatListMillis(d time.Duration) float64 {
-	return float64(d) / float64(time.Millisecond)
-}
-
-func (p *flatListPageTiming) logDetails(listing uint64, page int, destination bool, stage string, failed bool) time.Duration {
-	if !p.details {
-		return 0
-	}
-	start := time.Now()
-	// With prefetch this is page residence time, not the interval between completed pages.
-	loopTime := start.Sub(p.started)
-	var transportTime, bodyRead time.Duration
-	observed := 0
-	for i, m := range p.http {
-		v := m.snapshot()
-		transportTime += v.transportTime
-		bodyRead += v.bodyRead
-		if v.transportTime > 0 {
-			observed++
-		}
-		// Connection/DNS/TCP/TLS and body_wall are inclusive spans, not additive buckets.
-		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-			"[FlatListHTTP] listing=%d page=%d attempt=%d status=%d request_id=%q client_request_id=%q content_type=%q service_version=%q protocol=%q new_connections=%d reused_connections=%d transport_headers_ms=%.3f conn_acquire_ms=%.3f dns_ms=%.3f tcp_ms=%.3f tls_ms=%.3f request_write_ms=%.3f ttfb_ms=%.3f body_bytes=%d body_reads=%d body_read_ms=%.3f body_wall_ms=%.3f body_eof=%t body_closed=%t transport_failed=%t body_failed=%t",
-			listing, page, i+1, v.status, v.requestID, v.clientRequestID, v.contentType, v.version, v.proto,
-			v.newConns, v.reusedConns, flatListMillis(v.transportTime), flatListMillis(v.connWait),
-			flatListMillis(v.dnsTime), flatListMillis(v.tcpTime), flatListMillis(v.tlsTime),
-			flatListMillis(v.writeTime), flatListMillis(v.ttfb), v.bodyBytes, v.bodyReads,
-			flatListMillis(v.bodyRead), flatListMillis(v.bodyWall), v.bodyEOF, v.bodyClosed, v.transportFailed, v.bodyFailed), true)
-	}
-	// Residual includes SDK decode/mapping, policy work, allocation/GC and instrumentation, not pure decode CPU.
-	other := p.nextTime - p.retryGap - transportTime - bodyRead
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[FlatListPage] listing=%d page=%d destination=%t stage=%q failed=%t blobs=%d attempts=%d observed_http_attempts=%d throttles=%d next_ms=%.3f transport_headers_ms=%.3f body_read_ms=%.3f between_attempt_ms=%.3f next_other_ms=%.3f processing_ms=%.3f processor_ms=%.3f loop_before_log_ms=%.3f page_wait_ms=%.3f handoff_ms=%.3f",
-		listing, page, destination, stage, failed, p.blobs, p.attempts, observed, p.throttles,
-		flatListMillis(p.nextTime), flatListMillis(transportTime), flatListMillis(bodyRead), flatListMillis(p.retryGap),
-		flatListMillis(other), flatListMillis(p.processingTime), flatListMillis(p.processorTime), flatListMillis(loopTime),
-		flatListMillis(p.waitTime), flatListMillis(p.handoffTime)), true)
-	return time.Since(start)
-}
-
-type flatListTimingStats struct {
-	started, lastLog                                    time.Time
-	pages, blobs, minPage, maxPage, attempts, throttles int
-	arrowPages, xmlPages                                int
-	nextTime, attemptTime, retryGap, processingTime     time.Duration
-	detailLogTime                                       time.Duration
-	waitTime                                            time.Duration
-	prefetch                                            bool
-	discardedPages                                      int
-}
-
-func (s *flatListTimingStats) log(destination, final bool) {
-	now := time.Now()
-	if !final && now.Sub(s.lastLog) < 30*time.Second {
-		return
-	}
-	s.lastLog = now
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[FlatListTiming] destination=%t final=%t pages=%d blobs=%d minPage=%d maxPage=%d attempts=%d throttles=%d elapsed_ms=%d next_ms=%d attempt_ms=%d between_attempt_ms=%d outside_attempt_ms=%d processing_ms=%d arrow_pages=%d xml_pages=%d detail_log_ms=%d prefetch=%t page_wait_ms=%d discarded_pages=%d",
-		destination, final, s.pages, s.blobs, s.minPage, s.maxPage, s.attempts, s.throttles,
-		now.Sub(s.started).Milliseconds(), s.nextTime.Milliseconds(), s.attemptTime.Milliseconds(),
-		s.retryGap.Milliseconds(), (s.nextTime-s.attemptTime-s.retryGap).Milliseconds(), s.processingTime.Milliseconds(),
-		s.arrowPages, s.xmlPages, s.detailLogTime.Milliseconds(), s.prefetch, s.waitTime.Milliseconds(), s.discardedPages), true)
 }
 
 func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	if t.flatListingEnabled {
+		workers, err := flatListParallelism()
+		if err != nil {
+			return err
+		}
+		if workers > 1 {
+			if err := t.validateFlatRanges(); err != nil {
+				return err
+			}
+			var countMu, processMu sync.Mutex
+			return runFlatListRanges(t.ctx, workers, t.reportFlatRangeError, func(ctx context.Context, bounds flatListRange) error {
+				clone := t.rangeClone(ctx, &countMu)
+				processingFailed := false
+				err := clone.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, nil,
+					func(object StoredObject) error {
+						processMu.Lock()
+						defer processMu.Unlock()
+						if preprocessor != nil {
+							preprocessor(&object)
+						}
+						_, err := getProcessingError(processIfPassedFilters(filters, object, processor))
+						if err != nil {
+							processingFailed = true
+						}
+						return err
+					}, nil, &bounds)
+				if err != nil && !processingFailed {
+					return clone.flatRangeError(bounds, err)
+				}
+				return err
+			})
+		}
+	}
+	return t.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters, nil)
+}
 
-	diagnostics := t.flatListDiagnostics
-	pageDiagnostics := diagnostics && flatListPageDiagnosticsEnabled()
-	var listing uint64
-	if pageDiagnostics {
-		listing = flatListDiagnosticSequence.Add(1)
-	}
+func (t *blobTraverser) serialListRange(containerClient *container.Client, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter, bounds *flatListRange) error {
 	prefetch := t.flatListArrow
-	timings := flatListTimingStats{prefetch: prefetch}
-	if diagnostics {
-		timings.started = time.Now()
-		timings.lastLog = timings.started
-		defer timings.log(t.isSyncDestination, true)
-	}
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
@@ -1105,34 +844,31 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.
 		listCtx = context.WithValue(listCtx, ste.ServiceAPIVersionOverride, "2026-06-06")
 	}
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+	options := &container.ListBlobsFlatOptions{
 		Prefix:         &prefix,
 		Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
 		ResponseFormat: responseFormat,
-	})
-	pageNumber := 0
+	}
+	if bounds != nil {
+		start, end, empty := flatListRequestBounds(searchPrefix, prefix, *bounds)
+		if empty {
+			return nil
+		}
+		if start != "" {
+			options.StartFrom = &start
+		}
+		if end != "" {
+			options.EndBefore = &end
+		}
+	}
+	pager := containerClient.NewListBlobsFlatPager(options)
 	fetchPage := func(ctx context.Context) (flatListPage, bool) {
 		if !pager.More() {
 			return flatListPage{}, false
 		}
-		pageNumber++
-		page := flatListPage{number: pageNumber, timing: flatListPageTiming{details: pageDiagnostics}}
-		if diagnostics {
-			ctx = context.WithValue(ctx, flatListTimingKey{}, &page.timing)
-			page.timing.started = time.Now()
-		}
+		page := flatListPage{}
 		page.response, page.err = pager.NextPage(ctx)
-		if diagnostics {
-			page.timing.nextTime = time.Since(page.timing.started)
-		}
 		return page, true
-	}
-	recordFetch := func(page *flatListPage) {
-		timings.nextTime += page.timing.nextTime
-		timings.attempts += page.timing.attempts
-		timings.throttles += page.timing.throttles
-		timings.attemptTime += page.timing.attemptTime
-		timings.retryGap += page.timing.retryGap
 	}
 	nextPage := func() (flatListPage, bool) { return fetchPage(listCtx) }
 	if prefetch {
@@ -1159,13 +895,8 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 		}
 		defer func() {
 			cancel()
-			// Drain and join even on processor failure, preserving metrics for unused prefetches.
-			for page := range pages {
-				if diagnostics {
-					recordFetch(&page)
-					timings.discardedPages++
-					timings.detailLogTime += page.timing.logDetails(listing, page.number, t.isSyncDestination, "prefetch-discarded", page.err != nil)
-				}
+			// Drain and join so no prefetch request outlives traversal, even on processor failure.
+			for range pages {
 			}
 		}()
 		syncOrchestratorLog(common.LogInfo, "[FlatListPrefetch] enabled=true max_pages_ahead=1", true)
@@ -1175,71 +906,47 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 		if prefetch && t.ctx.Err() != nil {
 			return t.ctx.Err()
 		}
-		var waitStart time.Time
-		if diagnostics {
-			waitStart = time.Now()
-		}
 		page, more := nextPage()
 		if !more {
 			break
 		}
-		pageTiming := &page.timing
-		if diagnostics {
-			pageTiming.waitTime = time.Since(waitStart)
-			if prefetch {
-				pageTiming.handoffTime = time.Since(pageTiming.started) - pageTiming.nextTime
-			}
-			timings.waitTime += pageTiming.waitTime
-			recordFetch(&page)
-		}
 		resp, err := page.response, page.err
 		if err != nil {
-			timings.detailLogTime += pageTiming.logDetails(listing, page.number, t.isSyncDestination, "next", true)
 			return fmt.Errorf("cannot list blobs. Failed with error %w", err)
 		}
 		contentType := ternary.DerefOrZero(resp.ContentType)
+		if bounds != nil {
+			if !strings.HasPrefix(contentType, "application/vnd.apache.arrow.stream") {
+				return fmt.Errorf("static range listing requires Arrow; received %q (no partial-result fallback)", contentType)
+			}
+			if resp.Segment == nil {
+				return fmt.Errorf("static range listing returned a nil segment")
+			}
+			// Trust service pagination; validate this page's boundary records before emission.
+			items := resp.Segment.BlobItems
+			if len(items) > 0 {
+				first, last := items[0], items[len(items)-1]
+				if first == nil || last == nil || first.Name == nil || last.Name == nil ||
+					!strings.HasPrefix(*first.Name, prefix) || !strings.HasPrefix(*last.Name, prefix) {
+					return fmt.Errorf("static range listing returned a name outside prefix %q", prefix)
+				}
+				firstKey := strings.TrimPrefix(*first.Name, searchPrefix)
+				lastKey := strings.TrimPrefix(*last.Name, searchPrefix)
+				if firstKey < bounds.start || (bounds.end != "" && lastKey >= bounds.end) ||
+					firstKey > lastKey || (len(items) > 1 && firstKey == lastKey) {
+					return fmt.Errorf("static range bounds/order violation: first=%q last=%q range=[%q,%q)", firstKey, lastKey, bounds.start, bounds.end)
+				}
+			}
+		}
 		if t.flatListArrow && contentType != lastContentType {
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 				"[FlatListFormat] destination=%t requested=Arrow content_type=%q service_version=%q",
 				t.isSyncDestination, contentType, ternary.DerefOrZero(resp.Version)), true)
 			lastContentType = contentType
 		}
-		var processingStart time.Time
-		if diagnostics {
-			if strings.HasPrefix(contentType, "application/vnd.apache.arrow.stream") {
-				timings.arrowPages++
-			} else if strings.HasPrefix(contentType, "application/xml") || strings.HasPrefix(contentType, "text/xml") {
-				timings.xmlPages++
-			}
-			processingStart = time.Now()
-			count := len(resp.Segment.BlobItems)
-			pageTiming.blobs = count
-			timings.pages++
-			timings.blobs += count
-			if timings.pages == 1 || count < timings.minPage {
-				timings.minPage = count
-			}
-			if count > timings.maxPage {
-				timings.maxPage = count
-			}
-		}
-		pageProcessor := processor
-		if pageDiagnostics {
-			pageProcessor = func(object StoredObject) error {
-				start := time.Now()
-				err := processor(object)
-				pageTiming.processorTime += time.Since(start)
-				return err
-			}
-		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
 			if prefetch && t.ctx.Err() != nil {
-				if diagnostics {
-					pageTiming.processingTime = time.Since(processingStart)
-					timings.processingTime += pageTiming.processingTime
-				}
-				timings.detailLogTime += pageTiming.logDetails(listing, page.number, t.isSyncDestination, "processing", true)
 				return t.ctx.Err()
 			}
 			// if the blob represents a hdi folder, then skip it
@@ -1273,22 +980,11 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
 
-			processErr := processIfPassedFilters(filters, storedObject, pageProcessor)
+			processErr := processIfPassedFilters(filters, storedObject, processor)
 			_, processErr = getProcessingError(processErr)
 			if processErr != nil {
-				if diagnostics {
-					pageTiming.processingTime = time.Since(processingStart)
-					timings.processingTime += pageTiming.processingTime
-				}
-				timings.detailLogTime += pageTiming.logDetails(listing, page.number, t.isSyncDestination, "processing", true)
 				return processErr
 			}
-		}
-		if diagnostics {
-			pageTiming.processingTime = time.Since(processingStart)
-			timings.processingTime += pageTiming.processingTime
-			timings.detailLogTime += pageTiming.logDetails(listing, page.number, t.isSyncDestination, "complete", false)
-			timings.log(t.isSyncDestination, false)
 		}
 	}
 
@@ -1311,7 +1007,6 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		include:                     common.EBlobTraverserIncludeOption.FromInputs(opts.PermanentDelete, opts.ListVersions, opts.IncludeDirectoryStubs),
 		incrementEnumerationCounter: opts.IncrementEnumeration,
 		parallelListing:             true,
-		flatListDiagnostics:         opts.FlatListing && flatListDiagnosticsEnabled(),
 		s2sPreserveSourceTags:       opts.PreserveBlobTags,
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
@@ -1338,6 +1033,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	}
 	if opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
 		t.parallelListing = false
+		t.flatListingEnabled = true
 		t.flatListArrow = true
 	}
 	return

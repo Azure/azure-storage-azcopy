@@ -34,6 +34,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -659,16 +660,17 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.fromTo.From(), cca.fromTo.To()), true)
 
-		// The streaming merge-join uses its own directory-crawl parallelism
-		// (MOVER_SYNC_MJ_TRAV, default 32)
-		// — separate from the indexMap path, which keeps
-		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
-		// source and destination concurrently within each directory.
+		// Flat sync needs only the root crawl task; its range scheduler controls concurrency.
+		// Directory-based merge-join uses MOVER_SYNC_MJ_TRAV instead of the indexMap setting.
 		if orchestratorOptions != nil {
-			mjTrav := resolveMergeJoinParallelTraversers()
-			orchestratorOptions.parallelTraversers = mjTrav
-			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+			if cca.useFlatListing {
+				orchestratorOptions.parallelTraversers = 1
+			} else {
+				mjTrav := resolveMergeJoinParallelTraversers()
+				orchestratorOptions.parallelTraversers = mjTrav
+				syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+					"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+			}
 		}
 	} else if cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -678,7 +680,9 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 
 	// Initialize resource limits based on source/destination types
 	if cca.useFlatListing {
-		syncOrchestratorLog(common.LogInfo, "Flat FNS-to-FNS sync enabled: recursive blob streams, no child-directory queue", true)
+		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Flat FNS-to-FNS sync enabled: %s controls bounded range concurrency",
+			enum.EEnvironmentVariable.MoverFlatListParallelism().Name), true)
 	}
 	initializeLimits(orchestratorOptions)
 	return cca.runSyncOrchestrator(enumerator, ctx)
@@ -699,6 +703,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	defer cancel()                             // Ensure cancellation happens on exit
 
 	cca.orchestratorCancel = cancel // Store cancel function for later use
+	var rangeFailure error
+	var rangeFailureOnce sync.Once
 
 	// Initialize semaphore for directory concurrency control
 	if enableThrottling {
@@ -833,16 +839,30 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				return stErr
 			}
 
-			subDirs, mergeErr = mergeJoinTwoWaySyncDir(
-				dirCtx,
-				dirCancel,
-				enumerator,
-				cca,
-				dir.(minimalStoredObject).relativePath,
-				pt,
-				st,
-				isDestinationPresent,
-			)
+			workers := 1
+			if cca.useFlatListing {
+				workers, mergeErr = flatListParallelism()
+			}
+			if mergeErr != nil {
+				dirCancel()
+			} else if workers > 1 {
+				mergeErr = mergeStaticFlatRanges(dirCtx, workers, enumerator, cca, pt, st)
+				dirCancel()
+				if mergeErr != nil {
+					rangeFailureOnce.Do(func() { rangeFailure = mergeErr })
+				}
+			} else {
+				subDirs, mergeErr = mergeJoinTwoWaySyncDir(
+					dirCtx,
+					dirCancel,
+					enumerator,
+					cca,
+					dir.(minimalStoredObject).relativePath,
+					pt,
+					st,
+					isDestinationPresent,
+				)
+			}
 
 			srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
 
@@ -1166,7 +1186,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		statsCtx, stopStats := context.WithCancel(mainCtx)
 		defer stopStats()
 		go func() {
-			ticker := time.NewTicker(30 * time.Second)
+			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 			for {
 				select {
@@ -1196,6 +1216,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		return nil
 	}
 	syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
+	// A range error returned here could not be recorded through the scanner channel.
+	if rangeFailure != nil {
+		return rangeFailure
+	}
 
 	// Always try to finalize the enumerator. This will set cancellation complete and dispatch final part
 	syncOrchestratorLog(common.LogInfo, "Finalizing enumerator.")

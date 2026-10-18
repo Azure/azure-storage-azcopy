@@ -1,0 +1,832 @@
+//go:build smslidingwindow
+
+package cmd
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestStaticFlatRangesCoverage checks fixed boundaries and unique ownership across worker settings.
+func TestStaticFlatRangesCoverage(t *testing.T) {
+	for workers := 1; workers <= 37; workers++ {
+		ranges := flatListRanges(workers)
+		require.Empty(t, ranges[0].start)
+		require.Empty(t, ranges[len(ranges)-1].end)
+		if workers == 1 {
+			require.Equal(t, []flatListRange{{}}, ranges)
+		} else {
+			require.Len(t, ranges, 37, "workers=%d", workers)
+			for i, boundary := range "0123456789abcdefghijklmnopqrstuvwxyz" {
+				require.Equal(t, string(boundary), ranges[i].end, "workers=%d boundary=%d", workers, i)
+			}
+		}
+		for i := 1; i < len(ranges); i++ {
+			require.Equal(t, ranges[i-1].end, ranges[i].start)
+		}
+		for _, key := range []string{"/a", "0", "9", "A", "Z", "_", "a", "a//b", "d", "dir-000000000/blob", "z", "zzz", "\u03bb"} {
+			owners := 0
+			for _, bounds := range ranges {
+				if key >= bounds.start && (bounds.end == "" || key < bounds.end) {
+					owners++
+				}
+			}
+			require.Equal(t, 1, owners, "key=%q workers=%d", key, workers)
+		}
+	}
+}
+
+// TestStaticFlatListParallelism checks the eight-worker default, overrides and explicit input errors.
+func TestStaticFlatListParallelism(t *testing.T) {
+	setting := enum.EEnvironmentVariable.MoverFlatListParallelism()
+	t.Run("unset", func(t *testing.T) {
+		t.Setenv(setting.Name, "")
+		require.NoError(t, setting.Clear())
+		require.Equal(t, "8", setting.Get())
+		got, err := flatListParallelism()
+		require.NoError(t, err)
+		require.Equal(t, 8, got)
+	})
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{
+		{"", 8}, {"1", 1}, {"2", 2}, {"8", 8}, {"16", 16}, {"37", 37},
+		{"0", 0}, {"38", 0}, {"64", 0}, {"-1", 0}, {"bad", 0},
+	} {
+		t.Run("value="+tc.value, func(t *testing.T) {
+			t.Setenv(setting.Name, tc.value)
+			got, err := flatListParallelism()
+			if tc.want == 0 {
+				require.EqualError(t, err, setting.Name+" must be an integer between 1 and 37")
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestStaticFlatRangesWorkerLimit checks that eight workers execute all 37 ranges exactly once.
+func TestStaticFlatRangesWorkerLimit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	const workers = 8
+	release := make(chan struct{})
+	var mu sync.Mutex
+	active, peak := 0, 0
+	seen := make(map[flatListRange]int)
+	err := runFlatListRanges(ctx, workers, nil, func(_ context.Context, bounds flatListRange) error {
+		mu.Lock()
+		active++
+		peak = max(peak, active)
+		seen[bounds]++
+		// Hold the first wave until every worker is active, avoiding timing-based assertions.
+		if len(seen) == workers {
+			close(release)
+		}
+		mu.Unlock()
+		defer func() {
+			mu.Lock()
+			active--
+			mu.Unlock()
+		}()
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+	require.NoError(t, err)
+	require.Equal(t, workers, peak)
+	require.Zero(t, active)
+	require.Len(t, seen, 37)
+	for _, bounds := range flatListRanges(workers) {
+		require.Equal(t, 1, seen[bounds], "range=%+v", bounds)
+	}
+}
+
+// TestStaticFlatRangeStats checks minute cadence, queue accounting and reporter shutdown.
+func TestStaticFlatRangeStats(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		logger := captureCrawlLogs(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		release := make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			done <- runFlatListRanges(ctx, 8, nil, func(ctx context.Context, _ flatListRange) error {
+				select {
+				case <-release:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			})
+		}()
+		synctest.Wait()
+		time.Sleep(59 * time.Second)
+		synctest.Wait()
+		require.NotContains(t, logger.text(), "[FlatListRangeStats]")
+		time.Sleep(time.Second)
+		synctest.Wait()
+		require.Contains(t, logger.text(), "[FlatListRangeStats] activeWorkers=8/8 queuedRanges=29 completedRanges=0 failedRanges=0 cancelledRanges=0 totalRanges=37 final=false")
+		close(release)
+		require.NoError(t, <-done)
+		synctest.Wait()
+		require.Contains(t, logger.text(), "[FlatListRangeStats] activeWorkers=0/8 queuedRanges=0 completedRanges=37 failedRanges=0 cancelledRanges=0 totalRanges=37 final=true")
+		require.Equal(t, 2, strings.Count(logger.text(), "[FlatListRangeStats]"))
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+		require.Equal(t, 2, strings.Count(logger.text(), "[FlatListRangeStats]"), "reporter must stop when enumeration returns")
+	})
+}
+
+// TestStaticFlatRangesContinueAfterFailure checks that healthy and queued ranges still finish.
+func TestStaticFlatRangesContinueAfterFailure(t *testing.T) {
+	logger := captureCrawlLogs(t)
+	firstErr, lastErr := errors.New("first range failed"), errors.New("last range failed")
+	firstFailed := make(chan struct{})
+	var calls, completed atomic.Int32
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := runFlatListRanges(ctx, 2, nil, func(ctx context.Context, bounds flatListRange) error {
+		calls.Add(1)
+		if bounds.start == "" {
+			close(firstFailed)
+			return firstErr
+		}
+		select {
+		case <-firstFailed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if bounds.start == "z" {
+			return lastErr
+		}
+		completed.Add(1)
+		return nil
+	})
+	require.NoError(t, ctx.Err())
+	require.ErrorIs(t, err, firstErr)
+	require.ErrorIs(t, err, lastErr)
+	require.EqualValues(t, 37, calls.Load())
+	require.EqualValues(t, 35, completed.Load())
+	require.Equal(t, 2, strings.Count(logger.text(), "[FlatListRangeFailed]"))
+	require.Equal(t, 35, strings.Count(logger.text(), "[FlatListRangeComplete]"))
+	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=35 failedRanges=2 cancelledRanges=0 totalRanges=37 final=true")
+}
+
+// TestStaticFlatRangesParentCancellation checks that cancellation stops and joins active tasks.
+func TestStaticFlatRangesParentCancellation(t *testing.T) {
+	logger := captureCrawlLogs(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var started, stopped, reported atomic.Int32
+	err := runFlatListRanges(ctx, 2, func(flatListRange, error) bool {
+		reported.Add(1)
+		return true
+	}, func(ctx context.Context, _ flatListRange) error {
+		if started.Add(1) == 2 {
+			cancel()
+		}
+		<-ctx.Done()
+		stopped.Add(1)
+		return ctx.Err()
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.EqualValues(t, 2, started.Load())
+	require.EqualValues(t, 2, stopped.Load())
+	require.Zero(t, reported.Load(), "job cancellation must not be reported as range failures")
+	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=0 failedRanges=0 cancelledRanges=37 totalRanges=37 final=true")
+}
+
+// TestStaticFlatRangesAllFailures checks that reporting every failed range cannot stall scheduling.
+func TestStaticFlatRangesAllFailures(t *testing.T) {
+	logger := captureCrawlLogs(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	failure := errors.New("listing failed")
+	var calls atomic.Int32
+	err := runFlatListRanges(ctx, 8, nil, func(context.Context, flatListRange) error {
+		calls.Add(1)
+		return failure
+	})
+	require.NoError(t, ctx.Err())
+	require.ErrorIs(t, err, failure)
+	require.EqualValues(t, 37, calls.Load())
+	require.Equal(t, 37, strings.Count(logger.text(), "[FlatListRangeFailed]"))
+	require.NotContains(t, logger.text(), "[FlatListRangeComplete]")
+}
+
+// staticTestTraverser serves sorted, bounded Arrow pages through a real blob traverser.
+// The failure selector injects protocol, authorization, cancellation or bounds errors.
+func staticTestTraverser(t *testing.T, keys []string, root, failure string) (*blobTraverser, *atomic.Int32) {
+	t.Helper()
+	keys = append([]string(nil), keys...)
+	sort.Strings(keys)
+	calls := &atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("x-ms-error-code", "BlobNotFound")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		calls.Add(1)
+		q := r.URL.Query()
+		assert.Equal(t, root, q.Get("prefix"))
+		assert.Empty(t, q.Get("delimiter"))
+		assert.Equal(t, "2026-06-06", r.Header.Get("x-ms-version"))
+		if failure == "xml" {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, "<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>")
+			return
+		}
+		if failure == "403" || ((failure == "403-a" || failure == "403-z") &&
+			q.Get("startFrom") == root+strings.TrimPrefix(failure, "403-")) {
+			w.Header().Set("x-ms-error-code", "AuthorizationPermissionMismatch")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, "<Error><Code>AuthorizationPermissionMismatch</Code></Error>")
+			return
+		}
+
+		if failure == "404" {
+			w.Header().Set("x-ms-error-code", "BlobNotFound")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, "<Error><Code>BlobNotFound</Code></Error>")
+			return
+		}
+		if failure == "cancel" || (failure == "cancel-a" && q.Get("startFrom") == root+"a") {
+			<-r.Context().Done()
+			return
+		}
+		var selected []string
+		for _, key := range keys {
+			full := root + key
+			if full >= q.Get("startFrom") && (q.Get("endBefore") == "" || full < q.Get("endBefore")) {
+				selected = append(selected, key)
+			}
+		}
+		// An empty first page with a continuation token must not be mistaken for exhaustion.
+		next, page := "0", []string(nil)
+		if marker := q.Get("marker"); marker != "" {
+			offset, err := strconv.Atoi(marker)
+			require.NoError(t, err)
+			end := offset + 3
+			if end > len(selected) {
+				end = len(selected)
+			}
+			page, next = selected[offset:end], ""
+			if end < len(selected) {
+				next = strconv.Itoa(end)
+			}
+		}
+		if failure == "bounds" {
+			page, next = []string{"outside"}, ""
+		}
+		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+		w.Header().Set("x-ms-version", "2026-06-06")
+		_, _ = w.Write(flatTestArrowPage(t, page, root, next))
+	}))
+	t.Cleanup(server.Close)
+	endpoint := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
+	client, err := service.NewClientWithNoCredential(endpoint, &service.ClientOptions{
+		ClientOptions: azcore.ClientOptions{PerCallPolicies: []policy.Policy{ste.NewVersionPolicy()},
+			Retry: policy.RetryOptions{MaxRetries: -1}},
+	})
+	require.NoError(t, err)
+	location := common.ELocation.Blob()
+	return newBlobTraverser(endpoint+"/c/"+root, client, context.Background(),
+		InitResourceTraverserOptions{FlatListing: true, Recursive: true, DestResourceType: &location}), calls
+}
+
+// TestStaticFlatRangeReporting checks bounded delivery and explicit failure when delivery is unavailable.
+func TestStaticFlatRangeReporting(t *testing.T) {
+	for _, mode := range []string{"available", "full", "nil"} {
+		t.Run(mode, func(t *testing.T) {
+			logger := captureCrawlLogs(t)
+			var ch chan TraverserErrorItemInfo
+			if mode == "available" {
+				ch = make(chan TraverserErrorItemInfo, 37)
+			} else if mode == "full" {
+				ch = make(chan TraverserErrorItemInfo, 1)
+				ch <- ErrorBlobInfo{}
+			}
+			src := &blobTraverser{rawURL: "https://account.blob.core.windows.net/c/root/?sig=not-for-logs", errorChannel: ch}
+			failure := errors.New("listing failed")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			var calls atomic.Int32
+			err := runFlatListRanges(ctx, 8, src.reportFlatRangeError, func(_ context.Context, bounds flatListRange) error {
+				calls.Add(1)
+				return src.flatRangeError(bounds, failure)
+			})
+			require.NoError(t, ctx.Err())
+			require.EqualValues(t, 37, calls.Load())
+			require.Contains(t, logger.text(), "activeWorkers=0/8 queuedRanges=0 completedRanges=0 failedRanges=37 cancelledRanges=0 totalRanges=37 final=true")
+			if mode != "available" {
+				require.ErrorIs(t, err, failure)
+				return
+			}
+			require.NoError(t, err)
+			close(ch)
+			seen := make(map[flatListRange]bool)
+			for item := range ch {
+				info, ok := item.(*flatListRangeErrorInfo)
+				require.True(t, ok)
+				start, end := info.RangeBounds()
+				bounds := flatListRange{start, end}
+				require.False(t, seen[bounds])
+				seen[bounds] = true
+				require.True(t, info.IsDir())
+				require.False(t, info.IsDestinationError())
+				require.Equal(t, "https://account.blob.core.windows.net/c/root/", info.FullPath())
+				require.NotContains(t, info.ErrorMessage().Error(), "not-for-logs")
+				require.ErrorIs(t, info.ErrorMessage(), failure)
+			}
+			require.Len(t, seen, 37)
+		})
+	}
+}
+
+// TestStaticFlatRangesCopyReporting keeps finalization reachable without hiding dispatcher failures.
+func TestStaticFlatRangesCopyReporting(t *testing.T) {
+	for _, processingFailure := range []bool{false, true} {
+		t.Run(fmt.Sprintf("processingFailure=%t", processingFailure), func(t *testing.T) {
+			src, _ := staticTestTraverser(t, []string{"0/early", "a/file", "z/new"}, "source/", "403-a")
+			ch := make(chan TraverserErrorItemInfo, 100)
+			src.errorChannel = ch
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			src.ctx = ctx
+			var got []string
+			finalized := false
+			failure := errors.New("dispatcher failed")
+			e := NewCopyEnumerator(src, nil, func(obj StoredObject) error {
+				if processingFailure {
+					return failure
+				}
+				got = append(got, obj.relativePath)
+				return nil
+			}, func() error { finalized = true; return nil })
+			err := e.enumerate()
+			require.NoError(t, ctx.Err())
+			if processingFailure {
+				require.ErrorIs(t, err, failure)
+				require.False(t, finalized)
+			} else {
+				require.NoError(t, err)
+				require.True(t, finalized)
+				require.ElementsMatch(t, []string{"0/early", "z/new"}, got)
+			}
+			close(ch)
+			require.Len(t, ch, 1)
+			info := (<-ch).(*flatListRangeErrorInfo)
+			require.Equal(t, flatListRange{"a", "b"}, info.bounds)
+		})
+	}
+}
+
+// TestStaticFlatRangesProcessingFailure keeps merge processing errors fatal, not partial listing failures.
+func TestStaticFlatRangesProcessingFailure(t *testing.T) {
+	src, _ := staticTestTraverser(t, nil, "source/", "")
+	dst, _ := staticTestTraverser(t, []string{"a/delete"}, "destination/", "")
+	dst.isSyncDestination = true
+	ch := make(chan TraverserErrorItemInfo, 100)
+	src.errorChannel, dst.errorChannel = ch, ch
+	var deleted []string
+	var mu sync.Mutex
+	e := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	failure := errors.New("delete processing failed")
+	e.objectComparator = func(StoredObject) error { return failure }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.ErrorIs(t, mergeStaticFlatRanges(ctx, 2, e, mirrorSyncArgs(), src, dst), failure)
+	require.NoError(t, ctx.Err())
+	close(ch)
+	require.Empty(t, ch)
+}
+
+// TestStaticFlatRangesOrchestratorReporting checks mixed endpoint failures, no root duplicate, and finalization.
+func TestStaticFlatRangesOrchestratorReporting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the sync orchestrator normalizes source URLs as filesystem paths on Windows")
+	}
+	for _, channelAvailable := range []bool{true, false} {
+		t.Run(fmt.Sprintf("channelAvailable=%t", channelAvailable), func(t *testing.T) {
+			src, _ := staticTestTraverser(t, []string{"0/early", "a/file", "z/new"}, "source/", "403-a")
+			dst, _ := staticTestTraverser(t, []string{"a/keep", "m/remove", "z/extra"}, "destination/", "403-z")
+			oldOptions, oldParallelism, oldThrottling, oldUse := orchestratorOptions, crawlParallelism, enableThrottling, UseSyncOrchestrator
+			t.Cleanup(func() {
+				orchestratorOptions, crawlParallelism, enableThrottling, UseSyncOrchestrator = oldOptions, oldParallelism, oldThrottling, oldUse
+			})
+			orchestratorOptions = &SyncOrchestratorOptions{fromTo: common.EFromTo.BlobBlob()}
+			crawlParallelism, enableThrottling, UseSyncOrchestrator = 1, false, true
+			cca := mirrorSyncArgs()
+			cca.source = common.ResourceString{Value: strings.TrimSuffix(src.rawURL, "/")}
+			cca.destination = common.ResourceString{Value: strings.TrimSuffix(dst.rawURL, "/")}
+			cca.useFlatListing, cca.useStreamingMergeJoin = true, true
+			var ch chan TraverserErrorItemInfo
+			if channelAvailable {
+				ch = make(chan TraverserErrorItemInfo, 100)
+			}
+			options := InitResourceTraverserOptions{
+				Credential: &common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()}, ErrorChannel: ch,
+			}
+			targetOptions := options
+			targetOptions.IsSyncDestination = true
+			configureFlatSyncTraversers(cca, &options, &targetOptions)
+			var deleted []string
+			var mu sync.Mutex
+			e := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			e.ctp.copyJobTemplate.FromTo = cca.fromTo
+			e.primaryTraverser = src
+			e.primaryTraverserTemplate = ResourceTraverserTemplate{location: common.ELocation.Blob(), options: options}
+			e.secondaryTraverserTemplate = ResourceTraverserTemplate{location: common.ELocation.Blob(), options: targetOptions}
+			e.orchestratorOptions = orchestratorOptions
+			finalized := false
+			e.finalize = func() error { finalized = true; return nil }
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			err := cca.runSyncOrchestrator(e, ctx)
+			require.NoError(t, ctx.Err())
+			if !channelAvailable {
+				require.Error(t, err)
+				require.False(t, finalized)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, finalized)
+			require.Equal(t, []string{"/0/early"}, scheduledTransferSources(e))
+			require.Equal(t, []string{"m/remove"}, deleted)
+			close(ch)
+			require.Len(t, ch, 2, "no duplicate root-directory error")
+			seen := make(map[string]bool)
+			for item := range ch {
+				info, ok := item.(*flatListRangeErrorInfo)
+				require.True(t, ok)
+				start, _ := info.RangeBounds()
+				require.False(t, seen[start])
+				seen[start] = true
+				require.Equal(t, start == "z", info.IsDestinationError())
+				if info.IsDestinationError() {
+					require.Equal(t, dst.rawURL, info.FullPath())
+				} else {
+					require.Equal(t, src.rawURL, info.FullPath())
+				}
+			}
+			require.True(t, seen["a"] && seen["z"])
+		})
+	}
+}
+
+// TestStaticFlatRangesEnablement separates Mover flat-list eligibility from Arrow format selection.
+// Arrow alone must not enable ranges; enabled ranges still reject unsupported formats.
+func TestStaticFlatRangesEnablement(t *testing.T) {
+	t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, "8")
+	for _, tc := range []struct {
+		name      string
+		enabled   bool
+		arrow     bool
+		wantCalls int32
+		wantError bool
+	}{
+		{"arrow-without-mover-flat-mode", false, true, 2, false},
+		{"mover-flat-mode-with-arrow", true, true, 74, false},
+		{"mover-flat-mode-without-arrow", true, false, 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			keys := []string{"a/file", "z/file"}
+			src, calls := staticTestTraverser(t, keys, "root/", "")
+			src.flatListingEnabled = tc.enabled
+			src.flatListArrow = tc.arrow
+			if tc.enabled && tc.arrow {
+				require.NoError(t, src.validateFlatRanges())
+			} else {
+				require.Error(t, src.validateFlatRanges())
+			}
+			var got []string
+			err := src.Traverse(nil, func(object StoredObject) error {
+				got = append(got, object.relativePath)
+				return nil
+			}, nil)
+			if tc.wantError {
+				require.ErrorContains(t, err, "static ranges require recursive FNS Arrow listing")
+				require.Empty(t, got)
+			} else {
+				require.NoError(t, err)
+				require.ElementsMatch(t, keys, got)
+			}
+			require.Equal(t, tc.wantCalls, calls.Load())
+		})
+	}
+}
+
+// TestStaticFlatRangesCopyAndPairedSync checks copy coverage and sync/mirror decisions across roots.
+func TestStaticFlatRangesCopyAndPairedSync(t *testing.T) {
+	srcKeys := []string{"/a", "0", "9", "A", "Z", "_", "a", "a//b", "a/../b", "d", "z", "\u03bb/\u4e2d"}
+	dstKeys := []string{"/a", "a//b", "backup/extra", "dir-100/extra", "zzz/extra"}
+	for i := 0; i < 50; i++ {
+		key := fmt.Sprintf("%c/sparse-%09d", 'a'+i%26, i*7919)
+		srcKeys = append(srcKeys, key)
+		if i%3 != 0 {
+			dstKeys = append(dstKeys, key)
+		}
+	}
+	t.Run("copy", func(t *testing.T) {
+		setting := enum.EEnvironmentVariable.MoverFlatListParallelism()
+		t.Setenv(setting.Name, "")
+		require.NoError(t, setting.Clear())
+		src, calls := staticTestTraverser(t, srcKeys, "root/", "")
+		var got []string
+		require.NoError(t, src.Traverse(nil, func(o StoredObject) error {
+			got = append(got, o.relativePath)
+			return nil
+		}, nil))
+		require.ElementsMatch(t, srcKeys, got)
+		require.GreaterOrEqual(t, calls.Load(), int32(len(flatListRanges(8))*2))
+	})
+	for _, mirror := range []bool{false, true} {
+		t.Run(fmt.Sprintf("sync-mirror=%t", mirror), func(t *testing.T) {
+			src, _ := staticTestTraverser(t, srcKeys, "source/", "")
+			dst, _ := staticTestTraverser(t, dstKeys, "destination/", "")
+			dst.isSyncDestination = true
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
+			var unchanged int
+			enumerator.primaryTraverserTemplate.options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
+			cca := mirrorSyncArgs()
+			if !mirror {
+				cca.deleteDestination = common.EDeleteDestination.False()
+			}
+			require.NoError(t, mergeStaticFlatRanges(context.Background(), 8, enumerator, cca, src, dst))
+			sourceSet, destinationSet := map[string]bool{}, map[string]bool{}
+			for _, key := range srcKeys {
+				sourceSet[key] = true
+			}
+			for _, key := range dstKeys {
+				destinationSet[key] = true
+			}
+			var copies, deletes []string
+			same := 0
+			for key := range sourceSet {
+				if destinationSet[key] {
+					same++
+				} else {
+					copies = append(copies, "/"+key)
+				}
+			}
+			for key := range destinationSet {
+				if !sourceSet[key] && mirror {
+					deletes = append(deletes, key)
+				}
+			}
+			actual := scheduledTransferSources(enumerator)
+			for i, path := range actual {
+				decoded, err := url.PathUnescape(path)
+				require.NoError(t, err)
+				actual[i] = decoded
+			}
+			require.ElementsMatch(t, copies, actual)
+			require.ElementsMatch(t, deletes, deleted)
+			require.Equal(t, same, unchanged)
+			require.Empty(t, enumerator.objectIndexer.indexMap)
+		})
+	}
+}
+
+// TestStaticFlatRangesFailureAndCancellation checks that failed listings cannot authorize deletes.
+// Out-of-range records must also be rejected before reaching the object processor.
+func TestStaticFlatRangesFailureAndCancellation(t *testing.T) {
+	for _, failure := range []string{"xml", "403", "cancel"} {
+		t.Run(failure, func(t *testing.T) {
+			src, _ := staticTestTraverser(t, nil, "", failure)
+			dst, _ := staticTestTraverser(t, []string{"a", "z"}, "", "")
+			dst.isSyncDestination = true
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			require.Error(t, mergeStaticFlatRanges(ctx, 8, enumerator, mirrorSyncArgs(), src, dst))
+			require.Empty(t, deleted)
+		})
+	}
+	t.Run("bounds-before-emission", func(t *testing.T) {
+		src, _ := staticTestTraverser(t, nil, "", "bounds")
+		traverser := &flatRangeTraverser{blob: src, bounds: flatListRange{start: "a", end: "b"}}
+		emitted := 0
+		require.Error(t, traverser.Traverse(nil, func(StoredObject) error { emitted++; return nil }, nil))
+		require.Zero(t, emitted)
+	})
+}
+
+// TestStaticFlatRangesCopyContinuesAfterFailure checks that a failed range does not stop copy listing.
+func TestStaticFlatRangesCopyContinuesAfterFailure(t *testing.T) {
+	t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, "2")
+	src, _ := staticTestTraverser(t, []string{"0/early", "a/file", "z/new"}, "source/", "403-a")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	src.ctx = ctx
+	var got []string
+	err := src.Traverse(nil, func(object StoredObject) error {
+		got = append(got, object.relativePath)
+		return nil
+	}, nil)
+	require.NoError(t, ctx.Err())
+	require.ErrorContains(t, err, `flat range ["a","b")`)
+	require.ErrorContains(t, err, "AuthorizationPermissionMismatch")
+	require.ElementsMatch(t, []string{"0/early", "z/new"}, got)
+}
+
+// TestStaticFlatRangesSyncContinuesAfterFailure checks healthy-range progress and delete isolation.
+func TestStaticFlatRangesSyncContinuesAfterFailure(t *testing.T) {
+	for _, failedSide := range []string{"source", "destination"} {
+		t.Run(failedSide, func(t *testing.T) {
+			sourceFailure, destinationFailure := "", ""
+			if failedSide == "source" {
+				sourceFailure = "403-a"
+				destinationFailure = "cancel-a"
+			} else {
+				sourceFailure = "cancel-a"
+				destinationFailure = "403-a"
+			}
+			src, _ := staticTestTraverser(t, []string{"a/file", "z/new"}, "source/", sourceFailure)
+			dst, _ := staticTestTraverser(t, []string{"a/keep", "z/extra"}, "destination/", destinationFailure)
+			dst.isSyncDestination = true
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := mergeStaticFlatRanges(ctx, 2, enumerator, mirrorSyncArgs(), src, dst)
+			require.NoError(t, ctx.Err())
+			require.ErrorContains(t, err, `flat range ["a","b")`)
+			require.ErrorContains(t, err, failedSide+" traversal error")
+			var traversalErr *mergeJoinTraversalError
+			require.ErrorAs(t, err, &traversalErr)
+			require.Equal(t, common.ELocation.Blob(), traversalErr.location)
+			require.Equal(t, []string{"/z/new"}, scheduledTransferSources(enumerator))
+			require.Equal(t, []string{"z/extra"}, deleted)
+		})
+	}
+}
+
+// TestStaticFlatRangesAbsentDestination remains a successful source-only sync, not a pair failure.
+func TestStaticFlatRangesAbsentDestination(t *testing.T) {
+	src, _ := staticTestTraverser(t, []string{"a/file", "z/new"}, "source/", "")
+	dst, _ := staticTestTraverser(t, nil, "destination/", "404")
+	dst.isSyncDestination = true
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, mergeStaticFlatRanges(ctx, 2, enumerator, mirrorSyncArgs(), src, dst))
+	require.NoError(t, ctx.Err())
+	require.ElementsMatch(t, []string{"/a/file", "/z/new"}, scheduledTransferSources(enumerator))
+	require.Empty(t, deleted)
+}
+
+// TestStaticFlatRangePageEdges checks page boundaries without tracking cross-page ordering.
+// Invalid edges must fail before any record from that page is emitted.
+func TestStaticFlatRangePageEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		pages     [][]string
+		want      []string
+		wantError bool
+	}{
+		{"empty", [][]string{{}}, nil, false},
+		{"single", [][]string{{"a"}}, []string{"a"}, false},
+		{"multiple-pages", [][]string{{"a", "b"}, {}, {"c"}}, []string{"a", "b", "c"}, false},
+		{"before-start", [][]string{{"0", "b"}}, nil, true},
+		{"exclusive-end", [][]string{{"b", "d"}}, nil, true},
+		{"reversed-edges", [][]string{{"c", "b"}}, nil, true},
+		{"duplicate-edges", [][]string{{"b", "b"}}, nil, true},
+		{"cross-page-repeat", [][]string{{"b"}, {}, {"b"}}, []string{"b", "b"}, false},
+		{"cross-page-regression", [][]string{{"c"}, {"b"}}, []string{"c", "b"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			listing, _ := newFlatTestListing(t, context.Background(), tc.pages, "root/", nil)
+			traverser := &flatRangeTraverser{blob: listing.traverser, bounds: flatListRange{"a", "d"}}
+			var got []string
+			err := traverser.Traverse(nil, func(object StoredObject) error {
+				got = append(got, object.relativePath)
+				return nil
+			}, nil)
+			if tc.wantError {
+				require.ErrorContains(t, err, "static range bounds/order violation")
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestStaticFlatRangeSyncProducerOrdering retains the sync producer's cross-page order guard.
+func TestStaticFlatRangeSyncProducerOrdering(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	listing, _ := newFlatTestListing(t, ctx, [][]string{{"c"}, {}, {"b"}}, "root/", nil)
+	traverser := &flatRangeTraverser{blob: listing.traverser, bounds: flatListRange{"a", "d"}}
+	sideErr := &twoWaySideErr{}
+	folderCh, fileCh := traverserToTypedChannels(ctx, traverser, nil, "SRC[]", sideErr, false)
+	drainTypedChannelsForTest(folderCh, fileCh)
+	require.ErrorContains(t, sideErr.get(), "ORDER VIOLATION")
+}
+
+// TestStaticFlatRawDeletePaths protects literal separators and dot segments in deletion paths.
+func TestStaticFlatRawDeletePaths(t *testing.T) {
+	for _, tc := range [][3]string{{"", "/a", "/a"}, {"root/", "a//b", "root/a//b"}, {"root", "../a", "root/../a"}, {"root", "", "root"}} {
+		require.Equal(t, tc[2], flatBlobObjectPath(tc[0], tc[1]))
+	}
+}
+
+// TestStaticFlatPoolSizing checks the serial pool and two connections per active range pair.
+func TestStaticFlatPoolSizing(t *testing.T) {
+	captureCrawlLogs(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "ok")
+	}))
+	defer server.Close()
+	for _, tc := range []struct {
+		value       string
+		connections int
+	}{{"", 16}, {"1", 4}, {"8", 16}, {"37", 74}, {"38", 0}, {"64", 0}, {"bad", 0}} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, tc.value)
+			pool := &flatListPoolTransport{shared: server.Client()}
+			ctx := context.WithValue(context.Background(), flatListPoolKey{}, struct{}{})
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+			require.NoError(t, err)
+			response, err := pool.Do(req)
+			if tc.connections == 0 {
+				require.Error(t, err)
+				require.Nil(t, pool.listing)
+				return
+			}
+			require.NoError(t, err)
+			_, err = io.Copy(io.Discard, response.Body)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			defer pool.listing.CloseIdleConnections()
+			require.Equal(t, tc.connections, pool.listing.Transport.(*http.Transport).MaxConnsPerHost)
+		})
+	}
+}
+
+// TestStaticFlatPrefixIntersection checks request bounds for overlapping and disjoint prefilters.
+func TestStaticFlatPrefixIntersection(t *testing.T) {
+	for _, tc := range []struct {
+		prefix     string
+		bounds     flatListRange
+		start, end string
+		empty      bool
+	}{
+		{"root/", flatListRange{"a", "b"}, "root/a", "root/b", false},
+		{"root/ab", flatListRange{"a", "b"}, "root/ab", "", false},
+		{"root/z", flatListRange{"a", "b"}, "", "", true},
+		{"root/a", flatListRange{"b", "c"}, "", "", true},
+		{"root/ab", flatListRange{"aa", "ac"}, "root/ab", "", false},
+		{"root/a", flatListRange{"ab", "ac"}, "root/ab", "root/ac", false},
+		{"root/z", flatListRange{"z", ""}, "root/z", "", false},
+	} {
+		start, end, empty := flatListRequestBounds("root/", tc.prefix, tc.bounds)
+		require.Equal(t, tc.start, start)
+		require.Equal(t, tc.end, end)
+		require.Equal(t, tc.empty, empty)
+	}
+}
