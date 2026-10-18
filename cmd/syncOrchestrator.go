@@ -780,8 +780,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// listings are lexicographically sorted; keep the existing indexMap-based flow for
 		// local filesystem sources (which do not guarantee sorted listing order).
 		if useStreamingMergeJoin(cca) {
-			mergeJoinSyncOneDirLog(common.LogDebug,
-				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
+			mergeJoinTraceLog("Processing dir '%s'", dir.(minimalStoredObject).relativePath)
 
 			var subDirs []minimalStoredObject
 			var mergeErr error
@@ -1246,47 +1245,5 @@ func configureFlatSyncTraversers(cca *cookedSyncCmdArgs, source, destination *In
 		options.FlatListing = true
 		options.Recursive = true
 		options.DestResourceType = &location
-	}
-}
-
-// custom logging function for the sync orchestrator
-func syncOrchestratorLog(level common.LogLevel, toLog string, logToConsole ...bool) {
-	var prefix string
-	switch level {
-	case common.LogError:
-		prefix = "[ERROR] "
-	case common.LogPanic:
-		prefix = "[PANIC] "
-	case common.LogInfo:
-		prefix = "[INFO] "
-	case common.LogDebug:
-		prefix = "[DEBUG] "
-	case common.LogWarning:
-		prefix = "[WARNING] "
-	default:
-		prefix = "[INFO] "
-	}
-	toLog = prefix + toLog
-
-	shouldLogToConsole := false
-	if len(logToConsole) > 0 {
-		shouldLogToConsole = logToConsole[0]
-	}
-
-	if azcopyScanningLogger != nil {
-		// XDM: Log all messages at the error level as that is the log level set by Mover
-		azcopyScanningLogger.Log(common.LogError, toLog)
-	}
-
-	if azcopyScanningLogger == nil || shouldLogToConsole {
-		toLog = "[AzCopy] " + toLog
-		switch level {
-		case common.LogError, common.LogPanic, common.LogWarning:
-			glcm.Warn(toLog)
-		case common.LogInfo:
-			glcm.Info(toLog)
-		default:
-			glcm.Info(toLog)
-		}
 	}
 }

@@ -303,9 +303,9 @@ type filePropsProvider interface {
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
-		name:               name,
-		relativePath:       relativePath,
-		entityType:         entityType,
+		name:         name,
+		relativePath: relativePath,
+		entityType:   entityType,
 		// Normalize to UTC so the time references the shared time.UTC location instead of a
 		// per-blob fixedZone("GMT") allocated by the SDK's RFC1123 date parse. With millions of
 		// enumerated blobs buffered in the shuffle window, those per-blob zones added GBs of live heap.
@@ -392,7 +392,7 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential           *cred.CredentialInfo // Required for most remote traversers
+	Credential                  *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
 	IncrementEnumerationFailure enumerationCounterFunc
 
@@ -475,10 +475,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return nil, err
 	}
 
-	
 	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
 	file2FilesEnum := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
-	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
+	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS() && file2FilesEnum != "true" {
 		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
 	}
 
@@ -914,6 +913,48 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 		Filters:          filters,
 		ObjectDispatcher: objectDispatcher,
 		Finalize:         finalizer,
+	}
+}
+
+// Shared by tagged sync orchestration and tag-independent flat listing.
+func syncOrchestratorLog(level common.LogLevel, toLog string, logToConsole ...bool) {
+	var prefix string
+	switch level {
+	case common.LogError:
+		prefix = "[ERROR] "
+	case common.LogPanic:
+		prefix = "[PANIC] "
+	case common.LogInfo:
+		prefix = "[INFO] "
+	case common.LogDebug:
+		prefix = "[DEBUG] "
+	case common.LogWarning:
+		prefix = "[WARNING] "
+	default:
+		prefix = "[INFO] "
+	}
+	toLog = prefix + toLog
+
+	shouldLogToConsole := false
+	if len(logToConsole) > 0 {
+		shouldLogToConsole = logToConsole[0]
+	}
+
+	if azcopyScanningLogger != nil {
+		// XDM: Log all messages at the error level as that is the log level set by Mover
+		azcopyScanningLogger.Log(common.LogError, toLog)
+	}
+
+	if azcopyScanningLogger == nil || shouldLogToConsole {
+		toLog = "[AzCopy] " + toLog
+		switch level {
+		case common.LogError, common.LogPanic, common.LogWarning:
+			glcm.Warn(toLog)
+		case common.LogInfo:
+			glcm.Info(toLog)
+		default:
+			glcm.Info(toLog)
+		}
 	}
 }
 
