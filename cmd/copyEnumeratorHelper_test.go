@@ -117,8 +117,6 @@ func TestFlatListDedicatedPoolRouting(t *testing.T) {
 }
 
 func TestFlatListDedicatedPoolSettingsAndGate(t *testing.T) {
-	t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
-	t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
 	options := createClientOptions(nil, nil, nil)
 	pool, enabled := options.Transport.(*flatListPoolTransport)
 	require.Equal(t, buildmode.HighPerf(), enabled)
@@ -166,13 +164,11 @@ func TestFlatListDedicatedPoolError(t *testing.T) {
 	}
 }
 
-func TestFlatListDedicatedPoolWithoutDiagnostics(t *testing.T) {
+func TestFlatListDedicatedPoolIgnoresLegacyFlag(t *testing.T) {
 	t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, "1")
 	for _, legacyFlag := range []string{"", "false", "true"} {
 		t.Run(fmt.Sprintf("legacyFlag=%q", legacyFlag), func(t *testing.T) {
 			t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", legacyFlag)
-			t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", "false")
-			t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", "false")
 			logger := captureCrawlLogs(t)
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/xml")
@@ -201,14 +197,11 @@ func TestFlatListDedicatedPoolWithoutDiagnostics(t *testing.T) {
 			}, nil)
 			require.NoError(t, err)
 			if enabled {
-				require.NotNil(t, pool.listing, "flat requests must use the pool without a timing context")
+				require.NotNil(t, pool.listing, "flat requests must use the dedicated pool")
 				defer pool.listing.CloseIdleConnections()
 				require.Contains(t, logger.text(), "[FlatListPrefetch] enabled=true")
 			} else {
 				require.NotContains(t, logger.text(), "[FlatListPrefetch]")
-			}
-			for _, tag := range []string{"[FlatListHTTP]", "[FlatListPage]", "[FlatListTiming]"} {
-				require.NotContains(t, logger.text(), tag)
 			}
 		})
 	}
@@ -645,8 +638,6 @@ func TestFlatPhotonResponseFormatLogging(t *testing.T) {
 			azcopyScanningLogger = logger
 			t.Cleanup(func() { azcopyScanningLogger = previousLogger })
 			require.NoError(t, listing.Traverse(noPreProccessor, func(StoredObject) error { return nil }, nil))
-			require.NotContains(t, logger.text(), "[FlatListPage]")
-			require.NotContains(t, logger.text(), "[FlatListHTTP]")
 			if useArrow {
 				require.Contains(t, logger.text(), `content_type="application/vnd.apache.arrow.stream"`)
 			} else {
@@ -961,47 +952,35 @@ func TestFlatListPrefetchExactOutputAndMetadataLifetime(t *testing.T) {
 	pages = append(pages, []string{"folder-stub/"}, nil)
 	for _, arrowResponse := range []bool{false, true} {
 		t.Run(fmt.Sprintf("arrow=%t", arrowResponse), func(t *testing.T) {
-			var referenceObjects []StoredObject
-			for _, diagnostics := range []bool{false, true} {
-				t.Run(fmt.Sprintf("diagnostics=%t", diagnostics), func(t *testing.T) {
-					t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", strconv.FormatBool(diagnostics))
-					t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", strconv.FormatBool(diagnostics))
-					captureCrawlLogs(t)
-					listing, calls := newFlatTestListing(t, context.Background(), pages, "root/", nil, arrowResponse)
-					listing.traverser.s2sPreserveSourceTags = true
-					scanned := 0
-					listing.traverser.incrementEnumerationCounter = func(common.EntityType) { scanned++ }
-					var objects []StoredObject
-					err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
-						objects = append(objects, obj)
-						return nil
-					}, buildRegexFilters([]string{".*__AZURE_STORAGE_MOVER_MARKER.*", "folder-stub/.*"}, false))
-					require.NoError(t, err)
-					require.EqualValues(t, len(pages), calls.Load())
-					var got []string
-					runtime.GC()
-					for _, obj := range objects {
-						got = append(got, obj.relativePath)
-						require.EqualValues(t, 1, obj.size)
-						if arrowResponse {
-							require.Equal(t, "test", *obj.Metadata["owner"])
-							require.Equal(t, common.BlobTags{"kind": "test"}, obj.blobTags)
-							require.Equal(t, make([]byte, 16), obj.md5)
-						}
-					}
-					require.Equal(t, want, got, "every surviving key must be delivered exactly once and in order")
-					wantScanned := len(want) + 2 // XML fixture has no folder metadata, so its stub reaches filters.
-					if arrowResponse {
-						wantScanned--
-					}
-					require.Equal(t, wantScanned, scanned)
-					if diagnostics {
-						require.Equal(t, referenceObjects, objects, "diagnostics must not change prefetched objects")
-					} else {
-						referenceObjects = objects
-					}
-				})
+			captureCrawlLogs(t)
+			listing, calls := newFlatTestListing(t, context.Background(), pages, "root/", nil, arrowResponse)
+			listing.traverser.s2sPreserveSourceTags = true
+			scanned := 0
+			listing.traverser.incrementEnumerationCounter = func(common.EntityType) { scanned++ }
+			var objects []StoredObject
+			err := listing.Traverse(noPreProccessor, func(obj StoredObject) error {
+				objects = append(objects, obj)
+				return nil
+			}, buildRegexFilters([]string{".*__AZURE_STORAGE_MOVER_MARKER.*", "folder-stub/.*"}, false))
+			require.NoError(t, err)
+			require.EqualValues(t, len(pages), calls.Load())
+			var got []string
+			runtime.GC()
+			for _, obj := range objects {
+				got = append(got, obj.relativePath)
+				require.EqualValues(t, 1, obj.size)
+				if arrowResponse {
+					require.Equal(t, "test", *obj.Metadata["owner"])
+					require.Equal(t, common.BlobTags{"kind": "test"}, obj.blobTags)
+					require.Equal(t, make([]byte, 16), obj.md5)
+				}
 			}
+			require.Equal(t, want, got, "every surviving key must be delivered exactly once and in order")
+			wantScanned := len(want) + 2 // XML fixture has no folder metadata, so its stub reaches filters.
+			if arrowResponse {
+				wantScanned--
+			}
+			require.Equal(t, wantScanned, scanned)
 		})
 	}
 }

@@ -783,27 +783,21 @@ func TestFlatSyncPrefetchAsymmetricSetOracle(t *testing.T) {
 }
 
 func TestFlatSyncPrefetchPreservesLeadingSlashKeys(t *testing.T) {
-	for _, diagnostics := range []bool{false, true} {
-		t.Run(fmt.Sprintf("diagnostics=%t", diagnostics), func(t *testing.T) {
-			t.Setenv("MOVER_FLAT_LIST_DIAGNOSTICS", fmt.Sprintf("%t", diagnostics))
-			t.Setenv("MOVER_FLAT_LIST_PAGE_DIAGNOSTICS", fmt.Sprintf("%t", diagnostics))
-			captureCrawlLogs(t)
-			root, err := validateAndGetRootObject("https://example.blob.core.windows.net/c", common.EFromTo.BlobBlob())
-			require.NoError(t, err)
-			require.Equal(t, "/", root.relativePath)
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			src, _ := newFlatTestListing(t, ctx, [][]string{{"/a"}}, "", nil)
-			dst, _ := newFlatTestListing(t, ctx, [][]string{{"a"}}, "", nil)
-			var deleted []string
-			var mu sync.Mutex
-			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
-			cca := mirrorSyncArgs()
-			cca.useFlatListing = true
-			_, err = mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, root.relativePath, src, dst, true)
-			require.NoError(t, err)
-			require.Equal(t, []string{"//a"}, scheduledTransferSources(enumerator))
-			require.Equal(t, []string{"a"}, deleted)
-		})
-	}
+	captureCrawlLogs(t)
+	root, err := validateAndGetRootObject("https://example.blob.core.windows.net/c", common.EFromTo.BlobBlob())
+	require.NoError(t, err)
+	require.Equal(t, "/", root.relativePath)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src, _ := newFlatTestListing(t, ctx, [][]string{{"/a"}}, "", nil)
+	dst, _ := newFlatTestListing(t, ctx, [][]string{{"a"}}, "", nil)
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	cca := mirrorSyncArgs()
+	cca.useFlatListing = true
+	_, err = mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, root.relativePath, src, dst, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"//a"}, scheduledTransferSources(enumerator))
+	require.Equal(t, []string{"a"}, deleted)
 }
