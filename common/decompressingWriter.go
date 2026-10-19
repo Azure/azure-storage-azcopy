@@ -26,6 +26,8 @@ import (
 	"errors"
 	"io"
 	"time"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 type decompressingWriter struct {
@@ -38,8 +40,8 @@ var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCop
 
 // NewDecompressingWriter returns a WriteCloser which decompresses the data
 // that is written to it, before passing the decompressed data on to a final destination.
-// This decompressor is intended to work with compressed data wrapped in either the ZLib headers or the slightly larger
-// Gzip headers. Both of those formats compress a single file (often a .tar archive in the case of Gzip).
+// This decompressor is intended to work with compressed data wrapped in either the ZLib headers, Gzip headers,
+// or Zstandard (zstd) framing. These formats compress a single file (often a .tar archive in the case of Gzip).
 // So there is no need to to expand the decompressed info out into multiple files (as we would have to do,
 // if we were to support "zip" compression). See https://stackoverflow.com/a/20765054
 func NewDecompressingWriter(destination io.WriteCloser, ct CompressionType) io.WriteCloser {
@@ -62,6 +64,12 @@ func (d decompressingWriter) decompressorFactory(tp CompressionType, preader *io
 		return zlib.NewReader(preader)
 	case ECompressionType.GZip():
 		return gzip.NewReader(preader)
+	case ECompressionType.ZStd():
+		dec, err := zstd.NewReader(preader)
+		if err != nil {
+			return nil, err
+		}
+		return dec.IOReadCloser(), nil
 	default:
 		return nil, errors.New("unexpected compression type")
 	}
@@ -80,7 +88,7 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 
 	// make the decompressor. Must be in the worker method because,
 	// like the rest of read, this reads from the pipe.
-	// (Factory reads from pipe to read the zip/gzip file header)
+	// (Factory reads from pipe to read format headers)
 	dec, err = d.decompressorFactory(tp, preader)
 	if err != nil {
 		return
