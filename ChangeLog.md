@@ -1,6 +1,53 @@
 
 # Change Log
 
+## Version 10.34.0
+
+### New Features
+
+1. Added AzCopy client telemetry. The CLI now reports bounded, anonymous job and command events (`azcopy.job.started`, `azcopy.job.finished`, and `azcopy.command.invoked`) to Application Insights. Telemetry is enabled by default and can be turned off with the new `--disable-telemetry` flag; the destination can be overridden with `AZCOPY_TELEMETRY_CONNECTION_STRING`. Credentials, SAS tokens, full URLs, object paths, and raw error messages are never collected, and only reviewed flags with normalized values are recorded. ([#3654](https://github.com/Azure/azure-storage-azcopy/pull/3654))
+2. Added support for Azure Files NFS over REST, including copy and sync between Local and Azure Files NFS, and between two Azure Files NFS shares. The new `FileNFS` location is selected through `--from-to` (for example, `LocalFileNFS`, `FileNFSLocal`, `FileNFSFileNFS`). ([#3465](https://github.com/Azure/azure-storage-azcopy/pull/3465))
+3. Added `skip` and `preserve` to the `--hardlinks` flag, which previously only supported `follow`. `skip` omits hardlinked files, and `preserve` maintains hardlink relationships at the destination where the destination file system supports hardlinks. ([#3465](https://github.com/Azure/azure-storage-azcopy/pull/3465))
+4. AzCopy binaries now embed product and version resource metadata (`resource.syso`) so that application control solutions can identify them. ([#3479](https://github.com/Azure/azure-storage-azcopy/pull/3479))
+
+### Bug Fixes
+
+1. Fixed a bug where a blob name containing a path traversal sequence (for example, `foo/../../../bar.txt`) could cause a download to write outside of the user's intended download directory. (MSRC 139699, MSRC 143863) ([#3591](https://github.com/Azure/azure-storage-azcopy/pull/3591))
+2. Fixed a bug where log sanitization could be bypassed by percent-encoding the `=` sign, which could leak sensitive information into the job log. (MSRC 137306) ([#3592](https://github.com/Azure/azure-storage-azcopy/pull/3592))
+3. Fixed a bug where a `Close()` racing with a read permanently poisoned the chunk reader, exhausting the retry budget and failing the transfer. This affected storage accounts behind an Azure Front Door, which can terminate long-lived connections mid-request. ([#3506](https://github.com/Azure/azure-storage-azcopy/pull/3506))
+4. Fixed a bug where a job summary rebuilt from plan files (`jobs resume`, `jobs show`) counted completed folder transfers as files and reported zero folders. ([#3654](https://github.com/Azure/azure-storage-azcopy/pull/3654))
+5. Fixed a bug where cancelling a job while the enumeration was still running (for example, with SIGTERM) prompted for confirmation, which could leave the job hanging instead of cancelling. The prompt is now replaced with a warning, and the job is cancelled.
+6. Upgraded azblob to v1.8.2 to fix HTTP/2 downloads not being retried. ([#3645](https://github.com/Azure/azure-storage-azcopy/pull/3645))
+
+### Code Improvements
+
+1. Refactored the release and test pipelines, restored the release pipeline stage gates, fixed a release pipeline bug, merged the test pipeline jobs, and improved task naming in the release and performance-test pipelines. ([#3504](https://github.com/Azure/azure-storage-azcopy/pull/3504), [#3507](https://github.com/Azure/azure-storage-azcopy/pull/3507), [#3497](https://github.com/Azure/azure-storage-azcopy/pull/3497), [#3509](https://github.com/Azure/azure-storage-azcopy/pull/3509), [#3534](https://github.com/Azure/azure-storage-azcopy/pull/3534))
+2. Increased code coverage, ran the existing unit tests in the test pipeline, and upgraded the test dependencies. ([#3520](https://github.com/Azure/azure-storage-azcopy/pull/3520), [#3511](https://github.com/Azure/azure-storage-azcopy/pull/3511), [#3512](https://github.com/Azure/azure-storage-azcopy/pull/3512))
+3. Added a vulnerability scan for ACR images, and removed the CBL-Mariner 2 builds. ([#3473](https://github.com/Azure/azure-storage-azcopy/pull/3473), [#3516](https://github.com/Azure/azure-storage-azcopy/pull/3516))
+4. Removed dead code. ([#3503](https://github.com/Azure/azure-storage-azcopy/pull/3503))
+5. Increased the E2E test timeout, and eliminated a PowerShell error in the test pipeline. ([#3541](https://github.com/Azure/azure-storage-azcopy/pull/3541), [#3538](https://github.com/Azure/azure-storage-azcopy/pull/3538))
+6. Updated the CODEOWNERS file to include the new team members. ([#3466](https://github.com/Azure/azure-storage-azcopy/pull/3466))
+7. The flags that are only meant for Storage Explorer and CI (for example, `--list-of-files`, `--preserve-smb-info`, `--preserve-smb-permissions`, `--s2s-get-properties-in-backend`, and `--flush-threshold`) are now hidden from the help output by default. They can be shown with the new `--display-dev` flag.
+
+### Dependency updates
+
+1. Golang 1.25.11 -> 1.25.13
+2. Azure Storage SDKs: azblob v1.6.2 -> v1.8.2, azdatalake v1.2.0 -> v1.6.0, azcore v1.18.1 -> v1.23.2, azidentity v1.10.1 -> v1.14.0, azidentity/cache v0.3.2 -> v0.4.0, sdk/internal v1.11.1 -> v1.12.0 (azfile remains pinned to v1.5.2-0.20250507070125-9e8eb1f00372 by a `replace` directive)
+3. Upgraded minio from `v6.0.14+incompatible` to `minio-go/v7 v7.3.0` to better support more recent S3 regions. ([#3495](https://github.com/Azure/azure-storage-azcopy/pull/3495))
+4. cloud.google.com/go/storage v1.50.0 -> v1.65.1, google.golang.org/api v0.249.0 -> v0.294.0, cloud.google.com/go v0.120.0 -> v0.123.0, cloud.google.com/go/auth v0.16.5 -> v0.23.2, cloud.google.com/go/iam v1.5.2 -> v1.13.0, cloud.google.com/go/monitoring v1.24.2 -> v1.30.0
+5. golang.org/x/crypto v0.53.0 -> v0.55.0, golang.org/x/net v0.55.0 -> v0.58.0, golang.org/x/oauth2 v0.34.0 -> v0.36.0, golang.org/x/sync v0.21.0 -> v0.22.0, golang.org/x/sys v0.46.0 -> v0.47.0, golang.org/x/text v0.38.0 -> v0.41.0, golang.org/x/time v0.13.0 -> v0.15.0
+6. github.com/AzureAD/microsoft-authentication-library-for-go v1.4.2 -> v1.9.0, github.com/Azure/go-autorest/autorest/date v0.3.0 -> v0.3.1, github.com/spf13/cobra v1.8.1 -> v1.10.2, github.com/spf13/pflag v1.0.5 -> v1.0.10, github.com/stretchr/testify v1.11.1 -> v1.12.1
+7. go.opentelemetry.io/otel v1.42.0 -> v1.46.0, go.opentelemetry.io/otel/metric v1.42.0 -> v1.46.0, go.opentelemetry.io/otel/sdk v1.42.0 -> v1.46.0, go.opentelemetry.io/otel/sdk/metric v1.42.0 -> v1.46.0, go.opentelemetry.io/otel/trace v1.42.0 -> v1.46.0, go.opentelemetry.io/contrib/detectors/gcp v1.42.0 -> v1.46.0, go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.65.0 -> v0.71.0, go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.65.0 -> v0.71.0
+8. google.golang.org/grpc v1.79.3 -> v1.83.2, google.golang.org/protobuf v1.36.11 -> v1.36.12, google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9 -> v0.0.0-20260825221802-da73d73af1c5, google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 -> v0.0.0-20260825221802-da73d73af1c5, google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 -> v0.0.0-20260825221802-da73d73af1c5
+9. github.com/envoyproxy/go-control-plane/envoy v1.37.0 -> v1.39.0, github.com/felixge/httpsnoop v1.0.4 -> v1.1.0, github.com/googleapis/enterprise-certificate-proxy v0.3.6 -> v0.3.21, github.com/googleapis/gax-go/v2 v2.15.0 -> v2.24.0, github.com/spiffe/go-spiffe/v2 v2.6.0 -> v2.8.1, github.com/tinylib/msgp v1.6.1 -> v1.6.4, github.com/golang-jwt/jwt/v5 v5.2.3 -> v5.3.1, cel.dev/expr v0.25.1 -> v0.25.3, github.com/cpuguy83/go-md2man/v2 v2.0.4 -> v2.0.7, github.com/go-logr/logr v1.4.3 -> v1.4.4
+10. github.com/danieljoos/wincred v1.2.2 -> v1.2.3, github.com/pkg/xattr v0.4.10 -> v0.4.12, github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da -> v0.0.0-20241129210726-2c02b8208cf8, github.com/hillu/go-ntdll v0.0.0-20240418173803-69345773b582 -> v0.0.0-20260712105752-9cd1a6b1a84d
+11. Added `github.com/apache/arrow-go/v18`, `github.com/josephspurrier/goversioninfo` and `github.com/akavel/rsrc` (resource metadata generation for `resource.syso`), `github.com/klauspost/compress v1.19.2`, `github.com/klauspost/cpuid/v2 v2.4.0`, `github.com/klauspost/crc32 v1.3.0`, `go.yaml.in/yaml/v3 v3.0.5`, and `gopkg.in/ini.v1 v1.67.3` (replacing `github.com/go-ini/ini v1.67.0`).
+12. Added the `github.com/minio` compression and checksum helpers pulled in by minio-go/v7 (`github.com/minio/crc64nvme v1.1.1`, `github.com/minio/md5-simd v1.1.2`, `github.com/pierrec/lz4/v4 v4.1.28`, `github.com/philhofer/fwd v1.2.0`, `github.com/rs/xid v1.6.0`, `github.com/zeebo/xxh3 v1.1.0`, `github.com/google/flatbuffers v25.12.19+incompatible`, `github.com/goccy/go-json v0.10.6`, `github.com/dustin/go-humanize v1.0.1`, `github.com/Azure/azure-sdk-for-go/sdk/storage/internal v0.1.0`, `golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297`).
+
+### Notes
+
+1. Versions 10.32.7 and 10.32.8 were released from the 10.32.x maintenance branch and are not part of this release. Their dependency updates, the Go 1.25.13 toolchain upgrade, the SIGTERM cancellation fix, and the hidden developer flags are all included here.
+
 ## Version 10.32.6
 
 ### Dependency updates
