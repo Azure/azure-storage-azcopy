@@ -1234,6 +1234,48 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	return err
 }
 
+// custom logging function for the sync orchestrator
+func syncOrchestratorLog(level common.LogLevel, toLog string, logToConsole ...bool) {
+	var prefix string
+	switch level {
+	case common.LogError:
+		prefix = "[ERROR] "
+	case common.LogPanic:
+		prefix = "[PANIC] "
+	case common.LogInfo:
+		prefix = "[INFO] "
+	case common.LogDebug:
+		prefix = "[DEBUG] "
+	case common.LogWarning:
+		prefix = "[WARNING] "
+	default:
+		prefix = "[INFO] "
+	}
+	toLog = prefix + toLog
+
+	shouldLogToConsole := false
+	if len(logToConsole) > 0 {
+		shouldLogToConsole = logToConsole[0]
+	}
+
+	if azcopyScanningLogger != nil {
+		// XDM: Log all messages at the error level as that is the log level set by Mover
+		azcopyScanningLogger.Log(common.LogError, toLog)
+	}
+
+	if azcopyScanningLogger == nil || shouldLogToConsole {
+		toLog = "[AzCopy] " + toLog
+		switch level {
+		case common.LogError, common.LogPanic, common.LogWarning:
+			glcm.Warn(toLog)
+		case common.LogInfo:
+			glcm.Info(toLog)
+		default:
+			glcm.Info(toLog)
+		}
+	}
+}
+
 func configureFlatSyncTraversers(cca *cookedSyncCmdArgs, source, destination *InitResourceTraverserOptions) {
 	if !cca.useFlatListing || cca.fromTo != common.EFromTo.BlobBlob() {
 		return

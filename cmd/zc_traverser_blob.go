@@ -58,7 +58,6 @@ type blobTraverser struct {
 	// cx should have the option to disable this optimization in the name of saving costs
 	parallelListing    bool
 	flatListingEnabled bool
-	flatListArrow      bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -780,7 +779,7 @@ func (t *flatListPoolTransport) Do(req *http.Request) (*http.Response, error) {
 		}
 		t.listing, t.err = common.NewIsolatedHTTPClient(t.shared, connections)
 		if t.err == nil {
-			syncOrchestratorLog(common.LogInfo, fmt.Sprintf("[FlatListPool] mode=dedicated pools=1 max_connections_per_host=%d", connections), true)
+			logFlatListing(common.LogInfo, fmt.Sprintf("[FlatListPool] mode=dedicated pools=1 max_connections_per_host=%d", connections))
 		}
 	})
 	if t.err != nil {
@@ -834,7 +833,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 
 func (t *blobTraverser) serialListRange(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter, bounds *flatListRange) error {
-	prefetch := t.flatListArrow
+	prefetch := t.flatListingEnabled
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
@@ -843,7 +842,7 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 	if buildmode.HighPerf() {
 		listCtx = context.WithValue(listCtx, flatListPoolKey{}, struct{}{})
 	}
-	if t.flatListArrow {
+	if t.flatListingEnabled {
 		responseFormat = container.StorageResponseFormatArrow
 		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.
 		listCtx = context.WithValue(listCtx, ste.ServiceAPIVersionOverride, "2026-06-06")
@@ -903,7 +902,7 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 			for range pages {
 			}
 		}()
-		syncOrchestratorLog(common.LogInfo, "[FlatListPrefetch] enabled=true max_pages_ahead=1", true)
+		logFlatListing(common.LogInfo, "[FlatListPrefetch] enabled=true max_pages_ahead=1")
 	}
 	lastContentType := "<not received>"
 	for {
@@ -942,10 +941,10 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 				}
 			}
 		}
-		if t.flatListArrow && contentType != lastContentType {
-			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+		if t.flatListingEnabled && contentType != lastContentType {
+			logFlatListing(common.LogInfo, fmt.Sprintf(
 				"[FlatListFormat] destination=%t requested=Arrow content_type=%q service_version=%q",
-				t.isSyncDestination, contentType, ternary.DerefOrZero(resp.Version)), true)
+				t.isSyncDestination, contentType, ternary.DerefOrZero(resp.Version)))
 			lastContentType = contentType
 		}
 		// process the blobs returned in this result segment
@@ -1038,7 +1037,6 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	if opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
 		t.parallelListing = false
 		t.flatListingEnabled = true
-		t.flatListArrow = true
 	}
 	return
 }

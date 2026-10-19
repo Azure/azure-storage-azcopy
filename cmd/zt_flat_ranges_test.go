@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -133,7 +134,7 @@ func TestStaticFlatRangesWorkerLimit(t *testing.T) {
 // TestStaticFlatRangeStats checks minute cadence, queue accounting and reporter shutdown.
 func TestStaticFlatRangeStats(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		logger := captureCrawlLogs(t)
+		logger := captureFlatListLogs(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		release := make(chan struct{})
@@ -168,7 +169,7 @@ func TestStaticFlatRangeStats(t *testing.T) {
 
 // TestStaticFlatRangesContinueAfterFailure checks that healthy and queued ranges still finish.
 func TestStaticFlatRangesContinueAfterFailure(t *testing.T) {
-	logger := captureCrawlLogs(t)
+	logger := captureFlatListLogs(t)
 	firstErr, lastErr := errors.New("first range failed"), errors.New("last range failed")
 	firstFailed := make(chan struct{})
 	var calls, completed atomic.Int32
@@ -199,14 +200,14 @@ func TestStaticFlatRangesContinueAfterFailure(t *testing.T) {
 	require.ErrorIs(t, err, lastErr)
 	require.EqualValues(t, 37, calls.Load())
 	require.EqualValues(t, 35, completed.Load())
-	require.Equal(t, 2, strings.Count(logger.text(), "[FlatListRangeFailed]"))
-	require.Equal(t, 35, strings.Count(logger.text(), "[FlatListRangeComplete]"))
+	require.Equal(t, 2, strings.Count(logger.text(), "[AzCopy] [ERROR] [FlatListRangeFailed]"))
+	require.Equal(t, 35, strings.Count(logger.text(), "[AzCopy] [INFO] [FlatListRangeComplete]"))
 	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=35 failedRanges=2 cancelledRanges=0 totalRanges=37 final=true")
 }
 
 // TestStaticFlatRangesParentCancellation checks that cancellation stops and joins active tasks.
 func TestStaticFlatRangesParentCancellation(t *testing.T) {
-	logger := captureCrawlLogs(t)
+	logger := captureFlatListLogs(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var started, stopped, reported atomic.Int32
@@ -230,7 +231,7 @@ func TestStaticFlatRangesParentCancellation(t *testing.T) {
 
 // TestStaticFlatRangesAllFailures checks that reporting every failed range cannot stall scheduling.
 func TestStaticFlatRangesAllFailures(t *testing.T) {
-	logger := captureCrawlLogs(t)
+	logger := captureFlatListLogs(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	failure := errors.New("listing failed")
@@ -263,7 +264,13 @@ func staticTestTraverser(t *testing.T, keys []string, root, failure string) (*bl
 		q := r.URL.Query()
 		assert.Equal(t, root, q.Get("prefix"))
 		assert.Empty(t, q.Get("delimiter"))
-		assert.Equal(t, "2026-06-06", r.Header.Get("x-ms-version"))
+		if failure == "legacy" {
+			assert.NotContains(t, r.Header.Get("Accept"), "application/vnd.apache.arrow.stream")
+			assert.Empty(t, q.Get("startFrom"))
+			assert.Empty(t, q.Get("endBefore"))
+		} else {
+			assert.Equal(t, "2026-06-06", r.Header.Get("x-ms-version"))
+		}
 		if failure == "xml" {
 			w.Header().Set("Content-Type", "application/xml")
 			fmt.Fprint(w, "<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>")
@@ -311,6 +318,15 @@ func staticTestTraverser(t *testing.T, keys []string, root, failure string) (*bl
 		if failure == "bounds" {
 			page, next = []string{"outside"}, ""
 		}
+		if failure == "legacy" {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, "<EnumerationResults><Blobs>")
+			for _, key := range page {
+				fmt.Fprintf(w, "<Blob><Name>%s</Name><Properties><Last-Modified>Sun, 13 Sep 2020 12:26:40 GMT</Last-Modified><Etag>etag</Etag><Content-Length>1</Content-Length><BlobType>BlockBlob</BlobType></Properties></Blob>", html.EscapeString(root+key))
+			}
+			fmt.Fprintf(w, "</Blobs><NextMarker>%s</NextMarker></EnumerationResults>", html.EscapeString(next))
+			return
+		}
 		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
 		w.Header().Set("x-ms-version", "2026-06-06")
 		_, _ = w.Write(flatTestArrowPage(t, page, root, next))
@@ -331,7 +347,7 @@ func staticTestTraverser(t *testing.T, keys []string, root, failure string) (*bl
 func TestStaticFlatRangeReporting(t *testing.T) {
 	for _, mode := range []string{"available", "full", "nil"} {
 		t.Run(mode, func(t *testing.T) {
-			logger := captureCrawlLogs(t)
+			logger := captureFlatListLogs(t)
 			var ch chan TraverserErrorItemInfo
 			if mode == "available" {
 				ch = make(chan TraverserErrorItemInfo, 37)
@@ -507,27 +523,26 @@ func TestStaticFlatRangesOrchestratorReporting(t *testing.T) {
 	}
 }
 
-// TestStaticFlatRangesEnablement separates Mover flat-list eligibility from Arrow format selection.
-// Arrow alone must not enable ranges; enabled ranges still reject unsupported formats.
+// TestStaticFlatRangesEnablement checks that only opted-in flat listing schedules ranges.
 func TestStaticFlatRangesEnablement(t *testing.T) {
 	t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, "8")
 	for _, tc := range []struct {
 		name      string
 		enabled   bool
-		arrow     bool
 		wantCalls int32
-		wantError bool
 	}{
-		{"arrow-without-mover-flat-mode", false, true, 2, false},
-		{"mover-flat-mode-with-arrow", true, true, 74, false},
-		{"mover-flat-mode-without-arrow", true, false, 0, true},
+		{"legacy-flat-mode", false, 2},
+		{"mover-flat-mode", true, 74},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			keys := []string{"a/file", "z/file"}
-			src, calls := staticTestTraverser(t, keys, "root/", "")
+			responseMode := ""
+			if !tc.enabled {
+				responseMode = "legacy"
+			}
+			src, calls := staticTestTraverser(t, keys, "root/", responseMode)
 			src.flatListingEnabled = tc.enabled
-			src.flatListArrow = tc.arrow
-			if tc.enabled && tc.arrow {
+			if tc.enabled {
 				require.NoError(t, src.validateFlatRanges())
 			} else {
 				require.Error(t, src.validateFlatRanges())
@@ -537,13 +552,8 @@ func TestStaticFlatRangesEnablement(t *testing.T) {
 				got = append(got, object.relativePath)
 				return nil
 			}, nil)
-			if tc.wantError {
-				require.ErrorContains(t, err, "static ranges require recursive FNS Arrow listing")
-				require.Empty(t, got)
-			} else {
-				require.NoError(t, err)
-				require.ElementsMatch(t, keys, got)
-			}
+			require.NoError(t, err)
+			require.ElementsMatch(t, keys, got)
 			require.Equal(t, tc.wantCalls, calls.Load())
 		})
 	}

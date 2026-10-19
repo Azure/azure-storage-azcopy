@@ -15,6 +15,20 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// logFlatListing follows Blob crawl logging: console-only, independent of sync build tags.
+func logFlatListing(level common.LogLevel, message string) {
+	prefix := "[INFO] "
+	if level == common.LogError {
+		prefix = "[ERROR] "
+	}
+	message = prefix + message
+	if level == common.LogError {
+		glcm.Warn("[AzCopy] " + message)
+	} else {
+		glcm.Info("[AzCopy] " + message)
+	}
+}
+
 // flatListRange owns a half-open interval [start, end) in root-relative blob names.
 type flatListRange struct {
 	start, end string // Relative to the original transfer root; empty end is unbounded.
@@ -156,9 +170,9 @@ func (s *flatListRangeStats) startReporting(ctx context.Context, workers, total 
 			cancelled += queued
 			queued = 0
 		}
-		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+		logFlatListing(common.LogInfo, fmt.Sprintf(
 			"[FlatListRangeStats] activeWorkers=%d/%d queuedRanges=%d completedRanges=%d failedRanges=%d cancelledRanges=%d totalRanges=%d final=%t",
-			active, workers, queued, completed, failed, cancelled, total, final), true)
+			active, workers, queued, completed, failed, cancelled, total, final))
 	}
 	statsCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
@@ -193,7 +207,7 @@ func runFlatListRanges(parent context.Context, workers int, report func(flatList
 	stats := &flatListRangeStats{queued: len(ranges)}
 	stopStats := stats.startReporting(parent, workers, len(ranges))
 	defer stopStats()
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf("[FlatListRanges] workers=%d ranges=%d strategy=static", workers, len(ranges)), true)
+	logFlatListing(common.LogInfo, fmt.Sprintf("[FlatListRanges] workers=%d ranges=%d strategy=static", workers, len(ranges)))
 	for index, bounds := range ranges {
 		if parent.Err() != nil {
 			break
@@ -208,15 +222,15 @@ func runFlatListRanges(parent context.Context, workers int, report func(flatList
 			defer func() { stats.finished(err, parent.Err()) }()
 			err = fn(parent, bounds)
 			if err != nil {
-				syncOrchestratorLog(common.LogError, fmt.Sprintf(
-					"[FlatListRangeFailed] start=%q end=%q error=%v", bounds.start, bounds.end, err), true)
+				logFlatListing(common.LogError, fmt.Sprintf(
+					"[FlatListRangeFailed] start=%q end=%q error=%v", bounds.start, bounds.end, err))
 				if parent.Err() == nil && report != nil && report(bounds, err) {
 					return nil
 				}
 				rangeErrors[index] = fmt.Errorf("flat range [%q,%q): %w", bounds.start, bounds.end, err)
 				return rangeErrors[index]
 			}
-			syncOrchestratorLog(common.LogInfo, fmt.Sprintf("[FlatListRangeComplete] start=%q end=%q", bounds.start, bounds.end), true)
+			logFlatListing(common.LogInfo, fmt.Sprintf("[FlatListRangeComplete] start=%q end=%q", bounds.start, bounds.end))
 			return nil
 		})
 	}
@@ -255,7 +269,7 @@ func flatListRequestBounds(root, prefix string, bounds flatListRange) (start, en
 // validateFlatRanges rejects traversal modes incompatible with ordered FNS Arrow ranges.
 // This prevents unsupported listings from feeding range-scoped copy or mirror decisions.
 func (t *blobTraverser) validateFlatRanges() error {
-	if !t.flatListingEnabled || !t.flatListArrow || t.isDFS || !t.recursive || t.parallelListing ||
+	if !t.flatListingEnabled || t.isDFS || !t.recursive || t.parallelListing ||
 		t.include.Deleted() || t.include.Snapshots() || t.include.Versions() || t.include.DirStubs() {
 		return fmt.Errorf("static ranges require recursive FNS Arrow listing without deleted blobs, snapshots, versions or directory-stub inclusion")
 	}
