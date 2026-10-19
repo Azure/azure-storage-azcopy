@@ -178,7 +178,7 @@ func init() {
 		"\n For example: myFolder;myFolder/subDirName/file.pdf")
 	setPropCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
 	setPropCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the block blobs to the given tier. (default 'None'). "+
-		"\n Valid options are Hot, Cold, Cool, Archive")
+		"\n Valid options are Hot, Cold, Cool, Archive, Smart")
 	setPropCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Changes the access tier of the page blobs to the given tier. (default 'None'). "+
 		"\n Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")

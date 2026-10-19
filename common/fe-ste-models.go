@@ -946,6 +946,7 @@ func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
 func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
 func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(4) }
+func (BlockBlobTier) Smart() BlockBlobTier   { return BlockBlobTier(5) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))

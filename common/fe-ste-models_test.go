@@ -186,3 +186,14 @@ func TestMetadataResolveInvalidKeyNegative(t *testing.T) {
 	_, err = mNegative3.ResolveInvalidKey()
 	a.NotNil(err)
 }
+
+func TestBlockBlobTierSmart(t *testing.T) {
+	a := assert.New(t)
+
+	err := common.EBlockBlobTier.Parse("Smart")
+	a.Nil(err)
+
+	a.Equal("Smart", common.EBlockBlobTier.Smart().String())
+	a.NotEqual(common.EBlockBlobTier.None(), common.EBlockBlobTier.Smart())
+	a.NotEqual(common.EBlockBlobTier.Cold(), common.EBlockBlobTier.Smart())
+}
