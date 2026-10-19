@@ -141,9 +141,9 @@ To learn more, see [Synchronize files](https://docs.microsoft.com/en-us/azure/st
 
 ## Storage Mover FNS flat enumeration
 
-High-performance Storage Mover jobs (`MOVER_HIGH_PERF=true`, mover build) can opt
-confirmed flat-namespace (FNS) Blob-to-Blob jobs into flat listing per job. This is
-not inferred from a `.blob` endpoint. Default-performance jobs, HNS, unknown
+Storage Mover jobs (mover build) can opt confirmed flat-namespace (FNS)
+Blob-to-Blob jobs into flat listing per job in either performance profile.
+Namespace eligibility is not inferred from a `.blob` endpoint. HNS, unknown
 namespace, and other source/destination pairs retain their existing enumeration.
 
 Copy uses `InitResourceTraverserOptions.FlatListing` with recursive traversal.
@@ -151,22 +151,25 @@ For sync, `RawMoverSyncCmdArgs.UseFlatListing` requires the `smslidingwindow`
 build and selects the streaming merge-join even when its usual opt-in is off.
 The orchestrator lists the entire selected source and destination prefixes as
 recursive, sorted blob streams and compares full relative names through the
-existing merge-join. Only the root crawl task is needed; virtual directories are
-not accumulated. Filters, marker exclusion, comparison/transfer scheduling,
+existing merge-join, separately within each range when using parallel listing.
+Virtual directories are not accumulated. Filters, marker exclusion, comparison/transfer scheduling,
 source-error delete protection, and cancellation use the existing paths.
 
 Listing pages and merge channels are bounded independently of the number of
 virtual directories. This does not cap transfer-plan or scheduler memory.
-Each flat stream uses sequential continuation tokens, so listing throughput
-depends on page latency and occupancy.
+`MOVER_FLAT_LIST_PARALLELISM` controls range concurrency independently of
+`MOVER_HIGH_PERF`. It defaults to 8 and accepts integers from 1 to 37.
+A value of 1 uses serial listing; higher values process 37 static key ranges
+with bounded concurrency. Each range uses sequential continuation tokens.
+Eligible flat listing requests Photon Arrow responses, prefetches one page,
+and uses a dedicated listing connection pool in either performance profile.
 
-For a bounded diagnostic run, set `MOVER_FLAT_LIST_DIAGNOSTICS=true` to emit
-cumulative `[FlatListTiming]` console records approximately every 30 seconds
-and at traversal exit. Records include page sizes, `NextPage` time, HTTP-policy
-attempt time, time between retry attempts, and object-processing time.
-`outside_attempt_ms` includes SDK decoding and pipeline setup; it is not a
-CPU-only decoding measurement. Diagnostics are off by default and do not
-change retry policy, page size, or enumeration behavior.
+Production logging retains configuration/format/pool/prefetch messages and
+one-minute `[FlatListRangeStats]` records. High-performance hierarchical crawling
+also retains `[CrawlConfig]` and one-minute `[CrawlStats]` records.
+Temporary per-page, HTTP-attempt, and timing diagnostics have been removed;
+`MOVER_FLAT_LIST_DIAGNOSTICS` and `MOVER_FLAT_LIST_PAGE_DIAGNOSTICS` no longer
+enable them.
 
 Do not enable `AZCOPY_DISABLE_HIERARCHICAL_SCAN` globally to implement this:
 non-recursive directory-based sync would skip nested blobs. The new selection
