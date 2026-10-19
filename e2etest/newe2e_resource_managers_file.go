@@ -293,6 +293,9 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 		for pager.More() {
 			page, err := pager.NextPage(ctx)
 			a.NoError("Get page", err)
+			if err != nil {
+				return nil
+			}
 
 			// List directories and add to queue
 			for _, v := range page.Segment.Directories {
