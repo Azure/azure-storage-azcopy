@@ -394,10 +394,22 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 
 // TestStaticFlatRangesCopyReporting keeps finalization reachable without hiding dispatcher failures.
 func TestStaticFlatRangesCopyReporting(t *testing.T) {
-	for _, processingFailure := range []bool{false, true} {
-		t.Run(fmt.Sprintf("processingFailure=%t", processingFailure), func(t *testing.T) {
+	t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, "2")
+	for _, tc := range []struct {
+		name              string
+		reporting         bool
+		processingFailure bool
+	}{
+		{"reported-listing-failure", true, false},
+		{"unreported-listing-failure", false, false},
+		{"processing-failure", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			src, _ := staticTestTraverser(t, []string{"0/early", "a/file", "z/new"}, "source/", "403-a")
-			ch := make(chan TraverserErrorItemInfo, 100)
+			var ch chan TraverserErrorItemInfo
+			if tc.reporting {
+				ch = make(chan TraverserErrorItemInfo, 100)
+			}
 			src.errorChannel = ch
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -406,7 +418,7 @@ func TestStaticFlatRangesCopyReporting(t *testing.T) {
 			finalized := false
 			failure := errors.New("dispatcher failed")
 			e := NewCopyEnumerator(src, nil, func(obj StoredObject) error {
-				if processingFailure {
+				if tc.processingFailure {
 					return failure
 				}
 				got = append(got, obj.relativePath)
@@ -414,18 +426,24 @@ func TestStaticFlatRangesCopyReporting(t *testing.T) {
 			}, func() error { finalized = true; return nil })
 			err := e.enumerate()
 			require.NoError(t, ctx.Err())
-			if processingFailure {
+			if tc.processingFailure {
 				require.ErrorIs(t, err, failure)
-				require.False(t, finalized)
-			} else {
+			} else if tc.reporting {
 				require.NoError(t, err)
-				require.True(t, finalized)
+			} else {
+				require.ErrorContains(t, err, `flat range ["a","b")`)
+				require.ErrorContains(t, err, "AuthorizationPermissionMismatch")
+			}
+			require.Equal(t, tc.reporting && !tc.processingFailure, finalized)
+			if !tc.processingFailure {
 				require.ElementsMatch(t, []string{"0/early", "z/new"}, got)
 			}
-			close(ch)
-			require.Len(t, ch, 1)
-			info := (<-ch).(*flatListRangeErrorInfo)
-			require.Equal(t, flatListRange{"a", "b"}, info.bounds)
+			if tc.reporting {
+				close(ch)
+				require.Len(t, ch, 1)
+				info := (<-ch).(*flatListRangeErrorInfo)
+				require.Equal(t, flatListRange{"a", "b"}, info.bounds)
+			}
 		})
 	}
 }
@@ -658,24 +676,6 @@ func TestStaticFlatRangesFailureAndCancellation(t *testing.T) {
 		require.Error(t, traverser.Traverse(nil, func(StoredObject) error { emitted++; return nil }, nil))
 		require.Zero(t, emitted)
 	})
-}
-
-// TestStaticFlatRangesCopyContinuesAfterFailure checks that a failed range does not stop copy listing.
-func TestStaticFlatRangesCopyContinuesAfterFailure(t *testing.T) {
-	t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, "2")
-	src, _ := staticTestTraverser(t, []string{"0/early", "a/file", "z/new"}, "source/", "403-a")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	src.ctx = ctx
-	var got []string
-	err := src.Traverse(nil, func(object StoredObject) error {
-		got = append(got, object.relativePath)
-		return nil
-	}, nil)
-	require.NoError(t, ctx.Err())
-	require.ErrorContains(t, err, `flat range ["a","b")`)
-	require.ErrorContains(t, err, "AuthorizationPermissionMismatch")
-	require.ElementsMatch(t, []string{"0/early", "z/new"}, got)
 }
 
 // TestStaticFlatRangesSyncContinuesAfterFailure checks healthy-range progress and delete isolation.

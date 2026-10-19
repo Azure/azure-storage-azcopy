@@ -633,26 +633,35 @@ func TestFlatSyncTraverserConfiguration(t *testing.T) {
 	}
 }
 
-func TestFlatSyncForcesStreamingAndRejectsOtherPairs(t *testing.T) {
+func TestFlatSyncRespectsStreamingFlagAndRejectsOtherPairs(t *testing.T) {
 	for _, pair := range []common.FromTo{
 		common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(),
 		common.EFromTo.BlobFSBlobFS(), common.EFromTo.S3Blob(), common.EFromTo.FileFile(),
 	} {
-		t.Run(pair.String(), func(t *testing.T) {
-			raw := getDefaultSyncRawInput("https://source.blob.core.windows.net/c", "https://target.blob.core.windows.net/c")
-			raw.fromTo = pair.String()
-			raw.recursive = false
-			raw.useFlatListing = true
-			raw.useStreamingMergeJoin = false
-			cooked, err := raw.toOptions()
-			if pair == common.EFromTo.BlobBlob() {
-				require.NoError(t, err)
-				require.True(t, cooked.useFlatListing)
-				require.True(t, useStreamingMergeJoin(&cooked))
-			} else {
-				require.ErrorContains(t, err, "flat sync requires")
-			}
-		})
+		for _, streaming := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/streaming=%t", pair, streaming), func(t *testing.T) {
+				raw := getDefaultSyncRawInput("https://source.blob.core.windows.net/c", "https://target.blob.core.windows.net/c")
+				raw.fromTo = pair.String()
+				raw.recursive = false
+				raw.useFlatListing = true
+				raw.useStreamingMergeJoin = streaming
+				cooked, err := raw.toOptions()
+				if pair == common.EFromTo.BlobBlob() {
+					require.NoError(t, err)
+					require.True(t, cooked.useFlatListing)
+					require.Equal(t, streaming, cooked.useStreamingMergeJoin)
+					require.Equal(t, streaming, useStreamingMergeJoin(&cooked))
+					err = validate(&cooked, &SyncOrchestratorOptions{})
+					if streaming {
+						require.NoError(t, err)
+					} else {
+						require.ErrorContains(t, err, "flat sync requires the Blob-to-Blob streaming merge-join")
+					}
+				} else {
+					require.ErrorContains(t, err, "flat sync requires")
+				}
+			})
+		}
 	}
 }
 
@@ -692,61 +701,36 @@ func TestFlatSyncMergeNestedFiles(t *testing.T) {
 	}
 }
 
-func TestFlatSyncEmptyDestination(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	src, _ := newFlatTestListing(t, ctx, [][]string{{"a/b/c", "x/y"}}, "", nil)
-	dst, _ := newFlatTestListing(t, ctx, [][]string{{}}, "", nil)
-	var deleted []string
-	var mu sync.Mutex
-	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.BlobBlob(), useFlatListing: true, deleteDestination: common.EDeleteDestination.False()}
-	dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
-	require.NoError(t, err)
-	require.Empty(t, dirs)
-	require.Equal(t, []string{"/a/b/c", "/x/y"}, scheduledTransferSources(enumerator))
-}
-
-func TestFlatSyncPhotonDestinationBlobNotFound(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	src, _ := newFlatTestListing(t, ctx, [][]string{{"a/file"}, {"z/file"}}, "", nil)
-	dst, _ := newFlatTestListing(t, ctx, [][]string{{}}, "",
-		func(_ int, w http.ResponseWriter, _ *http.Request) bool {
-			w.Header().Set("x-ms-error-code", "BlobNotFound")
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(w, `<Error><Code>BlobNotFound</Code><Message>missing</Message></Error>`)
-			return false
-		})
-	var deleted []string
-	var mu sync.Mutex
-	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
-	require.NoError(t, err)
-	require.Empty(t, dirs)
-	require.Equal(t, []string{"/a/file", "/z/file"}, scheduledTransferSources(enumerator))
-	require.Empty(t, deleted)
-}
-
-func TestFlatSyncPhotonDecodeFailureDoesNotDeleteTarget(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	src, _ := newFlatTestListing(t, ctx, [][]string{{"a/same"}, {}}, "",
-		func(page int, w http.ResponseWriter, _ *http.Request) bool {
-			if page == 1 {
-				w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-				fmt.Fprint(w, "invalid Arrow stream")
-				return false
+func TestFlatSyncEmptyOrMissingDestination(t *testing.T) {
+	for _, missing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("missing=%t", missing), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src, _ := newFlatTestListing(t, ctx, [][]string{{"a/b/c"}, {"x/y"}}, "", nil)
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{}}, "",
+				func(_ int, w http.ResponseWriter, _ *http.Request) bool {
+					if !missing {
+						return true
+					}
+					w.Header().Set("x-ms-error-code", "BlobNotFound")
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(w, `<Error><Code>BlobNotFound</Code><Message>missing</Message></Error>`)
+					return false
+				})
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.BlobBlob(), useFlatListing: true, deleteDestination: common.EDeleteDestination.False()}
+			if missing {
+				cca.deleteDestination = common.EDeleteDestination.True()
 			}
-			return true
+			dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			require.NoError(t, err)
+			require.Empty(t, dirs)
+			require.Equal(t, []string{"/a/b/c", "/x/y"}, scheduledTransferSources(enumerator))
+			require.Empty(t, deleted)
 		})
-	dst, _ := newFlatTestListing(t, ctx, [][]string{{"a/same", "z/must-not-delete"}}, "", nil)
-	var deleted []string
-	var mu sync.Mutex
-	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
-	require.ErrorContains(t, err, "Arrow")
-	require.Empty(t, deleted)
+	}
 }
 
 func TestFlatSyncPreservesLastModifiedComparison(t *testing.T) {
@@ -772,26 +756,35 @@ func TestFlatSyncPreservesLastModifiedComparison(t *testing.T) {
 	require.Empty(t, deleted)
 }
 
-func TestFlatSyncSourcePageFailureDoesNotDeleteRemainingTarget(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	src, _ := newFlatTestListing(t, ctx, [][]string{{"a/same"}, {}}, "",
-		func(page int, w http.ResponseWriter, r *http.Request) bool {
-			if page == 1 {
-				w.Header().Set("x-ms-error-code", "AuthorizationPermissionMismatch")
-				w.WriteHeader(http.StatusForbidden)
-				fmt.Fprint(w, `<Error><Code>AuthorizationPermissionMismatch</Code><Message>denied</Message></Error>`)
-				return false
-			}
-			return true
+func TestFlatSyncSourceFailureDoesNotDeleteTarget(t *testing.T) {
+	for _, failure := range []string{"Arrow", "AuthorizationPermissionMismatch"} {
+		t.Run(failure, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src, _ := newFlatTestListing(t, ctx, [][]string{{"a/same"}, {}}, "",
+				func(page int, w http.ResponseWriter, _ *http.Request) bool {
+					if page != 1 {
+						return true
+					}
+					if failure == "Arrow" {
+						w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+						fmt.Fprint(w, "invalid Arrow stream")
+					} else {
+						w.Header().Set("x-ms-error-code", failure)
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprint(w, `<Error><Code>AuthorizationPermissionMismatch</Code><Message>denied</Message></Error>`)
+					}
+					return false
+				})
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{"a/same", "z/must-not-delete"}}, "", nil)
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
+			require.ErrorContains(t, err, failure)
+			require.Empty(t, deleted)
 		})
-	dst, _ := newFlatTestListing(t, ctx, [][]string{{"a/same", "z/must-not-delete"}}, "", nil)
-	var deleted []string
-	var mu sync.Mutex
-	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
-	require.Error(t, err)
-	require.Empty(t, deleted)
+	}
 }
 
 func TestFlatSyncStreamsBeforeListingCompletesAndCancels(t *testing.T) {
