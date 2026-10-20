@@ -27,14 +27,129 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestSyncOrchestratorContinuesAfterDirectoryErrors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the sync orchestrator normalizes source URLs as filesystem paths on Windows")
+	}
+	for _, mergeJoin := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mergeJoin=%t", mergeJoin), func(t *testing.T) {
+			const failedDirs = 1100
+			var listing strings.Builder
+			for i := 0; i < failedDirs; i++ {
+				fmt.Fprintf(&listing, "<BlobPrefix><Name>failed%04d/</Name></BlobPrefix>", i)
+			}
+			listing.WriteString("<BlobPrefix><Name>healthy/</Name></BlobPrefix>")
+			var healthyListed atomic.Bool
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodHead {
+					if strings.HasPrefix(r.URL.Path, "/source/failed") {
+						w.Header().Set("x-ms-error-code", "AuthorizationPermissionMismatch")
+						w.WriteHeader(http.StatusForbidden)
+					} else {
+						w.Header().Set("x-ms-error-code", "BlobNotFound")
+						w.WriteHeader(http.StatusNotFound)
+					}
+					return
+				}
+				if r.Method != http.MethodGet || r.URL.Query().Get("comp") != "list" {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				var blobs string
+				if strings.TrimSuffix(r.URL.Path, "/") == "/source" {
+					switch r.URL.Query().Get("prefix") {
+					case "":
+						blobs = listing.String()
+					case "healthy/":
+						healthyListed.Store(true)
+					default:
+						t.Errorf("unexpected source prefix: %s", r.URL.Query().Get("prefix"))
+					}
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><EnumerationResults><Blobs>%s</Blobs><NextMarker /></EnumerationResults>`, blobs)
+			}))
+			defer server.Close()
+
+			oldOptions, oldParallelism, oldThrottling, oldUseOrchestrator := orchestratorOptions, crawlParallelism, enableThrottling, UseSyncOrchestrator
+			t.Cleanup(func() {
+				orchestratorOptions, crawlParallelism, enableThrottling, UseSyncOrchestrator = oldOptions, oldParallelism, oldThrottling, oldUseOrchestrator
+			})
+			orchestratorOptions = &SyncOrchestratorOptions{fromTo: common.EFromTo.BlobBlob()}
+			crawlParallelism, enableThrottling, UseSyncOrchestrator = 64, false, true
+			baseURL := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
+			cca := &cookedSyncCmdArgs{
+				fromTo:                common.EFromTo.BlobBlob(),
+				source:                common.ResourceString{Value: baseURL + "/source"},
+				destination:           common.ResourceString{Value: baseURL + "/target"},
+				useStreamingMergeJoin: mergeJoin,
+			}
+			errorChannel := make(chan TraverserErrorItemInfo, 3*failedDirs)
+			options := InitResourceTraverserOptions{
+				Credential:   &common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
+				ErrorChannel: errorChannel,
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			primaryTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, options)
+			require.NoError(t, err)
+			finalized := false
+			enumerator := &syncEnumerator{
+				primaryTraverser: primaryTraverser,
+				primaryTraverserTemplate: ResourceTraverserTemplate{
+					location: common.ELocation.Blob(),
+					options:  options,
+				},
+				secondaryTraverserTemplate: ResourceTraverserTemplate{
+					location: common.ELocation.Blob(),
+					options:  options,
+				},
+				objectIndexer:       newObjectIndexer(),
+				objectComparator:    func(StoredObject) error { return nil },
+				orchestratorOptions: orchestratorOptions,
+				ctp: &copyTransferProcessor{
+					copyJobTemplate:        &common.CopyJobPartOrderRequest{FromTo: cca.fromTo},
+					folderPropertiesOption: common.EFolderPropertiesOption.NoFolders(),
+				},
+				finalize: func() error {
+					finalized = true
+					return nil
+				},
+			}
+			require.NoError(t, cca.runSyncOrchestrator(enumerator, ctx))
+			require.NoError(t, ctx.Err(), "enumeration must finish without waiting for cancellation")
+			assert.True(t, finalized)
+			assert.True(t, healthyListed.Load(), "healthy directories must still be enumerated")
+			close(errorChannel)
+			failedPaths := make(map[string]bool)
+			for err := range errorChannel {
+				if err.IsDir() {
+					assert.Contains(t, err.ErrorMessage().Error(), "AuthorizationPermissionMismatch")
+					assert.False(t, failedPaths[err.FullPath()], "directory failure must only be reported once")
+					failedPaths[err.FullPath()] = true
+				}
+			}
+			assert.Len(t, failedPaths, failedDirs)
+		})
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Shared test helpers for the streaming (two-way) merge-join tests.
@@ -362,7 +477,7 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 			objs = append(objs, mjTestVirtualFolder(fmt.Sprintf("d%06d", i)))
 		}
 	}
-	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}      // fast
+	src := &fakeMergeJoinTraverser{objects: append([]StoredObject(nil), objs...)}          // fast
 	dst := &delayingFakeTraverser{objects: append([]StoredObject(nil), objs...), delay: 0} // same content
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -419,6 +534,9 @@ func newMergeJoinRecordingEnumerator(deletedPaths *[]string, mu *sync.Mutex) *sy
 func scheduledTransferSources(enum *syncEnumerator) []string {
 	out := make([]string, 0, len(enum.ctp.copyJobTemplate.Transfers.List))
 	for _, tx := range enum.ctp.copyJobTemplate.Transfers.List {
+		out = append(out, tx.Source)
+	}
+	for _, tx := range enum.ctp.shuffleBuffer {
 		out = append(out, tx.Source)
 	}
 	return out
@@ -492,3 +610,311 @@ func TestTwoWaySyncDir_DestRealErrorStillFatal(t *testing.T) {
 	}
 }
 
+func TestFlatSyncTraverserConfiguration(t *testing.T) {
+	for _, pair := range []common.FromTo{
+		common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(),
+		common.EFromTo.BlobFSBlobFS(), common.EFromTo.S3Blob(), common.EFromTo.LocalBlob(),
+		common.EFromTo.FileFile(),
+	} {
+		for _, flat := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/flat=%t", pair, flat), func(t *testing.T) {
+				src, dst := InitResourceTraverserOptions{}, InitResourceTraverserOptions{}
+				configureFlatSyncTraversers(&cookedSyncCmdArgs{fromTo: pair, useFlatListing: flat}, &src, &dst)
+				want := flat && pair == common.EFromTo.BlobBlob()
+				for _, opts := range []InitResourceTraverserOptions{src, dst} {
+					require.Equal(t, want, opts.FlatListing)
+					require.Equal(t, want, opts.Recursive)
+					if want {
+						require.Equal(t, common.ELocation.Blob(), *opts.DestResourceType)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestFlatSyncRespectsStreamingFlagAndRejectsOtherPairs(t *testing.T) {
+	for _, pair := range []common.FromTo{
+		common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(),
+		common.EFromTo.BlobFSBlobFS(), common.EFromTo.S3Blob(), common.EFromTo.FileFile(),
+	} {
+		for _, streaming := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/streaming=%t", pair, streaming), func(t *testing.T) {
+				raw := getDefaultSyncRawInput("https://source.blob.core.windows.net/c", "https://target.blob.core.windows.net/c")
+				raw.fromTo = pair.String()
+				raw.recursive = false
+				raw.useFlatListing = true
+				raw.useStreamingMergeJoin = streaming
+				cooked, err := raw.toOptions()
+				if pair == common.EFromTo.BlobBlob() {
+					require.NoError(t, err)
+					require.True(t, cooked.useFlatListing)
+					require.True(t, cooked.useStreamingMergeJoin)
+					require.True(t, useStreamingMergeJoin(&cooked))
+					err = validate(&cooked, &SyncOrchestratorOptions{})
+					require.NoError(t, err)
+					cooked.useStreamingMergeJoin = false
+					require.ErrorContains(t, validate(&cooked, &SyncOrchestratorOptions{}), "flat sync requires the Blob-to-Blob streaming merge-join")
+				} else {
+					require.ErrorContains(t, err, "flat sync requires")
+				}
+			})
+		}
+	}
+	for _, streaming := range []bool{false, true} {
+		t.Run(fmt.Sprintf("non-flat/streaming=%t", streaming), func(t *testing.T) {
+			raw := getDefaultSyncRawInput("https://source.blob.core.windows.net/c", "https://target.blob.core.windows.net/c")
+			raw.fromTo = common.EFromTo.BlobBlob().String()
+			raw.recursive = false
+			raw.useFlatListing = false
+			raw.useStreamingMergeJoin = streaming
+			cooked, err := raw.toOptions()
+			require.NoError(t, err)
+			require.False(t, cooked.useFlatListing)
+			require.Equal(t, streaming, cooked.useStreamingMergeJoin)
+			require.Equal(t, streaming, useStreamingMergeJoin(&cooked))
+		})
+	}
+}
+
+func TestFlatSyncMergeNestedFiles(t *testing.T) {
+	for _, tc := range []struct{ mirror, destinationArrow bool }{
+		{false, false}, {false, true}, {true, false}, {true, true},
+	} {
+		t.Run(fmt.Sprintf("mirror=%t/destinationArrow=%t", tc.mirror, tc.destinationArrow), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src, _ := newFlatTestListing(t, ctx, [][]string{{"a/new", "b/same"}, {"d/new"}}, "source-root/", nil)
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{"b/same"}, {"c/extra"}}, "destination-root/", nil, tc.destinationArrow)
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
+			cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.BlobBlob(), useFlatListing: true}
+			if tc.mirror {
+				cca.deleteDestination = common.EDeleteDestination.True()
+			} else {
+				cca.deleteDestination = common.EDeleteDestination.False()
+			}
+			var unchanged int
+			enumerator.primaryTraverserTemplate.options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
+			dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			require.NoError(t, err)
+			require.Empty(t, dirs, "flat sync must not accumulate any child-directory frontier")
+			require.Equal(t, []string{"/a/new", "/d/new"}, scheduledTransferSources(enumerator))
+			require.Equal(t, 1, unchanged)
+			if tc.mirror {
+				require.Equal(t, []string{"c/extra"}, deleted)
+			} else {
+				require.Empty(t, deleted)
+			}
+			require.Empty(t, enumerator.objectIndexer.indexMap, "flat sync must not build a whole-tree index")
+		})
+	}
+}
+
+func TestFlatSyncEmptyOrMissingDestination(t *testing.T) {
+	for _, missing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("missing=%t", missing), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src, _ := newFlatTestListing(t, ctx, [][]string{{"a/b/c"}, {"x/y"}}, "", nil)
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{}}, "",
+				func(_ int, w http.ResponseWriter, _ *http.Request) bool {
+					if !missing {
+						return true
+					}
+					w.Header().Set("x-ms-error-code", "BlobNotFound")
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(w, `<Error><Code>BlobNotFound</Code><Message>missing</Message></Error>`)
+					return false
+				})
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			cca := &cookedSyncCmdArgs{fromTo: common.EFromTo.BlobBlob(), useFlatListing: true, deleteDestination: common.EDeleteDestination.False()}
+			if missing {
+				cca.deleteDestination = common.EDeleteDestination.True()
+			}
+			dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			require.NoError(t, err)
+			require.Empty(t, dirs)
+			require.Equal(t, []string{"/a/b/c", "/x/y"}, scheduledTransferSources(enumerator))
+			require.Empty(t, deleted)
+		})
+	}
+}
+
+func TestFlatSyncPreservesLastModifiedComparison(t *testing.T) {
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	var unchanged int
+	enumerator.primaryTraverserTemplate.options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
+	source := []StoredObject{mjTestFile("a/source-newer"), mjTestFile("b/same"), mjTestFile("c/target-newer")}
+	target := append([]StoredObject(nil), source...)
+	target[0].lastModifiedTime = target[0].lastModifiedTime.Add(-time.Hour)
+	target[2].lastModifiedTime = target[2].lastModifiedTime.Add(time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cca := mirrorSyncArgs()
+	cca.useFlatListing = true
+	dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "",
+		&fakeMergeJoinTraverser{objects: source}, &fakeMergeJoinTraverser{objects: target}, true)
+	require.NoError(t, err)
+	require.Empty(t, dirs)
+	require.Equal(t, []string{"/a/source-newer"}, scheduledTransferSources(enumerator))
+	require.Equal(t, 2, unchanged)
+	require.Empty(t, deleted)
+}
+
+func TestFlatSyncSourceFailureDoesNotDeleteTarget(t *testing.T) {
+	for _, failure := range []string{"Arrow", "AuthorizationPermissionMismatch"} {
+		t.Run(failure, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src, _ := newFlatTestListing(t, ctx, [][]string{{"a/same"}, {}}, "",
+				func(page int, w http.ResponseWriter, _ *http.Request) bool {
+					if page != 1 {
+						return true
+					}
+					if failure == "Arrow" {
+						w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+						fmt.Fprint(w, "invalid Arrow stream")
+					} else {
+						w.Header().Set("x-ms-error-code", failure)
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprint(w, `<Error><Code>AuthorizationPermissionMismatch</Code><Message>denied</Message></Error>`)
+					}
+					return false
+				})
+			dst, _ := newFlatTestListing(t, ctx, [][]string{{"a/same", "z/must-not-delete"}}, "", nil)
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
+			require.ErrorContains(t, err, failure)
+			require.Empty(t, deleted)
+		})
+	}
+}
+
+func TestFlatSyncStreamsBeforeListingCompletesAndCancels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pages := make([][]string, 3)
+	for page := range pages {
+		for i := 0; i < mergeJoinChannelBufferSize; i++ {
+			pages[page] = append(pages[page], fmt.Sprintf("dir-%08d/file", page*mergeJoinChannelBufferSize+i))
+		}
+	}
+
+	waitAtLastPage := func(page int, w http.ResponseWriter, r *http.Request) bool {
+		if page == 2 {
+			<-r.Context().Done()
+			return false
+		}
+		return true
+	}
+	src, _ := newFlatTestListing(t, ctx, pages, "", waitAtLastPage)
+	dst, _ := newFlatTestListing(t, ctx, pages, "", waitAtLastPage)
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	var compared atomic.Int64
+	enumerator.primaryTraverserTemplate.options.IncrementNotTransferred = func(common.EntityType) { compared.Add(1) }
+	done := make(chan error, 1)
+	go func() {
+		_, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, mirrorSyncArgs(), "", src, dst, true)
+		done <- err
+	}()
+	require.Eventually(t, func() bool { return compared.Load() >= mergeJoinChannelBufferSize }, 10*time.Second, 10*time.Millisecond,
+		"comparisons must advance while later listing pages are still pending")
+	cancel()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("flat sync did not drain after cancellation")
+	}
+}
+
+func TestFlatSyncPrefetchAsymmetricSetOracle(t *testing.T) {
+	splitPages := func(names []string, size int) [][]string {
+		pages := [][]string{{}}
+		for len(names) > 0 {
+			n := size
+			if n > len(names) {
+				n = len(names)
+			}
+			pages = append(pages, names[:n], nil)
+			names = names[n:]
+		}
+		return pages
+	}
+	var source, target, wantCopies, wantDeletes []string
+	wantUnchanged := 0
+	for i := 0; i < 12_000; i++ {
+		name := fmt.Sprintf("dir-%06d/nested/file", i)
+		inSource, inTarget := i%3 != 0, i%4 != 0
+		if inSource {
+			source = append(source, name)
+		}
+		if inTarget {
+			target = append(target, name)
+		}
+		switch {
+		case inSource && !inTarget:
+			wantCopies = append(wantCopies, "/"+name)
+		case inTarget && !inSource:
+			wantDeletes = append(wantDeletes, name)
+		case inSource && inTarget:
+			wantUnchanged++
+		}
+	}
+	for _, destinationArrow := range []bool{false, true} {
+		t.Run(fmt.Sprintf("destinationArrow=%t", destinationArrow), func(t *testing.T) {
+			captureCrawlLogs(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			src, srcCalls := newFlatTestListing(t, ctx, splitPages(source, 1499), "src/", nil)
+			dst, dstCalls := newFlatTestListing(t, ctx, splitPages(target, 4093), "dst/", nil, destinationArrow)
+			var deleted []string
+			var mu sync.Mutex
+			enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+			enumerator.ctp.copyJobTemplate.FromTo = common.EFromTo.BlobBlob()
+			unchanged := 0
+			enumerator.primaryTraverserTemplate.options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
+			cca := mirrorSyncArgs()
+			cca.useFlatListing = true
+			dirs, err := mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			require.NoError(t, err)
+			require.Empty(t, dirs)
+			require.Equal(t, wantCopies, scheduledTransferSources(enumerator))
+			require.Equal(t, wantDeletes, deleted)
+			require.Equal(t, wantUnchanged, unchanged)
+			require.EqualValues(t, len(splitPages(source, 1499)), srcCalls.Load())
+			require.EqualValues(t, len(splitPages(target, 4093)), dstCalls.Load())
+		})
+	}
+}
+
+func TestFlatSyncPrefetchPreservesLeadingSlashKeys(t *testing.T) {
+	captureCrawlLogs(t)
+	root, err := validateAndGetRootObject("https://example.blob.core.windows.net/c", common.EFromTo.BlobBlob())
+	require.NoError(t, err)
+	require.Equal(t, "/", root.relativePath)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src, _ := newFlatTestListing(t, ctx, [][]string{{"/a"}}, "", nil)
+	dst, _ := newFlatTestListing(t, ctx, [][]string{{"a"}}, "", nil)
+	var deleted []string
+	var mu sync.Mutex
+	enumerator := newMergeJoinRecordingEnumerator(&deleted, &mu)
+	cca := mirrorSyncArgs()
+	cca.useFlatListing = true
+	_, err = mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, root.relativePath, src, dst, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"//a"}, scheduledTransferSources(enumerator))
+	require.Equal(t, []string{"a"}, deleted)
+}

@@ -489,7 +489,13 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 			}
 			highWatermark := s.numOfTransfersPerPart * parkParts
 			s.bufferDrainCond.L.Lock()
-			for len(s.shuffleBuffer) >= highWatermark {
+			for {
+				s.syncTransferMutex.Lock()
+				park := len(s.shuffleBuffer) >= highWatermark
+				s.syncTransferMutex.Unlock()
+				if !park {
+					break
+				}
 				s.bufferDrainCond.Wait()
 			}
 			s.bufferDrainCond.L.Unlock()

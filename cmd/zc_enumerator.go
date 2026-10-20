@@ -303,9 +303,9 @@ type filePropsProvider interface {
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
-		name:               name,
-		relativePath:       relativePath,
-		entityType:         entityType,
+		name:         name,
+		relativePath: relativePath,
+		entityType:   entityType,
 		// Normalize to UTC so the time references the shared time.UTC location instead of a
 		// per-blob fixedZone("GMT") allocated by the SDK's RFC1123 date parse. With millions of
 		// enumerated blobs buffered in the shuffle window, those per-blob zones added GBs of live heap.
@@ -392,7 +392,7 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential           *cred.CredentialInfo // Required for most remote traversers
+	Credential                  *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
 	IncrementEnumerationFailure enumerationCounterFunc
 
@@ -430,6 +430,10 @@ type InitResourceTraverserOptions struct {
 
 	// SuppressCrawlStats avoids per-directory diagnostics when an outer sync crawler reports them.
 	SuppressCrawlStats bool
+
+	// FlatListing is a per-job opt-in for confirmed FNS-to-FNS transfers.
+	// In the high-performance profile it requests Arrow with SDK-managed XML fallback.
+	FlatListing bool
 
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
 	// (List, GetProperties) issued during enumeration, so scanning respects the
@@ -471,10 +475,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return nil, err
 	}
 
-	
 	// ScanPacer (enumeration IOPS metering) is only supported for Azure Files locations
 	file2FilesEnum := enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Get()
-	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS()  && file2FilesEnum != "true" {
+	if opts.ScanPacer != nil && resourceLocation != common.ELocation.File() && resourceLocation != common.ELocation.FileNFS() && file2FilesEnum != "true" {
 		return nil, fmt.Errorf("ScanPacer (enumeration IOPS metering) is only supported for Azure Files transfers, but resource location is %v and EnableAzFilesProactiveStats is %v", resourceLocation, file2FilesEnum)
 	}
 

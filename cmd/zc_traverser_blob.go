@@ -23,9 +23,11 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +39,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/pkg/errors"
 
@@ -53,7 +56,8 @@ type blobTraverser struct {
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization in the name of saving costs
-	parallelListing bool
+	parallelListing    bool
+	flatListingEnabled bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -665,24 +669,28 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	return nil
 }
 
+func logBlobCrawlStats(message string) {
+	glcm.Info("[AzCopy] [INFO] " + message)
+}
+
 func startBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {
 	if !buildmode.HighPerf() {
 		return func() {}
 	}
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+	logBlobCrawlStats(fmt.Sprintf(
 		"[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
-		parallelism, stats.MaxQueueDirectories, randomDequeue), true)
+		parallelism, stats.MaxQueueDirectories, randomDequeue))
 	statsCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		logStats := func(final bool) {
-			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			logBlobCrawlStats(fmt.Sprintf(
 				"[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
 				atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
-				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final), true)
+				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final))
 		}
 		for {
 			select {
@@ -745,23 +753,197 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bo
 	return util.doesBlobRepresentAFolder(metadata) // We should ignore these, because we pick them up in other ways.
 }
 
+type flatListPoolKey struct{}
+
+// Only requests carrying a flat-page context use the isolated pool; STE and other calls keep theirs.
+type flatListPoolTransport struct {
+	shared  *http.Client
+	once    sync.Once
+	listing *http.Client
+	err     error
+}
+
+func (t *flatListPoolTransport) Do(req *http.Request) (*http.Response, error) {
+	if req.Context().Value(flatListPoolKey{}) == nil {
+		return t.shared.Do(req)
+	}
+	t.once.Do(func() {
+		workers, err := flatListParallelism()
+		if err != nil {
+			t.err = err
+			return
+		}
+		connections := 4
+		if workers > 1 {
+			connections = 2 * workers
+		}
+		t.listing, t.err = common.NewIsolatedHTTPClient(t.shared, connections)
+		if t.err == nil {
+			logFlatListing(common.LogInfo, fmt.Sprintf("[FlatListPool] mode=dedicated pools=1 max_connections_per_host=%d", connections))
+		}
+	})
+	if t.err != nil {
+		return nil, t.err
+	}
+	return t.listing.Do(req)
+}
+
+type flatListPage struct {
+	response container.ListBlobsFlatResponse
+	err      error
+}
+
 func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	if t.flatListingEnabled {
+		workers, err := flatListParallelism()
+		if err != nil {
+			return err
+		}
+		if workers > 1 {
+			if err := t.validateFlatRanges(); err != nil {
+				return err
+			}
+			var countMu, processMu sync.Mutex
+			return runFlatListRanges(t.ctx, workers, t.reportFlatRangeError, func(ctx context.Context, bounds flatListRange) error {
+				clone := t.rangeClone(ctx, &countMu)
+				processingFailed := false
+				err := clone.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, nil,
+					func(object StoredObject) error {
+						processMu.Lock()
+						defer processMu.Unlock()
+						if preprocessor != nil {
+							preprocessor(&object)
+						}
+						_, err := getProcessingError(processIfPassedFilters(filters, object, processor))
+						if err != nil {
+							processingFailed = true
+						}
+						return err
+					}, nil, &bounds)
+				if err != nil && !processingFailed {
+					return clone.flatRangeError(bounds, err)
+				}
+				return err
+			})
+		}
+	}
+	return t.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters, nil)
+}
 
+func (t *blobTraverser) serialListRange(containerClient *container.Client, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter, bounds *flatListRange) error {
+	prefetch := t.flatListingEnabled
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
-	})
-	for pager.More() {
-		resp, err := pager.NextPage(t.ctx)
+	responseFormat := container.StorageResponseFormatAuto
+	listCtx := t.ctx
+	if buildmode.HighPerf() {
+		listCtx = context.WithValue(listCtx, flatListPoolKey{}, struct{}{})
+	}
+	if t.flatListingEnabled {
+		responseFormat = container.StorageResponseFormatArrow
+		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.
+		listCtx = context.WithValue(listCtx, ste.ServiceAPIVersionOverride, "2026-06-06")
+	}
+	options := &container.ListBlobsFlatOptions{
+		Prefix:         &prefix,
+		Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		ResponseFormat: responseFormat,
+	}
+	if bounds != nil {
+		start, end, empty := flatListRequestBounds(searchPrefix, prefix, *bounds)
+		if empty {
+			return nil
+		}
+		if start != "" {
+			options.StartFrom = &start
+		}
+		if end != "" {
+			options.EndBefore = &end
+		}
+	}
+	pager := containerClient.NewListBlobsFlatPager(options)
+	fetchPage := func(ctx context.Context) (flatListPage, bool) {
+		if !pager.More() {
+			return flatListPage{}, false
+		}
+		page := flatListPage{}
+		page.response, page.err = pager.NextPage(ctx)
+		return page, true
+	}
+	nextPage := func() (flatListPage, bool) { return fetchPage(listCtx) }
+	if prefetch {
+		ctx, cancel := context.WithCancel(listCtx)
+		pages := make(chan flatListPage)
+		// The unbuffered handoff permits only one page ahead, including in-flight work.
+		// Only this goroutine accesses the pager; the consumer retains ordered processing.
+		go func() {
+			defer close(pages)
+			for ctx.Err() == nil {
+				page, more := fetchPage(ctx)
+				if !more {
+					return
+				}
+				pages <- page
+				if page.err != nil {
+					return
+				}
+			}
+		}()
+		nextPage = func() (flatListPage, bool) {
+			page, more := <-pages
+			return page, more
+		}
+		defer func() {
+			cancel()
+			// Drain and join so no prefetch request outlives traversal, even on processor failure.
+			for range pages {
+			}
+		}()
+	}
+	for {
+		if prefetch && t.ctx.Err() != nil {
+			return t.ctx.Err()
+		}
+		page, more := nextPage()
+		if !more {
+			break
+		}
+		resp, err := page.response, page.err
 		if err != nil {
-			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+			return fmt.Errorf("cannot list blobs. Failed with error %w", err)
+		}
+		contentType := ternary.DerefOrZero(resp.ContentType)
+		if bounds != nil {
+			if !strings.HasPrefix(contentType, "application/vnd.apache.arrow.stream") {
+				return fmt.Errorf("static range listing requires Arrow; received %q (no partial-result fallback)", contentType)
+			}
+			if resp.Segment == nil {
+				return fmt.Errorf("static range listing returned a nil segment")
+			}
+			// Trust service pagination; validate this page's boundary records before emission.
+			items := resp.Segment.BlobItems
+			if len(items) > 0 {
+				first, last := items[0], items[len(items)-1]
+				if first == nil || last == nil || first.Name == nil || last.Name == nil ||
+					!strings.HasPrefix(*first.Name, prefix) || !strings.HasPrefix(*last.Name, prefix) {
+					return fmt.Errorf("static range listing returned a name outside prefix %q", prefix)
+				}
+				firstKey := strings.TrimPrefix(*first.Name, searchPrefix)
+				lastKey := strings.TrimPrefix(*last.Name, searchPrefix)
+				if firstKey < bounds.start || (bounds.end != "" && lastKey >= bounds.end) ||
+					firstKey > lastKey || (len(items) > 1 && firstKey == lastKey) {
+					return fmt.Errorf("static range bounds/order violation: first=%q last=%q range=[%q,%q)", firstKey, lastKey, bounds.start, bounds.end)
+				}
+			}
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
+			if prefetch && t.ctx.Err() != nil {
+				return t.ctx.Err()
+			}
 			// if the blob represents a hdi folder, then skip it
 			if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
@@ -801,6 +983,9 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 		}
 	}
 
+	if prefetch {
+		return t.ctx.Err()
+	}
 	return nil
 }
 
@@ -840,6 +1025,10 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	if disableHierarchicalScanning == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.parallelListing = false
+	}
+	if opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
+		t.parallelListing = false
+		t.flatListingEnabled = true
 	}
 	return
 }
