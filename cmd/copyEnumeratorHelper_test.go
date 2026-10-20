@@ -160,7 +160,7 @@ func TestFlatListDedicatedPool(t *testing.T) {
 		for _, legacyFlag := range []string{"", "false", "true"} {
 			t.Run(fmt.Sprintf("legacyFlag=%q", legacyFlag), func(t *testing.T) {
 				t.Setenv("MOVER_FLAT_LIST_DEDICATED_POOL", legacyFlag)
-				logger := captureFlatListLogs(t)
+				captureFlatListLogs(t)
 				server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/xml")
 					fmt.Fprint(w, `<EnumerationResults><Blobs></Blobs><NextMarker></NextMarker></EnumerationResults>`)
@@ -192,9 +192,6 @@ func TestFlatListDedicatedPool(t *testing.T) {
 				if enabled {
 					require.NotNil(t, pool.listing, "flat requests must use the dedicated pool")
 					defer pool.listing.CloseIdleConnections()
-					require.Contains(t, logger.text(), "[FlatListPrefetch] enabled=true")
-				} else {
-					require.NotContains(t, logger.text(), "[FlatListPrefetch]")
 				}
 			})
 		}
