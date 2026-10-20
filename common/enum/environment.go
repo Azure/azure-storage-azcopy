@@ -1,6 +1,7 @@
 package enum
 
 import (
+	"fmt"
 	"iter"
 	"os"
 	"path/filepath"
@@ -173,11 +174,20 @@ func (eEnvironmentVariable) MoverSyncMergeJoinTraversers() EnvironmentVariable {
 	}
 }
 
+const (
+	// FlatListRangeBoundaries contains ordered ASCII split points; unbounded tails cover all other names.
+	FlatListRangeBoundaries = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	// MinFlatListParallelism selects one unbounded serial listing.
+	MinFlatListParallelism = 1
+	// MaxFlatListParallelism allows one task per range, including the final unbounded range.
+	MaxFlatListParallelism = len(FlatListRangeBoundaries) + 1
+)
+
 func (eEnvironmentVariable) MoverFlatListParallelism() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:            "MOVER_FLAT_LIST_PARALLELISM",
-		DefaultValue:    "8",
-		Description:     "Eligible high-perf FNS flat listing: maximum concurrent range tasks. Defaults to 8; integer from 1 to 37. Set 1 for serial listing; higher values process 37 static ranges with bounded concurrency.",
+		DefaultValue:    "16",
+		Description:     fmt.Sprintf("Eligible FNS flat listing: maximum concurrent range tasks. Defaults to 16; integer from %d to %d. Set %d for serial listing; higher values process %d static ranges with bounded concurrency.", MinFlatListParallelism, MaxFlatListParallelism, MinFlatListParallelism, MaxFlatListParallelism),
 		DeveloperOption: true,
 	}
 }

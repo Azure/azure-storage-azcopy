@@ -33,7 +33,7 @@ import (
 
 // TestStaticFlatRangesCoverage checks fixed boundaries and unique ownership across worker settings.
 func TestStaticFlatRangesCoverage(t *testing.T) {
-	for workers := 1; workers <= 64; workers++ {
+	for workers := enum.MinFlatListParallelism; workers <= enum.MaxFlatListParallelism; workers++ {
 		ranges := flatListRanges(workers)
 		require.Empty(t, ranges[0].start)
 		require.Empty(t, ranges[len(ranges)-1].end)
@@ -41,6 +41,7 @@ func TestStaticFlatRangesCoverage(t *testing.T) {
 			require.Equal(t, []flatListRange{{}}, ranges)
 		} else {
 			require.Len(t, ranges, 63, "workers=%d", workers)
+			require.Len(t, ranges, enum.MaxFlatListParallelism, "range count must match the supported maximum")
 			for i, boundary := range "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" {
 				require.Equal(t, string(boundary), ranges[i].end, "workers=%d boundary=%d", workers, i)
 			}
@@ -64,29 +65,29 @@ func TestStaticFlatRangesCoverage(t *testing.T) {
 	}
 }
 
-// TestStaticFlatListParallelism checks the eight-worker default, overrides and explicit input errors.
+// TestStaticFlatListParallelism checks the sixteen-worker default, overrides and explicit input errors.
 func TestStaticFlatListParallelism(t *testing.T) {
 	setting := enum.EEnvironmentVariable.MoverFlatListParallelism()
 	t.Run("unset", func(t *testing.T) {
 		t.Setenv(setting.Name, "")
 		require.NoError(t, setting.Clear())
-		require.Equal(t, "8", setting.Get())
+		require.Equal(t, "16", setting.Get())
 		got, err := flatListParallelism()
 		require.NoError(t, err)
-		require.Equal(t, 8, got)
+		require.Equal(t, 16, got)
 	})
 	for _, tc := range []struct {
 		value string
 		want  int
 	}{
-		{"", 8}, {"1", 1}, {"2", 2}, {"8", 8}, {"16", 16}, {"32", 32}, {"33", 33}, {"37", 37}, {"63", 63}, {"64", 64},
-		{"0", 0}, {"65", 0}, {"-1", 0}, {"bad", 0},
+		{"", 16}, {"1", 1}, {"2", 2}, {"8", 8}, {"16", 16}, {"32", 32}, {"33", 33}, {"37", 37}, {"63", 63},
+		{"0", 0}, {"64", 0}, {"65", 0}, {"-1", 0}, {"bad", 0},
 	} {
 		t.Run("value="+tc.value, func(t *testing.T) {
 			t.Setenv(setting.Name, tc.value)
 			got, err := flatListParallelism()
 			if tc.want == 0 {
-				require.EqualError(t, err, setting.Name+" must be an integer between 1 and 64")
+				require.EqualError(t, err, setting.Name+" must be an integer between 1 and 63")
 			} else {
 				require.NoError(t, err)
 			}
@@ -97,7 +98,7 @@ func TestStaticFlatListParallelism(t *testing.T) {
 
 // TestStaticFlatRangesWorkerLimit checks concurrency limits and exactly-once range execution.
 func TestStaticFlatRangesWorkerLimit(t *testing.T) {
-	for _, workers := range []int{8, 32, 64} {
+	for _, workers := range []int{1, 8, 16, 32, enum.MaxFlatListParallelism} {
 		t.Run(fmt.Sprint(workers), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -131,7 +132,7 @@ func TestStaticFlatRangesWorkerLimit(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, wantPeak, peak)
 			require.Zero(t, active)
-			require.Len(t, seen, 63)
+			require.Len(t, seen, len(flatListRanges(workers)))
 			for _, bounds := range flatListRanges(workers) {
 				require.Equal(t, 1, seen[bounds], "range=%+v", bounds)
 			}
@@ -803,7 +804,7 @@ func TestStaticFlatPoolSizing(t *testing.T) {
 	for _, tc := range []struct {
 		value       string
 		connections int
-	}{{"", 16}, {"1", 4}, {"8", 16}, {"32", 64}, {"37", 74}, {"63", 126}, {"64", 128}, {"65", 0}, {"bad", 0}} {
+	}{{"", 32}, {"1", 4}, {"8", 16}, {"16", 32}, {"32", 64}, {"37", 74}, {"63", 126}, {"64", 0}, {"65", 0}, {"bad", 0}} {
 		t.Run(tc.value, func(t *testing.T) {
 			t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, tc.value)
 			pool := &flatListPoolTransport{shared: server.Client()}

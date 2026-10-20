@@ -99,7 +99,7 @@ func flatBlobObjectPath(root, key string) string {
 	return root + "/" + key
 }
 
-// flatListParallelism reads the shared environment setting and validates its 1-64 range.
+// flatListParallelism reads the shared environment setting and validates its supported limits.
 // Unset or empty values use the registered default; an explicit 1 selects serial listing.
 func flatListParallelism() (int, error) {
 	setting := enum.EEnvironmentVariable.MoverFlatListParallelism()
@@ -108,22 +108,21 @@ func flatListParallelism() (int, error) {
 		value = setting.DefaultValue
 	}
 	n, err := strconv.Atoi(value)
-	if err != nil || n < 1 || n > 64 {
-		return 0, fmt.Errorf("%s must be an integer between 1 and 64", setting.Name)
+	if err != nil || n < enum.MinFlatListParallelism || n > enum.MaxFlatListParallelism {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", setting.Name, enum.MinFlatListParallelism, enum.MaxFlatListParallelism)
 	}
 	return n, nil
 }
 
-// flatListRanges returns one unbounded serial range or 63 fixed parallel ranges.
+// flatListRanges returns one unbounded serial range or fixed ranges from the shared boundaries.
 // Adjacent boundaries and unbounded tails cover every name, including non-alphabet characters.
 func flatListRanges(workers int) []flatListRange {
-	if workers <= 1 {
+	if workers <= enum.MinFlatListParallelism {
 		return []flatListRange{{}}
 	}
-	const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	ranges := make([]flatListRange, 0, len(alphabet)+1)
+	ranges := make([]flatListRange, 0, enum.MaxFlatListParallelism)
 	start := ""
-	for _, boundary := range alphabet {
+	for _, boundary := range enum.FlatListRangeBoundaries {
 		end := string(boundary)
 		ranges = append(ranges, flatListRange{start: start, end: end})
 		start = end
