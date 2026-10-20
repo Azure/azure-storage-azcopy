@@ -170,6 +170,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		if cooked.fromTo != common.EFromTo.BlobBlob() || !UseSyncOrchestrator {
 			return cooked, errors.New("flat sync requires FNS-to-FNS Blob transfers and the sync orchestrator")
 		}
+		cooked.useStreamingMergeJoin = true
 	}
 
 	switch cooked.fromTo {

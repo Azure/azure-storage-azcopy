@@ -33,22 +33,26 @@ import (
 
 // TestStaticFlatRangesCoverage checks fixed boundaries and unique ownership across worker settings.
 func TestStaticFlatRangesCoverage(t *testing.T) {
-	for workers := 1; workers <= 37; workers++ {
+	for workers := 1; workers <= 64; workers++ {
 		ranges := flatListRanges(workers)
 		require.Empty(t, ranges[0].start)
 		require.Empty(t, ranges[len(ranges)-1].end)
 		if workers == 1 {
 			require.Equal(t, []flatListRange{{}}, ranges)
 		} else {
-			require.Len(t, ranges, 37, "workers=%d", workers)
-			for i, boundary := range "0123456789abcdefghijklmnopqrstuvwxyz" {
+			require.Len(t, ranges, 63, "workers=%d", workers)
+			for i, boundary := range "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" {
 				require.Equal(t, string(boundary), ranges[i].end, "workers=%d boundary=%d", workers, i)
 			}
 		}
 		for i := 1; i < len(ranges); i++ {
 			require.Equal(t, ranges[i-1].end, ranges[i].start)
 		}
-		for _, key := range []string{"/a", "0", "9", "A", "Z", "_", "a", "a//b", "d", "dir-000000000/blob", "z", "zzz", "\u03bb"} {
+		keys := []string{"/a", "0", "9", "A", "Z", "_", "a", "a//b", "d", "dir-000000000/blob", "z", "zzz", "\u03bb"}
+		for ch := 'A'; ch <= 'Z'; ch++ {
+			keys = append(keys, string(ch), string(ch)+"/\u4e2d", string(ch)+"suffix")
+		}
+		for _, key := range keys {
 			owners := 0
 			for _, bounds := range ranges {
 				if key >= bounds.start && (bounds.end == "" || key < bounds.end) {
@@ -75,14 +79,14 @@ func TestStaticFlatListParallelism(t *testing.T) {
 		value string
 		want  int
 	}{
-		{"", 8}, {"1", 1}, {"2", 2}, {"8", 8}, {"16", 16}, {"37", 37},
-		{"0", 0}, {"38", 0}, {"64", 0}, {"-1", 0}, {"bad", 0},
+		{"", 8}, {"1", 1}, {"2", 2}, {"8", 8}, {"16", 16}, {"32", 32}, {"33", 33}, {"37", 37}, {"63", 63}, {"64", 64},
+		{"0", 0}, {"65", 0}, {"-1", 0}, {"bad", 0},
 	} {
 		t.Run("value="+tc.value, func(t *testing.T) {
 			t.Setenv(setting.Name, tc.value)
 			got, err := flatListParallelism()
 			if tc.want == 0 {
-				require.EqualError(t, err, setting.Name+" must be an integer between 1 and 37")
+				require.EqualError(t, err, setting.Name+" must be an integer between 1 and 64")
 			} else {
 				require.NoError(t, err)
 			}
@@ -91,43 +95,47 @@ func TestStaticFlatListParallelism(t *testing.T) {
 	}
 }
 
-// TestStaticFlatRangesWorkerLimit checks that eight workers execute all 37 ranges exactly once.
+// TestStaticFlatRangesWorkerLimit checks concurrency limits and exactly-once range execution.
 func TestStaticFlatRangesWorkerLimit(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	const workers = 8
-	release := make(chan struct{})
-	var mu sync.Mutex
-	active, peak := 0, 0
-	seen := make(map[flatListRange]int)
-	err := runFlatListRanges(ctx, workers, nil, func(_ context.Context, bounds flatListRange) error {
-		mu.Lock()
-		active++
-		peak = max(peak, active)
-		seen[bounds]++
-		// Hold the first wave until every worker is active, avoiding timing-based assertions.
-		if len(seen) == workers {
-			close(release)
-		}
-		mu.Unlock()
-		defer func() {
-			mu.Lock()
-			active--
-			mu.Unlock()
-		}()
-		select {
-		case <-release:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	})
-	require.NoError(t, err)
-	require.Equal(t, workers, peak)
-	require.Zero(t, active)
-	require.Len(t, seen, 37)
-	for _, bounds := range flatListRanges(workers) {
-		require.Equal(t, 1, seen[bounds], "range=%+v", bounds)
+	for _, workers := range []int{8, 32, 64} {
+		t.Run(fmt.Sprint(workers), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			wantPeak := min(workers, len(flatListRanges(workers)))
+			release := make(chan struct{})
+			var mu sync.Mutex
+			active, peak := 0, 0
+			seen := make(map[flatListRange]int)
+			err := runFlatListRanges(ctx, workers, nil, func(_ context.Context, bounds flatListRange) error {
+				mu.Lock()
+				active++
+				peak = max(peak, active)
+				seen[bounds]++
+				// Hold the first wave until every worker is active, avoiding timing-based assertions.
+				if len(seen) == wantPeak {
+					close(release)
+				}
+				mu.Unlock()
+				defer func() {
+					mu.Lock()
+					active--
+					mu.Unlock()
+				}()
+				select {
+				case <-release:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			})
+			require.NoError(t, err)
+			require.Equal(t, wantPeak, peak)
+			require.Zero(t, active)
+			require.Len(t, seen, 63)
+			for _, bounds := range flatListRanges(workers) {
+				require.Equal(t, 1, seen[bounds], "range=%+v", bounds)
+			}
+		})
 	}
 }
 
@@ -155,11 +163,11 @@ func TestStaticFlatRangeStats(t *testing.T) {
 		require.NotContains(t, logger.text(), "[FlatListRangeStats]")
 		time.Sleep(time.Second)
 		synctest.Wait()
-		require.Contains(t, logger.text(), "[FlatListRangeStats] activeWorkers=8/8 queuedRanges=29 completedRanges=0 failedRanges=0 cancelledRanges=0 totalRanges=37 final=false")
+		require.Contains(t, logger.text(), "[FlatListRangeStats] activeWorkers=8/8 queuedRanges=55 completedRanges=0 failedRanges=0 cancelledRanges=0 totalRanges=63 final=false")
 		close(release)
 		require.NoError(t, <-done)
 		synctest.Wait()
-		require.Contains(t, logger.text(), "[FlatListRangeStats] activeWorkers=0/8 queuedRanges=0 completedRanges=37 failedRanges=0 cancelledRanges=0 totalRanges=37 final=true")
+		require.Contains(t, logger.text(), "[FlatListRangeStats] activeWorkers=0/8 queuedRanges=0 completedRanges=63 failedRanges=0 cancelledRanges=0 totalRanges=63 final=true")
 		require.Equal(t, 2, strings.Count(logger.text(), "[FlatListRangeStats]"))
 		time.Sleep(2 * time.Minute)
 		synctest.Wait()
@@ -198,11 +206,11 @@ func TestStaticFlatRangesContinueAfterFailure(t *testing.T) {
 	require.NoError(t, ctx.Err())
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, lastErr)
-	require.EqualValues(t, 37, calls.Load())
-	require.EqualValues(t, 35, completed.Load())
+	require.EqualValues(t, 63, calls.Load())
+	require.EqualValues(t, 61, completed.Load())
 	require.Equal(t, 2, strings.Count(logger.text(), "[AzCopy] [ERROR] [FlatListRangeFailed]"))
-	require.Equal(t, 35, strings.Count(logger.text(), "[AzCopy] [INFO] [FlatListRangeComplete]"))
-	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=35 failedRanges=2 cancelledRanges=0 totalRanges=37 final=true")
+	require.Equal(t, 61, strings.Count(logger.text(), "[AzCopy] [INFO] [FlatListRangeComplete]"))
+	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=61 failedRanges=2 cancelledRanges=0 totalRanges=63 final=true")
 }
 
 // TestStaticFlatRangesParentCancellation checks that cancellation stops and joins active tasks.
@@ -226,7 +234,7 @@ func TestStaticFlatRangesParentCancellation(t *testing.T) {
 	require.EqualValues(t, 2, started.Load())
 	require.EqualValues(t, 2, stopped.Load())
 	require.Zero(t, reported.Load(), "job cancellation must not be reported as range failures")
-	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=0 failedRanges=0 cancelledRanges=37 totalRanges=37 final=true")
+	require.Contains(t, logger.text(), "activeWorkers=0/2 queuedRanges=0 completedRanges=0 failedRanges=0 cancelledRanges=63 totalRanges=63 final=true")
 }
 
 // TestStaticFlatRangesAllFailures checks that reporting every failed range cannot stall scheduling.
@@ -242,8 +250,8 @@ func TestStaticFlatRangesAllFailures(t *testing.T) {
 	})
 	require.NoError(t, ctx.Err())
 	require.ErrorIs(t, err, failure)
-	require.EqualValues(t, 37, calls.Load())
-	require.Equal(t, 37, strings.Count(logger.text(), "[FlatListRangeFailed]"))
+	require.EqualValues(t, 63, calls.Load())
+	require.Equal(t, 63, strings.Count(logger.text(), "[FlatListRangeFailed]"))
 	require.NotContains(t, logger.text(), "[FlatListRangeComplete]")
 }
 
@@ -350,7 +358,7 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 			logger := captureFlatListLogs(t)
 			var ch chan TraverserErrorItemInfo
 			if mode == "available" {
-				ch = make(chan TraverserErrorItemInfo, 37)
+				ch = make(chan TraverserErrorItemInfo, 63)
 			} else if mode == "full" {
 				ch = make(chan TraverserErrorItemInfo, 1)
 				ch <- ErrorBlobInfo{}
@@ -365,8 +373,8 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 				return src.flatRangeError(bounds, failure)
 			})
 			require.NoError(t, ctx.Err())
-			require.EqualValues(t, 37, calls.Load())
-			require.Contains(t, logger.text(), "activeWorkers=0/8 queuedRanges=0 completedRanges=0 failedRanges=37 cancelledRanges=0 totalRanges=37 final=true")
+			require.EqualValues(t, 63, calls.Load())
+			require.Contains(t, logger.text(), "activeWorkers=0/8 queuedRanges=0 completedRanges=0 failedRanges=63 cancelledRanges=0 totalRanges=63 final=true")
 			if mode != "available" {
 				require.ErrorIs(t, err, failure)
 				return
@@ -387,7 +395,7 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 				require.NotContains(t, info.ErrorMessage().Error(), "not-for-logs")
 				require.ErrorIs(t, info.ErrorMessage(), failure)
 			}
-			require.Len(t, seen, 37)
+			require.Len(t, seen, 63)
 		})
 	}
 }
@@ -550,7 +558,7 @@ func TestStaticFlatRangesEnablement(t *testing.T) {
 		wantCalls int32
 	}{
 		{"legacy-flat-mode", false, 2},
-		{"mover-flat-mode", true, 74},
+		{"mover-flat-mode", true, 126},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			keys := []string{"a/file", "z/file"}
@@ -795,7 +803,7 @@ func TestStaticFlatPoolSizing(t *testing.T) {
 	for _, tc := range []struct {
 		value       string
 		connections int
-	}{{"", 16}, {"1", 4}, {"8", 16}, {"37", 74}, {"38", 0}, {"64", 0}, {"bad", 0}} {
+	}{{"", 16}, {"1", 4}, {"8", 16}, {"32", 64}, {"37", 74}, {"63", 126}, {"64", 128}, {"65", 0}, {"bad", 0}} {
 		t.Run(tc.value, func(t *testing.T) {
 			t.Setenv(enum.EEnvironmentVariable.MoverFlatListParallelism().Name, tc.value)
 			pool := &flatListPoolTransport{shared: server.Client()}

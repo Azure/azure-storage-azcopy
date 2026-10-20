@@ -902,9 +902,7 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 			for range pages {
 			}
 		}()
-		logFlatListing(common.LogInfo, "[FlatListPrefetch] enabled=true max_pages_ahead=1")
 	}
-	lastContentType := "<not received>"
 	for {
 		if prefetch && t.ctx.Err() != nil {
 			return t.ctx.Err()
@@ -940,12 +938,6 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 					return fmt.Errorf("static range bounds/order violation: first=%q last=%q range=[%q,%q)", firstKey, lastKey, bounds.start, bounds.end)
 				}
 			}
-		}
-		if t.flatListingEnabled && contentType != lastContentType {
-			logFlatListing(common.LogInfo, fmt.Sprintf(
-				"[FlatListFormat] destination=%t requested=Arrow content_type=%q service_version=%q",
-				t.isSyncDestination, contentType, ternary.DerefOrZero(resp.Version)))
-			lastContentType = contentType
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {

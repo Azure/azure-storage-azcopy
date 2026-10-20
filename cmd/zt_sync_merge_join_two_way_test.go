@@ -649,19 +649,31 @@ func TestFlatSyncRespectsStreamingFlagAndRejectsOtherPairs(t *testing.T) {
 				if pair == common.EFromTo.BlobBlob() {
 					require.NoError(t, err)
 					require.True(t, cooked.useFlatListing)
-					require.Equal(t, streaming, cooked.useStreamingMergeJoin)
-					require.Equal(t, streaming, useStreamingMergeJoin(&cooked))
+					require.True(t, cooked.useStreamingMergeJoin)
+					require.True(t, useStreamingMergeJoin(&cooked))
 					err = validate(&cooked, &SyncOrchestratorOptions{})
-					if streaming {
-						require.NoError(t, err)
-					} else {
-						require.ErrorContains(t, err, "flat sync requires the Blob-to-Blob streaming merge-join")
-					}
+					require.NoError(t, err)
+					cooked.useStreamingMergeJoin = false
+					require.ErrorContains(t, validate(&cooked, &SyncOrchestratorOptions{}), "flat sync requires the Blob-to-Blob streaming merge-join")
 				} else {
 					require.ErrorContains(t, err, "flat sync requires")
 				}
 			})
 		}
+	}
+	for _, streaming := range []bool{false, true} {
+		t.Run(fmt.Sprintf("non-flat/streaming=%t", streaming), func(t *testing.T) {
+			raw := getDefaultSyncRawInput("https://source.blob.core.windows.net/c", "https://target.blob.core.windows.net/c")
+			raw.fromTo = common.EFromTo.BlobBlob().String()
+			raw.recursive = false
+			raw.useFlatListing = false
+			raw.useStreamingMergeJoin = streaming
+			cooked, err := raw.toOptions()
+			require.NoError(t, err)
+			require.False(t, cooked.useFlatListing)
+			require.Equal(t, streaming, cooked.useStreamingMergeJoin)
+			require.Equal(t, streaming, useStreamingMergeJoin(&cooked))
+		})
 	}
 }
 

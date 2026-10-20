@@ -901,7 +901,6 @@ func TestFlatListingPages(t *testing.T) {
 	pages = append(pages, []string{"z/end", "folder-stub/"}, nil)
 	for _, arrowResponse := range []bool{false, true} {
 		t.Run(fmt.Sprintf("arrow=%t", arrowResponse), func(t *testing.T) {
-			logger := captureFlatListLogs(t)
 			listing, calls := newFlatTestListing(t, context.Background(), pages, "root/", nil, arrowResponse)
 			listing.traverser.s2sPreserveSourceTags = true
 			scanned := 0
@@ -936,12 +935,6 @@ func TestFlatListingPages(t *testing.T) {
 			}
 			require.Equal(t, wantScanned, scanned)
 			require.Equal(t, "2025-05-05", listing.traverser.ctx.Value(ste.ServiceAPIVersionOverride))
-			contentType := "application/xml"
-			if arrowResponse {
-				contentType = "application/vnd.apache.arrow.stream"
-			}
-			require.Contains(t, logger.text(), fmt.Sprintf("content_type=%q", contentType))
-			require.Equal(t, 1, strings.Count(logger.text(), "[FlatListFormat]"), "stable page formats must not log per page or object")
 		})
 	}
 }
