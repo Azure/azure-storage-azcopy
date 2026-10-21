@@ -2,41 +2,35 @@ module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go/storage v1.65.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.2
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.4.0
+	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.3.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.7.0
+	github.com/Azure/go-autorest/autorest/date v0.3.1
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.2.3
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
 	github.com/google/uuid v1.6.0
 	github.com/hillu/go-ntdll v0.0.0-20260712105752-9cd1a6b1a84d
-	github.com/mattn/go-ieproxy v0.0.12
-	github.com/pkg/errors v0.9.1
-	github.com/pkg/xattr v0.4.12
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/spf13/cobra v1.10.2
-	github.com/wastore/keyctl v0.3.1
-	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
-	google.golang.org/api v0.294.0
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
-)
-
-require github.com/stretchr/testify v1.12.1
-
-require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.2
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.0
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.4.0
-	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.3.0
-	github.com/Azure/go-autorest/autorest/date v0.3.1
 	github.com/josephspurrier/goversioninfo v1.7.0
 	github.com/keybase/go-keychain v0.0.1
+	github.com/mattn/go-ieproxy v0.0.12
 	github.com/minio/minio-go/v7 v7.3.0
+	github.com/pkg/errors v0.9.1
+	github.com/pkg/xattr v0.4.12
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
-	golang.org/x/net v0.58.0
+	github.com/stretchr/testify v1.12.1
+	github.com/wastore/keyctl v0.3.1
+	golang.org/x/net v0.60.0
+	golang.org/x/oauth2 v0.36.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
+	google.golang.org/api v0.294.0
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
 require (
@@ -86,6 +80,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.28 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
@@ -101,8 +96,9 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
@@ -114,4 +110,4 @@ require (
 
 replace github.com/Azure/azure-sdk-for-go/sdk/storage/azfile => github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.5.2-0.20250507070125-9e8eb1f00372
 
-go 1.25.13
+go 1.27.3

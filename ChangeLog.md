@@ -1,6 +1,14 @@
 
 # Change Log
 
+## Version 10.34.1
+
+### Dependency updates
+
+1. Golang 1.25.13 -> 1.27.3
+2. golang.org/x/crypto v0.55.0 -> v0.57.0, golang.org/x/net v0.58.0 -> v0.60.0, golang.org/x/sync v0.22.0 -> v0.23.0, golang.org/x/sys v0.47.0 -> v0.48.0, golang.org/x/text v0.41.0 -> v0.42.0
+3. The Go toolchain and `golang.org/x/net` upgrades pick up fixes for the HTTP/2, HTTP/1, TLS, `html/template`, `os` and SSH security issues tracked as CVE-2026-78669, CVE-2026-78663, CVE-2026-97032, CVE-2026-78659, CVE-2026-78660, CVE-2026-78667, CVE-2026-56866, CVE-2026-94439, CVE-2026-94440, CVE-2026-111943, CVE-2026-97031, CVE-2026-94448, CVE-2026-97030, CVE-2026-56857, CVE-2026-56855 and CVE-2026-78662.
+
 ## Version 10.34.0
 
 ### New Features
