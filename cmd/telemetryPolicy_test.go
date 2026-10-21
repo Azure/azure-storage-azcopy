@@ -33,6 +33,8 @@ var telemetryFlagDenylist = map[string]struct{}{
 	"source-sas":                 {},
 	"tenant-id":                  {},
 	"trusted-microsoft-suffixes": {},
+	"await-enumeration":          {},
+	"display-dev":                {},
 }
 
 func TestTelemetryHelpDisclosesStorageAccountNames(t *testing.T) {

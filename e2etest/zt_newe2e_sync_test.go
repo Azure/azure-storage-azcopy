@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
 )
@@ -19,6 +20,131 @@ type SyncTestSuite struct{}
 
 func init() {
 	suiteManager.RegisterSuite(&SyncTestSuite{})
+}
+
+func (s *SyncTestSuite) Scenario_SyncFilePreserveInfoRetriesIncompleteDestination(svm *ScenarioVariationManager) {
+	if svm.Dryrun() {
+		return
+	}
+
+	sourceLocation := ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})
+	if sourceLocation == common.ELocation.Local() && runtime.GOOS != "windows" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	const objectName = "incomplete.dat"
+	body := NewRandomObjectContentContainer(SizeFromString("16M"))
+	body.(*ObjectContentContainerBuffer).Data[0] = 1
+	sourceLastWriteTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	sourceCreationTime := sourceLastWriteTime.Add(-time.Hour)
+	sourceProperties := ObjectProperties{
+		EntityType: common.EEntityType.File(),
+		FileProperties: FileProperties{
+			FileCreationTime:  &sourceCreationTime,
+			FileLastWriteTime: &sourceLastWriteTime,
+		},
+	}
+
+	source := CreateResource[ContainerResourceManager](
+		svm,
+		GetRootResource(svm, sourceLocation),
+		ResourceDefinitionContainer{},
+	)
+	sourceObject := CreateResource[ObjectResourceManager](
+		svm,
+		source,
+		ResourceDefinitionObject{
+			ObjectName:       pointerTo(objectName),
+			Body:             body,
+			ObjectProperties: sourceProperties,
+		},
+	)
+	sourceObject.SetObjectProperties(svm, sourceProperties)
+
+	destination := CreateResource[ContainerResourceManager](
+		svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{},
+	)
+	destinationObject := destination.GetObject(svm, objectName, common.EEntityType.File())
+	destinationFile := destinationObject.(*FileObjectResourceManager)
+	rangeUploaded := make(chan bool, 1)
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{source, destination},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:    pointerTo(true),
+				PreserveInfo: pointerTo(true),
+				BlockSizeMB:  pointerTo(float64(0.25)),
+				GlobalFlags: GlobalFlags{
+					CapMbps: pointerTo(float64(4)),
+				},
+			},
+		},
+		AfterStartProcess: func(process *os.Process) {
+			go func() {
+				uploaded := false
+				deadline := time.Now().Add(time.Minute)
+				for time.Now().Before(deadline) {
+					response, err := destinationFile.getFileClient().DownloadStream(ctx, &file.DownloadStreamOptions{
+						Range: file.HTTPRange{Offset: 0, Count: 1},
+					})
+					if err == nil {
+						firstByte := []byte{0}
+						bytesRead, _ := response.Body.Read(firstByte)
+						_ = response.Body.Close()
+						if bytesRead == 1 && firstByte[0] == 1 {
+							uploaded = true
+							break
+						}
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+				rangeUploaded <- uploaded
+				_ = process.Kill()
+			}()
+		},
+		ShouldFail: true,
+	})
+
+	svm.AssertNow("at least one range must be uploaded before termination", Equal{}, <-rangeUploaded, true)
+	svm.AssertNow("terminated sync must leave the destination file", Equal{}, destinationObject.Exists(), true)
+	incompleteProperties := destinationObject.GetProperties(svm)
+	svm.AssertNow("incomplete destination must have a last-write-time", Not{IsNil{}}, incompleteProperties.FileProperties.FileLastWriteTime)
+	svm.Assert(
+		"incomplete destination must use the Unix epoch last-write-time",
+		Equal{},
+		incompleteProperties.FileProperties.FileLastWriteTime.Equal(time.Unix(0, 0).UTC()),
+		true,
+	)
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{source, destination},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:    pointerTo(true),
+				PreserveInfo: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource[ContainerResourceManager](svm, destination, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			objectName: {
+				Body:             body,
+				ObjectProperties: sourceProperties,
+			},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+
+	finalProperties := destinationObject.GetProperties(svm)
+	ValidateTimePtr(svm, "last-write-time after retry", &sourceLastWriteTime, finalProperties.FileProperties.FileLastWriteTime)
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationManager) {

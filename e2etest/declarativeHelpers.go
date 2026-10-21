@@ -200,7 +200,8 @@ type params struct {
 	AutoLoginType string
 
 	// cancel params
-	ignoreErrorIfCompleted bool
+	ignoreErrorIfCompleted   bool
+	sigtermDuringEnumeration bool
 
 	// benchmark params
 	mode        string
