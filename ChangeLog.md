@@ -3,11 +3,19 @@
 
 ## Version 10.34.1
 
+### Bug Fixes
+
+1. Fixed a bug where a fidelity-preserving Azure Files sync that was interrupted after the destination file had been created could leave the partial destination file with the source's last-write-time. A subsequent sync could then treat the incomplete file as up to date and skip it. The destination is now created with the Unix epoch as its last-write-time, so an interrupted transfer is always older than the source and is retried by the next sync; the correct last-write-time is restored by the epilogue once the transfer completes. ([#3629](https://github.com/Azure/azure-storage-azcopy/pull/3629))
+
 ### Dependency updates
 
 1. Golang 1.25.13 -> 1.27.3
 2. golang.org/x/crypto v0.55.0 -> v0.57.0, golang.org/x/net v0.58.0 -> v0.60.0, golang.org/x/sync v0.22.0 -> v0.23.0, golang.org/x/sys v0.47.0 -> v0.48.0, golang.org/x/text v0.41.0 -> v0.42.0
 3. The Go toolchain and `golang.org/x/net` upgrades pick up fixes for the HTTP/2, HTTP/1, TLS, `html/template`, `os` and SSH security issues tracked as CVE-2026-78669, CVE-2026-78663, CVE-2026-97032, CVE-2026-78659, CVE-2026-78660, CVE-2026-78667, CVE-2026-56866, CVE-2026-94439, CVE-2026-94440, CVE-2026-111943, CVE-2026-97031, CVE-2026-94448, CVE-2026-97030, CVE-2026-56857, CVE-2026-56855 and CVE-2026-78662.
+
+### Notes
+
+1. The macOS binaries now require macOS 13 (Ventura) or later. Go 1.27 raised the minimum supported macOS version from 12 (Monterey) to 13, and the produced binaries now declare macOS 13.0.0 as their minimum deployment target. The previous release (10.34.0) remains the last version that runs on macOS 12.
 
 ## Version 10.34.0
 
