@@ -189,9 +189,10 @@ func (t tokenInfoManagedIdentity) getTokenCredential(header TokenHeader, ctx con
 		id = azidentity.ClientID(t.ClientID)
 	} else if t.MSIResID != "" {
 		id = azidentity.ResourceID(t.MSIResID)
-	} else {
+	} else if t.ObjectID != "" {
 		return nil, fmt.Errorf("object ID is deprecated and no longer supported for managed identity. Please use client ID or resource ID instead")
 	}
+	// If no ID is specified, the system-assigned identity will be used.
 
 	return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
