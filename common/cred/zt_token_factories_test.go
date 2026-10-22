@@ -2,8 +2,12 @@ package cred
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
@@ -104,7 +108,6 @@ func TestMSITokenOptions_Empty(t *testing.T) {
 }
 
 func TestMSILoginIdentitySelection(t *testing.T) {
-	t.Setenv("IDENTITY_ENDPOINT", "http://127.0.0.1/identity")
 	t.Setenv("IDENTITY_HEADER", "test-header")
 	t.Setenv("IDENTITY_SERVER_THUMBPRINT", "")
 	t.Setenv("IMDS_ENDPOINT", "")
@@ -116,17 +119,28 @@ func TestMSILoginIdentitySelection(t *testing.T) {
 		resourceID string
 		objectID   string
 		wantError  bool
+		wantClient string
+		wantResID  string
 	}{
 		{name: "system assigned"},
-		{name: "client ID", clientID: "client-id"},
-		{name: "resource ID", resourceID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity"},
+		{name: "client ID", clientID: "client-id", wantClient: "client-id"},
+		{name: "resource ID", resourceID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity", wantResID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity"},
 		{name: "object ID unsupported", objectID: "object-id", wantError: true},
-		{name: "client ID takes precedence", clientID: "client-id", resourceID: "resource-id", objectID: "object-id"},
-		{name: "resource ID takes precedence over object ID", resourceID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity", objectID: "object-id"},
+		{name: "client ID takes precedence", clientID: "client-id", resourceID: "resource-id", objectID: "object-id", wantClient: "client-id"},
+		{name: "resource ID takes precedence over object ID", resourceID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity", objectID: "object-id", wantResID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			requestParams := make(chan url.Values, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestParams <- r.URL.Query()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"access_token":"test-token","expires_on":"4102444800","token_type":"Bearer"}`))
+			}))
+			defer server.Close()
+			t.Setenv("IDENTITY_ENDPOINT", server.URL)
+
 			opts := NewLoginNewTokenOptions(enum.EAutoLoginType.MSI())
 			opts.IdentityClientID = tt.clientID
 			opts.IdentityResourceID = tt.resourceID
@@ -141,6 +155,18 @@ func TestMSILoginIdentitySelection(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.IsType(t, &azidentity.ManagedIdentityCredential{}, credential)
+			_, err = credential.GetToken(context.Background(), policy.TokenRequestOptions{
+				Scopes: []string{"https://storage.azure.com/.default"},
+			})
+			if !assert.NoError(t, err) {
+				return
+			}
+
+			params := <-requestParams
+			assert.Equal(t, tt.wantClient, params.Get("client_id"), "client_id")
+			assert.Equal(t, tt.wantClient != "", params.Has("client_id"), "client_id presence")
+			assert.Equal(t, tt.wantResID, params.Get("mi_res_id"), "mi_res_id")
+			assert.Equal(t, tt.wantResID != "", params.Has("mi_res_id"), "mi_res_id presence")
 		})
 	}
 }
