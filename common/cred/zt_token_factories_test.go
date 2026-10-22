@@ -1,6 +1,7 @@
 package cred
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -100,6 +101,68 @@ func TestMSITokenOptions_Empty(t *testing.T) {
 	a.Empty(msi.ClientID)
 	a.Empty(msi.ObjectID)
 	a.Empty(msi.MSIResID)
+}
+
+func TestMSILoginIdentitySelection(t *testing.T) {
+	t.Setenv("IDENTITY_ENDPOINT", "http://127.0.0.1/identity")
+	t.Setenv("IDENTITY_HEADER", "test-header")
+	t.Setenv("IDENTITY_SERVER_THUMBPRINT", "")
+	t.Setenv("IMDS_ENDPOINT", "")
+	t.Setenv("MSI_ENDPOINT", "")
+
+	tests := []struct {
+		name       string
+		clientID   string
+		resourceID string
+		objectID   string
+		wantError  bool
+	}{
+		{name: "system assigned"},
+		{name: "client ID", clientID: "client-id"},
+		{name: "resource ID", resourceID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity"},
+		{name: "object ID unsupported", objectID: "object-id", wantError: true},
+		{name: "client ID takes precedence", clientID: "client-id", resourceID: "resource-id", objectID: "object-id"},
+		{name: "resource ID takes precedence over object ID", resourceID: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/identity", objectID: "object-id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewLoginNewTokenOptions(enum.EAutoLoginType.MSI())
+			opts.IdentityClientID = tt.clientID
+			opts.IdentityResourceID = tt.resourceID
+			opts.IdentityObjectID = tt.objectID
+
+			credential, err := NewManager().DoLogin(opts, context.Background())
+			if tt.wantError {
+				assert.EqualError(t, err, "object ID is deprecated and no longer supported for managed identity. Please use client ID or resource ID instead")
+				assert.Nil(t, credential)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.IsType(t, &azidentity.ManagedIdentityCredential{}, credential)
+		})
+	}
+}
+
+func TestMSIAutoLoginSystemAssigned(t *testing.T) {
+	t.Setenv("IDENTITY_ENDPOINT", "")
+	t.Setenv("IMDS_ENDPOINT", "")
+	t.Setenv("MSI_ENDPOINT", "")
+	t.Setenv(enum.EEnvironmentVariable.AutoLoginType().Name, "MSI")
+	t.Setenv(enum.EEnvironmentVariable.ManagedIdentityClientID().Name, "")
+	t.Setenv(enum.EEnvironmentVariable.ManagedIdentityResourceString().Name, "")
+	t.Setenv(enum.EEnvironmentVariable.ManagedIdentityObjectID().Name, "")
+	t.Setenv(enum.EEnvironmentVariable.AADEndpoint().Name, "")
+
+	manager := NewManager(NewAutoLoginKeyring())
+	for _, nickname := range []string{"", DefaultNickname, "source", "destination"} {
+		t.Run("nickname="+nickname, func(t *testing.T) {
+			credential, err := manager.GetCredentials(nickname, context.Background())
+			assert.NoError(t, err)
+			assert.IsType(t, &azidentity.ManagedIdentityCredential{}, credential)
+		})
+	}
 }
 
 func TestUserLoginTokenOptions_Device(t *testing.T) {
