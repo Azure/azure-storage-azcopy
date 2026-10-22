@@ -269,6 +269,9 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 	}
 	*/
 	objectPath := path.Join(b.rootPath, object.RelativePath)
+	if target == common.ELocation.Blob() {
+		objectPath = common.FlatBlobObjectPath(b.rootPath, object.RelativePath)
+	}
 	if object.RelativePath == "\x00" && target != common.ELocation.Blob() {
 		return nil // Do nothing, we don't want to accidentally delete the root.
 	} else if object.RelativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.

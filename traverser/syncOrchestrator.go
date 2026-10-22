@@ -582,6 +582,9 @@ func (r *syncRun) validate(cca *SyncJob, orchestratorOptions *SyncOrchestratorOp
 	if cca.Recursive {
 		return errors.New("sync orchestrator does not support recursive traversal. Use --recursive=false.")
 	}
+	if cca.UseFlatListing && (cca.FromTo != common.EFromTo.BlobBlob() || !useStreamingMergeJoin(cca)) {
+		return errors.New("flat sync requires the Blob-to-Blob streaming merge-join")
+	}
 
 	if r.orchestratorOptions == nil {
 		return errors.New("orchestrator options are required for sync orchestrator")
@@ -622,16 +625,17 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.FromTo.From(), cca.FromTo.To()), true)
 
-		// The streaming merge-join uses its own directory-crawl parallelism
-		// (MOVER_SYNC_MJ_TRAV, default 32)
-		// — separate from the indexMap path, which keeps
-		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
-		// source and destination concurrently within each directory.
+		// Flat sync needs only the root crawl task; its range scheduler controls concurrency.
+		// Directory-based merge-join uses MOVER_SYNC_MJ_TRAV instead of the indexMap setting.
 		if r.orchestratorOptions != nil {
-			mjTrav := resolveMergeJoinParallelTraversers()
-			r.orchestratorOptions.parallelTraversers = mjTrav
-			r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+			if cca.UseFlatListing {
+				r.orchestratorOptions.parallelTraversers = 1
+			} else {
+				mjTrav := resolveMergeJoinParallelTraversers()
+				r.orchestratorOptions.parallelTraversers = mjTrav
+				r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+					"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+			}
 		}
 	} else if cca.UseStreamingMergeJoin {
 		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -640,6 +644,11 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 	}
 
 	// Initialize resource limits based on source/destination types
+	if cca.UseFlatListing {
+		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Flat FNS-to-FNS sync enabled: %s controls bounded range concurrency",
+			enum.EEnvironmentVariable.MoverFlatListParallelism().Name), true)
+	}
 	r.initializeLimits(r.orchestratorOptions)
 	return r.runSyncOrchestrator(cca, enumerator, ctx)
 }
@@ -661,6 +670,8 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 	if cca.SetCancel != nil {
 		cca.SetCancel(cancel)
 	}
+	var rangeFailure error
+	var rangeFailureOnce sync.Once
 
 	// Initialize semaphore for directory concurrency control
 	if r.enableThrottling {
@@ -685,8 +696,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		dir parallel.Directory,
 		enqueueDir func(parallel.Directory),
 		enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		defer crawlWg.Done() // Signal this task is done when it finishes
-
 		// Track that this directory entered the processing queue
 		defer r.totalDirectoriesProcessed.Add(1)
 
@@ -730,6 +739,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		stt := enumerator.secondaryTraverserTemplate
 		ptt.Options.SuppressCrawlStats = true
 		stt.Options.SuppressCrawlStats = true
+		configureFlatSyncTraversers(cca, &ptt.Options, &stt.Options)
 
 		var errMsg string
 
@@ -797,16 +807,30 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 				return stErr
 			}
 
-			subDirs, mergeErr = r.mergeJoinTwoWaySyncDir(
-				dirCtx,
-				dirCancel,
-				enumerator,
-				cca,
-				dir.(minimalStoredObject).RelativePath,
-				pt,
-				st,
-				isDestinationPresent,
-			)
+			workers := 1
+			if cca.UseFlatListing {
+				workers, mergeErr = flatListParallelism()
+			}
+			if mergeErr != nil {
+				dirCancel()
+			} else if workers > 1 {
+				mergeErr = r.mergeStaticFlatRanges(dirCtx, workers, enumerator, cca, pt, st)
+				dirCancel()
+				if mergeErr != nil {
+					rangeFailureOnce.Do(func() { rangeFailure = mergeErr })
+				}
+			} else {
+				subDirs, mergeErr = r.mergeJoinTwoWaySyncDir(
+					dirCtx,
+					dirCancel,
+					enumerator,
+					cca,
+					dir.(minimalStoredObject).RelativePath,
+					pt,
+					st,
+					isDestinationPresent,
+				)
+			}
 
 			r.srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
 
@@ -839,7 +863,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 			// Enqueue discovered subdirectories for processing
 			for _, sub_dir := range subDirs {
-				crawlWg.Add(1)
 				enqueueDir(minimalStoredObject{
 					RelativePath:           sub_dir.RelativePath,
 					ChangeTime:             sub_dir.ChangeTime,
@@ -1041,7 +1064,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 		// Enqueue discovered subdirectories for processing
 		for _, sub_dir := range stra.sub_dirs {
-			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
 			enqueueDir(minimalStoredObject{
 				RelativePath:           sub_dir.RelativePath,
 				ChangeTime:             sub_dir.ChangeTime,
@@ -1101,8 +1123,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 	}
 	defer cleanupFunc()
 
-	crawlWg.Add(1) // Add the root directory to the WaitGroup
-
 	// Random dequeue is only used for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers: it helps
 	// avoid partition hotspotting when writing to Azure Blob Storage. Fall back to the original
 	// BFS/DFS-hybrid dequeue for everything else (default azcopy CLI, mover-default builds, and
@@ -1120,7 +1140,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 	maxQueueDirs := ResolveHighPerfMaxQueueDirs()
 
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
-	// merge-join producers) has returned — the drain signal we use on cancellation below.
+	// merge-join producers) has returned, on both completion and cancellation.
 	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(r.crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: maxQueueDirs})
 
 	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
@@ -1134,7 +1154,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		statsCtx, stopStats := context.WithCancel(mainCtx)
 		defer stopStats()
 		go func() {
-			ticker := time.NewTicker(30 * time.Second)
+			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 			for {
 				select {
@@ -1175,6 +1195,11 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		}
 		r.syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
+	}
+	syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
+	// A range error returned here could not be recorded through the scanner channel.
+	if rangeFailure != nil {
+		return rangeFailure
 	}
 
 	// Always try to finalize the enumerator. This will set cancellation complete and dispatch final part
@@ -1235,5 +1260,19 @@ func (r *syncRun) syncOrchestratorLog(level common.LogLevel, toLog string, logTo
 		default:
 			common.GetLifecycleMgr().Info(toLog)
 		}
+	}
+}
+
+func configureFlatSyncTraversers(cca *SyncJob, source, destination *InitResourceTraverserOptions) {
+	if !cca.UseFlatListing || cca.FromTo != common.EFromTo.BlobBlob() {
+		return
+	}
+	// List the entire selected prefix once. No virtual directories are emitted,
+	// so the root is the only crawl task and the existing file merge streams all blobs.
+	for _, options := range []*InitResourceTraverserOptions{source, destination} {
+		location := common.ELocation.Blob()
+		options.FlatListing = true
+		options.Recursive = true
+		options.DestResourceType = &location
 	}
 }

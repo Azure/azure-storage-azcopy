@@ -44,6 +44,7 @@ type SyncOptions struct {
 	DstCredName                string
 	UseSyncOrchestrator        bool
 	UseStreamingMergeJoin      bool
+	UseFlatListing             bool
 	OrchestratorOptions        *traverser.SyncOrchestratorOptions
 	ErrorChannel               chan<- traverser.TraverserErrorItemInfo
 	AllowLocalSymlinkFollowing bool

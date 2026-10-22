@@ -310,9 +310,12 @@ type filePropsProvider interface {
 func NewStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time,
 	size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
-		Name:               name,
-		RelativePath:       relativePath,
-		EntityType:         entityType,
+		Name:         name,
+		RelativePath: relativePath,
+		EntityType:   entityType,
+		// Normalize to UTC so the time references the shared time.UTC location instead of a
+		// per-blob fixedZone("GMT") allocated by the SDK's RFC1123 date parse. With millions of
+		// enumerated blobs buffered in the shuffle window, those per-blob zones added GBs of live heap.
 		LastModifiedTime:   lmt.UTC(),
 		Size:               size,
 		CacheControl:       props.CacheControl(),
@@ -440,6 +443,10 @@ type InitResourceTraverserOptions struct {
 
 	// SuppressCrawlStats avoids per-directory diagnostics when an outer sync crawler reports them.
 	SuppressCrawlStats bool
+
+	// FlatListing is a per-job opt-in for confirmed FNS-to-FNS transfers.
+	// In the high-performance profile it requests Arrow with SDK-managed XML fallback.
+	FlatListing bool
 
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
 	// (List, GetProperties) issued during enumeration, so scanning respects the

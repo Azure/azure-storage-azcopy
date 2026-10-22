@@ -33,6 +33,7 @@ import (
 type cookedSyncOptions struct {
 	useSyncOrchestrator        bool
 	useStreamingMergeJoin      bool
+	useFlatListing             bool
 	orchestratorOptions        *traverser.SyncOrchestratorOptions
 	errorChannel               chan<- traverser.TraverserErrorItemInfo
 	allowLocalSymlinkFollowing bool
@@ -162,6 +163,7 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.s2SPreserveAccessTier = ternary.IffNotNil(opts.S2SPreserveAccessTier, true)
 	s.useSyncOrchestrator = opts.UseSyncOrchestrator
 	s.useStreamingMergeJoin = opts.UseStreamingMergeJoin
+	s.useFlatListing = opts.UseFlatListing
 	s.errorChannel = opts.ErrorChannel
 	s.allowLocalSymlinkFollowing = opts.AllowLocalSymlinkFollowing
 	s.blobType, s.blockBlobTier, s.backupMode = opts.BlobType, opts.BlockBlobTier, opts.BackupMode
@@ -310,6 +312,9 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 
 	if s.useSyncOrchestrator && !traverser.UseSyncOrchestrator {
 		return errors.New("sync orchestration requires the smslidingwindow build tag")
+	}
+	if s.useFlatListing && (s.fromTo != common.EFromTo.BlobBlob() || !s.useSyncOrchestrator || !s.useStreamingMergeJoin) {
+		return errors.New("flat sync requires FNS-to-FNS Blob transfers, the sync orchestrator, and streaming merge-join")
 	}
 	if s.fromTo.IsNFS() {
 		err = PerformNFSSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, &s.hardlinks, s.symlinks)

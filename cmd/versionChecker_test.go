@@ -229,8 +229,8 @@ func TestGetGitHubLatestVersion(t *testing.T) {
 	versionVar, err := NewVersion(versionStr)
 	a.NoError(err)
 	a.NotNil(versionVar)
-	// Check if version API response is newer or the same
-	sameOrLaterVersion := latestVersion.NewerThan(ternary.DerefOrZero(versionVar)) ||
+	// Check if API response is newer or the same
+	sameOrLaterVersion := latestVersion.OlderThan(ternary.DerefOrZero(versionVar)) ||
 		latestVersion.EqualTo(ternary.DerefOrZero(versionVar))
 	a.True(sameOrLaterVersion)
 }

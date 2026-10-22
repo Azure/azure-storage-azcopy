@@ -139,6 +139,7 @@ func (s *syncer) enumerate(ctx context.Context, enumerator *traverser.SyncEnumer
 		Source: s.opts.source, Destination: s.opts.destination, FromTo: s.opts.fromTo,
 		JobID: s.spt.jobID, Recursive: s.opts.recursive, DeleteDestination: s.opts.deleteDestination,
 		PreserveInfo: s.opts.preserveInfo, UseStreamingMergeJoin: s.opts.useStreamingMergeJoin,
+		UseFlatListing:        s.opts.useFlatListing,
 		EncodeDestinationPath: func(path string) string { return PathEncodeRules(path, s.opts.fromTo, false, false) },
 		Log: func(level common.LogLevel, message string, console bool) {
 			if logger != nil {

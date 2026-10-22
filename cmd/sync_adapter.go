@@ -102,6 +102,7 @@ func (cca *cookedSyncCmdArgs) librarySyncOptions(enumeratorOptions *SyncEnumerat
 		DstCredName:                cca.DstCredName,
 		UseSyncOrchestrator:        UseSyncOrchestrator,
 		UseStreamingMergeJoin:      cca.useStreamingMergeJoin,
+		UseFlatListing:             cca.useFlatListing,
 		OrchestratorOptions:        enumeratorOptions.SyncOrchOptions,
 		ErrorChannel:               enumeratorOptions.ErrorChannel,
 		AllowLocalSymlinkFollowing: cca.allowLocalSymlinkFollowing,
