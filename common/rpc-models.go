@@ -317,6 +317,30 @@ type TransferDetail struct {
 	TransferSize       uint64
 	ErrorCode          int32  `json:",string"`
 	ErrorMessage       string `json:",string"`
+
+	// The fields below let callers classify a failure without parsing
+	// ErrorMessage. They are set only on failures reported live, not on
+	// transfers rebuilt from plan files.
+
+	// ExtendedErrorCode is the failed request's x-ms-error-code, or an
+	// AzCopy.* code when AzCopy failed the transfer itself. Needed because
+	// the HTTP status alone is ambiguous (e.g. which 409).
+	ExtendedErrorCode string `json:",omitempty"`
+
+	// FailedRequestTarget is the account the failed request went to, if
+	// known. Needed because a code means different things on each side
+	// (e.g. BlobNotFound on the source vs. the destination).
+	FailedRequestTarget FailedRequestTarget `json:",omitempty"`
+
+	// S2SSourceStatusCode is x-ms-copy-source-status-code from a server-side
+	// copy that failed with CannotVerifyCopySource. Needed because ErrorCode
+	// is the destination's status, not the source's.
+	S2SSourceStatusCode int32 `json:",omitempty"`
+
+	// S2SSourceExtendedErrorCode is x-ms-copy-source-error-code from the same
+	// response. Needed because ExtendedErrorCode only says the copy source
+	// failed, not why.
+	S2SSourceExtendedErrorCode string `json:",omitempty"`
 }
 
 type CancelPauseResumeResponse struct {

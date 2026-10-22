@@ -80,10 +80,33 @@ type blobTraverser struct {
 	isSyncDestination  bool
 	suppressCrawlStats bool
 
+	// failOnLookupError: see InitResourceTraverserOptions.FailOnSingleBlobLookupError.
+	failOnLookupError bool
+
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
 	// is not folder aware.
 	includeDirectoryOrPrefix bool
+
+	// selfOnly stops Traverse after the entity the root URL names, without
+	// listing anything under it. Set by TraverseSelf.
+	selfOnly bool
+
+	// cacheLookup reuses the first getPropertiesIfSingleBlob result; see
+	// InitResourceTraverserOptions.cacheSingleBlobLookup.
+	cacheLookup bool
+	lookup      *singleBlobLookup
+}
+
+var _ selfTraverser = (*blobTraverser)(nil)
+
+// TraverseSelf enumerates only the entity the traverser's root names: the
+// blob, or the directory itself (a folder, when directory stubs are
+// included), never the directory's contents. Implements selfTraverser.
+func (t *blobTraverser) TraverseSelf(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	self := *t
+	self.selfOnly = true
+	return self.Traverse(preprocessor, processor, filters)
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -147,9 +170,7 @@ func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
 			}
 		}()
-		select {
-		case t.errorChannel <- err:
-		default:
+		if !sendScanError(t.errorChannel, err) {
 			// Channel might be full, log the error instead
 			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
 		}
@@ -224,7 +245,31 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 	return true, nil
 }
 
+// singleBlobLookup is one result of lookupSingleBlob.
+type singleBlobLookup struct {
+	response  *blob.GetPropertiesResponse
+	isBlob    bool
+	isDirStub bool
+	blobName  string
+	err       error
+}
+
+// getPropertiesIfSingleBlob reads the properties of the blob the root URL
+// names, if there is one. With cacheLookup set the first result is reused,
+// so IsDirectory followed by Traverse costs one request instead of two.
 func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertiesResponse, isBlob bool, isDirStub bool, blobName string, err error) {
+	if t.cacheLookup && t.lookup != nil {
+		l := t.lookup
+		return l.response, l.isBlob, l.isDirStub, l.blobName, l.err
+	}
+	response, isBlob, isDirStub, blobName, err = t.lookupSingleBlob()
+	if t.cacheLookup && t.ctx.Err() == nil {
+		t.lookup = &singleBlobLookup{response: response, isBlob: isBlob, isDirStub: isDirStub, blobName: blobName, err: err}
+	}
+	return response, isBlob, isDirStub, blobName, err
+}
+
+func (t *blobTraverser) lookupSingleBlob() (response *blob.GetPropertiesResponse, isBlob bool, isDirStub bool, blobName string, err error) {
 	// trim away the trailing slash before we check whether it's a single blob
 	// so that we can detect the directory stub in case there is one
 	blobURLParts, err := blob.ParseURL(t.rawURL)
@@ -299,6 +344,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	blobProperties, isBlob, isDirStub, blobName, err := t.getPropertiesIfSingleBlob()
 
 	var respErr *azcore.ResponseError
+	if err != nil && t.failOnLookupError &&
+		!(errors.As(err, &respErr) && respErr.StatusCode == http.StatusNotFound) {
+		return fmt.Errorf("cannot get properties of blob %s: %w", blobURLParts.BlobName, err)
+	}
+
 	if errors.As(err, &respErr) {
 		errorBlobInfo := ErrorBlobInfo{
 			BlobPath: blobURLParts.BlobName,
@@ -365,7 +415,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if t.s2sPreserveSourceTags {
 			blobTagsMap, err := t.getBlobTags()
 			if err != nil {
-				panic("Couldn't fetch blob tags due to error: " + err.Error())
+				// An error, not a panic: a canceled job, throttling or a missing
+				// tag-read permission is an ordinary enumeration failure.
+				return fmt.Errorf("cannot get tags of blob %s: %w", blobURLParts.BlobName, err)
 			}
 			if len(blobTagsMap) > 0 {
 				storedObject.blobTags = blobTagsMap
@@ -412,6 +464,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if err != nil {
 			return err
 		}
+	}
+
+	if t.selfOnly {
+		return nil
 	}
 
 	// get the container URL so that we can list the blobs
@@ -1010,6 +1066,8 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:           opts.IsSyncDestination,
 		suppressCrawlStats:          opts.SuppressCrawlStats,
+		failOnLookupError:           opts.FailOnSingleBlobLookupError,
+		cacheLookup:                 opts.cacheSingleBlobLookup,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
