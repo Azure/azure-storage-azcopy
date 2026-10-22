@@ -231,6 +231,31 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 	return GlobalHTTPClient
 }
 
+// NewIsolatedHTTPClient preserves HTTP settings but creates one independent connection pool.
+func NewIsolatedHTTPClient(shared *http.Client, maxConnsPerHost int) (*http.Client, error) {
+	if shared == nil || maxConnsPerHost < 1 {
+		return nil, fmt.Errorf("isolated HTTP client requires a shared client and positive connection limit")
+	}
+	var transport *http.Transport
+	switch source := shared.Transport.(type) {
+	case *ShardedTransport:
+		if len(source.transports) == 0 {
+			return nil, fmt.Errorf("cannot isolate an empty sharded HTTP transport")
+		}
+		transport = source.transports[0].Clone()
+	case *http.Transport:
+		transport = source.Clone()
+	default:
+		return nil, fmt.Errorf("cannot isolate shared HTTP transport %T", shared.Transport)
+	}
+	transport.MaxConnsPerHost = maxConnsPerHost
+	transport.MaxIdleConnsPerHost = maxConnsPerHost
+	transport.MaxIdleConns = maxConnsPerHost
+	client := *shared
+	client.Transport = transport
+	return &client, nil
+}
+
 // This is a code duplication of GetMainPoolSize in ste/concurrency.go
 // Ideally we should just move concurrency.go to common package. That is a todo for future.
 func GetMaxIdleConnsPerHost() int {
