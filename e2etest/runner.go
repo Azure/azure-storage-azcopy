@@ -44,6 +44,8 @@ type TestRunner struct {
 }
 
 func newTestRunner() TestRunner {
+	// The legacy suite has no framework hooks to keep AzCopy out of production telemetry.
+	disableUnconfiguredTelemetry()
 	return TestRunner{flags: make(map[string]string)}
 }
 
@@ -423,7 +425,7 @@ func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID, azcopyDir string
 	cmd := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
 
 	if azcopyDir != "" {
-		cmd.Env = append(cmd.Env, "AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(azcopyDir, "plans"))
+		cmd.Env = append(os.Environ(), "AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(azcopyDir, "plans"))
 	}
 
 	out, err := cmd.Output()

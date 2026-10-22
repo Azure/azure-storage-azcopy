@@ -15,7 +15,7 @@ func InitializeFolders() {
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but all the above can be put elsewhere as they can become very large
-	azcopyAppPathFolder := getAzCopyAppPath()
+	azcopyAppPathFolder := GetAzCopyAppPath()
 
 	// the user can optionally put the log files somewhere else
 	if LogPathFolder == "" {

@@ -319,6 +319,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+		js.StorageHTTPAttemptCount = pipeStats.HTTPAttemptCount()
+		js.NetworkErrorAttemptCount = pipeStats.NetworkErrorAttemptCount()
+		js.ServerBusy503Count = pipeStats.GetTotalRetries()
+		js.ServerBusyThroughputCount = pipeStats.ServerBusyThroughputCount()
+		js.ServerBusyIOPSCount = pipeStats.ServerBusyIOPSCount()
+		js.ServerBusyOtherCount = pipeStats.ServerBusyOtherCount()
 	}
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
@@ -396,6 +402,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 
 			// check for all completed transfer to calculate the progress percentage at the end
 			isHardlink := jppt.EntityType == common.EEntityType.Hardlink()
+			isFolder := jppt.EntityType == common.EEntityType.Folder()
 
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
@@ -407,6 +414,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
+				if isFolder {
+					js.FoldersCompleted++
+				}
 				if isHardlink {
 					js.HardlinksCompleted++
 				}
@@ -416,11 +426,18 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
+				if js.FailedTransferErrorCodeCounts == nil {
+					js.FailedTransferErrorCodeCounts = make(map[int32]uint32)
+				}
+				js.FailedTransferErrorCodeCounts[jppt.ErrorCode()]++
+				if isFolder {
+					js.FoldersFailed++
+				}
 				if isHardlink {
 					js.HardlinksFailed++
 				}
 				// getting the source and destination for failed transfer at position - index
-				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
+				src, dst, _ := jpp.TransferSrcDstStrings(t)
 				// appending to list of failed transfer
 				js.FailedTransfers = append(js.FailedTransfers,
 					common.TransferDetail{
@@ -433,11 +450,14 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
+				if isFolder {
+					js.FoldersSkipped++
+				}
 				if isHardlink {
 					js.HardlinksSkipped++
 				}
 				// getting the source and destination for skipped transfer at position - index
-				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
+				src, dst, _ := jpp.TransferSrcDstStrings(t)
 				js.SkippedTransfers = append(js.SkippedTransfers,
 					common.TransferDetail{
 						Src:                src,
@@ -487,6 +507,12 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+		js.StorageHTTPAttemptCount = pipeStats.HTTPAttemptCount()
+		js.NetworkErrorAttemptCount = pipeStats.NetworkErrorAttemptCount()
+		js.ServerBusy503Count = pipeStats.GetTotalRetries()
+		js.ServerBusyThroughputCount = pipeStats.ServerBusyThroughputCount()
+		js.ServerBusyIOPSCount = pipeStats.ServerBusyIOPSCount()
+		js.ServerBusyOtherCount = pipeStats.ServerBusyOtherCount()
 	}
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
