@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,7 +31,7 @@ func checkDeliveryWaits(t *testing.T, name string, ch chan TraverserErrorItemInf
 	case <-time.After(5 * time.Second):
 		t.Fatalf("%s: send did not complete once there was room", name)
 	}
-	if got := (<-ch).ErrorMessage(); got == nil || got.Error() != "delivered" {
+	if got := (<-ch).ErrorMessage(); got == nil || !strings.HasSuffix(got.Error(), "delivered") {
 		t.Fatalf("%s: delivered %v, want the sent error", name, got)
 	}
 	ch <- ErrorBlobInfo{Error: errors.New("queued")}
@@ -50,6 +51,13 @@ func TestSendScanErrorDelivery(t *testing.T) {
 	})
 	checkDeliveryWaits(t, "blob traverser", ch, func() {
 		(&blobTraverser{errorChannel: ch}).writeToBlobErrorChannel(ErrorBlobInfo{Error: errors.New("delivered")})
+	})
+	checkDeliveryWaits(t, "flat range", ch, func() {
+		bt := &blobTraverser{errorChannel: ch, rawURL: "https://a.blob.core.windows.net/c"}
+		bounds := flatListRange{start: "a", end: "b"}
+		if !bt.reportFlatRangeError(bounds, bt.flatRangeError(bounds, errors.New("delivered"))) {
+			t.Error("flat range error requiring delivery was not reported")
+		}
 	})
 
 	release()
