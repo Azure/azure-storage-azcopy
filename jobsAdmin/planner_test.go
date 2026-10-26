@@ -36,7 +36,10 @@ func plannerOrder(t *testing.T) common.CopyJobPartOrderRequest {
 func TestPlannerOnlyCreatesNativePlanWithoutSTE(t *testing.T) {
 	order := plannerOrder(t)
 	plans, objects, bytes := 0, 0, uint64(0)
-	order.PlanOnly.OnPartCreated = func(transfers common.Transfers) error {
+	order.PlanOnly.OnPartCreated = func(part common.PartNumber, transfers common.Transfers) error {
+		if part != order.PartNum {
+			t.Fatal("callback lost native part identity")
+		}
 		plans++
 		objects += len(transfers.List)
 		bytes += transfers.TotalSizeInBytes
@@ -67,7 +70,7 @@ func TestPlannerOnlyFailurePreservesEarlierCounters(t *testing.T) {
 	order := plannerOrder(t)
 	plans, objects, bytes := 0, 0, uint64(0)
 	var observed error
-	order.PlanOnly.OnPartCreated = func(transfers common.Transfers) error {
+	order.PlanOnly.OnPartCreated = func(_ common.PartNumber, transfers common.Transfers) error {
 		plans++
 		objects += len(transfers.List)
 		bytes += transfers.TotalSizeInBytes
@@ -99,7 +102,7 @@ func TestPlannerOnlyEmptyAndCancelledOrders(t *testing.T) {
 			counters := 0
 			var observed error
 			order.PlanOnly.ReportError = func(err error) { observed = err }
-			order.PlanOnly.OnPartCreated = func(common.Transfers) error { counters++; cancel(); return nil }
+			order.PlanOnly.OnPartCreated = func(common.PartNumber, common.Transfers) error { counters++; cancel(); return nil }
 			switch scenario {
 			case "empty":
 				order.Transfers = common.Transfers{}

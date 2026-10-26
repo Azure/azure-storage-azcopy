@@ -108,7 +108,7 @@ type Transfers struct {
 type PlanOnlyOptions struct {
 	Context       context.Context
 	Directory     string
-	OnPartCreated func(Transfers) error
+	OnPartCreated func(PartNumber, Transfers) error
 	ReportError   func(error)
 }
 
