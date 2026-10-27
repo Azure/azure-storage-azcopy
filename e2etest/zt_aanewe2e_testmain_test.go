@@ -20,6 +20,8 @@ var FrameworkHooks = []TestFrameworkHook{
 	{HookName: "Config", SetupHook: LoadConfigHook},
 	{HookName: "Workload Identity Setup", SetupHook: WorkloadIdentitySetup},
 	{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
+	// Temporary until the Application Insights validation hook replaces it.
+	{HookName: "Disable unconfigured telemetry", SetupHook: func(Asserter) { disableUnconfiguredTelemetry() }},
 	{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
 	{HookName: "Default accts", SetupHook: AccountRegistryInitHook, TeardownHook: AccountRegistryCleanupHook},
 	{HookName: "Synthetic Test Suite Registration", SetupHook: RegisterSyntheticStressTestHook},

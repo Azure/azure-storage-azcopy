@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -151,6 +152,7 @@ type CookedTransferOptions struct {
 	dryrun                           bool
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 	deleteDestinationFileIfNecessary bool
+	telemetryOptions                 telemetry.OptionAttributes
 }
 
 func newCookedCopyOptions(src, dst string, opts CopyOptions) (c *CookedTransferOptions, err error) {
@@ -316,6 +318,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	c.posixPropertiesStyle = opts.PosixPropertiesStyle
 	c.s2sInvalidMetadataHandleOption = opts.S2SHandleInvalidateMetadata
 	c.commandString = opts.commandString
+	c.telemetryOptions = opts.telemetryOptions.Clone()
 
 	// inference
 	if opts.ContentType != "" {
