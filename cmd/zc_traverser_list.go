@@ -292,7 +292,7 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
 			PreserveBlobTags:        options.PreserveBlobTags,
 
-			FailOnSingleBlobLookupError: reportEntryErrors,
+			failOnSingleBlobLookupError: reportEntryErrors,
 			cacheSingleBlobLookup:       true,
 		})
 		if err != nil {

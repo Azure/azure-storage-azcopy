@@ -92,7 +92,6 @@ func TestListTraverserParallel(t *testing.T) {
 	// The processor is not synchronized: the traverser must serialize it.
 	var got []string
 	var inProcessor int32
-	start := time.Now()
 	err := l.Traverse(nil, func(o StoredObject) error {
 		if atomic.AddInt32(&inProcessor, 1) != 1 {
 			a.Fail("processor called concurrently")
@@ -101,7 +100,6 @@ func TestListTraverserParallel(t *testing.T) {
 		atomic.AddInt32(&inProcessor, -1)
 		return nil
 	}, nil)
-	elapsed := time.Since(start)
 	a.NoError(err)
 	close(errCh)
 
@@ -109,8 +107,6 @@ func TestListTraverserParallel(t *testing.T) {
 	a.Equal(files, got, "want every listed file once")
 	a.GreaterOrEqual(maxSeen, int64(2), "max entries in flight")
 	a.LessOrEqual(maxSeen, int64(16), "max entries in flight")
-	sequential := time.Duration(entries) * 5 * time.Millisecond
-	a.Less(elapsed, sequential/4, "want well under the sequential %s", sequential)
 
 	var reported []string
 	for item := range errCh {

@@ -80,7 +80,7 @@ type blobTraverser struct {
 	isSyncDestination  bool
 	suppressCrawlStats bool
 
-	// failOnLookupError: see InitResourceTraverserOptions.FailOnSingleBlobLookupError.
+	// failOnLookupError: see InitResourceTraverserOptions.failOnSingleBlobLookupError.
 	failOnLookupError bool
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
@@ -1066,7 +1066,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:           opts.IsSyncDestination,
 		suppressCrawlStats:          opts.SuppressCrawlStats,
-		failOnLookupError:           opts.FailOnSingleBlobLookupError,
+		failOnLookupError:           opts.failOnSingleBlobLookupError,
 		cacheLookup:                 opts.cacheSingleBlobLookup,
 	}
 

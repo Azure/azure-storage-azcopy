@@ -448,10 +448,10 @@ type InitResourceTraverserOptions struct {
 	// not found is such an error, not a virtual directory.
 	ReportListOfFilesEntryErrors bool
 
-	// FailOnSingleBlobLookupError makes a blob traverser return an error when
+	// failOnSingleBlobLookupError makes a blob traverser return an error when
 	// reading its root blob's properties fails other than with not found.
 	// Set by the list traverser when ReportListOfFilesEntryErrors is on.
-	FailOnSingleBlobLookupError bool
+	failOnSingleBlobLookupError bool
 
 	// ListOfFilesDirectoriesSelfOnly makes a ListOfFiles entry naming a
 	// directory transfer only the directory itself, not its contents, for
