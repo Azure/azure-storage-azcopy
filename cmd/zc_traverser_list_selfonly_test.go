@@ -139,19 +139,6 @@ func TestListTraverserSelfOnlyEmptyDirectoryIsNotWarned(t *testing.T) {
 	}
 }
 
-func TestNewListTraverserDirectoriesSelfOnlyIsOptIn(t *testing.T) {
-	list := make(chan string)
-	close(list)
-	src := common.ResourceString{Value: "https://a.blob.core.windows.net/c"}
-
-	off := newListTraverser(src, common.ELocation.Blob(), context.Background(), InitResourceTraverserOptions{ListOfFiles: list}).(*listTraverser)
-	on := newListTraverser(src, common.ELocation.Blob(), context.Background(),
-		InitResourceTraverserOptions{ListOfFiles: list, ListOfFilesDirectoriesSelfOnly: true}).(*listTraverser)
-	if off.directoriesSelfOnly || !on.directoriesSelfOnly {
-		t.Fatalf("directoriesSelfOnly off=%v on=%v, want false/true", off.directoriesSelfOnly, on.directoriesSelfOnly)
-	}
-}
-
 // hnsDirTransport serves a container holding an HNS-style directory "dir"
 // (a blob with hdi_isfolder metadata) with one file under it, and records
 // every request.

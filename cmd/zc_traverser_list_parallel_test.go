@@ -14,7 +14,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // slowEntryTraverser yields one object per entry after a delay, tracking how
@@ -116,8 +115,13 @@ func TestListTraverserParallel(t *testing.T) {
 
 func TestListTraverserParallelStopsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	// genMu makes the 20th entry's count and cancel one step, so each other
+	// worker can start at most one entry after the cancel.
+	var genMu sync.Mutex
 	var visited int64
 	gen := func(childPath string) (ResourceTraverser, error) {
+		genMu.Lock()
+		defer genMu.Unlock()
 		if atomic.AddInt64(&visited, 1) == 20 {
 			cancel()
 			return fakeEntryTraverser{traverseErr: context.Canceled}, nil
@@ -140,19 +144,6 @@ func TestListTraverserParallelStopsOnCancel(t *testing.T) {
 	}
 	if v := atomic.LoadInt64(&visited); v > 20+8 {
 		t.Fatalf("visited %d entries, want the traversal to stop soon after the cancel", v)
-	}
-}
-
-func TestNewListTraverserParallelism(t *testing.T) {
-	list := make(chan string)
-	close(list)
-	l := newListTraverser(common.ResourceString{Value: "https://a.blob.core.windows.net/c"}, common.ELocation.Blob(), context.Background(),
-		InitResourceTraverserOptions{ListOfFiles: list, ListOfFilesParallelism: 32}).(*listTraverser)
-	if l.parallelism != 32 {
-		t.Fatalf("parallelism = %d, want 32", l.parallelism)
-	}
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
-		t.Fatalf("Traverse() over an empty list = %v", err)
 	}
 }
 

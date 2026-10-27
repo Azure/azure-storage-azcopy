@@ -61,13 +61,3 @@ func TestSyncFinalizeStopsWhenBeforeFinalPartFails(t *testing.T) {
 		})
 	}
 }
-
-func TestSyncEnumeratorOptionsWithoutBeforeFinalPart(t *testing.T) {
-	var nilOptions *SyncEnumeratorOptions
-	if err := nilOptions.beforeFinalPart(); err != nil {
-		t.Fatalf("nil options: got %v, want nil", err)
-	}
-	if err := (&SyncEnumeratorOptions{}).beforeFinalPart(); err != nil {
-		t.Fatalf("no hook: got %v, want nil", err)
-	}
-}

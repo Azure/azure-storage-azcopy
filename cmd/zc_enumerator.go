@@ -442,43 +442,30 @@ type InitResourceTraverserOptions struct {
 	ScanPacer common.IOPSPacer
 
 	// ReportListOfFilesEntryErrors, with ListOfFiles and ErrorChannel set,
-	// sends every list entry that cannot be enumerated to ErrorChannel as a
-	// ListEntryErrorInfo instead of skipping it with a log line. A blob entry
-	// whose properties cannot be read for any reason other than not found is
-	// such an error, rather than being treated as a virtual directory. The
-	// reported error wraps the underlying error, so a storage service error
-	// can be recovered with errors.As. Used by XDM.
+	// sends each list entry that cannot be enumerated to ErrorChannel as a
+	// ListEntryErrorInfo (wrapping the underlying error) instead of skipping
+	// it with a log line. A blob whose properties read fails other than with
+	// not found is such an error, not a virtual directory.
 	ReportListOfFilesEntryErrors bool
 
 	// FailOnSingleBlobLookupError makes a blob traverser return an error when
-	// reading the properties of the blob it points at fails for any reason
-	// other than not found. Set by the list traverser for its entries when
-	// ReportListOfFilesEntryErrors is on.
+	// reading its root blob's properties fails other than with not found.
+	// Set by the list traverser when ReportListOfFilesEntryErrors is on.
 	FailOnSingleBlobLookupError bool
 
-	// ListOfFilesDirectoriesSelfOnly makes a ListOfFiles entry that names a
-	// directory transfer the directory itself (created at the destination
-	// with its properties, as a full traversal would create it) without
-	// enumerating anything under it. Entries naming files are unaffected.
-	// For lists that already name every changed entity individually, such
-	// as XDM's change-detected lists, where expanding a directory would
-	// re-transfer its whole subtree. An entry naming a directory on a
-	// source that cannot enumerate a directory alone is skipped, or reported
-	// as an error with ReportListOfFilesEntryErrors, never expanded. Used by
-	// XDM.
+	// ListOfFilesDirectoriesSelfOnly makes a ListOfFiles entry naming a
+	// directory transfer only the directory itself, not its contents, for
+	// lists that already name every changed entity. A directory the source
+	// cannot enumerate alone is skipped (or reported), never expanded.
 	ListOfFilesDirectoriesSelfOnly bool
 
 	// ListOfFilesParallelism is how many ListOfFiles entries are enumerated
-	// at once. Each entry costs at least one round trip to the source (its
-	// properties), so a long list enumerated one entry at a time is bound by
-	// latency. Values below 2 enumerate one at a time, in list order. Calls
-	// to the processor are serialized either way. Used by XDM.
+	// at once; below 2 they go one at a time, in list order. Processor calls
+	// are serialized either way.
 	ListOfFilesParallelism int
 
-	// cacheSingleBlobLookup makes a blob traverser read the properties of
-	// the blob its root names once, however often it is asked (IsDirectory,
-	// then Traverse). Set by the list traverser for its entries, which are
-	// traversed right after the check.
+	// cacheSingleBlobLookup makes a blob traverser read its root blob's
+	// properties once (IsDirectory, then Traverse). Set by the list traverser.
 	cacheSingleBlobLookup bool
 }
 

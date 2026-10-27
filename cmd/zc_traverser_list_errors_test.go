@@ -93,21 +93,28 @@ func TestListTraverserSkipsEntryErrorsWithoutChannel(t *testing.T) {
 	}
 }
 
-func TestNewListTraverserReportingIsOptIn(t *testing.T) {
-	errCh := make(chan TraverserErrorItemInfo, 1)
-	list := make(chan string)
-	close(list)
-
-	off := newListTraverser(common.ResourceString{Value: "https://a.blob.core.windows.net/c"}, common.ELocation.Blob(), context.Background(),
-		InitResourceTraverserOptions{ListOfFiles: list, ErrorChannel: errCh}).(*listTraverser)
-	if off.entryErrorChannel != nil {
-		t.Fatal("entry errors reported without ReportListOfFilesEntryErrors")
+// TestNewListTraverserOptions: the list-of-files options are off unless the
+// caller sets them, so other callers of newListTraverser are unaffected.
+func TestNewListTraverserOptions(t *testing.T) {
+	newList := func(opts InitResourceTraverserOptions) *listTraverser {
+		list := make(chan string)
+		close(list)
+		opts.ListOfFiles = list
+		return newListTraverser(common.ResourceString{Value: "https://a.blob.core.windows.net/c"}, common.ELocation.Blob(),
+			context.Background(), opts).(*listTraverser)
 	}
+	errCh := make(chan TraverserErrorItemInfo, 1)
 
-	on := newListTraverser(common.ResourceString{Value: "https://a.blob.core.windows.net/c"}, common.ELocation.Blob(), context.Background(),
-		InitResourceTraverserOptions{ListOfFiles: list, ErrorChannel: errCh, ReportListOfFilesEntryErrors: true}).(*listTraverser)
-	if on.entryErrorChannel == nil {
-		t.Fatal("entry errors not reported with ReportListOfFilesEntryErrors")
+	if l := newList(InitResourceTraverserOptions{ErrorChannel: errCh}); l.entryErrorChannel != nil || l.directoriesSelfOnly {
+		t.Fatalf("defaults: reports entry errors=%v, directoriesSelfOnly=%v; want neither", l.entryErrorChannel != nil, l.directoriesSelfOnly)
+	}
+	l := newList(InitResourceTraverserOptions{ErrorChannel: errCh, ReportListOfFilesEntryErrors: true,
+		ListOfFilesDirectoriesSelfOnly: true, ListOfFilesParallelism: 32})
+	if l.entryErrorChannel == nil || !l.directoriesSelfOnly || l.parallelism != 32 {
+		t.Fatalf("set: reports entry errors=%v, directoriesSelfOnly=%v, parallelism=%d", l.entryErrorChannel != nil, l.directoriesSelfOnly, l.parallelism)
+	}
+	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
+		t.Fatalf("Traverse() over an empty list = %v", err)
 	}
 }
 
