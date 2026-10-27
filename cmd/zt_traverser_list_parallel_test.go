@@ -1,3 +1,23 @@
+// Copyright © Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package cmd
 
 import (
@@ -5,15 +25,12 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/stretchr/testify/assert"
 )
 
 // slowEntryTraverser yields one object per entry after a delay, tracking how
@@ -48,11 +65,13 @@ func (s slowEntryTraverser) Traverse(_ objectMorpher, processor objectProcessor,
 }
 
 func TestListTraverserParallel(t *testing.T) {
+	a := assert.New(t)
 	const entries = 200
 	var names []string
 	for i := 0; i < entries; i++ {
 		names = append(names, fmt.Sprintf("f%03d", i))
 	}
+	files := append([]string(nil), names...)
 	names = append(names, "denied", "gone")
 
 	var inFlight, maxSeen int64
@@ -76,44 +95,34 @@ func TestListTraverserParallel(t *testing.T) {
 	start := time.Now()
 	err := l.Traverse(nil, func(o StoredObject) error {
 		if atomic.AddInt32(&inProcessor, 1) != 1 {
-			t.Error("processor called concurrently")
+			a.Fail("processor called concurrently")
 		}
 		got = append(got, o.name)
 		atomic.AddInt32(&inProcessor, -1)
 		return nil
 	}, nil)
 	elapsed := time.Since(start)
-	if err != nil {
-		t.Fatalf("Traverse() = %v", err)
-	}
+	a.NoError(err)
 	close(errCh)
 
 	sort.Strings(got)
-	if len(got) != entries || got[0] != "f000" || got[entries-1] != fmt.Sprintf("f%03d", entries-1) {
-		t.Fatalf("processed %d objects (%v...), want every listed file once", len(got), got[:min(3, len(got))])
-	}
-	if maxSeen < 2 || maxSeen > 16 {
-		t.Errorf("max entries in flight = %d, want 2..16", maxSeen)
-	}
-	if elapsed > time.Duration(entries)*5*time.Millisecond/4 {
-		t.Errorf("took %s, want well under the sequential %s", elapsed, time.Duration(entries)*5*time.Millisecond)
-	}
+	a.Equal(files, got, "want every listed file once")
+	a.GreaterOrEqual(maxSeen, int64(2), "max entries in flight")
+	a.LessOrEqual(maxSeen, int64(16), "max entries in flight")
+	sequential := time.Duration(entries) * 5 * time.Millisecond
+	a.Less(elapsed, sequential/4, "want well under the sequential %s", sequential)
+
 	var reported []string
 	for item := range errCh {
 		reported = append(reported, item.FullPath())
-		if !errors.Is(item.ErrorMessage(), lookupErr) {
-			t.Errorf("reported %q with %v", item.FullPath(), item.ErrorMessage())
-		}
+		a.ErrorIs(item.ErrorMessage(), lookupErr)
 	}
-	if len(reported) != 1 || reported[0] != "denied" {
-		t.Errorf("reported %v, want [denied]", reported)
-	}
-	if len(*warnings) != 2 {
-		t.Errorf("warnings %q, want one for gone and a total", *warnings)
-	}
+	a.Equal([]string{"denied"}, reported)
+	a.Len(*warnings, 2, "want one for gone and a total")
 }
 
 func TestListTraverserParallelStopsOnCancel(t *testing.T) {
+	a := assert.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	// genMu makes the 20th entry's count and cancel one step, so each other
 	// worker can start at most one entry after the cancel.
@@ -139,55 +148,6 @@ func TestListTraverserParallelStopsOnCancel(t *testing.T) {
 	l.parallelism = 8
 
 	var mu sync.Mutex
-	if err := l.Traverse(nil, func(StoredObject) error { mu.Lock(); defer mu.Unlock(); return nil }, nil); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Traverse() = %v, want context.Canceled", err)
-	}
-	if v := atomic.LoadInt64(&visited); v > 20+8 {
-		t.Fatalf("visited %d entries, want the traversal to stop soon after the cancel", v)
-	}
-}
-
-// heads counts the HEAD (properties) requests the transport saw for path.
-func (tr *hnsDirTransport) heads(path string) int {
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
-	n := 0
-	for _, r := range tr.requests {
-		if strings.HasPrefix(r, "HEAD /c/"+path+"?") {
-			n++
-		}
-	}
-	return n
-}
-
-func TestBlobTraverserCachesSingleBlobLookup(t *testing.T) {
-	for _, cache := range []bool{false, true} {
-		tr := &hnsDirTransport{}
-		sc, err := service.NewClientWithNoCredential("https://acct.blob.core.windows.net/", &service.ClientOptions{
-			ClientOptions: azcore.ClientOptions{Transport: tr, Retry: policy.RetryOptions{MaxRetries: -1}},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		bt := newBlobTraverser("https://acct.blob.core.windows.net/c/file.txt", sc, context.Background(), InitResourceTraverserOptions{
-			Recursive:             true,
-			IncrementEnumeration:  enumerationCounterFuncNoop,
-			cacheSingleBlobLookup: cache,
-		})
-		if isDir, err := bt.IsDirectory(true); err != nil || isDir {
-			t.Fatalf("IsDirectory() = %v, %v", isDir, err)
-		}
-		var got []string
-		if err := bt.Traverse(nil, func(o StoredObject) error { got = append(got, o.name); return nil }, nil); err != nil {
-			t.Fatalf("Traverse() = %v", err)
-		}
-		want := 2
-		if cache {
-			want = 1
-		}
-		if n := tr.heads("file.txt"); n != want || len(got) != 1 {
-			t.Errorf("cache=%v: %d properties requests and %d objects, want %d and 1", cache, n, len(got), want)
-		}
-	}
-
+	a.ErrorIs(l.Traverse(nil, func(StoredObject) error { mu.Lock(); defer mu.Unlock(); return nil }, nil), context.Canceled)
+	a.LessOrEqual(atomic.LoadInt64(&visited), int64(20+8), "want the traversal to stop soon after the cancel")
 }

@@ -1,8 +1,27 @@
+// Copyright © Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package cmd
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -13,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 // fakeDirTraverser models a directory entry: Traverse yields the directory
@@ -70,19 +90,17 @@ type fakeEmptyDir struct{ fakeDirTraverser }
 
 func (fakeEmptyDir) TraverseSelf(objectMorpher, objectProcessor, []ObjectFilter) error { return nil }
 
-func collectRelPaths(t *testing.T, l *listTraverser) []string {
-	t.Helper()
+func collectRelPaths(a *assert.Assertions, l *listTraverser) []string {
 	var got []string
-	if err := l.Traverse(nil, func(o StoredObject) error {
+	a.NoError(l.Traverse(nil, func(o StoredObject) error {
 		got = append(got, o.relativePath)
 		return nil
-	}, nil); err != nil {
-		t.Fatalf("Traverse() = %v", err)
-	}
+	}, nil))
 	return got
 }
 
 func TestListTraverserDirectoriesSelfOnly(t *testing.T) {
+	a := assert.New(t)
 	gen := func(childPath string) (ResourceTraverser, error) {
 		if strings.HasPrefix(childPath, "dir") {
 			return fakeDirTraverser{}, nil
@@ -92,19 +110,16 @@ func TestListTraverserDirectoriesSelfOnly(t *testing.T) {
 
 	expanded := newTestListTraverser([]string{"dir", "file.txt"}, gen, nil)
 	expanded.recursive = true
-	if got := collectRelPaths(t, expanded); strings.Join(got, ",") != "dir,dir/child.txt,file.txt" {
-		t.Fatalf("default mode yielded %q, want the directory expanded", got)
-	}
+	a.Equal([]string{"dir", "dir/child.txt", "file.txt"}, collectRelPaths(a, expanded), "default mode expands the directory")
 
 	selfOnly := newTestListTraverser([]string{"dir", "file.txt"}, gen, nil)
 	selfOnly.recursive = true
 	selfOnly.directoriesSelfOnly = true
-	if got := collectRelPaths(t, selfOnly); strings.Join(got, ",") != "dir,file.txt" {
-		t.Fatalf("self-only mode yielded %q, want the directory itself and the file", got)
-	}
+	a.Equal([]string{"dir", "file.txt"}, collectRelPaths(a, selfOnly), "self-only mode yields the directory itself and the file")
 }
 
 func TestListTraverserSelfOnlyReportsDirectoriesItCannotNarrow(t *testing.T) {
+	a := assert.New(t)
 	traversed := false
 	gen := func(string) (ResourceTraverser, error) { return fakeDirNoSelf{traversed: &traversed}, nil }
 
@@ -112,20 +127,19 @@ func TestListTraverserSelfOnlyReportsDirectoriesItCannotNarrow(t *testing.T) {
 	l := newTestListTraverser([]string{"dir"}, gen, errCh)
 	l.recursive = true
 	l.directoriesSelfOnly = true
-	if got := collectRelPaths(t, l); len(got) != 0 {
-		t.Fatalf("yielded %q, want nothing", got)
-	}
-	if traversed {
-		t.Fatal("directory was expanded")
-	}
+	a.Empty(collectRelPaths(a, l))
+	a.False(traversed, "directory was expanded")
+
 	close(errCh)
 	item, ok := <-errCh
-	if !ok || !errors.Is(item.ErrorMessage(), errDirectoryNotSelfTraversable) || item.FullPath() != "dir" {
-		t.Fatalf("reported %v, want dir with errDirectoryNotSelfTraversable", item)
+	if a.True(ok, "nothing reported") {
+		a.ErrorIs(item.ErrorMessage(), errDirectoryNotSelfTraversable)
+		a.Equal("dir", item.FullPath())
 	}
 }
 
 func TestListTraverserSelfOnlyEmptyDirectoryIsNotWarned(t *testing.T) {
+	a := assert.New(t)
 	warnings := captureListEntryWarnings(t)
 	gen := func(string) (ResourceTraverser, error) { return fakeEmptyDir{}, nil }
 
@@ -133,10 +147,9 @@ func TestListTraverserSelfOnlyEmptyDirectoryIsNotWarned(t *testing.T) {
 	l := newTestListTraverser([]string{"stub"}, gen, errCh)
 	l.recursive = true
 	l.directoriesSelfOnly = true
-	collectRelPaths(t, l)
-	if len(*warnings) != 0 || len(errCh) != 0 {
-		t.Fatalf("warnings=%q errors=%d, want neither for a directory that yields nothing by design", *warnings, len(errCh))
-	}
+	collectRelPaths(a, l)
+	a.Empty(*warnings, "a directory that yields nothing by design is not warned about")
+	a.Empty(errCh, "a directory that yields nothing by design is not an error")
 }
 
 // hnsDirTransport serves a container holding an HNS-style directory "dir"
@@ -187,18 +200,28 @@ func (tr *hnsDirTransport) listed() bool {
 	return false
 }
 
+// heads counts the HEAD (properties) requests the transport saw for path.
+func (tr *hnsDirTransport) heads(path string) int {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	n := 0
+	for _, r := range tr.requests {
+		if strings.HasPrefix(r, "HEAD /c/"+path+"?") {
+			n++
+		}
+	}
+	return n
+}
+
 // newHnsDirListTraverser is a self-only list traverser over real blob
 // traversers on a fake service, configured as XDM configures an HNS source
 // (recursive, directory stubs included).
-func newHnsDirListTraverser(t *testing.T, entries []string, includeDirStubs, selfOnly bool) (*listTraverser, *hnsDirTransport) {
-	t.Helper()
+func newHnsDirListTraverser(a *assert.Assertions, entries []string, includeDirStubs, selfOnly bool) (*listTraverser, *hnsDirTransport) {
 	tr := &hnsDirTransport{}
 	sc, err := service.NewClientWithNoCredential("https://acct.blob.core.windows.net/", &service.ClientOptions{
 		ClientOptions: azcore.ClientOptions{Transport: tr, Retry: policy.RetryOptions{MaxRetries: -1}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	a.NoError(err)
 	gen := func(childPath string) (ResourceTraverser, error) {
 		return newBlobTraverser("https://acct.blob.core.windows.net/c/"+childPath, sc, context.Background(), InitResourceTraverserOptions{
 			Recursive:             true,
@@ -214,47 +237,39 @@ func newHnsDirListTraverser(t *testing.T, entries []string, includeDirStubs, sel
 	return l, tr
 }
 
-func collectObjects(t *testing.T, l *listTraverser) map[string]common.EntityType {
-	t.Helper()
+func collectObjects(a *assert.Assertions, l *listTraverser) map[string]common.EntityType {
 	got := map[string]common.EntityType{}
-	if err := l.Traverse(nil, func(o StoredObject) error {
+	a.NoError(l.Traverse(nil, func(o StoredObject) error {
 		got[o.relativePath] = o.entityType
 		return nil
-	}, nil); err != nil {
-		t.Fatalf("Traverse() = %v", err)
-	}
+	}, nil))
 	return got
 }
 
 func TestBlobListEntryDirectorySelfOnly(t *testing.T) {
+	a := assert.New(t)
+
 	// Baseline: without self-only, the directory entry expands to its file.
-	l, tr := newHnsDirListTraverser(t, []string{"dir"}, true, false)
-	if got := collectObjects(t, l); got["dir"] != common.EEntityType.Folder() || got["dir/a.txt"] != common.EEntityType.File() {
-		t.Fatalf("default mode yielded %v, want dir (folder) and dir/a.txt", got)
-	}
-	if !tr.listed() {
-		t.Fatal("default mode did not list the directory; the fake does not model expansion")
-	}
+	l, tr := newHnsDirListTraverser(a, []string{"dir"}, true, false)
+	got := collectObjects(a, l)
+	a.Equal(common.EEntityType.Folder(), got["dir"])
+	a.Equal(common.EEntityType.File(), got["dir/a.txt"])
+	a.True(tr.listed(), "default mode did not list the directory; the fake does not model expansion")
 
 	// Self-only: the directory as a folder, nothing under it, no listing.
-	l, tr = newHnsDirListTraverser(t, []string{"dir", "file.txt"}, true, true)
-	got := collectObjects(t, l)
-	if len(got) != 2 || got["dir"] != common.EEntityType.Folder() || got["file.txt"] != common.EEntityType.File() {
-		t.Fatalf("self-only mode yielded %v, want exactly dir (folder) and file.txt (file)", got)
-	}
-	if tr.listed() {
-		t.Fatalf("self-only mode listed a directory: %q", tr.requests)
-	}
+	l, tr = newHnsDirListTraverser(a, []string{"dir", "file.txt"}, true, true)
+	a.Equal(map[string]common.EntityType{
+		"dir":      common.EEntityType.Folder(),
+		"file.txt": common.EEntityType.File(),
+	}, collectObjects(a, l))
+	a.False(tr.listed(), "self-only mode listed a directory: %q", tr.requests)
 }
 
 func TestBlobListEntryDirectoryStubSelfOnlyWithoutFolders(t *testing.T) {
+	a := assert.New(t)
 	// A transfer that does not carry folders (flat namespace to flat
 	// namespace) yields nothing for a directory stub, and does not expand it.
-	l, tr := newHnsDirListTraverser(t, []string{"dir"}, false, true)
-	if got := collectObjects(t, l); len(got) != 0 {
-		t.Fatalf("yielded %v, want nothing", got)
-	}
-	if tr.listed() {
-		t.Fatalf("listed a directory: %q", tr.requests)
-	}
+	l, tr := newHnsDirListTraverser(a, []string{"dir"}, false, true)
+	a.Empty(collectObjects(a, l))
+	a.False(tr.listed(), "listed a directory: %q", tr.requests)
 }

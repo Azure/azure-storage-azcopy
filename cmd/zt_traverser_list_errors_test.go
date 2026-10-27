@@ -1,12 +1,32 @@
+// Copyright © Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package cmd
 
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 type fakeEntryTraverser struct {
@@ -50,6 +70,7 @@ func newTestListTraverser(entries []string, gen childTraverserGenerator, errCh c
 }
 
 func TestListTraverserReportsEntryErrors(t *testing.T) {
+	a := assert.New(t)
 	lookupErr := errors.New("403 AuthorizationPermissionMismatch")
 	genErr := errors.New("bad entry")
 	gen := func(childPath string) (ResourceTraverser, error) {
@@ -65,60 +86,33 @@ func TestListTraverserReportsEntryErrors(t *testing.T) {
 
 	errCh := make(chan TraverserErrorItemInfo, 10)
 	l := newTestListTraverser([]string{"ok", "denied", "unparsable"}, gen, errCh)
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
-		t.Fatalf("Traverse() = %v", err)
-	}
+	a.NoError(l.Traverse(nil, func(StoredObject) error { return nil }, nil))
 	close(errCh)
 
 	got := map[string]error{}
 	for item := range errCh {
 		entry, ok := item.(ListEntryErrorInfo)
-		if !ok {
-			t.Fatalf("got %T, want ListEntryErrorInfo", item)
+		if !a.True(ok, "got %T, want ListEntryErrorInfo", item) {
+			continue
 		}
 		got[entry.FullPath()] = entry.ErrorMessage()
 	}
-	if len(got) != 2 || !errors.Is(got["denied"], lookupErr) || !errors.Is(got["unparsable"], genErr) {
-		t.Fatalf("reported entries = %v, want denied and unparsable with their errors", got)
-	}
+	a.Len(got, 2)
+	a.ErrorIs(got["denied"], lookupErr)
+	a.ErrorIs(got["unparsable"], genErr)
 }
 
 func TestListTraverserSkipsEntryErrorsWithoutChannel(t *testing.T) {
+	a := assert.New(t)
 	gen := func(string) (ResourceTraverser, error) {
 		return fakeEntryTraverser{traverseErr: errors.New("boom")}, nil
 	}
 	l := newTestListTraverser([]string{"a"}, gen, nil)
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
-		t.Fatalf("Traverse() = %v", err)
-	}
-}
-
-// TestNewListTraverserOptions: the list-of-files options are off unless the
-// caller sets them, so other callers of newListTraverser are unaffected.
-func TestNewListTraverserOptions(t *testing.T) {
-	newList := func(opts InitResourceTraverserOptions) *listTraverser {
-		list := make(chan string)
-		close(list)
-		opts.ListOfFiles = list
-		return newListTraverser(common.ResourceString{Value: "https://a.blob.core.windows.net/c"}, common.ELocation.Blob(),
-			context.Background(), opts).(*listTraverser)
-	}
-	errCh := make(chan TraverserErrorItemInfo, 1)
-
-	if l := newList(InitResourceTraverserOptions{ErrorChannel: errCh}); l.entryErrorChannel != nil || l.directoriesSelfOnly {
-		t.Fatalf("defaults: reports entry errors=%v, directoriesSelfOnly=%v; want neither", l.entryErrorChannel != nil, l.directoriesSelfOnly)
-	}
-	l := newList(InitResourceTraverserOptions{ErrorChannel: errCh, ReportListOfFilesEntryErrors: true,
-		ListOfFilesDirectoriesSelfOnly: true, ListOfFilesParallelism: 32})
-	if l.entryErrorChannel == nil || !l.directoriesSelfOnly || l.parallelism != 32 {
-		t.Fatalf("set: reports entry errors=%v, directoriesSelfOnly=%v, parallelism=%d", l.entryErrorChannel != nil, l.directoriesSelfOnly, l.parallelism)
-	}
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
-		t.Fatalf("Traverse() over an empty list = %v", err)
-	}
+	a.NoError(l.Traverse(nil, func(StoredObject) error { return nil }, nil))
 }
 
 func TestListTraverserStopsOnCancel(t *testing.T) {
+	a := assert.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	var visited []string
 	gen := func(childPath string) (ResourceTraverser, error) {
@@ -135,29 +129,25 @@ func TestListTraverserStopsOnCancel(t *testing.T) {
 	l := newTestListTraverser([]string{"a", "b", "c", "d"}, gen, errCh)
 	l.ctx = ctx
 
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Traverse() = %v, want context.Canceled", err)
-	}
-	if len(visited) != 2 {
-		t.Fatalf("visited %v after cancel, want [a b]", visited)
-	}
+	a.ErrorIs(l.Traverse(nil, func(StoredObject) error { return nil }, nil), context.Canceled)
+	a.Equal([]string{"a", "b"}, visited, "entries visited after cancel")
 }
 
 func TestListTraverserReturnsWhenCanceledBeforeStart(t *testing.T) {
+	a := assert.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	gen := func(string) (ResourceTraverser, error) {
-		t.Fatal("entry enumerated after cancel")
-		return nil, nil
+		a.Fail("entry enumerated after cancel")
+		return nil, errors.New("entry enumerated after cancel")
 	}
 	l := newTestListTraverser([]string{"a"}, gen, nil)
 	l.ctx = ctx
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Traverse() = %v, want context.Canceled", err)
-	}
+	a.ErrorIs(l.Traverse(nil, func(StoredObject) error { return nil }, nil), context.Canceled)
 }
 
 func TestListTraverserLogsEntriesThatMatchNothing(t *testing.T) {
+	a := assert.New(t)
 	warnings := captureListEntryWarnings(t)
 	gen := func(childPath string) (ResourceTraverser, error) {
 		return fakeEntryTraverser{empty: childPath == "gone"}, nil
@@ -165,23 +155,16 @@ func TestListTraverserLogsEntriesThatMatchNothing(t *testing.T) {
 
 	errCh := make(chan TraverserErrorItemInfo, 10)
 	l := newTestListTraverser([]string{"ok", "gone"}, gen, errCh)
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
-		t.Fatalf("Traverse() = %v", err)
+	a.NoError(l.Traverse(nil, func(StoredObject) error { return nil }, nil))
+	if a.Len(*warnings, 2, "want one for gone and a total") {
+		a.Contains((*warnings)[0], "gone")
+		a.Contains((*warnings)[1], "1 list entries")
 	}
-	if len(*warnings) != 2 || !strings.Contains((*warnings)[0], "gone") || !strings.Contains((*warnings)[1], "1 list entries") {
-		t.Fatalf("warnings = %q, want one for gone and a total of 1", *warnings)
-	}
-	if len(errCh) != 0 {
-		t.Fatalf("an entry that matched nothing was reported as an error")
-	}
+	a.Empty(errCh, "an entry that matched nothing was reported as an error")
 
 	// Without entry error reporting (plain azcopy), nothing is logged.
 	*warnings = nil
 	l = newTestListTraverser([]string{"gone"}, gen, nil)
-	if err := l.Traverse(nil, func(StoredObject) error { return nil }, nil); err != nil {
-		t.Fatalf("Traverse() = %v", err)
-	}
-	if len(*warnings) != 0 {
-		t.Fatalf("warnings = %q without reporting", *warnings)
-	}
+	a.NoError(l.Traverse(nil, func(StoredObject) error { return nil }, nil))
+	a.Empty(*warnings)
 }

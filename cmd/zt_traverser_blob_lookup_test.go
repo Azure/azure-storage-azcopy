@@ -1,8 +1,28 @@
+// Copyright © Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package cmd
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/stretchr/testify/assert"
 )
 
 // lookupTransport answers blob GetProperties with status/code and container
@@ -44,20 +65,18 @@ func (tr lookupTransport) Do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func newLookupTestTraverser(t *testing.T, status int, code string) *blobTraverser {
-	return newLookupTestTraverserWith(t, lookupTransport{status: status, code: code})
+func newLookupTestTraverser(a *assert.Assertions, status int, code string) *blobTraverser {
+	return newLookupTestTraverserWith(a, lookupTransport{status: status, code: code})
 }
 
-func newLookupTestTraverserWith(t *testing.T, tr lookupTransport) *blobTraverser {
+func newLookupTestTraverserWith(a *assert.Assertions, tr lookupTransport) *blobTraverser {
 	sc, err := service.NewClientWithNoCredential("https://acct.blob.core.windows.net/", &service.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
 			Transport: tr,
 			Retry:     policy.RetryOptions{MaxRetries: -1},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	a.NoError(err)
 	return &blobTraverser{
 		rawURL:                      "https://acct.blob.core.windows.net/c/dir/file.txt",
 		serviceClient:               sc,
@@ -76,10 +95,12 @@ func TestBlobTraverserFailsOnLookupError(t *testing.T) {
 		{http.StatusServiceUnavailable, "ServerBusy"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
-			err := newLookupTestTraverser(t, tc.status, tc.code).Traverse(nil, func(StoredObject) error { return nil }, nil)
+			a := assert.New(t)
+			err := newLookupTestTraverser(a, tc.status, tc.code).Traverse(nil, func(StoredObject) error { return nil }, nil)
 			var respErr *azcore.ResponseError
-			if !errors.As(err, &respErr) || respErr.StatusCode != tc.status || respErr.ErrorCode != tc.code {
-				t.Fatalf("Traverse() = %v, want wrapped %d %s", err, tc.status, tc.code)
+			if a.ErrorAs(err, &respErr) {
+				a.Equal(tc.status, respErr.StatusCode)
+				a.Equal(tc.code, respErr.ErrorCode)
 			}
 		})
 	}
@@ -101,26 +122,61 @@ func TestBlobTraverserReturnedErrorsWrapServiceError(t *testing.T) {
 			http.StatusServiceUnavailable, "ServerBusy"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tr := newLookupTestTraverserWith(t, tc.tr)
+			a := assert.New(t)
+			tr := newLookupTestTraverserWith(a, tc.tr)
 			tr.failOnLookupError = false
 			tr.parallelListing = true
 			tr.suppressCrawlStats = true
 			err := tr.Traverse(noPreProccessor, func(StoredObject) error { return nil }, nil)
 			var respErr *azcore.ResponseError
-			if !errors.As(err, &respErr) || respErr.StatusCode != tc.status || respErr.ErrorCode != tc.code {
-				t.Fatalf("Traverse() = %v, want wrapped %d %s", err, tc.status, tc.code)
+			if a.ErrorAs(err, &respErr) {
+				a.Equal(tc.status, respErr.StatusCode)
+				a.Equal(tc.code, respErr.ErrorCode)
 			}
 		})
 	}
 }
 
 func TestBlobTraverserLookupNotFoundIsNotAnError(t *testing.T) {
+	a := assert.New(t)
 	var scheduled int
-	err := newLookupTestTraverser(t, http.StatusNotFound, "BlobNotFound").Traverse(nil, func(StoredObject) error {
+	err := newLookupTestTraverser(a, http.StatusNotFound, "BlobNotFound").Traverse(nil, func(StoredObject) error {
 		scheduled++
 		return nil
 	}, nil)
-	if err != nil || scheduled != 0 {
-		t.Fatalf("Traverse() = %v with %d objects, want no error and nothing scheduled", err, scheduled)
+	a.NoError(err)
+	a.Zero(scheduled)
+}
+
+// With cacheSingleBlobLookup, IsDirectory followed by Traverse reads the
+// blob's properties once instead of twice.
+func TestBlobTraverserCachesSingleBlobLookup(t *testing.T) {
+	for _, cache := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cache=%t", cache), func(t *testing.T) {
+			a := assert.New(t)
+			tr := &hnsDirTransport{}
+			sc, err := service.NewClientWithNoCredential("https://acct.blob.core.windows.net/", &service.ClientOptions{
+				ClientOptions: azcore.ClientOptions{Transport: tr, Retry: policy.RetryOptions{MaxRetries: -1}},
+			})
+			a.NoError(err)
+			bt := newBlobTraverser("https://acct.blob.core.windows.net/c/file.txt", sc, context.Background(), InitResourceTraverserOptions{
+				Recursive:             true,
+				IncrementEnumeration:  enumerationCounterFuncNoop,
+				cacheSingleBlobLookup: cache,
+			})
+
+			isDir, err := bt.IsDirectory(true)
+			a.NoError(err)
+			a.False(isDir)
+			var got []string
+			a.NoError(bt.Traverse(nil, func(o StoredObject) error { got = append(got, o.name); return nil }, nil))
+			a.Len(got, 1)
+
+			want := 2
+			if cache {
+				want = 1
+			}
+			a.Equal(want, tr.heads("file.txt"), "properties requests")
+		})
 	}
 }
