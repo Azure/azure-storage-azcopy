@@ -153,9 +153,12 @@ type singleChunkReader struct {
 	muClose *sync.Mutex
 
 	isClosed bool
+
+	// dropPageCache releases the source file's OS cache pages after each chunk is read
+	dropPageCache bool
 }
 
-func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
+func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, dropPageCache bool) SingleChunkReader {
 	if length <= 0 {
 		return &emptyChunkReader{}
 	}
@@ -170,6 +173,7 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 		sourceFactory: sourceFactory,
 		chunkId:       chunkId,
 		length:        length,
+		dropPageCache: dropPageCache,
 	}
 }
 
@@ -267,7 +271,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	cr.buffer = targetBuffer
 
 	// TODO: change this to check if the source is a mounted NFS file share, not the target; or enable it for all jobs, or for all Mover jobs
-	if IsNFSCopy() {
+	if cr.dropPageCache {
 		if file, ok := fileReader.(*os.File); ok {
 			_ = FadviseDontNeed(file, cr.chunkId.OffsetInFile(), cr.length)
 		}
