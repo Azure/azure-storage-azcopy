@@ -8,7 +8,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -144,7 +142,7 @@ func TestSyncDirectoryResourcesLocalToFileShare(t *testing.T) {
 // GetProperties) must target the snapshot, not the live share.
 func TestFileTraverserIsDirectoryUsesShareSnapshot(t *testing.T) {
 	t.Setenv(enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Name, "")
-	for _, dir := range []string{"", "Viesinimas/#4_PP 100%"} {
+	for _, dir := range []string{"", "alpha/#1_beta 50%"} {
 		t.Run("dir="+dir, func(t *testing.T) {
 			var requests []string
 			var mu sync.Mutex
@@ -202,125 +200,28 @@ func (tree fileShareTree) allDirs() []string {
 func TestSyncOrchestratorFileShareSpecialDirectoryNames(t *testing.T) {
 	t.Setenv(enum.EEnvironmentVariable.EnableAzFilesProactiveStats().Name, "")
 
-	const pp = "#4_PP pranesimas apie patvirtinta PP"
+	// Shapes mirror the failing Run1/Run2 data with neutral names:
+	//  - Run2: names start with '#' followed by digits, '_', spaces and non-ASCII
+	//    letters; plain names ('!', '(', ')', '-') sit between '#' levels, and
+	//    the same '#' name repeats down the path.
+	//  - Run1: a non-ASCII name with internal dots that ends in '.', with a child.
+	const nested = "#7_gamma d\u00e9lta \u0161\u016b"
+	const plain = "!old (copy)-1"
 	tree := fileShareTree{
-		"":                                      {"Viesinimas"},
-		"Viesinimas":                            {pp, "#1_PP", "100% done", "a&b=c+d;e", "Report 12.4.2019 \u0433."},
-		"Viesinimas/" + pp:                      {pp, "#2 x"},
-		"Viesinimas/" + pp + "/" + pp:           {},
-		"Viesinimas/" + pp + "/#2 x":            {},
-		"Viesinimas/#1_PP":                      {},
-		"Viesinimas/100% done":                  {"50%25"},
-		"Viesinimas/100% done/50%25":            {},
-		"Viesinimas/a&b=c+d;e":                  {},
-		"Viesinimas/Report 12.4.2019 \u0433.":   {"0"},
-		"Viesinimas/Report 12.4.2019 \u0433./0": {},
+		"":                               {"alpha"},
+		"alpha":                          {nested, "#1_beta", "50% off", "q&r=s+t;u_~$", "draft v1.2 \u00e9."},
+		"alpha/" + nested:                {nested, "#3 x", plain},
+		"alpha/" + nested + "/" + nested: {},
+		"alpha/" + nested + "/#3 x":      {},
+		"alpha/" + nested + "/" + plain:  {"#2 \u017e\u0117"},
+		"alpha/" + nested + "/" + plain + "/#2 \u017e\u0117": {},
+		"alpha/#1_beta":              {},
+		"alpha/50% off":              {"%41%42"},
+		"alpha/50% off/%41%42":       {},
+		"alpha/q&r=s+t;u_~$":         {},
+		"alpha/draft v1.2 \u00e9.":   {"1"},
+		"alpha/draft v1.2 \u00e9./1": {},
 	}
 
-	var mu sync.Mutex
-	listed := map[string]map[string]int{"src": {}, "dst": {}}
-	var unexpected []string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		q := r.URL.Query()
-		if r.Method != http.MethodGet || q.Get("restype") != "directory" || q.Get("comp") != "list" {
-			unexpected = append(unexpected, r.Method+" "+r.URL.String())
-			http.Error(w, "unexpected request", http.StatusBadRequest)
-			return
-		}
-		share, dir, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
-		dir = strings.TrimSuffix(dir, "/")
-		if share != "src" && share != "dst" {
-			unexpected = append(unexpected, "share "+share)
-			http.Error(w, "unexpected share", http.StatusBadRequest)
-			return
-		}
-		listed[share][dir]++
-
-		children, exists := tree[dir]
-		if share == "src" {
-			assert.Equal(t, fileSyncTestSnapshot, q.Get("sharesnapshot"), "source listing must stay on the snapshot: %s", r.URL.String())
-			assert.Equal(t, "true", r.Header.Get("x-ms-allow-trailing-dot"))
-			if !exists {
-				w.Header().Set("x-ms-error-code", "ParentNotFound")
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-		} else {
-			children = nil // empty destination: everything is new
-		}
-
-		var entries strings.Builder
-		for _, child := range children {
-			fmt.Fprintf(&entries, "<Directory><Name>%s</Name><Properties /></Directory>", html.EscapeString(child))
-		}
-		w.Header().Set("Content-Type", "application/xml")
-		fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><EnumerationResults ShareName="%s" DirectoryPath="%s"><Entries>%s</Entries><NextMarker /></EnumerationResults>`,
-			share, html.EscapeString(dir), entries.String())
-	}))
-	defer server.Close()
-
-	oldOptions, oldParallelism, oldThrottling, oldUseOrchestrator := orchestratorOptions, crawlParallelism, enableThrottling, UseSyncOrchestrator
-	t.Cleanup(func() {
-		orchestratorOptions, crawlParallelism, enableThrottling, UseSyncOrchestrator = oldOptions, oldParallelism, oldThrottling, oldUseOrchestrator
-	})
-	orchestratorOptions = &SyncOrchestratorOptions{fromTo: common.EFromTo.FileFile()}
-	crawlParallelism, enableThrottling, UseSyncOrchestrator = 8, false, true
-
-	// localhost avoids the SDK's IP-address (emulator-style) URL parsing rules.
-	baseURL := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
-	cca := &cookedSyncCmdArgs{
-		fromTo:      common.EFromTo.FileFile(),
-		source:      common.ResourceString{Value: baseURL + "/src", ExtraQuery: "sharesnapshot=" + fileSyncTestSnapshot},
-		destination: common.ResourceString{Value: baseURL + "/dst"},
-	}
-	errorChannel := make(chan TraverserErrorItemInfo, 64)
-	options := InitResourceTraverserOptions{
-		Credential:   &common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
-		ErrorChannel: errorChannel,
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	primaryTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, options)
-	require.NoError(t, err)
-	enumerator := &syncEnumerator{
-		primaryTraverser:           primaryTraverser,
-		primaryTraverserTemplate:   ResourceTraverserTemplate{location: common.ELocation.File(), options: options},
-		secondaryTraverserTemplate: ResourceTraverserTemplate{location: common.ELocation.File(), options: options},
-		objectIndexer:              newObjectIndexer(),
-		objectComparator:           func(StoredObject) error { return nil },
-		orchestratorOptions:        orchestratorOptions,
-		ctp: &copyTransferProcessor{
-			copyJobTemplate:        &common.CopyJobPartOrderRequest{FromTo: cca.fromTo},
-			folderPropertiesOption: common.EFolderPropertiesOption.NoFolders(),
-		},
-		finalize: func() error { return nil },
-	}
-
-	require.NoError(t, cca.runSyncOrchestrator(enumerator, ctx))
-	require.NoError(t, ctx.Err(), "crawl must terminate on its own")
-	close(errorChannel)
-	for e := range errorChannel {
-		t.Errorf("traversal error for %s: %v", e.FullPath(), e.ErrorMessage())
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Empty(t, unexpected)
-	for _, dir := range tree.allDirs() {
-		want := 1
-		if dir == "" {
-			want = 2 // IsDirectory existence probe + the root listing itself
-		}
-		assert.Equal(t, want, listed["src"][dir], "source directory %q listed an unexpected number of times", dir)
-	}
-	for _, share := range []string{"src", "dst"} {
-		for dir := range listed[share] {
-			_, exists := tree[dir]
-			assert.True(t, exists, "%s listed phantom directory %q", share, dir)
-		}
-	}
-	assert.Len(t, listed["src"], len(tree))
+	assertEachDirectoryListedOnce(t, tree, runSyncOrchestratorAgainstTree(t, common.EFromTo.FileFile(), tree, false))
 }
