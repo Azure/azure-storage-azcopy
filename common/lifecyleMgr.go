@@ -579,7 +579,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 // for the lifecycleMgr to babysit a job, it must be given a controller to get information about the job
 type WorkController interface {
 	Cancel(mgr LifecycleMgr)                                        // handle to cancel the work
-	ReportProgressOrExit(mgr LifecycleMgr) (totalKnownCount uint32) // print the progress status, optionally exit the application if work is done
+	ReportProgressOrExit(mgr LifecycleMgr) (totalKnownCount uint64) // print the progress status, optionally exit the application if work is done
 }
 
 // AllowReinitiateProgressReporting must be called before running an cleanup job, to allow the initiation of that job's
@@ -598,7 +598,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	// it will terminate the whole process eventually when the work is complete
 	go func() {
 		const progressFrequencyThreshold = 1000000
-		var oldCount, newCount uint32
+		var oldCount, newCount uint64
 		wait := 2 * time.Second
 		lastFetchTime := time.Now().Add(-wait) // So that we start fetching time immediately
 

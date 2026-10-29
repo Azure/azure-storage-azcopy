@@ -227,22 +227,22 @@ type ListJobSummaryResponse struct {
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
 
-	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
+	TotalTransfers uint64 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
 	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
 	// The name FolderPropertyTransfers is used to emphasise that is is only counting transferring the properties and existence of
 	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as
 	// FileTransfers.
-	FileTransfers           uint32 `json:",string"`
-	FolderPropertyTransfers uint32 `json:",string"`
+	FileTransfers           uint64 `json:",string"`
+	FolderPropertyTransfers uint64 `json:",string"`
 	SymlinkTransfers        uint32 `json:",string"`
-	FilePropertyTransfers   uint32 `json:",string"`
+	FilePropertyTransfers   uint64 `json:",string"`
 
-	FoldersCompleted   uint32 `json:",string"` // Files can be figured out by TransfersCompleted - FoldersCompleted
-	TransfersCompleted uint32 `json:",string"`
-	FoldersFailed      uint32 `json:",string"`
-	TransfersFailed    uint32 `json:",string"`
-	FoldersSkipped     uint32 `json:",string"`
-	TransfersSkipped   uint32 `json:",string"`
+	FoldersCompleted   uint64 `json:",string"` // Files can be figured out by TransfersCompleted - FoldersCompleted
+	TransfersCompleted uint64 `json:",string"`
+	FoldersFailed      uint64 `json:",string"`
+	TransfersFailed    uint64 `json:",string"`
+	FoldersSkipped     uint64 `json:",string"`
+	TransfersSkipped   uint64 `json:",string"`
 
 	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers
 	BytesOverWire uint64 `json:",string"`
@@ -286,8 +286,8 @@ type ListJobSummaryResponse struct {
 // wraps the standard ListJobSummaryResponse with sync-specific stats
 type ListSyncJobSummaryResponse struct {
 	ListJobSummaryResponse
-	DeleteTotalTransfers     uint32 `json:",string"`
-	DeleteTransfersCompleted uint32 `json:",string"`
+	DeleteTotalTransfers     uint64 `json:",string"`
+	DeleteTransfersCompleted uint64 `json:",string"`
 }
 
 type ListJobTransfersRequest struct {
