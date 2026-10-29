@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,6 +51,7 @@ type IJobPartTransferMgr interface {
 	TransferStatusIgnoringCancellation() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
+	SetTransferErrorCodes(codes common.TransferErrorCodes)
 	SetErrorMessage(errorMessage string)
 	SetNumberOfChunks(numChunks uint32)
 	SetActionAfterLastChunk(f func())
@@ -236,6 +238,13 @@ type jobPartTransferMgr struct {
 	transferInfo *TransferInfo
 
 	actionAfterLastChunk func()
+
+	// Error codes of the failure that ended the transfer (see
+	// SetTransferErrorCodes), without StatusCode, which SetErrorCode records
+	// in the plan file. Kept in memory only; the plan file stores just the
+	// HTTP status and message.
+	errorCodesLock sync.Mutex
+	errorCodes     common.TransferErrorCodes
 
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
@@ -705,6 +714,25 @@ func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
 	jptm.jobPartPlanTransfer.SetErrorCode(errorCode, false)
 }
 
+// SetTransferErrorCodes records the error codes of the failure that ended
+// the transfer; see common.TransferDetail. codes.StatusCode is ignored; set
+// it with SetErrorCode. Like SetErrorCode, the first non-empty codes set are
+// kept.
+func (jptm *jobPartTransferMgr) SetTransferErrorCodes(codes common.TransferErrorCodes) {
+	codes.StatusCode = 0
+	jptm.errorCodesLock.Lock()
+	defer jptm.errorCodesLock.Unlock()
+	if jptm.errorCodes.IsZero() {
+		jptm.errorCodes = codes
+	}
+}
+
+func (jptm *jobPartTransferMgr) transferErrorCodes() common.TransferErrorCodes {
+	jptm.errorCodesLock.Lock()
+	defer jptm.errorCodesLock.Unlock()
+	return jptm.errorCodes
+}
+
 // ErrorMessage gets the error message of transfer for given job.
 func (jptm *jobPartTransferMgr) ErrorMessage() string {
 	return jptm.jobPartPlanTransfer.ErrorMessage()
@@ -875,6 +903,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
+		jptm.SetTransferErrorCodes(common.TransferFailureCodesFor(err, jptm.Info().Source, jptm.Info().Destination))
 		jptm.SetErrorMessage(fullMsg)
 		if suppressTransfer503(jptm.ctx) {
 			if details := formatFailedTransfer503(err); details != "" {
@@ -1027,13 +1056,18 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	}
 
 	// Update Status Manager
+	errorCodes := jptm.transferErrorCodes()
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
-		Dst:                jptm.Info().Destination,
-		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
-		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
-		TransferSize:       uint64(jptm.Info().SourceSize),
-		ErrorCode:          jptm.ErrorCode(),
-		ErrorMessage:       jptm.ErrorMessage(),
+		Dst:                        jptm.Info().Destination,
+		IsFolderProperties:         jptm.Info().IsFolderPropertiesTransfer(),
+		TransferStatus:             jptm.jobPartPlanTransfer.TransferStatus(),
+		TransferSize:               uint64(jptm.Info().SourceSize),
+		ErrorCode:                  jptm.ErrorCode(),
+		ErrorMessage:               jptm.ErrorMessage(),
+		ExtendedErrorCode:          errorCodes.ExtendedErrorCode,
+		FailedRequestTarget:        errorCodes.FailedRequestTarget,
+		S2SSourceStatusCode:        errorCodes.S2SSourceStatusCode,
+		S2SSourceExtendedErrorCode: errorCodes.S2SSourceExtendedErrorCode,
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())

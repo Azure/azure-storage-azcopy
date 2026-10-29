@@ -41,6 +41,19 @@ type SyncEnumeratorOptions struct {
 
 	// SyncOrchOptions contains options for the sync orchestrator.
 	SyncOrchOptions *SyncOrchestratorOptions
+
+	// BeforeFinalPart, if set, runs after enumeration and before the final
+	// job part is dispatched. An error stops the final part from being
+	// dispatched (the job never completes) and is returned by the enumerator.
+	BeforeFinalPart func() error
+}
+
+// beforeFinalPart runs the caller's BeforeFinalPart hook, if any.
+func (o *SyncEnumeratorOptions) beforeFinalPart() error {
+	if o == nil || o.BeforeFinalPart == nil {
+		return nil
+	}
+	return o.BeforeFinalPart()
 }
 
 func NewSyncDefaultEnumeratorOptions() *SyncEnumeratorOptions {
@@ -566,6 +579,10 @@ func GetSyncEnumeratorWithDestComparator(
 			return err
 		}
 
+		if err := enumeratorOptions.beforeFinalPart(); err != nil {
+			return err
+		}
+
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		// sync cleanly exits if nothing is scheduled.
 		if err != nil && err != NothingScheduledError {
@@ -615,6 +632,10 @@ func GetSyncEnumeratorWithSrcComparator(
 
 		err := indexer.traverse(deleteScheduler, nil)
 		if err != nil {
+			return err
+		}
+
+		if err := enumeratorOptions.beforeFinalPart(); err != nil {
 			return err
 		}
 

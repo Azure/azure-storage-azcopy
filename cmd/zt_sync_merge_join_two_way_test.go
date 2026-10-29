@@ -37,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
@@ -142,6 +143,10 @@ func TestSyncOrchestratorContinuesAfterDirectoryErrors(t *testing.T) {
 			for err := range errorChannel {
 				if err.IsDir() {
 					assert.Contains(t, err.ErrorMessage().Error(), "AuthorizationPermissionMismatch")
+					var respErr *azcore.ResponseError
+					if assert.ErrorAs(t, err.ErrorMessage(), &respErr, "directory failures must wrap the service error") {
+						assert.Equal(t, http.StatusForbidden, respErr.StatusCode)
+					}
 					assert.False(t, failedPaths[err.FullPath()], "directory failure must only be reported once")
 					failedPaths[err.FullPath()] = true
 				}

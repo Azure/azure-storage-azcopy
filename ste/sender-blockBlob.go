@@ -138,7 +138,8 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 	}
 
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		err = fmt.Errorf("Block size %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		err = common.NewCodedError(common.TransferErrorCodeBlockCountExceedsLimit,
+			fmt.Sprintf("Block size %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize))
 		return
 	}
 

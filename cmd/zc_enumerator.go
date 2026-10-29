@@ -440,6 +440,33 @@ type InitResourceTraverserOptions struct {
 	// same storage IOPS budget as the transfer phase. Currently wired for Azure
 	// Files; nil means uncapped scanning (unchanged behavior).
 	ScanPacer common.IOPSPacer
+
+	// ReportListOfFilesEntryErrors, with ListOfFiles and ErrorChannel set,
+	// sends each list entry that cannot be enumerated to ErrorChannel as a
+	// ListEntryErrorInfo (wrapping the underlying error) instead of skipping
+	// it with a log line. A blob whose properties read fails other than with
+	// not found is such an error, not a virtual directory.
+	ReportListOfFilesEntryErrors bool
+
+	// failOnSingleBlobLookupError makes a blob traverser return an error when
+	// reading its root blob's properties fails other than with not found.
+	// Set by the list traverser when ReportListOfFilesEntryErrors is on.
+	failOnSingleBlobLookupError bool
+
+	// ListOfFilesDirectoriesSelfOnly makes a ListOfFiles entry naming a
+	// directory transfer only the directory itself, not its contents, for
+	// lists that already name every changed entity. A directory the source
+	// cannot enumerate alone is skipped (or reported), never expanded.
+	ListOfFilesDirectoriesSelfOnly bool
+
+	// ListOfFilesParallelism is how many ListOfFiles entries are enumerated
+	// at once; below 2 they go one at a time, in list order. Processor calls
+	// are serialized either way.
+	ListOfFilesParallelism int
+
+	// cacheSingleBlobLookup makes a blob traverser read its root blob's
+	// properties once (IsDirectory, then Traverse). Set by the list traverser.
+	cacheSingleBlobLookup bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers
