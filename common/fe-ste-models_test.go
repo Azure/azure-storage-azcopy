@@ -21,8 +21,12 @@
 package common_test
 
 import (
+	"encoding/json"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"math"
+	"strconv"
 	"testing"
 )
 
@@ -184,4 +188,43 @@ func TestMetadataResolveInvalidKeyNegative(t *testing.T) {
 
 	_, err = mNegative3.ResolveInvalidKey()
 	a.NotNil(err)
+}
+
+func TestJobSummaryCounterJSON(t *testing.T) {
+	for _, count := range []uint64{0, math.MaxUint32, math.MaxUint32 + 1, 5703271243} {
+		t.Run(strconv.FormatUint(count, 10), func(t *testing.T) {
+			summary := common.ListSyncJobSummaryResponse{
+				ListJobSummaryResponse: common.ListJobSummaryResponse{
+					TotalTransfers:          count,
+					FileTransfers:           count,
+					FolderPropertyTransfers: count,
+					FilePropertyTransfers:   count,
+					FoldersCompleted:        count,
+					TransfersCompleted:      count,
+					FoldersFailed:           count,
+					TransfersFailed:         count,
+					FoldersSkipped:          count,
+					TransfersSkipped:        count,
+				},
+				DeleteTotalTransfers:     count,
+				DeleteTransfersCompleted: count,
+			}
+			data, err := json.Marshal(summary)
+			require.NoError(t, err)
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(data, &fields))
+			for _, field := range []string{
+				"TotalTransfers", "FileTransfers", "FolderPropertyTransfers",
+				"FilePropertyTransfers", "FoldersCompleted",
+				"TransfersCompleted", "FoldersFailed", "TransfersFailed",
+				"FoldersSkipped", "TransfersSkipped",
+				"DeleteTotalTransfers", "DeleteTransfersCompleted",
+			} {
+				require.Equal(t, strconv.Quote(strconv.FormatUint(count, 10)), string(fields[field]), field)
+			}
+			var decoded common.ListSyncJobSummaryResponse
+			require.NoError(t, json.Unmarshal(data, &decoded))
+			require.Equal(t, summary, decoded)
+		})
+	}
 }

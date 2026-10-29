@@ -876,6 +876,11 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		jptm.SetErrorMessage(fullMsg)
+		if suppressTransfer503(jptm.ctx) {
+			if details := formatFailedTransfer503(err); details != "" {
+				jptm.Log(common.LogError, details)
+			}
+		}
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if !buildmode.IsMover && status == http.StatusForbidden &&

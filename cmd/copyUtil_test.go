@@ -24,6 +24,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"math"
+	"sync/atomic"
 	"testing"
 )
 
@@ -136,4 +139,13 @@ func TestDoesBlobRepresentAFolder(t *testing.T) {
 	metadata["other_key"] = to.Ptr("value")
 	ok = util.doesBlobRepresentAFolder(metadata)
 	a.False(ok)
+}
+
+func TestJobSummarySyncDeletionCountBeyondUint32(t *testing.T) {
+	cca := &cookedSyncCmdArgs{}
+	atomic.StoreUint64(&cca.atomicDeletionCount, math.MaxUint32)
+	cca.incrementDeletionCount()
+	want := uint64(math.MaxUint32) + 1
+	require.Equal(t, want, cca.GetDeletionCount())
+	require.Equal(t, "4294967296", cca.ToStringMap()["deletionCount"])
 }
