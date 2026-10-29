@@ -287,7 +287,7 @@ func (cooked *cookedSyncCmdArgs) ScanningComplete() bool {
 	return cooked.scanningComplete()
 }
 
-func (cooked *cookedSyncCmdArgs) GetDeletionCount() uint32 {
+func (cooked *cookedSyncCmdArgs) GetDeletionCount() uint64 {
 	return cooked.getDeletionCount()
 }
 
@@ -566,7 +566,7 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	if dstFiles > 0 {
 		result["destinationFilesScanned"] = fmt.Sprintf("%d", dstFiles)
 	}
-	deletions := atomic.LoadUint32(&cooked.atomicDeletionCount)
+	deletions := atomic.LoadUint64(&cooked.atomicDeletionCount)
 	if deletions > 0 {
 		result["deletionCount"] = fmt.Sprintf("%d", deletions)
 	}

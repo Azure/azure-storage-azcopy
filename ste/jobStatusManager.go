@@ -138,11 +138,11 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				continue
 			}
 			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
-			js.TotalTransfers += msg.TotalTransfers
-			js.FileTransfers += msg.FileTransfers
-			js.FolderPropertyTransfers += msg.FolderTransfer
+			js.TotalTransfers += uint64(msg.TotalTransfers)
+			js.FileTransfers += uint64(msg.FileTransfers)
+			js.FolderPropertyTransfers += uint64(msg.FolderTransfer)
 			js.SymlinkTransfers += msg.SymlinkTransfers
-			js.FilePropertyTransfers += msg.FilePropertyTransfers
+			js.FilePropertyTransfers += uint64(msg.FilePropertyTransfers)
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 			js.HardlinksConvertedCount += msg.HardlinksConvertedCount

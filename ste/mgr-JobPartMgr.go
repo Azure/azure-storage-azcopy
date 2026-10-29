@@ -380,6 +380,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		// Add the pipeline network stats to the context. This will be manually unset for all sourceInfoProvider contexts.
 		transferCtx = withPipelineNetworkStats(transferCtx, jpm.jobMgr.PipelineNetworkStats())
+		if buildmode.HighPerf() {
+			transferCtx = context.WithValue(transferCtx, transferLogContextKey, true)
+		}
 		// Initialize a job part transfer manager
 		jptm := &jobPartTransferMgr{
 			jobPartMgr:          jpm,

@@ -458,6 +458,8 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesScanned uint64
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
+	// deletion count keeps track of how many extra files from the destination were removed
+	atomicDeletionCount uint64
 	// defines the scanning status of the sync operation.
 	// 0 means scanning is in progress and 1 means scanning is complete.
 	atomicScanningStatus uint32
@@ -477,9 +479,6 @@ type cookedSyncCmdArgs struct {
 	// defined the failure counters for sync operation through SyncOrchestrator
 	atomicDestinationFolderEnumerationFailed  atomic.Uint64
 	atomicDestinationFolderEnumerationSkipped atomic.Uint64
-
-	// deletion count keeps track of how many extra files from the destination were removed
-	atomicDeletionCount uint32
 
 	source      common.ResourceString
 	destination common.ResourceString
@@ -580,11 +579,11 @@ type cookedSyncCmdArgs struct {
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
-	atomic.AddUint32(&cca.atomicDeletionCount, 1)
+	atomic.AddUint64(&cca.atomicDeletionCount, 1)
 }
 
-func (cca *cookedSyncCmdArgs) getDeletionCount() uint32 {
-	return atomic.LoadUint32(&cca.atomicDeletionCount)
+func (cca *cookedSyncCmdArgs) getDeletionCount() uint64 {
+	return atomic.LoadUint64(&cca.atomicDeletionCount)
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
@@ -784,7 +783,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint64) {
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64

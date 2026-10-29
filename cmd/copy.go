@@ -1,4 +1,3 @@
-
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -1282,7 +1281,7 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint64) {
 
 	// When we do GetJobSummary, the transfers list objects are cleared.
 	// This is a problem for other client consumers like XDM
@@ -1718,7 +1717,7 @@ func init() {
 
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "",
 		"Set the cache-control header. Returned on download.")
-    
+
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
 		"Specify this flag if you want to preserve properties during the transfer operation."+
 			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag"+
@@ -1919,8 +1918,8 @@ func init() {
 		cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 
 		if !displayDeveloperOptions {
-	        _ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-        
+			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+
 			// Hide the old SMB-specific flags
 			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")

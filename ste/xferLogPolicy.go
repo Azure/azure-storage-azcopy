@@ -3,7 +3,9 @@ package ste
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"net/http"
 	"net/http/httptrace"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // This file is copied and extended from Azure Storage Blob Go SDK.
@@ -111,6 +114,16 @@ type logPolicyOpValues struct {
 	start time.Time
 }
 
+var transferLogContextKey = contextKey{"transferLog"}
+
+func suppressTransfer503(ctx context.Context) bool {
+	if !buildmode.HighPerf() {
+		return false
+	}
+	activeTransfer, _ := ctx.Value(transferLogContextKey).(bool)
+	return activeTransfer
+}
+
 type LogOptions struct {
 	// TODO : Unravel LogOptions and RequestLogOptions
 	RequestLogOptions RequestLogOptions
@@ -139,11 +152,9 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 	opValues.try++ // The first try is #1 (not #0)
 	req.SetOperationValue(opValues)
 
-	if p.LogOptions.ShouldLog(common.LogDebug) {
-		b := &bytes.Buffer{}
-		fmt.Fprintf(b, "==> OUTGOING REQUEST (Try=%d)\n", opValues.try)
-		p.writeRequestWithResponse(b, req, nil, nil)
-		p.LogOptions.Log(common.LogInfo, b.String())
+	suppress503 := suppressTransfer503(req.Raw().Context())
+	if !suppress503 {
+		p.logRequest(req.Raw(), opValues.try)
 	}
 
 	// Set the time for this particular retry operation and then Do the operation.
@@ -168,6 +179,15 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 	}
 	tryDuration := tryEnd.Sub(tryBeginAwaitResponse)
 	opDuration := tryEnd.Sub(opValues.start)
+	// Even the SDK's last attempt may be recoverable by the caller. Only the
+	// transfer failure path should emit a 503 request/response dump.
+	if suppress503 && response != nil && response.StatusCode == http.StatusServiceUnavailable {
+		return response, err
+	}
+	// Only scoped transfers delay Debug request logging until the response is known.
+	if suppress503 {
+		p.logRequest(req.Raw(), opValues.try)
+	}
 
 	logLevel, forceLog, httpError := common.LogInfo, false, false // Default logging information
 
@@ -215,7 +235,7 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 			}
 		}
 		if forceLog || err != nil || p.LogOptions.ShouldLog(common.LogDebug) {
-			p.writeRequestWithResponse(b, req, response, err)
+			p.writeRequestWithResponse(b, req.Raw(), response, err)
 		} else {
 			p.writeRequestAsOneLine(b, req)
 			writeActivityId(b, response)
@@ -245,7 +265,33 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 	return response, err
 }
 
-func newLogPolicy(options LogOptions) policy.Policy {
+func (p logPolicy) logRequest(req *http.Request, attempt int32) {
+	if p.LogOptions.ShouldLog(common.LogDebug) {
+		b := &bytes.Buffer{}
+		fmt.Fprintf(b, "==> OUTGOING REQUEST (Try=%d)\n", attempt)
+		p.writeRequestWithResponse(b, req, nil, nil)
+		p.LogOptions.Log(common.LogInfo, b.String())
+	}
+}
+
+func formatFailedTransfer503(err error) string {
+	var responseErr *azcore.ResponseError
+	if !errors.As(err, &responseErr) || responseErr.StatusCode != http.StatusServiceUnavailable {
+		return ""
+	}
+	response := responseErr.RawResponse
+	if response == nil || response.Request == nil || response.Request.URL == nil {
+		return ""
+	}
+	p := newLogPolicy(LogOptions{})
+	b := &bytes.Buffer{}
+	fmt.Fprintln(b, "==> FINAL TRANSFER FAILURE: REQUEST/RESPONSE")
+	p.writeRequestWithResponse(b, response.Request, response, nil)
+	fmt.Fprintln(b, "Response Details:", formatBody(transparentlyReadBody(response)))
+	return b.String()
+}
+
+func newLogPolicy(options LogOptions) logPolicy {
 	options.RequestLogOptions = options.RequestLogOptions.defaults()
 	if options.ShouldLog == nil {
 		options.ShouldLog = func(common.LogLevel) bool { return false } // No-op logger
@@ -285,9 +331,9 @@ func (p *logPolicy) writeRequestAsOneLine(b *bytes.Buffer, req *policy.Request) 
 
 // writeRequestWithResponse appends a formatted HTTP request into a Buffer. If request and/or err are
 // not nil, then these are also written into the Buffer.
-func (p *logPolicy) writeRequestWithResponse(b *bytes.Buffer, req *policy.Request, resp *http.Response, err error) {
+func (p *logPolicy) writeRequestWithResponse(b *bytes.Buffer, req *http.Request, resp *http.Response, err error) {
 	// redact applicable query params
-	cpURL := *req.Raw().URL
+	cpURL := *req.URL
 	qp := cpURL.Query()
 	for k := range qp {
 		if _, ok := p.disallowedQueryParams[strings.ToLower(k)]; ok {
@@ -296,8 +342,8 @@ func (p *logPolicy) writeRequestWithResponse(b *bytes.Buffer, req *policy.Reques
 	}
 	cpURL.RawQuery = qp.Encode()
 	// Write the request into the buffer.
-	fmt.Fprint(b, "   "+req.Raw().Method+" "+cpURL.String()+"\n")
-	p.writeHeader(b, req.Raw().Header)
+	fmt.Fprint(b, "   "+req.Method+" "+cpURL.String()+"\n")
+	p.writeHeader(b, req.Header)
 	if resp != nil {
 		fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
 		fmt.Fprint(b, "   RESPONSE Status: "+resp.Status+"\n")
