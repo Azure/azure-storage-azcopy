@@ -381,7 +381,7 @@ type SyncCmdArgsInput struct {
 	S2sPreserveBlobTags     bool
 }
 
-func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
+func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (*cookedSyncCmdArgs, error) {
 	raw := rawSyncCmdArgs{
 		src:                        args.Src,
 		dst:                        args.Dst,

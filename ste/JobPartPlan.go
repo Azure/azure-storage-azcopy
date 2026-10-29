@@ -150,10 +150,10 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 // CommandString returns the command string given by user when job was created
 func (jpph *JobPartPlanHeader) CommandString() string {
 	// Calculate the start address of the command string
-	start := uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)
+	start := unsafe.Add(unsafe.Pointer(jpph), int(unsafe.Sizeof(*jpph)))
 
 	// Create a slice from the calculated start address
-	commandSlice := unsafe.Slice((*byte)(unsafe.Pointer(start)), int(jpph.CommandStringLength))
+	commandSlice := unsafe.Slice((*byte)(start), int(jpph.CommandStringLength))
 	return string(commandSlice)
 }
 

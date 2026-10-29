@@ -42,7 +42,7 @@ func (a *OAuthAccountResourceManager) GetService(asserter e2etest.Asserter, loca
 		common.ELocation.BlobFS(): ".dfs.core.windows.net",
 	}
 
-	uri := fmt.Sprint("https://%s%s/", a.accountName, serviceSuffix)
+	uri := fmt.Sprintf("https://%s%s/", a.accountName, serviceSuffix)
 
 	var out e2etest.ServiceResourceManager
 	switch location {

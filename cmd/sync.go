@@ -140,8 +140,8 @@ func validateURLIsNotServiceLevel(url string, location common.Location) error {
 	return nil
 }
 
-func (raw rawSyncCmdArgs) toCookedOptions() (cooked cookedSyncCmdArgs, err error) {
-	cooked = cookedSyncCmdArgs{
+func (raw rawSyncCmdArgs) toCookedOptions() (cooked *cookedSyncCmdArgs, err error) {
+	cooked = &cookedSyncCmdArgs{
 		dryrunMode:                       raw.dryrun,
 		blockSizeMB:                      raw.blockSizeMB,
 		putBlobSizeMB:                    raw.putBlobSizeMB,
@@ -317,7 +317,7 @@ func (raw rawSyncCmdArgs) toCookedOptions() (cooked cookedSyncCmdArgs, err error
 }
 
 // validates and transform raw input into cooked input
-func (raw *rawSyncCmdArgs) cook() (cooked cookedSyncCmdArgs, err error) {
+func (raw *rawSyncCmdArgs) cook() (cooked *cookedSyncCmdArgs, err error) {
 	if cooked, err = raw.toCookedOptions(); err != nil {
 		return cooked, err
 	}
