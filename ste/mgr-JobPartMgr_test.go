@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -31,6 +32,22 @@ import (
 	"strconv"
 	"time"
 )
+
+func TestPlanFilenameLargeParts(t *testing.T) {
+	id := common.NewJobID()
+	for _, part := range []common.PartNumber{0, 1, 8, 9, 10, 9999, 99999, 100000, 999999, 1000000, math.MaxUint32} {
+		name := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, id, part, DataSchemaVersion))
+		gotID, gotPart, err := name.Parse()
+		if err != nil || gotID != id || gotPart != part {
+			t.Fatalf("Parse(%q) = (%v, %d, %v), want (%v, %d, nil)", name, gotID, gotPart, err, id, part)
+		}
+	}
+	t.Run("schemaMismatch", func(t *testing.T) {
+		name := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, id, 100000, DataSchemaVersion+1))
+		_, _, err := name.Parse()
+		require.Error(t, err)
+	})
+}
 
 func TestInferContentType(t *testing.T) {
 	a := assert.New(t)

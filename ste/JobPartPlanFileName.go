@@ -55,7 +55,7 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 		common.GetLifecycleMgr().Warn(err.Error())
 	}
 	jobID = jobId
-	n, err := fmt.Sscanf(jpfnSplit[1], "%05d.steV%d", &partNumber, &dataSchemaVersion)
+	n, err := fmt.Sscanf(jpfnSplit[1], "%d.steV%d", &partNumber, &dataSchemaVersion)
 	if err != nil || n != 2 {
 		panic(err)
 	}
