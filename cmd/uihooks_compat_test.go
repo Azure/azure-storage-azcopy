@@ -42,7 +42,7 @@ func (w *lifecycleCompatWork) Cancel(manager common.LifecycleMgr) {
 	w.cancelManager = manager
 }
 
-func (w *lifecycleCompatWork) ReportProgressOrExit(manager common.LifecycleMgr) uint32 {
+func (w *lifecycleCompatWork) ReportProgressOrExit(manager common.LifecycleMgr) uint64 {
 	w.progressManager = manager
 	manager.Progress(func(common.OutputFormat) string { return "host progress" })
 	return 17

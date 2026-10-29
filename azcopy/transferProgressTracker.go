@@ -95,7 +95,7 @@ func (tpt *transferProgressTracker) Start() {
 	}
 }
 
-func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
+func (tpt *transferProgressTracker) CheckProgress() (uint64, bool) {
 	if handler, ok := tpt.handler.(CopyEnumerationStatsHandler); ok {
 		handler.OnEnumerationStats(tpt.GetEnumerationStats())
 	}

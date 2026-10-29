@@ -641,7 +641,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	// it will terminate the whole process eventually when the work is complete
 	go func() {
 		const progressFrequencyThreshold = 1000000
-		var oldCount, newCount uint32
+		var oldCount, newCount uint64
 		wait := 2 * time.Second
 		lastFetchTime := time.Now().Add(-wait) // So that we start fetching time immediately
 

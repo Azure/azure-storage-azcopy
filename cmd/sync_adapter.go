@@ -51,7 +51,7 @@ func (cca *cookedSyncCmdArgs) applyPreparedState(state azcopy.PreparedSyncState)
 	}
 	atomic.StoreUint32(&cca.atomicFirstPartOrdered, firstPartOrdered)
 	atomic.StoreUint32(&cca.atomicScanningStatus, scanningComplete)
-	atomic.StoreUint32(&cca.atomicDeletionCount, state.DeletionCount)
+	atomic.StoreUint64(&cca.atomicDeletionCount, state.DeletionCount)
 	atomic.StoreUint32(&cca.atomicSkippedSymlinkCount, state.SkippedSymlinkCount)
 	atomic.StoreUint32(&cca.atomicSkippedSpecialFileCount, state.SkippedSpecialFileCount)
 	atomic.StoreUint32(&cca.atomicSkippedHardlinkCount, state.SkippedHardlinkCount)
@@ -183,7 +183,7 @@ func (h cliSyncHandler) OnEnumerationStats(stats azcopy.SyncEnumerationStats) {
 	}
 	atomic.StoreUint32(&c.atomicFirstPartOrdered, firstPartOrdered)
 	atomic.StoreUint32(&c.atomicScanningStatus, scanningComplete)
-	atomic.StoreUint32(&c.atomicDeletionCount, stats.DeletionCount)
+	atomic.StoreUint64(&c.atomicDeletionCount, stats.DeletionCount)
 	atomic.StoreUint32(&c.atomicSkippedSymlinkCount, stats.SkippedSymlinkCount)
 	atomic.StoreUint32(&c.atomicSkippedSpecialFileCount, stats.SkippedSpecialFileCount)
 	atomic.StoreUint32(&c.atomicSkippedHardlinkCount, stats.SkippedHardlinkCount)
@@ -207,7 +207,7 @@ func (h cliSyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 	h.cooked.reportScanningProgress(glcm, throughput)
 }
 
-func (h cliSyncHandler) applySummary(summary common.ListJobSummaryResponse, deletions uint32) {
+func (h cliSyncHandler) applySummary(summary common.ListJobSummaryResponse, deletions uint64) {
 	if h.cooked == nil {
 		return
 	}
@@ -218,7 +218,7 @@ func (h cliSyncHandler) applySummary(summary common.ListJobSummaryResponse, dele
 	if summary.TotalTransfers > 0 {
 		c.setFirstPartOrdered()
 	}
-	atomic.StoreUint32(&c.atomicDeletionCount, deletions)
+	atomic.StoreUint64(&c.atomicDeletionCount, deletions)
 	atomic.StoreUint32(&c.atomicSkippedSymlinkCount, summary.SkippedSymlinkCount)
 	atomic.StoreUint32(&c.atomicSkippedSpecialFileCount, summary.SkippedSpecialFileCount)
 	atomic.StoreUint32(&c.atomicSkippedHardlinkCount, summary.SkippedHardlinkCount)

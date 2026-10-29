@@ -334,7 +334,7 @@ func (r *resumeProgressTracker) Start() {
 	}
 }
 
-func (r *resumeProgressTracker) CheckProgress() (uint32, bool) {
+func (r *resumeProgressTracker) CheckProgress() (uint64, bool) {
 	summary := jobsAdmin.GetJobSummary(r.jobID, !buildmode.IsMover)
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount := summary.TotalTransfers

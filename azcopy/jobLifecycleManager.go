@@ -36,7 +36,7 @@ type jobProgressTracker interface {
 	// Start - calls OnStart
 	Start()
 	// CheckProgress checks the progress of the job and returns the number of transfers completed so far and whether the job is done
-	CheckProgress() (uint32, bool)
+	CheckProgress() (uint64, bool)
 	// CompletedEnumeration checks whether the enumeration is complete
 	CompletedEnumeration() bool // Whether we should prompt before cancelling
 	// GetJobID returns the JobID of the job being tracked
@@ -274,7 +274,7 @@ func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 
 		// Progress reporting configuration (exactly like lifecycleMgr)
 		const progressFrequencyThreshold = 1000000
-		var oldCount, newCount uint32
+		var oldCount, newCount uint64
 		wait := 2 * time.Second
 		lastFetchTime := time.Now().Add(-wait) // Start fetching immediately
 

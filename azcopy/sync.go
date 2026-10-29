@@ -119,8 +119,8 @@ type SyncScanProgress struct {
 type SyncProgress struct {
 	MoverSyncStats `json:"MoverSyncStats"`
 	common.ListJobSummaryResponse
-	DeleteTotalTransfers     uint32
-	DeleteTransfersCompleted uint32
+	DeleteTotalTransfers     uint64
+	DeleteTransfersCompleted uint64
 	Throughput               float64
 	ElapsedTime              time.Duration
 }
@@ -130,8 +130,8 @@ type SyncResult struct {
 	SourceFilesScanned      uint64
 	DestinationFilesScanned uint64
 	common.ListJobSummaryResponse
-	DeleteTotalTransfers     uint32
-	DeleteTransfersCompleted uint32
+	DeleteTotalTransfers     uint64
+	DeleteTransfersCompleted uint64
 	ElapsedTime              time.Duration
 }
 

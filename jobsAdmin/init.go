@@ -483,7 +483,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	jm.IterateJobParts(true, func(partNum common.PartNumber, jpm ste.IJobPartMgr) {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
-		js.TotalTransfers += jpp.NumTransfers
+		js.TotalTransfers += uint64(jpp.NumTransfers)
 		if js.TotalTransfers > common.RECOMMENDED_OBJECTS_COUNT {
 			common.WarnIfTooManyObjects()
 		}

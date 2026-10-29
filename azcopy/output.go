@@ -58,7 +58,7 @@ func GetCopyProgress(progress CopyProgress, isBenchmark bool) string {
 		progress.TransfersCompleted,
 		progress.TransfersFailed,
 		progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
-		progress.TransfersSkipped+progress.SkippedSymlinkCount+progress.SkippedSpecialFileCount+progress.SkippedHardlinkCount,
+		uint64(progress.TransfersSkipped)+uint64(progress.SkippedSymlinkCount)+uint64(progress.SkippedSpecialFileCount)+uint64(progress.SkippedHardlinkCount),
 		progress.TotalTransfers, scanningString, perfString, throughputString, diskString)
 }
 

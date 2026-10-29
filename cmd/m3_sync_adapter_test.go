@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"math"
 	"net/url"
 	"sync/atomic"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestM3SyncResourceStringsPreserveQueries(t *testing.T) {
@@ -152,7 +154,7 @@ func TestM3PreparedSyncStateMirrorsLegacyGetters(t *testing.T) {
 	assert.Equal(t, uint64(21), args.GetSkippedArchiveFileCount())
 	assert.True(t, args.FirstPartOrdered())
 	assert.True(t, args.ScanningComplete())
-	assert.Equal(t, uint32(22), args.GetDeletionCount())
+	assert.Equal(t, uint64(22), args.GetDeletionCount())
 	assert.Equal(t, uint32(23), args.GetSymlinkSkipped())
 	assert.Equal(t, uint32(24), args.GetSpecialFileSkipped())
 	assert.Equal(t, uint32(25), atomic.LoadUint32(&args.atomicSkippedHardlinkCount))
@@ -172,6 +174,15 @@ func TestM3PreparedSyncStateMirrorsLegacyGetters(t *testing.T) {
 	assert.Zero(t, atomic.LoadUint32(&args.atomicSkippedHardlinkCount))
 }
 
+func TestJobSummarySyncDeletionCountBeyondUint32(t *testing.T) {
+	cca := &cookedSyncCmdArgs{}
+	atomic.StoreUint64(&cca.atomicDeletionCount, math.MaxUint32)
+	cca.incrementDeletionCount()
+	want := uint64(math.MaxUint32) + 1
+	require.Equal(t, want, cca.GetDeletionCount())
+	require.Equal(t, "4294967296", cca.ToStringMap()["deletionCount"])
+}
+
 func TestM3SyncEnumerationCallbackMirrorsFullState(t *testing.T) {
 	args := cookedSyncCmdArgs{}
 	handler := cliSyncHandler{cooked: &args}
@@ -188,7 +199,7 @@ func TestM3SyncEnumerationCallbackMirrorsFullState(t *testing.T) {
 	assert.Equal(t, uint64(10), args.GetSkippedArchiveFileCount())
 	assert.True(t, args.FirstPartOrdered())
 	assert.True(t, args.ScanningComplete())
-	assert.Equal(t, uint32(11), args.GetDeletionCount())
+	assert.Equal(t, uint64(11), args.GetDeletionCount())
 	assert.Equal(t, uint32(12), args.GetSymlinkSkipped())
 	assert.Equal(t, uint32(13), args.GetSpecialFileSkipped())
 	assert.Equal(t, uint32(14), atomic.LoadUint32(&args.atomicSkippedHardlinkCount))
@@ -197,7 +208,7 @@ func TestM3SyncEnumerationCallbackMirrorsFullState(t *testing.T) {
 	handler.applyMoverStats(stats)
 	assert.Equal(t, uint64(7), args.GetSourceFilesScanned())
 	assert.Equal(t, uint64(10), args.GetSkippedArchiveFileCount())
-	assert.Equal(t, uint32(11), args.GetDeletionCount())
+	assert.Equal(t, uint64(11), args.GetDeletionCount())
 	assert.Equal(t, uint32(12), args.GetSymlinkSkipped())
 
 	handler.OnEnumerationStats(azcopy.SyncEnumerationStats{})

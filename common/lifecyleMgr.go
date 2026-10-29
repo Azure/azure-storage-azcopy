@@ -68,7 +68,7 @@ type LifecycleMgr interface {
 
 type WorkController interface {
 	Cancel(LifecycleMgr)
-	ReportProgressOrExit(LifecycleMgr) uint32
+	ReportProgressOrExit(LifecycleMgr) uint64
 }
 
 type JobErrorHandler interface {

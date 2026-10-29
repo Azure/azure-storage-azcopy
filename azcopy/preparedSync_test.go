@@ -22,7 +22,7 @@ func TestM3PreparedSyncPublishesExecutionState(t *testing.T) {
 	require.Equal(t, id, state.JobID)
 	require.True(t, state.FirstPartOrdered)
 	require.True(t, state.ScanningComplete)
-	require.Equal(t, uint32(1), state.DeletionCount)
+	require.Equal(t, uint64(1), state.DeletionCount)
 	require.Equal(t, uint32(1), state.SkippedSymlinkCount)
 	require.Equal(t, uint32(1), state.SkippedSpecialFileCount)
 	require.Equal(t, uint32(1), state.SkippedHardlinkCount)

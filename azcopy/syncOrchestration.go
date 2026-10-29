@@ -89,7 +89,7 @@ type PreparedSyncState struct {
 	JobID                   common.JobID
 	FirstPartOrdered        bool
 	ScanningComplete        bool
-	DeletionCount           uint32
+	DeletionCount           uint64
 	SkippedSymlinkCount     uint32
 	SkippedSpecialFileCount uint32
 	SkippedHardlinkCount    uint32

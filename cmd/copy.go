@@ -956,7 +956,7 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() ExitCode {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint64) {
 
 	// When we do GetJobSummary, the transfers list objects are cleared.
 	// This is a problem for other client consumers like XDM

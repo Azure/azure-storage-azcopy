@@ -46,7 +46,7 @@ type SyncEnumerationStats struct {
 	SkippedArchiveFileCount             uint64
 	FirstPartOrdered                    bool
 	ScanningComplete                    bool
-	DeletionCount                       uint32
+	DeletionCount                       uint64
 	SkippedSymlinkCount                 uint32
 	SkippedSpecialFileCount             uint32
 	SkippedHardlinkCount                uint32
@@ -78,7 +78,7 @@ type syncProgressTracker struct {
 
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
-	atomicDeletionCount           uint32
+	atomicDeletionCount           uint64
 	atomicSkippedHardlinkCount    uint32
 
 	// variables used to calculate progress
@@ -129,12 +129,12 @@ func (spt *syncProgressTracker) Start() {
 	}
 }
 
-func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
+func (s *syncProgressTracker) CheckProgress() (uint64, bool) {
 	duration := time.Since(s.jobStartTime)
 	snapshot := s.GetEnumerationStats()
 	var summary common.ListJobSummaryResponse
 	var jobDone bool
-	var totalKnownCount uint32
+	var totalKnownCount uint64
 	var throughput float64
 
 	// transfers have begun, so we can start computing throughput
@@ -265,11 +265,11 @@ func (spt *syncProgressTracker) incDestEnumeration(entityType common.EntityType,
 }
 
 func (spt *syncProgressTracker) incrementDeletionCount() {
-	atomic.AddUint32(&spt.atomicDeletionCount, 1)
+	atomic.AddUint64(&spt.atomicDeletionCount, 1)
 }
 
-func (spt *syncProgressTracker) getDeletionCount() uint32 {
-	return atomic.LoadUint32(&spt.atomicDeletionCount)
+func (spt *syncProgressTracker) getDeletionCount() uint64 {
+	return atomic.LoadUint64(&spt.atomicDeletionCount)
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1

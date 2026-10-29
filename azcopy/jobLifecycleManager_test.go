@@ -43,7 +43,7 @@ func (p *lifecycleTestProgress) Start() {
 		p.start()
 	}
 }
-func (*lifecycleTestProgress) CheckProgress() (uint32, bool) { return 0, false }
+func (*lifecycleTestProgress) CheckProgress() (uint64, bool) { return 0, false }
 func (*lifecycleTestProgress) CompletedEnumeration() bool    { return false }
 func (*lifecycleTestProgress) firstPartOrdered() bool        { return false }
 func (*lifecycleTestProgress) GetJobID() common.JobID        { return common.JobID{} }
