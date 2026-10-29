@@ -86,7 +86,7 @@ var JobsAdmin interface {
 
 	//DeleteJob(jobID common.JobID)
 
-	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
+	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint64, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
 
 	SetConcurrencySettingsToAuto()
 	GetConcurrencySettings() (int, bool)
@@ -650,7 +650,7 @@ func (ja *jobsAdmin) ForceCollectStats() bool {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice {
+func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint64, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice {
 	if !BenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
 	}
@@ -675,7 +675,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 
 	averageBytesPerFile := int64(0)
 	if filesInJob > 0 {
-		averageBytesPerFile = int64(bytesInJob / uint64(filesInJob))
+		averageBytesPerFile = int64(bytesInJob / filesInJob)
 	}
 
 	isToAzureFiles := fromTo.To() == common.ELocation.File()

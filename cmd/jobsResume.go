@@ -92,7 +92,7 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 }
 
 // TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint64) {
 
 	// When we do GetJobSummary, the transfers list objects are cleared.
 	// This is a problem for other client consumers like XDM
