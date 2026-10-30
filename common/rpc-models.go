@@ -253,8 +253,8 @@ type ListJobSummaryResponse struct {
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
 
-	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
-	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
+	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers + SymlinkTransfers + HardlinksConvertedCount + HardlinksTransferCount. Once all transfers finish, it also = TransfersCompleted + TransfersFailed + TransfersSkipped
+	// FileTransfers, FolderPropertyTransfers, SymlinkTransfers, and the two hardlink counts break the total down by type.
 	// The name FolderPropertyTransfers is used to emphasize that it is only counting transferring the properties and existence of
 	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as
 	// FileTransfers.
@@ -270,14 +270,19 @@ type ListJobSummaryResponse struct {
 	TransfersSkipped   uint32 `json:",string"`
 
 	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers
+	// Physical payload traffic observed by the transfer engine, not logical progress.
 	BytesOverWire uint64 `json:",string"`
 
 	// does not include failed transfers or bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
+	// Active-file bytes contribute during live progress; this is not limited to completed files.
 	TotalBytesTransferred uint64 `json:",string"`
 
 	// sum of the total transfer enumerated so far.
+	// Counts source sizes scheduled into job plans, not every object encountered during scanning.
 	TotalBytesEnumerated uint64 `json:",string"`
 	// sum of total bytes expected in the job (i.e. based on our current expectation of which files will be successful)
+	// Used as the progress denominator. Live and resumed jobs count all scheduled bytes; only reconstruction for
+	// 'jobs show' excludes failed/skipped transfers.
 	TotalBytesExpected uint64 `json:",string"`
 
 	PercentComplete float32 `json:",string"`
@@ -289,6 +294,20 @@ type ListJobSummaryResponse struct {
 	AverageE2EMilliseconds int     `json:",string"`
 	ServerBusyPercentage   float32 `json:",string"`
 	NetworkErrorPercentage float32 `json:",string"`
+
+	// Raw attempt counts from the same process-local pipeline statistics as above.
+	// ServerBusy503Count counts observed HTTP 503 responses, not all retries.
+	// Telemetry-only counters, excluded from customer-facing JSON summaries.
+	StorageHTTPAttemptCount   int64 `json:"-"`
+	NetworkErrorAttemptCount  int64 `json:"-"`
+	ServerBusy503Count        int64 `json:"-"`
+	ServerBusyThroughputCount int64 `json:"-"`
+	ServerBusyIOPSCount       int64 `json:"-"`
+	ServerBusyOtherCount      int64 `json:"-"`
+
+	// Failed transfers by ErrorCode, counted like TransfersFailed. Unlike FailedTransfers, which only holds
+	// failures since the previous summary request, this is cumulative. Telemetry-only.
+	FailedTransferErrorCodeCounts map[int32]uint32 `json:"-"`
 
 	FailedTransfers         []TransferDetail
 	SkippedTransfers        []TransferDetail

@@ -67,7 +67,7 @@ func newCopyRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManag
 
 	// Check protocol compatibility for File Shares
 	if err := ValidateProtocolCompatibility(ctx, fromTo, src, dst, rp.srcServiceClient, rp.dstServiceClient); err != nil {
-		return nil, err
+		return rp, err
 	}
 
 	return rp, nil
@@ -99,7 +99,7 @@ func newSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManag
 
 	// Check protocol compatibility for File Shares
 	if err := ValidateProtocolCompatibility(ctx, fromTo, src, dst, rp.srcServiceClient, rp.dstServiceClient); err != nil {
-		return nil, err
+		return rp, err
 	}
 
 	return rp, nil

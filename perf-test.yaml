@@ -21,6 +21,9 @@ stages:
       - group: AzCopyPerfTestTargets
       - name: localPath
         value: "/mnt/storage"
+      # The all-zero key keeps perf runs out of production telemetry.
+      - name: AZCOPY_TELEMETRY_CONNECTION_STRING
+        value: "InstrumentationKey=00000000-0000-0000-0000-000000000000"
 
       steps:
         - script: |

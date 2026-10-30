@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"maps"
 	"sync"
 	"time"
 
@@ -169,6 +170,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.HardlinksFailed++
 				}
 				js.TransfersFailed++
+				if js.FailedTransferErrorCodeCounts == nil {
+					js.FailedTransferErrorCodeCounts = make(map[int32]uint32)
+				}
+				js.FailedTransferErrorCodeCounts[msg.ErrorCode]++
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
@@ -190,8 +195,11 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					jm.Log(common.LogError, "Cannot send message on respChan")
 				}
 			}()
+			resp := *js
+			// The status manager keeps updating the map after this response is read.
+			resp.FailedTransferErrorCodeCounts = maps.Clone(js.FailedTransferErrorCodeCounts)
 			select {
-			case jstm.respChan <- *js:
+			case jstm.respChan <- resp:
 				// Send on the channel
 			case <-jstm.statusMgrDone:
 				// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
