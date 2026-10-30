@@ -256,7 +256,7 @@ func flatListRequestBounds(root, prefix string, bounds flatListRange) (start, en
 // validateFlatRanges rejects traversal modes incompatible with ordered FNS Arrow ranges.
 // This prevents unsupported listings from feeding range-scoped copy or mirror decisions.
 func (t *BlobTraverser) validateFlatRanges() error {
-	if !t.flatListingEnabled || t.isDFS || !t.recursive || t.ParallelListing ||
+	if !t.FlatListingEnabled || t.isDFS || !t.recursive || t.ParallelListing ||
 		t.include.Deleted() || t.include.Snapshots() || t.include.Versions() || t.include.DirStubs() {
 		return fmt.Errorf("static ranges require recursive FNS Arrow listing without deleted blobs, snapshots, versions or directory-stub inclusion")
 	}

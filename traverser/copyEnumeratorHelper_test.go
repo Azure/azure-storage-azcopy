@@ -182,7 +182,7 @@ func TestFlatListDedicatedPool(t *testing.T) {
 				require.NoError(t, err)
 				traverser := &BlobTraverser{
 					ctx: context.Background(), recursive: true,
-					flatListingEnabled: buildmode.HighPerf(),
+					FlatListingEnabled: buildmode.HighPerf(),
 				}
 				err = traverser.serialList(client, "c", "", "", NoPreProccessor, func(StoredObject) error {
 					t.Error("empty listing must not deliver an object")
@@ -390,7 +390,7 @@ func TestFlatListingSelection(t *testing.T) {
 				InitResourceTraverserOptions{FlatListing: tc.flat, Recursive: true, DestResourceType: &tc.dest},
 				BlobTraverserOptions{IsDFS: &tc.hns})
 			require.Equal(t, !tc.want, traverser.ParallelListing)
-			require.Equal(t, tc.want, traverser.flatListingEnabled)
+			require.Equal(t, tc.want, traverser.FlatListingEnabled)
 		})
 	}
 	t.Run("legacy flat scan is not opted in", func(t *testing.T) {
@@ -398,12 +398,12 @@ func TestFlatListingSelection(t *testing.T) {
 		traverser := NewBlobTraverser("https://example.blob.core.windows.net/c", nil, context.Background(),
 			InitResourceTraverserOptions{Recursive: true, DestResourceType: &blob})
 		require.False(t, traverser.ParallelListing)
-		require.False(t, traverser.flatListingEnabled)
+		require.False(t, traverser.FlatListingEnabled)
 	})
 	t.Run("unknown destination is not opted in", func(t *testing.T) {
 		traverser := NewBlobTraverser("https://example.blob.core.windows.net/c", nil, context.Background(),
 			InitResourceTraverserOptions{FlatListing: true, Recursive: true})
-		require.False(t, traverser.flatListingEnabled)
+		require.False(t, traverser.FlatListingEnabled)
 	})
 }
 
@@ -583,7 +583,7 @@ func TestFlatPhotonDoesNotChangeLegacyRequests(t *testing.T) {
 			location := common.ELocation.Blob()
 			traverser := NewBlobTraverser(endpoint+"/c", client, ctx,
 				InitResourceTraverserOptions{Recursive: true, DestResourceType: &location})
-			require.False(t, traverser.flatListingEnabled)
+			require.False(t, traverser.FlatListingEnabled)
 			traverser.ParallelListing = hierarchical
 			require.NoError(t, traverser.Traverse(NoPreProccessor, func(StoredObject) error { return nil }, nil))
 			require.Positive(t, calls.Load())
@@ -648,7 +648,7 @@ func TestFlatListPrefetchOverlapAndBound(t *testing.T) {
 								Request:    req,
 							}, nil
 						}))
-						traverser := &BlobTraverser{ctx: context.Background(), recursive: true, flatListingEnabled: eligible}
+						traverser := &BlobTraverser{ctx: context.Background(), recursive: true, FlatListingEnabled: eligible}
 						prefetch := eligible
 						var paths []string
 						start := time.Now()
@@ -710,7 +710,7 @@ func TestFlatListPrefetchDiscardsReadyPage(t *testing.T) {
 						Request:    req,
 					}, nil
 				}))
-				traverser := &BlobTraverser{ctx: ctx, recursive: true, flatListingEnabled: true}
+				traverser := &BlobTraverser{ctx: ctx, recursive: true, FlatListingEnabled: true}
 				wantErr := errors.New("processor stopped")
 				processed := 0
 				err := traverser.serialList(client, "c", "", "", NoPreProccessor, func(StoredObject) error {
@@ -844,7 +844,7 @@ func TestFlatListPrefetchAlreadyCanceled(t *testing.T) {
 		t.Error("canceled traversal must not start a request")
 		return nil, ctx.Err()
 	}))
-	traverser := &BlobTraverser{ctx: ctx, recursive: true, flatListingEnabled: true}
+	traverser := &BlobTraverser{ctx: ctx, recursive: true, FlatListingEnabled: true}
 	err := traverser.serialList(client, "c", "", "", NoPreProccessor, func(StoredObject) error {
 		t.Error("canceled traversal must not process a blob")
 		return nil

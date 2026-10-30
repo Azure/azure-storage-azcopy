@@ -793,11 +793,6 @@ func (t *BlobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	return object
 }
 
-func (t *BlobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bool {
-	util := copyHandlerUtil{}
-	return util.doesBlobRepresentAFolder(metadata) // We should ignore these, because we pick them up in other ways.
-}
-
 type flatListPoolKey struct{}
 
 // Only requests carrying a flat-page context use the isolated pool; STE and other calls keep theirs.
@@ -838,9 +833,9 @@ type flatListPage struct {
 	err      error
 }
 
-func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
-	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
-	if t.flatListingEnabled {
+func (t *BlobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
+	if t.FlatListingEnabled {
 		workers, err := flatListParallelism()
 		if err != nil {
 			return err
@@ -860,7 +855,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 						if preprocessor != nil {
 							preprocessor(&object)
 						}
-						_, err := getProcessingError(processIfPassedFilters(filters, object, processor))
+						_, err := getProcessingError(ProcessIfPassedFilters(filters, object, processor))
 						if err != nil {
 							processingFailed = true
 						}
@@ -876,9 +871,9 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	return t.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters, nil)
 }
 
-func (t *blobTraverser) serialListRange(containerClient *container.Client, containerName string, searchPrefix string,
-	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter, bounds *flatListRange) error {
-	prefetch := t.flatListingEnabled
+func (t *BlobTraverser) serialListRange(containerClient *container.Client, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter, bounds *flatListRange) error {
+	prefetch := t.FlatListingEnabled
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
@@ -887,7 +882,7 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 	if buildmode.HighPerf() {
 		listCtx = context.WithValue(listCtx, flatListPoolKey{}, struct{}{})
 	}
-	if t.flatListingEnabled {
+	if t.FlatListingEnabled {
 		responseFormat = container.StorageResponseFormatArrow
 		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.
 		listCtx = context.WithValue(listCtx, ste.ServiceAPIVersionOverride, "2026-06-06")

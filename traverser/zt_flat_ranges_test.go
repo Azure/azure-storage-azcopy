@@ -565,7 +565,7 @@ func TestStaticFlatRangesEnablement(t *testing.T) {
 				responseMode = "legacy"
 			}
 			src, calls := staticTestTraverser(t, keys, "root/", responseMode)
-			src.flatListingEnabled = tc.enabled
+			src.FlatListingEnabled = tc.enabled
 			if tc.enabled {
 				require.NoError(t, src.validateFlatRanges())
 			} else {

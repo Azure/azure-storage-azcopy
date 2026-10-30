@@ -1196,7 +1196,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		r.syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
 	}
-	syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
+	r.syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
 	// A range error returned here could not be recorded through the scanner channel.
 	if rangeFailure != nil {
 		return rangeFailure
