@@ -35,6 +35,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.4.0
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.3.0
 	github.com/Azure/go-autorest/autorest/date v0.3.0
+	github.com/apache/arrow-go/v18 v18.7.0
 	github.com/keybase/go-keychain v0.0.1
 	github.com/lescuer97/go-libsecret v0.0.0-20251130160347-067b741bcf5a
 	github.com/spf13/pflag v1.0.5
@@ -43,7 +44,6 @@ require (
 
 require (
 	github.com/akavel/rsrc v0.10.2 // indirect
-	github.com/apache/arrow-go/v18 v18.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect

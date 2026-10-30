@@ -687,8 +687,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 			cca.Destination.Value,
 			r.orchestratorOptions.ToStringMap()))
 
-	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
-
 	// syncOneDir processes a single directory by creating source and destination traversers,
 	// enumerating files, comparing them, and scheduling transfers. It also discovers
 	// subdirectories and enqueues them for further processing.
@@ -1174,25 +1172,12 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		}()
 	}
 
-	// Cancellation-aware wait
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		crawlWg.Wait() // Wait for all goroutines in background
-	}()
-
-	select {
-	case <-done:
-		// All goroutines completed normally
-		r.syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
-
-	case <-mainCtx.Done():
-		// On cancel, drain crawlOutput until it closes so no producer is still alive to write to the
-		// caller-owned sync ErrorChannel after it is closed. (crawlWg can't be used here: the crawler
-		// abandons queued dirs on cancel, so it would never reach zero.)
-		r.syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected; waiting for in-flight traversers to drain.")
-		for range crawlOutput {
-		}
+	// syncOneDir already reports failures through ErrorChannel. Consume the crawler's duplicate
+	// error results continuously so its bounded output cannot block workers from taking the next
+	// directory. Closure also guarantees no traverser can write to ErrorChannel after we return.
+	for range crawlOutput {
+	}
+	if mainCtx.Err() != nil {
 		r.syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
 	}
