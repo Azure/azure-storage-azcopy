@@ -491,6 +491,9 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 
 func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 	if msgToOutput.msgType == EOutputMessageType.Error() {
+		// EOutputFormat.None() is exclusively used when stdout is being used for data output
+		// Allow errors to be printed to stderr even when the output format is None()
+		fmt.Fprintln(os.Stderr, "\n" + msgToOutput.msgContent)
 		lcm.closeFunc()
 		os.Exit(int(EExitCode.Error()))
 	} else if msgToOutput.shouldExitProcess() {
@@ -535,7 +538,12 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		// simply print and quit
 		// if no message is intended, avoid adding new lines
 		if msgToOutput.msgContent != "" {
-			fmt.Println("\n" + msgToOutput.msgContent)
+			// Print errors to stderr
+			var dest = os.Stdout
+			if msgToOutput.msgType == EOutputMessageType.Error() {
+				dest = os.Stderr
+			}
+			fmt.Fprintln(dest, "\n" + msgToOutput.msgContent)
 		}
 		if msgToOutput.shouldExitProcess() {
 			lcm.closeFunc()
