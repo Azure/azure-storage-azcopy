@@ -28,7 +28,7 @@ jobs:
           CGO_ENABLED=1 go build -o output/azcopy_darwin_m1_arm64
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-artifacts
           path: output/
