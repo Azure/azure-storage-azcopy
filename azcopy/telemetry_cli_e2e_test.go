@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,7 +222,7 @@ func assertCLIE2ELifecycle(t *testing.T, events []cliE2EEnvelope, summary common
 	for _, properties := range []map[string]string{started.Properties, finished.Properties} {
 		require.Equal(t, command, properties["Command"])
 		require.Equal(t, summary.JobID.String(), properties["JobID"])
-		require.Equal(t, "1", properties["SchemaVersion"])
+		require.Equal(t, telemetry.SchemaVersion, properties["SchemaVersion"])
 		require.Equal(t, "Blob", properties["SourceType"])
 		require.Equal(t, "Local", properties["DestType"])
 		require.Equal(t, auth, properties["SourceAuthMechanism"])
@@ -233,6 +234,9 @@ func assertCLIE2ELifecycle(t *testing.T, events []cliE2EEnvelope, summary common
 	}
 	require.Equal(t, started.Properties["InstallationID"], finished.Properties["InstallationID"])
 	require.Equal(t, started.Properties["InvocationID"], finished.Properties["InvocationID"])
+	// Host fields are sent once per attempt, on job.started only.
+	require.NotEmpty(t, started.Properties["HostNumCPU"])
+	require.NotContains(t, finished.Properties, "HostNumCPU")
 	require.Equal(t, "Completed", finished.Properties["JobStatus"])
 	for metric, expected := range map[string]float64{
 		"azcopy.bytes_transferred":           float64(summary.TotalBytesTransferred),
@@ -250,6 +254,9 @@ func assertCLIE2ELifecycle(t *testing.T, events []cliE2EEnvelope, summary common
 		"azcopy.source_max_directory_depth":  0,
 	} {
 		value, present := finished.Measurements[metric]
+		if !present && expected == 0 && telemetry.MeasurementOmittedWhenZero(metric) {
+			continue
+		}
 		require.True(t, present, metric)
 		require.Equal(t, expected, value, metric)
 	}
@@ -316,7 +323,7 @@ func TestTelemetryCLIIntegration(t *testing.T) {
 				require.Equal(t, "azcopy.command.invoked", events[0].Data.BaseData.Name)
 				require.Empty(t, events[0].Data.BaseData.Measurements)
 				require.Equal(t, "jobs.list", events[0].Data.BaseData.Properties["Command"])
-				require.Equal(t, "1", events[0].Data.BaseData.Properties["SchemaVersion"])
+				require.Equal(t, telemetry.SchemaVersion, events[0].Data.BaseData.Properties["SchemaVersion"])
 			}
 		})
 	}

@@ -94,7 +94,7 @@ func sampleFinished() JobFinishedEvent {
 			ObjectsFailed:                   1,
 			ObjectsSkipped:                  1,
 			FolderPropertiesCompleted:       3,
-			FolderPropertiesFailed:          0,
+			FolderPropertiesFailed:          1,
 			FolderPropertiesSkipped:         1,
 			SourceObjectsScanned:            20,
 			SourceBytesScanned:              40960,
@@ -107,6 +107,8 @@ func sampleFinished() JobFinishedEvent {
 			SourceMaxDirectoryDepth:         5,
 			ContainersScanned:               3,
 			ContainersTouched:               2,
+			BucketsScanned:                  4,
+			BucketsTouched:                  1,
 			TransfersCompleted:              10,
 			TransfersFailed:                 1,
 			TransfersSkipped:                2,
@@ -166,7 +168,7 @@ func TestFinishedMeasurements(t *testing.T) {
 	assert.Equal(t, float64(1), byName["azcopy.objects_failed"])
 	assert.Equal(t, float64(1), byName["azcopy.objects_skipped"])
 	assert.Equal(t, float64(3), byName["azcopy.folder_properties_completed"])
-	assert.Equal(t, float64(0), byName["azcopy.folder_properties_failed"])
+	assert.Equal(t, float64(1), byName["azcopy.folder_properties_failed"])
 	assert.Equal(t, float64(1), byName["azcopy.folder_properties_skipped"])
 	assert.Equal(t, float64(20), byName["azcopy.source_objects_scanned"])
 	assert.Equal(t, float64(40960), byName["azcopy.source_bytes_scanned"])
@@ -179,6 +181,8 @@ func TestFinishedMeasurements(t *testing.T) {
 	assert.Equal(t, float64(5), byName["azcopy.source_max_directory_depth"])
 	assert.Equal(t, float64(3), byName["azcopy.containers_scanned"])
 	assert.Equal(t, float64(2), byName["azcopy.containers_touched"])
+	assert.Equal(t, float64(4), byName["azcopy.buckets_scanned"])
+	assert.Equal(t, float64(1), byName["azcopy.buckets_touched"])
 	assert.Equal(t, float64(10), byName["azcopy.transfers_completed"])
 	assert.Equal(t, float64(1), byName["azcopy.transfers_failed"])
 	assert.Equal(t, float64(2), byName["azcopy.transfers_skipped"])
@@ -201,6 +205,56 @@ func TestFinishedMeasurements(t *testing.T) {
 	assert.Equal(t, float64(100), byName["azcopy.percent_complete"])
 	assert.Len(t, m, 50)
 	assert.NotContains(t, byName, "azcopy.job.finished")
+}
+
+func TestFinishedMeasurementsOmitOnlyZeroCounters(t *testing.T) {
+	event := JobFinishedEvent{JobStatus: "Failed", TerminalStage: "initialization"}
+	byName := map[string]float64{}
+	for _, metric := range event.measurements() {
+		byName[metric.Name] = metric.Value
+	}
+	// Every counter is zero, so only values that are averaged rather than summed remain.
+	assert.ElementsMatch(t, []string{
+		"azcopy.source_average_object_size_bytes",
+		"azcopy.source_object_size_p50_bytes_approx",
+		"azcopy.source_object_size_p90_bytes_approx",
+		"azcopy.source_object_size_p95_bytes_approx",
+		"azcopy.source_objects_under_1_mib_ratio_pct",
+		"azcopy.source_max_directory_depth",
+		"azcopy.job_duration_seconds",
+		"azcopy.enumeration_phase_duration_seconds",
+		"azcopy.transfer_phase_duration_seconds",
+		"azcopy.job_throughput_mbps",
+		"azcopy.transfer_phase_throughput_mbps",
+		"azcopy.average_storage_http_attempt_e2e_ms",
+		"azcopy.avg_iops",
+		"azcopy.server_busy_pct",
+		"azcopy.network_error_pct",
+		"azcopy.percent_complete",
+	}, func() []string {
+		names := make([]string, 0, len(byName))
+		for name, value := range byName {
+			assert.Zero(t, value, name)
+			names = append(names, name)
+		}
+		return names
+	}())
+	for name := range byName {
+		assert.False(t, MeasurementOmittedWhenZero(name), name)
+	}
+	assert.Len(t, zeroOmittedMeasurements, 50-len(byName))
+
+	// A zero counter is omitted on its own; a zero average is still sent.
+	event = sampleFinished()
+	event.Measurements.TransfersFailed = 0
+	event.Measurements.PercentComplete = 0
+	byName = map[string]float64{}
+	for _, metric := range event.measurements() {
+		byName[metric.Name] = metric.Value
+	}
+	assert.NotContains(t, byName, "azcopy.transfers_failed")
+	assert.Contains(t, byName, "azcopy.percent_complete")
+	assert.Len(t, byName, 49)
 }
 
 func TestFinishedMeasurementOmissionRules(t *testing.T) {
@@ -285,6 +339,7 @@ func TestCommandInvokedEvent(t *testing.T) {
 	assert.Equal(t, "invocation-9999", attrs["InvocationID"])
 	// Resource attributes are included.
 	assert.Equal(t, "10.32.2", attrs["AzCopyVersion"])
+	assert.Equal(t, "8", attrs["HostNumCPU"])
 	_, hasServiceName := attrs["ServiceName"]
 	assert.False(t, hasServiceName)
 	_, hasServiceVersion := attrs["ServiceVersion"]
@@ -307,9 +362,17 @@ func TestAttributesIncludeResourceAndDimensions(t *testing.T) {
 	_, hasServiceVersion := attrs["ServiceVersion"]
 	assert.False(t, hasServiceVersion)
 	assert.Equal(t, "1", attrs["SchemaVersion"])
-	assert.Equal(t, "true", attrs["AzureVMDetected"])
-	assert.Equal(t, "386", attrs["HostArch"])
-	assert.Equal(t, "amd64", attrs["OSArch"])
+	// Host fields are sent on job.started and command.invoked only.
+	for _, name := range []string{"OSVersion", "HostArch", "OSArch", "HostNumCPU", "HostCPUModel", "HostMemoryTotalGB", "AzureVMDetected"} {
+		assert.NotContains(t, attrs, name)
+	}
+	started := sampleStarted().properties()
+	assert.Equal(t, "true", started["AzureVMDetected"])
+	assert.Equal(t, "386", started["HostArch"])
+	assert.Equal(t, "amd64", started["OSArch"])
+	assert.Equal(t, "8", started["HostNumCPU"])
+	assert.Equal(t, "linux", attrs["OSType"])
+	assert.Equal(t, "abc123", attrs["InstallationID"])
 	_, hasHostVirtualization := attrs["HostVirtualization"]
 	assert.False(t, hasHostVirtualization)
 	_, hasNetworkRunContext := attrs["NetworkRunContext"]
@@ -505,7 +568,7 @@ func TestEventPropertiesAreBoundedBeforeExport(t *testing.T) {
 	for name, value := range envelope.Data.BaseData.Properties {
 		assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
 	}
-	assert.Len(t, envelope.Data.BaseData.Properties["OSVersion"], maxHostValueLen)
+	assert.NotContains(t, envelope.Data.BaseData.Properties, "OSVersion")
 	assert.Len(t, envelope.Data.BaseData.Properties["JobID"], maxIdentifierValueLen)
 	assert.Len(t, envelope.Data.BaseData.Properties["OptFutureValue"], maxOptionValueLen)
 
@@ -520,6 +583,8 @@ func TestEventPropertiesAreBoundedBeforeExport(t *testing.T) {
 	for name, value := range command.properties() {
 		assert.LessOrEqual(t, len(value), propertyValueLimit(name), name)
 	}
+	assert.Len(t, command.properties()["OSVersion"], maxHostValueLen)
+	assert.Len(t, command.properties()["HostCPUModel"], maxHostValueLen)
 }
 
 func TestUnsetOptionsAreOmitted(t *testing.T) {
