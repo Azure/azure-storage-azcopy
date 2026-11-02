@@ -176,6 +176,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				js.FailedTransferErrorCodeCounts[msg.ErrorCode]++
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
+				common.ETransferStatus.SkippedEntityHasInvalidName(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				if msg.IsFolderProperties {
 					js.FoldersSkipped++
