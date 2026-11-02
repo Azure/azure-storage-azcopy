@@ -24,8 +24,18 @@ param baseName string = 'azcopy-telemetry'
 @maxValue(730)
 param retentionInDays int = 730
 
-@description('Daily ingestion cap in GB. Decimal values are passed as strings because Bicep has no floating-point type.')
+@description('Log Analytics workspace daily ingestion cap in GB. Decimal values are passed as strings because Bicep has no floating-point type.')
 param dailyQuotaGb string = '10'
+
+@description('Application Insights daily cap in whole GB. Keep it at least twice dailyQuotaGb so the workspace cap, which raises the daily cap alert, is the one that stops ingestion: the two caps reset at different hours, so one Application Insights day can span two workspace days.')
+@minValue(1)
+param appInsightsDailyCapGb int = 20
+
+@description('Email addresses notified when the workspace daily cap stops ingestion. Leave empty to see the alert only in the Azure portal.')
+param capAlertEmails array = []
+
+@description('Existing action group resource IDs, for example an IcM connector, also notified when the workspace daily cap stops ingestion.')
+param capAlertActionGroupIds array = []
 
 @description('Optional object ID of the E2E workload identity. When provided, grants only the read/query roles required by telemetry validation.')
 param e2eQueryPrincipalId string = ''
@@ -85,6 +95,67 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
     RetentionInDays: retentionInDays
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
+  }
+}
+
+resource appInsightsDailyCap 'Microsoft.Insights/components/pricingPlans@2017-10-01' = {
+  parent: appInsights
+  name: 'current'
+  properties: {
+    planType: 'Basic'
+    cap: appInsightsDailyCapGb
+    stopSendNotificationWhenHitCap: false
+  }
+}
+
+resource capAlertActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = if (!empty(capAlertEmails)) {
+  name: '${baseName}-${environmentName}-cap-alerts'
+  location: 'global'
+  tags: commonTags
+  properties: {
+    groupShortName: environmentName == 'prod' ? 'azcopytelprd' : 'azcopyteltst'
+    enabled: true
+    emailReceivers: [for (email, i) in capAlertEmails: {
+      name: 'email-${i}'
+      emailAddress: email
+      useCommonAlertSchema: true
+    }]
+  }
+}
+
+// Query and settings follow https://learn.microsoft.com/azure/azure-monitor/logs/daily-cap#alert-when-daily-cap-is-reached
+resource dailyCapAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+  name: '${baseName}-${environmentName}-daily-cap-reached'
+  location: location
+  tags: commonTags
+  properties: {
+    displayName: 'AzCopy telemetry (${environmentName}): daily data limit reached'
+    description: 'The ${workspaceName} daily cap stopped ingestion; AzCopy telemetry is dropped until the daily reset.'
+    severity: 2
+    enabled: true
+    scopes: [
+      workspace.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      allOf: [
+        {
+          query: '_LogOperation | where Category =~ "Ingestion" | where Detail contains "OverQuota"'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    autoMitigate: false
+    actions: {
+      actionGroups: empty(capAlertEmails) ? capAlertActionGroupIds : concat(capAlertActionGroupIds, [capAlertActionGroup.id])
+    }
   }
 }
 
