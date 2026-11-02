@@ -28,15 +28,16 @@ steps:
         auth=${header#AUTHORIZATION: ***
         case "$auth" in
           basic\ *)  token=$(printf '%s' "${auth#basic }" | base64 -d | cut -d: -f2) ;;
-          bearer\ *) token=${auth#bearer } ;;
-          *)         echo "unexpected scheme" >&2; exit 1 ;;
+          bearer\ *) token=$value ;;
+          *)         echo "unexpected scheme: $scheme" >&2; exit 1 ;;
         esac
+        [ -n "$token" ] || { echo "empty token" >&2; exit 1; }
         
         # Create the JSON payload
         PAYLOAD=$(jq -n --arg ref "$GITHUB_REF" '{ref: $ref}')
         
         # Trigger the workflow
-        response=$(curl -w "%{http_code}" -X POST -H "Authorization: Basic $(token)" -H "Accept: application/vnd.github.v3+json" $GITHUB_API_URL -d "$PAYLOAD")
+        response=$(curl -w "%{http_code}" -X POST -H "Authorization: Basic $token" -H "Accept: application/vnd.github.v3+json" $GITHUB_API_URL -d "$PAYLOAD")
         echo "response: $response"
 
         if [ $response -eq 204 ]; then
@@ -71,7 +72,7 @@ steps:
 
         # Function to check the status of the latest workflow run
         check_status() {
-          runs_response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$WORKFLOW_RUNS_URL")
+          runs_response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(token)" "$WORKFLOW_RUNS_URL")
 
           latest_run_status=$(echo $runs_response | jq -r '.workflow_runs[0].status')
           latest_run_conclusion=$(echo $runs_response | jq -r '.workflow_runs[0].conclusion')
@@ -107,7 +108,7 @@ steps:
           mkdir -p $ARTIFACTS_DIR
 
           # Retrieve the list of artifacts
-          artifacts_response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$ARTIFACTS_URL")
+          artifacts_response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(token)" "$ARTIFACTS_URL")
 
           # Extract the artifact download URLs
           artifact_count=$(echo $artifacts_response | jq '.artifacts | length')
@@ -119,7 +120,7 @@ steps:
             
             echo "Downloading artifact: $artifact_name"
             
-            download_response=$(curl -w "%{http_code}" -L -o "$ARTIFACTS_DIR/$artifact_name.zip" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$artifact_url")
+            download_response=$(curl -w "%{http_code}" -L -o "$ARTIFACTS_DIR/$artifact_name.zip" -H "Authorization: Bearer $(token)" "$artifact_url")
             echo "download response: $download_response"
 
             if [ $? -eq 0 ]; then
