@@ -24,7 +24,7 @@ steps:
 
         GITHUB_API_URL="https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/workflows/$GITHUB_WORKFLOW_FILE/dispatches"
         
-        header=$(git config --local --get "http.https://github.com/.extraheader")
+        header=$(git config --local --get "http.https://github.com/Azure/azure-storage-azcopy.extraheader")
         auth=${header#AUTHORIZATION: ***
         case "$auth" in
           basic\ *)  token=$(printf '%s' "${auth#basic }" | base64 -d | cut -d: -f2) ;;
