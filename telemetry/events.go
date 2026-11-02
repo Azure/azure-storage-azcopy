@@ -39,9 +39,17 @@ import (
 	"unicode/utf8"
 )
 
+// SchemaVersion identifies the event payload shape. Increment it whenever
+// released clients change which properties or measurements an event carries.
+// Version 4 omits zero-valued counters and host fields from job.finished.
+// Versions 2 and 3 were used by pre-release builds and are not reused.
+const SchemaVersion = "4"
+
 // ---------------------------------------------------------------------------
 // Resource attributes - machine/system facts, constant for the process.
-// Attached to every telemetry event.
+// Identity attributes are attached to every telemetry event. Host attributes
+// are attached only to job.started and command.invoked; join job.finished to
+// job.started on InvocationID for them.
 // ---------------------------------------------------------------------------
 
 type ResourceAttributes struct {
@@ -65,13 +73,6 @@ func (ra ResourceAttributes) props() map[string]string {
 		"AzCopyVersion":     ra.AzCopyVersion,
 		"SchemaVersion":     ra.SchemaVersion,
 		"OSType":            ra.OSType,
-		"OSVersion":         ra.OSVersion,
-		"HostArch":          ra.HostArch,
-		"OSArch":            ra.OSArch,
-		"HostNumCPU":        strconv.Itoa(ra.HostNumCPU),
-		"HostCPUModel":      ra.HostCPUModel,
-		"HostMemoryTotalGB": strconv.Itoa(ra.HostMemoryTotalGB),
-		"AzureVMDetected":   strconv.FormatBool(ra.AzureVMDetected),
 		"InstallationID":    ra.InstallationID,
 		"InvocationContext": ra.InvocationContext,
 	}
@@ -79,6 +80,18 @@ func (ra ResourceAttributes) props() map[string]string {
 		props["E2ETestRunID"] = ra.E2ETestRunID
 	}
 	return props
+}
+
+func (ra ResourceAttributes) hostProps() map[string]string {
+	return map[string]string{
+		"OSVersion":         ra.OSVersion,
+		"HostArch":          ra.HostArch,
+		"OSArch":            ra.OSArch,
+		"HostNumCPU":        strconv.Itoa(ra.HostNumCPU),
+		"HostCPUModel":      ra.HostCPUModel,
+		"HostMemoryTotalGB": strconv.Itoa(ra.HostMemoryTotalGB),
+		"AzureVMDetected":   strconv.FormatBool(ra.AzureVMDetected),
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +336,7 @@ func (e JobStartedEvent) timestamp() time.Time  { return e.Timestamp }
 func (e JobFinishedEvent) timestamp() time.Time { return e.EndTimestamp }
 
 func (e JobStartedEvent) properties() map[string]string {
-	attrs := mergeProps(e.Resource.props(), e.Dimensions.props())
+	attrs := mergeProps(e.Resource.props(), e.Resource.hostProps(), e.Dimensions.props())
 	attrs["JobID"] = e.JobID
 	if e.InvocationID != "" {
 		attrs["InvocationID"] = e.InvocationID
@@ -423,6 +436,9 @@ func (e JobFinishedEvent) measurements() []namedMetric {
 	}
 	filtered := metrics[:0]
 	for _, metric := range metrics {
+		if metric.Value == 0 && zeroOmittedMeasurements[metric.Name] {
+			continue
+		}
 		switch metric.Name {
 		case "azcopy.job_throughput_mbps", "azcopy.transfer_phase_throughput_mbps":
 			if e.Dimensions.SummaryCounterScope == "job-cumulative" {
@@ -436,6 +452,53 @@ func (e JobFinishedEvent) measurements() []namedMetric {
 		filtered = append(filtered, metric)
 	}
 	return filtered
+}
+
+// zeroOmittedMeasurements are job.finished counters that consumers sum, so a
+// missing value means zero and omitting zeros does not change any total.
+// Durations, rates, percentages, sizes and other values that are averaged are
+// always sent, because a missing value would change their averages.
+var zeroOmittedMeasurements = map[string]bool{
+	"azcopy.failure_error_other_count":     true,
+	"azcopy.bytes_enumerated":              true,
+	"azcopy.bytes_expected":                true,
+	"azcopy.bytes_transferred":             true,
+	"azcopy.bytes_over_wire":               true,
+	"azcopy.objects_scheduled":             true,
+	"azcopy.regular_files_scheduled":       true,
+	"azcopy.symlinks_scheduled":            true,
+	"azcopy.hardlinks_converted_scheduled": true,
+	"azcopy.hardlinks_preserved_scheduled": true,
+	"azcopy.folder_properties_scheduled":   true,
+	"azcopy.objects_completed":             true,
+	"azcopy.objects_failed":                true,
+	"azcopy.objects_skipped":               true,
+	"azcopy.folder_properties_completed":   true,
+	"azcopy.folder_properties_failed":      true,
+	"azcopy.folder_properties_skipped":     true,
+	"azcopy.source_objects_scanned":        true,
+	"azcopy.source_bytes_scanned":          true,
+	"azcopy.source_objects_under_1_mib":    true,
+	"azcopy.containers_scanned":            true,
+	"azcopy.containers_touched":            true,
+	"azcopy.buckets_scanned":               true,
+	"azcopy.buckets_touched":               true,
+	"azcopy.transfers_completed":           true,
+	"azcopy.transfers_failed":              true,
+	"azcopy.transfers_skipped":             true,
+	"azcopy.transfers_total":               true,
+	"azcopy.storage_http_attempt_count":    true,
+	"azcopy.network_error_attempt_count":   true,
+	"azcopy.server_busy_503_count":         true,
+	"azcopy.server_busy_throughput_count":  true,
+	"azcopy.server_busy_iops_count":        true,
+	"azcopy.server_busy_other_count":       true,
+}
+
+// MeasurementOmittedWhenZero reports whether job.finished omits the named
+// measurement when its value is zero, so readers should treat it as zero.
+func MeasurementOmittedWhenZero(name string) bool {
+	return zeroOmittedMeasurements[name]
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +525,7 @@ func (CommandInvokedEvent) EventName() string { return commandInvokedEventName }
 func (e CommandInvokedEvent) timestamp() time.Time { return e.Timestamp }
 
 func (e CommandInvokedEvent) properties() map[string]string {
-	attrs := e.Resource.props()
+	attrs := mergeProps(e.Resource.props(), e.Resource.hostProps())
 	attrs["Command"] = e.Command
 	e.Options.addTo(attrs)
 	if e.JobID != "" {
