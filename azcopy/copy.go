@@ -48,6 +48,7 @@ type CopyOptions struct {
 	SrcCredName               string
 	DstCredName               string
 	S3CredentialProvider      credentials.Provider
+	UseFlatListing            bool
 
 	IncludeBefore               *time.Time
 	IncludeAfter                *time.Time

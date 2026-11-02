@@ -159,6 +159,8 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 				t.tpt.incSkippedArchive()
 			}
 		},
+
+		FlatListing: t.opts.useFlatListing,
 	})
 	if err != nil {
 		return nil, err

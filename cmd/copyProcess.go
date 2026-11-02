@@ -236,6 +236,7 @@ func (cooked *CookedCopyCmdArgs) ToCopyOptions() (azcopy.CopyOptions, error) {
 		PreserveLastModifiedTime: cooked.preserveLastModifiedTime,
 		PreservePermissions:      cooked.preservePermissions.IsTruthy(),
 		PreserveOwner:            &cooked.preserveOwner, PreserveInfo: &cooked.preserveInfo,
+		UseFlatListing:          cooked.useFlatListing,
 		PreservePosixProperties: cooked.preservePOSIXProperties, AsSubDir: &cooked.asSubdir,
 		PosixPropertiesStyle: cooked.posixPropertiesStyle,
 		Symlinks:             cooked.SymlinkHandling, Hardlinks: cooked.hardlinks, BackupMode: cooked.backupMode,

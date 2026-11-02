@@ -127,6 +127,11 @@ func (cooked *CookedCopyCmdArgs) SetS2sGetPropertiesInBackend(value bool) {
 	cooked.s2sGetPropertiesInBackend = value
 }
 
+// SetUseFlatListing opts an FNS-to-FNS Blob copy into flat listing. The caller must confirm both accounts are FNS.
+func (cooked *CookedCopyCmdArgs) SetUseFlatListing(value bool) {
+	cooked.useFlatListing = value
+}
+
 // ============================================================================
 // End CookedCopyCmdArgs - Property Setters
 // ============================================================================
