@@ -92,6 +92,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DisableSyslog(),
 	EEnvironmentVariable.MimeMapping(),
 	EEnvironmentVariable.DownloadToTempPath(),
+	EEnvironmentVariable.StorageMoverNudge(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -260,6 +261,16 @@ func (EnvironmentVariable) AutoTuneToCpu() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_TUNE_TO_CPU",
 		Description: "Set to false to prevent AzCopy from taking CPU usage into account when auto-tuning its concurrency level (e.g. in the benchmark command).",
+	}
+}
+
+// StorageMoverNudge (POC) gates an informational note that points users at Azure
+// Storage Mover for migration scenarios that Storage Mover also covers.
+func (EnvironmentVariable) StorageMoverNudge() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_STORAGE_MOVER_NUDGE",
+		DefaultValue: "false",
+		Description:  "Set to 'true' to show an informational note suggesting Azure Storage Mover for fully managed migration when the source/destination pair and flags are covered by Storage Mover.",
 	}
 }
 
