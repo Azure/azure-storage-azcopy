@@ -785,6 +785,7 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo                  bool
 	hardlinks                     common.HardlinkHandlingType
+	useFlatListing                bool
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
 	atomicSkippedArchiveFileCount uint64
