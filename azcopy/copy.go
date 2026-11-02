@@ -49,6 +49,8 @@ type CopyOptions struct {
 	DstCredName               string
 	S3CredentialProvider      credentials.Provider
 	UseFlatListing            bool
+	// ErrorChannel receives enumeration errors without blocking; errors are dropped when it is full. The caller owns closing it.
+	ErrorChannel chan<- traverser.TraverserErrorItemInfo
 
 	IncludeBefore               *time.Time
 	IncludeAfter                *time.Time

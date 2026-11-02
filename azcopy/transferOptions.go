@@ -156,6 +156,7 @@ type CookedTransferOptions struct {
 	deleteDestinationFileIfNecessary bool
 
 	useFlatListing bool
+	errorChannel   chan<- traverser.TraverserErrorItemInfo
 }
 
 func newCookedCopyOptions(src, dst string, opts CopyOptions) (c *CookedTransferOptions, err error) {
@@ -294,6 +295,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	c.checkLength = opts.CheckLength
 	c.includeDirectoryStubs = opts.IncludeDirectoryStubs
 	c.useFlatListing = opts.UseFlatListing
+	c.errorChannel = opts.ErrorChannel
 	c.backupMode = opts.BackupMode
 	c.s2sPreserveProperties = boolDefaultTrue{value: opts.S2SPreserveProperties}
 	c.s2sPreserveAccessTier = boolDefaultTrue{value: opts.S2SPreserveAccessTier}

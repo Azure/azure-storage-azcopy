@@ -32,8 +32,30 @@ import (
 
 var _ jobProgressTracker = &transferProgressTracker{}
 
+type CopyEnumerationStats struct {
+	FilesScanned            uint64
+	FoldersScanned          uint64
+	FileEnumerationFailed   uint64
+	FolderEnumerationFailed uint64
+	SkippedArchiveFileCount uint64
+	SkippedSymlinkCount     uint32
+	SkippedSpecialFileCount uint32
+	SkippedHardlinkCount    uint32
+	FirstPartOrdered        bool
+	ScanningComplete        bool
+}
+
+// CopyEnumerationStatsHandler is optional so existing CopyHandler implementations remain compatible.
+type CopyEnumerationStatsHandler interface {
+	OnEnumerationStats(CopyEnumerationStats)
+}
+
 type transferProgressTracker struct {
 	atomicSkippedArchiveFileCount atomic.Uint64
+	atomicFilesScanned            atomic.Uint64
+	atomicFoldersScanned          atomic.Uint64
+	atomicFileEnumerationFailed   atomic.Uint64
+	atomicFolderEnumerationFailed atomic.Uint64
 	jobID                         common.JobID
 	fromTo                        common.FromTo
 	handler                       CopyHandler
@@ -74,6 +96,10 @@ func (tpt *transferProgressTracker) Start() {
 }
 
 func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
+	if handler, ok := tpt.handler.(CopyEnumerationStatsHandler); ok {
+		handler.OnEnumerationStats(tpt.GetEnumerationStats())
+	}
+
 	if tpt.firstPartOrdered() {
 		// fetch a job status
 		summary := jobsAdmin.GetJobSummary(tpt.jobID, !buildmode.IsMover)
@@ -199,7 +225,44 @@ func (tpt *transferProgressTracker) getSkippedArchiveFileCount() uint64 {
 	return tpt.atomicSkippedArchiveFileCount.Load()
 }
 
+func (tpt *transferProgressTracker) GetEnumerationStats() CopyEnumerationStats {
+	return CopyEnumerationStats{
+		FilesScanned:            tpt.atomicFilesScanned.Load(),
+		FoldersScanned:          tpt.atomicFoldersScanned.Load(),
+		FileEnumerationFailed:   tpt.atomicFileEnumerationFailed.Load(),
+		FolderEnumerationFailed: tpt.atomicFolderEnumerationFailed.Load(),
+		SkippedArchiveFileCount: tpt.getSkippedArchiveFileCount(),
+		SkippedSymlinkCount:     tpt.getSkippedSymlinkCount(),
+		SkippedSpecialFileCount: tpt.getSkippedSpecialFileCount(),
+		SkippedHardlinkCount:    tpt.getSkippedHardlinkCount(),
+		FirstPartOrdered:        tpt.firstPartOrdered(),
+		ScanningComplete:        tpt.CompletedEnumeration(),
+	}
+}
+
+// incEnumerationFailure mirrors the sync tracker: a failed entity still counts as scanned.
+func (tpt *transferProgressTracker) incEnumerationFailure(entityType common.EntityType) {
+	if entityType == common.EEntityType.Folder() {
+		tpt.atomicFolderEnumerationFailed.Add(1)
+		tpt.atomicFoldersScanned.Add(1)
+	} else {
+		tpt.atomicFileEnumerationFailed.Add(1)
+		tpt.atomicFilesScanned.Add(1)
+	}
+}
+
 func (tpt *transferProgressTracker) incEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
+	switch entityType {
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
+		tpt.atomicFilesScanned.Add(1)
+	case common.EEntityType.Folder():
+		tpt.atomicFoldersScanned.Add(1)
+	case common.EEntityType.Other():
+		if tpt.fromTo.IsNFS() || tpt.fromTo.From() == common.ELocation.S3() {
+			tpt.atomicFilesScanned.Add(1)
+		}
+	}
+
 	if tpt.fromTo.IsNFS() {
 		if entityType == common.EEntityType.Other() {
 			atomic.AddUint32(&tpt.atomicSkippedSpecialFileCount, 1)
