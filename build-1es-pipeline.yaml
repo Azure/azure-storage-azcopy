@@ -62,7 +62,7 @@ extends:
   template: v1/1ES.Official.PipelineTemplate.yml@1esPipelines
   parameters:
     settings:
-      networkIsolationPolicy: Good
+      networkIsolationPolicy: Good, GitHub
     sdl:
       sourceAnalysisPool:
         name: azcopy-pool  # Name of your hosted pool
