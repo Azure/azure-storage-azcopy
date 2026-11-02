@@ -36,7 +36,7 @@ steps:
         PAYLOAD=$(jq -n --arg ref "$GITHUB_REF" '{ref: $ref}')
         
         # Trigger the workflow
-        response=$(curl -w "%{http_code}" -X POST -H "Authorization: Bearer $(auth)" -H "Accept: application/vnd.github.v3+json" $GITHUB_API_URL -d "$PAYLOAD")
+        response=$(curl -w "%{http_code}" -X POST -H "Authorization: Basic $(token)" -H "Accept: application/vnd.github.v3+json" $GITHUB_API_URL -d "$PAYLOAD")
         echo "response: $response"
 
         if [ $response -eq 204 ]; then
@@ -51,7 +51,7 @@ steps:
         WORKFLOWS_URL="https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/workflows"
 
         # Retrieve workflows
-        response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(auth)" "$WORKFLOWS_URL")
+        response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(token)" "$WORKFLOWS_URL")
 
         # Extract the workflow ID for the specified workflow name
         workflow_id=$(echo $response | jq -r --arg workflow_name "$GITHUB_WORKFLOW_NAME" '.workflows[] | select(.name == $workflow_name) | .id')
