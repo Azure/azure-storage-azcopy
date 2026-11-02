@@ -23,8 +23,11 @@ import (
 
 const hashingScanReadableFiles = 1_500 // more than the hash queue holds
 
+// hashingScanThreads matches the hashing thread count in prepareHashingThreads.
+func hashingScanThreads() int { return max(1, runtime.NumCPU()/2) }
+
 // hashingScanBadFiles is one bad file per hashing thread.
-func hashingScanBadFiles() int { return max(1, runtime.NumCPU()/2) }
+func hashingScanBadFiles() int { return hashingScanThreads() }
 
 // A file that can't be read is indexed without a hash, and the hashing threads move on to the next file.
 func TestLocalHashingScanDoesNotHangWhenReadsFail(t *testing.T) {
@@ -256,7 +259,7 @@ func hashingGoroutineReport() string {
 	}
 	workers := createdBy("(*localTraverser).prepareHashingThreads", strings.Fields(scan[0])[1])
 
-	report := fmt.Sprintf("Live hashing threads: %d of %d started\n\nScan goroutine:\n%s", len(workers), runtime.NumCPU()/2, scan[0])
+	report := fmt.Sprintf("Live hashing threads: %d of %d started\n\nScan goroutine:\n%s", len(workers), hashingScanThreads(), scan[0])
 	if len(workers) > 0 {
 		report += "\n\nFirst live hashing thread:\n" + workers[0]
 	}
