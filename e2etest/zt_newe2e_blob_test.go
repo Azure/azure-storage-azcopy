@@ -122,6 +122,44 @@ func (s *BlobTestSuite) Scenario_SetPageBlobTier(svm *ScenarioVariationManager) 
 	})
 }
 
+func (s *BlobTestSuite) Scenario_UploadBlockBlobSmartTier(svm *ScenarioVariationManager) {
+	fileName := "test_block_blob_smart.txt"
+	body := NewRandomObjectContentContainer(common.KiloByte)
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			fileName: ResourceDefinitionObject{Body: body},
+		},
+	})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+			BlockBlobTier: pointerTo(common.EBlockBlobTier.Smart()),
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+		ObjectProperties: ObjectProperties{
+			BlobProperties: BlobProperties{
+				Type:                pointerTo(blob.BlobTypeBlockBlob),
+				BlockBlobAccessTier: pointerTo(blob.AccessTierSmart),
+			},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+}
+
 func (s *BlobTestSuite) Scenario_UploadBlob(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
