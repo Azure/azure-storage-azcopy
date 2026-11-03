@@ -261,7 +261,7 @@ func TestTwoWayTypedChannels_HNSFolderReorder(t *testing.T) {
 	fake := &fakeMergeJoinTraverser{objects: objs}
 	sideErr := &twoWaySideErr{}
 
-	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false)
+	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false, compareBlobNames)
 	folders, files := drainTypedChannelsForTest(folderCh, fileCh)
 
 	// Folders reordered to canonical "<name>/" key order (dist-info before its shorter sibling).
@@ -282,7 +282,7 @@ func TestTwoWayTypedChannels_FileOrderViolation(t *testing.T) {
 	fake := &fakeMergeJoinTraverser{objects: objs}
 	sideErr := &twoWaySideErr{}
 
-	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false)
+	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false, compareBlobNames)
 	drainTypedChannelsForTest(folderCh, fileCh)
 
 	a.Error(sideErr.get())
@@ -300,7 +300,7 @@ func TestTwoWayTypedChannels_TraversalErrorRecorded(t *testing.T) {
 	}
 	sideErr := &twoWaySideErr{}
 
-	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false)
+	folderCh, fileCh := traverserToTypedChannels(context.Background(), fake, nil, "SRC[]", sideErr, false, compareBlobNames)
 	drainTypedChannelsForTest(folderCh, fileCh)
 
 	a.ErrorIs(sideErr.get(), boom)
@@ -318,7 +318,7 @@ func TestTwoWayTypedChannels_Cancel(t *testing.T) {
 	sideErr := &twoWaySideErr{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	folderCh, fileCh := traverserToTypedChannels(ctx, fake, nil, "SRC[]", sideErr, false)
+	folderCh, fileCh := traverserToTypedChannels(ctx, fake, nil, "SRC[]", sideErr, false, compareBlobNames)
 	cancel()
 	// Draining must terminate (channels close after the producer observes cancellation).
 	done := make(chan struct{})

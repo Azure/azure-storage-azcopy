@@ -59,6 +59,36 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	}
 }
 
+// compareBlobNames compares valid UTF-8 names using UTF-16 ordinal ordering,
+// matching the Azure Blob listing order observed in our investigation.
+// It does not allocate or normalize names. The only inversion versus UTF-8
+// byte order is supplementary characters versus U+E000..U+FFFF.
+func compareBlobNames(a, b string) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		x, y := a[i], b[i]
+		if x == y {
+			continue
+		}
+		if x >= 0xf0 && y >= 0xee && y < 0xf0 {
+			return -1
+		}
+		if y >= 0xf0 && x >= 0xee && x < 0xf0 {
+			return 1
+		}
+		if x < y {
+			return -1
+		}
+		return 1
+	}
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(a) > len(b) {
+		return 1
+	}
+	return 0
+}
+
 // timeEqual compares two timestamps with precision tolerance to handle filesystem precision differences.
 // It truncates both times to the specified precision to handle precision differences
 func timeEqual(t1, t2 time.Time, useMicroSecPrecision bool) bool {
@@ -134,7 +164,7 @@ func newSyncDestinationComparator(
 
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
 		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
-		 orchestratorOptions.fromTo.From() == common.ELocation.File())
+			orchestratorOptions.fromTo.From() == common.ELocation.File())
 
 	return comp
 }

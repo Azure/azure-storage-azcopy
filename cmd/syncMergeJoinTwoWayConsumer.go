@@ -45,6 +45,17 @@ import (
 // writes subDirs, so there is no shared-state contention. See two-way-merge-join-design.md.
 // ============================================================================
 
+func mergeJoinNameComparer(fromTo common.FromTo) func(string, string) int {
+	isAzure := func(location common.Location) bool {
+		return location == common.ELocation.Blob() || location == common.ELocation.BlobFS()
+	}
+	if isAzure(fromTo.From()) && isAzure(fromTo.To()) {
+		return compareBlobNames
+	}
+	// Preserve S3's existing byte comparison until cross-provider ordering is redesigned.
+	return strings.Compare
+}
+
 // twoWayClosedObjCh returns an already-closed StoredObject channel (used when the destination is
 // absent, so a merge sees an immediately-exhausted destination stream).
 func twoWayClosedObjCh() <-chan StoredObject {
@@ -102,6 +113,7 @@ func mergeJoinTwoWayMergeFiles(
 ) error {
 	srcNext := func() (StoredObject, bool) { return mergeJoinRecv(srcFileCh) }
 	dstNext := func() (StoredObject, bool) { return mergeJoinRecv(dstFileCh) }
+	compareNames := mergeJoinNameComparer(cca.fromTo)
 
 	srcObj, srcOk := srcNext()
 	dstObj, dstOk := dstNext()
@@ -112,7 +124,7 @@ func mergeJoinTwoWayMergeFiles(
 		}
 		srcPath := buildChildPath(dir, srcObj.relativePath, false)
 		dstPath := buildChildPath(dir, dstObj.relativePath, false)
-		cmp := strings.Compare(srcPath, dstPath)
+		cmp := compareNames(srcPath, dstPath)
 		mergeJoinTraceLog("FILE-CMP dir=%q SRC=%q vs DST=%q => %s", dir, srcPath, dstPath, mergeJoinCmpLabel(cmp))
 		switch {
 		case cmp < 0:
@@ -177,6 +189,7 @@ func mergeJoinTwoWayMergeFolders(
 	subDirs := make([]minimalStoredObject, 0, 64)
 	srcNext := func() (StoredObject, bool) { return mergeJoinRecv(srcFolderCh) }
 	dstNext := func() (StoredObject, bool) { return mergeJoinRecv(dstFolderCh) }
+	compareNames := mergeJoinNameComparer(cca.fromTo)
 
 	srcObj, srcOk := srcNext()
 	dstObj, dstOk := dstNext()
@@ -189,7 +202,7 @@ func mergeJoinTwoWayMergeFolders(
 		srcOrigPath := srcObj.relativePath
 		srcPath := buildChildPath(dir, srcObj.relativePath, true)
 		dstPath := buildChildPath(dir, dstObj.relativePath, true)
-		cmp := strings.Compare(srcPath, dstPath)
+		cmp := compareNames(srcPath, dstPath)
 		mergeJoinTraceLog("FOLDER-CMP dir=%q SRC=%q vs DST=%q => %s", dir, srcPath, dstPath, mergeJoinCmpLabel(cmp))
 		switch {
 		case cmp < 0:
@@ -269,11 +282,12 @@ func mergeJoinTwoWaySyncDir(
 	srcSideErr := &twoWaySideErr{}
 	dstSideErr := &twoWaySideErr{}
 
-	srcFolderCh, srcFileCh := traverserToTypedChannels(ctx, pt, enumerator.filters, srcLabel, srcSideErr, false)
+	compareNames := mergeJoinNameComparer(cca.fromTo)
+	srcFolderCh, srcFileCh := traverserToTypedChannels(ctx, pt, enumerator.filters, srcLabel, srcSideErr, false, compareNames)
 
 	var dstFolderCh, dstFileCh <-chan StoredObject
 	if isDestinationPresent {
-		dstFolderCh, dstFileCh = traverserToTypedChannels(ctx, st, enumerator.filters, dstLabel, dstSideErr, true)
+		dstFolderCh, dstFileCh = traverserToTypedChannels(ctx, st, enumerator.filters, dstLabel, dstSideErr, true, compareNames)
 	} else {
 		dstFolderCh = twoWayClosedObjCh()
 		dstFileCh = twoWayClosedObjCh()
@@ -405,7 +419,7 @@ type mergeJoinTraversalError struct {
 }
 
 func (e *mergeJoinTraversalError) Error() string { return e.err.Error() }
-func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
+func (e *mergeJoinTraversalError) Unwrap() error { return e.err }
 
 // mergeJoinDefaultParallelTraversers is the default directory-crawl parallelism used ONLY for
 // streaming merge-join jobs. It is intentionally separate from (and lower than) the indexMap
