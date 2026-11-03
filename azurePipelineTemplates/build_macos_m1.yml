@@ -7,14 +7,8 @@ steps:
     displayName: 'Install Go'
 
   - script: |
-      sudo apt-get clean
-      sudo apt-get update --fix-missing
-      sudo apt-get install -y zip unzip
-    displayName: 'Install Dependencies'
-
-  - template: ../setup/trigger_m1_build.yml@self
-    parameters:
-      download_path: '$(System.DefaultWorkingDirectory)'
+      GOARCH=arm64 CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64"
+    displayName: 'Generate MacOS M1 ARM64 Build'
 
   - script: |
       mkdir -p $(unsigned)
