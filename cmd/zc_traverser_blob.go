@@ -933,8 +933,8 @@ func (t *blobTraverser) serialListRange(containerClient *container.Client, conta
 				}
 				firstKey := strings.TrimPrefix(*first.Name, searchPrefix)
 				lastKey := strings.TrimPrefix(*last.Name, searchPrefix)
-				if firstKey < bounds.start || (bounds.end != "" && lastKey >= bounds.end) ||
-					firstKey > lastKey || (len(items) > 1 && firstKey == lastKey) {
+				if compareBlobNames(firstKey, bounds.start) < 0 || (bounds.end != "" && compareBlobNames(lastKey, bounds.end) >= 0) ||
+					compareBlobNames(firstKey, lastKey) > 0 || (len(items) > 1 && firstKey == lastKey) {
 					return fmt.Errorf("static range bounds/order violation: first=%q last=%q range=[%q,%q)", firstKey, lastKey, bounds.start, bounds.end)
 				}
 			}

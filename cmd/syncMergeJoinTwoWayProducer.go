@@ -90,17 +90,24 @@ type twoWayFolderEntry struct {
 }
 
 // twoWayFolderHeap is a min-heap of buffered folders ordered by canonical merge-join key.
-type twoWayFolderHeap []twoWayFolderEntry
+type twoWayFolderHeap struct {
+	entries      []twoWayFolderEntry
+	compareNames func(string, string) int
+}
 
-func (h twoWayFolderHeap) Len() int            { return len(h) }
-func (h twoWayFolderHeap) Less(i, j int) bool  { return h[i].key < h[j].key }
-func (h twoWayFolderHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
-func (h *twoWayFolderHeap) Push(x interface{}) { *h = append(*h, x.(twoWayFolderEntry)) }
+func (h twoWayFolderHeap) Len() int { return len(h.entries) }
+func (h twoWayFolderHeap) Less(i, j int) bool {
+	return h.compareNames(h.entries[i].key, h.entries[j].key) < 0
+}
+func (h twoWayFolderHeap) Swap(i, j int) { h.entries[i], h.entries[j] = h.entries[j], h.entries[i] }
+func (h *twoWayFolderHeap) Push(x interface{}) {
+	h.entries = append(h.entries, x.(twoWayFolderEntry))
+}
 func (h *twoWayFolderHeap) Pop() interface{} {
-	old := *h
+	old := h.entries
 	n := len(old)
 	e := old[n-1]
-	*h = old[:n-1]
+	h.entries = old[:n-1]
 	return e
 }
 
@@ -121,6 +128,7 @@ func traverserToTypedChannels(
 	label string,
 	sideErr *twoWaySideErr,
 	isDestination bool,
+	compareNames func(string, string) int,
 ) (<-chan StoredObject, <-chan StoredObject) {
 
 	folderCh := make(chan StoredObject, mergeJoinChannelBufferSize)
@@ -130,7 +138,7 @@ func traverserToTypedChannels(
 		defer close(folderCh)
 		defer close(fileCh)
 
-		var dirHeap twoWayFolderHeap
+		dirHeap := twoWayFolderHeap{compareNames: compareNames}
 		var folderSpill []twoWayFolderEntry // ready-to-emit folders that folderCh could not accept yet
 
 		// drainSpill pushes as many spilled folders to folderCh as it can WITHOUT blocking.
@@ -153,7 +161,7 @@ func traverserToTypedChannels(
 		// flushFoldersBefore releases buffered folders whose key sorts before key (folders-only stream,
 		// so this is safe and bounds the buffer to the active prefix-extension group).
 		flushFoldersBefore := func(key string) {
-			for dirHeap.Len() > 0 && dirHeap[0].key < key {
+			for dirHeap.Len() > 0 && compareNames(dirHeap.entries[0].key, key) < 0 {
 				readyFolder(heap.Pop(&dirHeap).(twoWayFolderEntry))
 			}
 		}
@@ -170,12 +178,12 @@ func traverserToTypedChannels(
 				drainSpillNonBlocking()
 				return nil
 			}
-			// File: order-invariant guard (files must be service-sorted by raw key). A violation is a
+			// Files must follow the pair's comparison order. A violation is a
 			// HARD FAILURE — the two-pointer merge would otherwise mis-classify (missed transfers or,
 			// for mirror, extra deletes).
 			fileKey := obj.relativePath
 			fileCount++
-			if fileCount > 1 && fileKey < prevFileKey {
+			if fileCount > 1 && compareNames(fileKey, prevFileKey) < 0 {
 				return fmt.Errorf(
 					"ORDER VIOLATION in %s files: key=%q < previous key=%q — listing not lexicographically sorted; aborting merge-join",
 					label, fileKey, prevFileKey)

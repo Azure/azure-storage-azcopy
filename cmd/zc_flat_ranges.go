@@ -247,7 +247,7 @@ func runFlatListRanges(parent context.Context, workers int, report func(flatList
 // Disjoint scopes skip the request; the prefix supplies the upper bound when it is tighter.
 func flatListRequestBounds(root, prefix string, bounds flatListRange) (start, end string, empty bool) {
 	start = root + bounds.start
-	if start < prefix {
+	if compareBlobNames(start, prefix) < 0 {
 		start = prefix
 	}
 	if !strings.HasPrefix(start, prefix) {
@@ -255,7 +255,7 @@ func flatListRequestBounds(root, prefix string, bounds flatListRange) (start, en
 	}
 	if bounds.end != "" {
 		end = root + bounds.end
-		if end <= prefix {
+		if compareBlobNames(end, prefix) <= 0 {
 			return "", "", true
 		}
 		if !strings.HasPrefix(end, prefix) {
