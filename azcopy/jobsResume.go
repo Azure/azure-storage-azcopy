@@ -44,6 +44,8 @@ type ResumeJobOptions struct {
 	Handler        ResumeJobHandler
 	SrcCredName    string
 	DstCredName    string
+	// S3CredentialProviderFactory is only called for S3 sources.
+	S3CredentialProviderFactory S3CredentialProviderFactory
 	// Retained for compatibility; nonempty transfer selections are rejected as obsolete.
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
@@ -133,6 +135,10 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	)
 	if err != nil {
 		return ResumeJobResult{}, fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
+	}
+	if opts.S3CredentialProviderFactory != nil && jobDetails.FromTo.From() == common.ELocation.S3() {
+		srcCredInfo.CredentialType = enum.ECredentialType.S3AccessKey()
+		srcCredInfo.S3CredentialInfo.Provider = opts.S3CredentialProviderFactory()
 	}
 
 	resumeHandler := common.GetLifecycleMgr()

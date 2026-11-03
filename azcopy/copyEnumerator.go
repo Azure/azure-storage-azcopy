@@ -41,7 +41,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
-func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *jobLifecycleManager) (enumerator *traverser.CopyEnumerator, err error) {
+func (t *copyExecutor) initCopyEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *jobLifecycleManager) (enumerator *traverser.CopyEnumerator, err error) {
 
 	// source root trailing slash handling
 	normalizedSource := t.opts.source
@@ -366,7 +366,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 }
 
 // TODO : This function should probably be split into escape source and escape destination. As is this method is a little confusing imo.
-func (t *transferExecutor) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
+func (t *copyExecutor) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && t.opts.destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -458,7 +458,7 @@ type CopyPathOptions struct {
 }
 
 func (o CopyPathOptions) MakeEscapedRelativePath(source, dstIsDir bool, object traverser.StoredObject) string {
-	t := transferExecutor{opts: &CookedTransferOptions{
+	t := copyExecutor{opts: &CookedTransferOptions{
 		source: o.Source, destination: o.Destination, fromTo: o.FromTo,
 		stripTopDir: o.StripTopDir, asSubdir: o.AsSubDir, disableAutoDecoding: o.DisableAutoDecoding,
 	}}
@@ -466,7 +466,7 @@ func (o CopyPathOptions) MakeEscapedRelativePath(source, dstIsDir bool, object t
 }
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func (t *transferExecutor) newCopyTransferProcessor(numOfTransfersPerPart int,
+func (t *copyExecutor) newCopyTransferProcessor(numOfTransfersPerPart int,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) {
 		if jobStarted {

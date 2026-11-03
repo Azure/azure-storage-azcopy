@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // SyncOptions contains the optional parameters for the Sync operation.
@@ -86,6 +87,8 @@ type SyncOptions struct {
 	Symlinks                common.SymlinkHandlingType
 	PreservePermissions     bool
 	Hardlinks               common.HardlinkHandlingType
+	// S3CredentialProviderFactory is only called for S3 sources.
+	S3CredentialProviderFactory S3CredentialProviderFactory
 
 	dryrun                           bool
 	deleteDestinationFileIfNecessary bool
@@ -199,13 +202,13 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		common.LogPathFolder = ""
 	}
 
-	var s *syncer
+	var s *syncExecutor
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	manager := opts.CredentialManager
 	if manager == nil {
 		manager = c.GetCredentialManager()
 	}
-	s, err := newSyncer(ctx, jobID, src, dest, opts, manager)
+	s, err := newSyncExecutor(ctx, jobID, src, dest, opts, manager)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -231,7 +234,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, operationErr
 	}
 
-	enumerator, err := s.initEnumerator(ctx, c.GetLogLevel(), mgr)
+	enumerator, err := s.initSyncEnumerator(ctx, c.GetLogLevel(), mgr)
 	if err != nil {
 		return failSync(err)
 	}
@@ -290,7 +293,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	return result, nil
 }
 
-type syncer struct {
+type syncExecutor struct {
 	logger    common.ILoggerResetable
 	processor *CopyTransferProcessor
 	opts      *cookedSyncOptions
@@ -298,7 +301,7 @@ type syncer struct {
 	spt       *syncProgressTracker
 }
 
-func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, manager cred.Manager) (s *syncer, err error) {
+func newSyncExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, manager cred.Manager) (s *syncExecutor, err error) {
 	cookedOpts, err := newCookedSyncOptions(src, dst, opts)
 	if err != nil {
 		return nil, err
@@ -306,11 +309,16 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 	if err := common.SetBackupMode(cookedOpts.backupMode, cookedOpts.fromTo); err != nil {
 		return nil, err
 	}
-	syncRemote, err := newSyncRemoteProvider(ctx, manager, cookedOpts.source, cookedOpts.destination,
-		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot, opts.SrcCredName, opts.DstCredName)
+	var traversalS3Provider, steS3Provider credentials.Provider
+	if opts.S3CredentialProviderFactory != nil && cookedOpts.fromTo.From() == common.ELocation.S3() {
+		traversalS3Provider, steS3Provider = opts.S3CredentialProviderFactory(), opts.S3CredentialProviderFactory()
+	}
+	syncRemote, err := newRemoteProvider(ctx, manager, cookedOpts.source, cookedOpts.destination,
+		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot, traversalS3Provider, opts.SrcCredName, opts.DstCredName)
 	if err != nil {
 		return nil, err
 	}
+	syncRemote.s3CredentialProvider = steS3Provider
 	progressTracker := newSyncProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
-	return &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker}, nil
+	return &syncExecutor{opts: cookedOpts, srp: syncRemote, spt: progressTracker}, nil
 }

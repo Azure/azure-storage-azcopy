@@ -17,7 +17,7 @@ func TestM3PreparedSyncPublishesExecutionState(t *testing.T) {
 	tracker.incSourceEnumeration(common.EEntityType.Symlink(), common.ESymlinkHandlingType.Skip(), common.SkipHardlinkHandlingType)
 	tracker.incSourceEnumeration(common.EEntityType.Other(), common.ESymlinkHandlingType.Skip(), common.SkipHardlinkHandlingType)
 	tracker.incSourceEnumeration(common.EEntityType.Hardlink(), common.ESymlinkHandlingType.Skip(), common.SkipHardlinkHandlingType)
-	prepared := &PreparedSync{syncer: &syncer{spt: tracker}}
+	prepared := &PreparedSync{syncer: &syncExecutor{spt: tracker}}
 	state := prepared.State()
 	require.Equal(t, id, state.JobID)
 	require.True(t, state.FirstPartOrdered)

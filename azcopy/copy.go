@@ -47,8 +47,9 @@ type CopyOptions struct {
 	DestinationCredentialName string
 	SrcCredName               string
 	DstCredName               string
-	S3CredentialProvider      credentials.Provider
-	UseFlatListing            bool
+	// S3CredentialProviderFactory is only called for S3 sources.
+	S3CredentialProviderFactory S3CredentialProviderFactory
+	UseFlatListing              bool
 	// ErrorChannel receives enumeration errors without blocking; errors are dropped when it is full. The caller owns closing it.
 	ErrorChannel chan<- traverser.TraverserErrorItemInfo
 
@@ -230,16 +231,13 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		common.LogPathFolder = ""
 	}
 
-	var t *transferExecutor
+	var t *copyExecutor
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	if opts.S3CredentialProvider != nil {
-		ctx = context.WithValue(ctx, "customS3Creds", opts.S3CredentialProvider)
-	}
 	manager := opts.CredentialManager
 	if manager == nil {
 		manager = c.GetCredentialManager()
 	}
-	t, err := newCopyTransferExecutor(ctx, jobID, src, dest, opts, manager, jobLogger)
+	t, err := newCopyExecutor(ctx, jobID, src, dest, opts, manager, jobLogger)
 	if err != nil {
 		return CopyResult{}, err
 	}
@@ -342,14 +340,14 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 	}
 }
 
-type transferExecutor struct {
+type copyExecutor struct {
 	opts      *CookedTransferOptions
 	trp       *remoteProvider
 	tpt       *transferProgressTracker
 	processor *CopyTransferProcessor
 }
 
-func (t *transferExecutor) cancelAndDrain(cancel context.CancelFunc, jobID common.JobID, drain func(context.Context, common.JobID) error) error {
+func (t *copyExecutor) cancelAndDrain(cancel context.CancelFunc, jobID common.JobID, drain func(context.Context, common.JobID) error) error {
 	cancel()
 	cleanupCtx, stopCleanup := context.WithTimeout(context.Background(), 30*time.Second)
 	defer stopCleanup()
@@ -369,7 +367,7 @@ func (t *transferExecutor) cancelAndDrain(cancel context.CancelFunc, jobID commo
 	return drain(cleanupCtx, jobID)
 }
 
-func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, manager cred.Manager, loggers ...common.ILogger) (t *transferExecutor, err error) {
+func newCopyExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, manager cred.Manager, loggers ...common.ILogger) (t *copyExecutor, err error) {
 	sourceName, destinationName := opts.SourceCredentialName, opts.DestinationCredentialName
 	if sourceName == "" {
 		sourceName = opts.SrcCredName
@@ -386,16 +384,21 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		return nil, err
 	}
 
-	copyRemote, err := newCopyRemoteProvider(ctx, manager, cookedOpts.source, cookedOpts.destination,
-		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot, sourceName, destinationName)
+	var traversalS3Provider, steS3Provider credentials.Provider
+	if opts.S3CredentialProviderFactory != nil && cookedOpts.fromTo.From() == common.ELocation.S3() {
+		traversalS3Provider, steS3Provider = opts.S3CredentialProviderFactory(), opts.S3CredentialProviderFactory()
+	}
+	copyRemote, err := newRemoteProvider(ctx, manager, cookedOpts.source, cookedOpts.destination,
+		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot, traversalS3Provider, sourceName, destinationName)
 	if err != nil {
 		return nil, err
 	}
+	copyRemote.s3CredentialProvider = steS3Provider
 	if opts.onCredentials != nil {
 		opts.onCredentials(copyRemote.srcCredInfo, copyRemote.dstCredInfo)
 	}
 
 	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo, loggers...)
 
-	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker}, nil
+	return &copyExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker}, nil
 }

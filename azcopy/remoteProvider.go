@@ -13,6 +13,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// S3CredentialProviderFactory returns an independent provider on every call, so enumeration and the transfer engine never share refresh state.
+type S3CredentialProviderFactory func() credentials.Provider
+
 type remoteProvider struct {
 	srcServiceClient     *common.ServiceClient
 	srcCredInfo          cred.CredentialInfo
@@ -25,15 +28,7 @@ type remoteProvider struct {
 	s3CredentialProvider credentials.Provider
 }
 
-func newCopyRemoteProvider(ctx context.Context, manager cred.Manager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption, credentialNames ...string) (*remoteProvider, error) {
-	return newRemoteProvider(ctx, manager, src, dst, fromTo, cpkOptions, trailingDot, credentialNames...)
-}
-
-func newSyncRemoteProvider(ctx context.Context, manager cred.Manager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption, credentialNames ...string) (*remoteProvider, error) {
-	return newRemoteProvider(ctx, manager, src, dst, fromTo, cpkOptions, trailingDot, credentialNames...)
-}
-
-func newRemoteProvider(ctx context.Context, manager cred.Manager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption, credentialNames ...string) (*remoteProvider, error) {
+func newRemoteProvider(ctx context.Context, manager cred.Manager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption, s3Provider credentials.Provider, credentialNames ...string) (*remoteProvider, error) {
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	var sourceName, destinationName string
 	if len(credentialNames) > 0 {
@@ -49,9 +44,9 @@ func newRemoteProvider(ctx context.Context, manager cred.Manager, src, dst commo
 	if err != nil {
 		return nil, fmt.Errorf("source authorization failed: %w", err)
 	}
-	if provider, ok := ctx.Value("customS3Creds").(credentials.Provider); ok && fromTo.From() == common.ELocation.S3() {
+	if s3Provider != nil && fromTo.From() == common.ELocation.S3() {
 		sourceCred.CredentialType = enum.ECredentialType.S3AccessKey()
-		sourceCred.S3CredentialInfo.Provider = provider
+		sourceCred.S3CredentialInfo.Provider = s3Provider
 	}
 	destinationCred, err := GetTargetCredInfo(dst, fromTo.To(), GetTargetCredInfoOptions{
 		Context: ctx, SharedKeyAllowed: !fromTo.IsS2S(),
@@ -82,7 +77,6 @@ func newRemoteProvider(ctx context.Context, manager cred.Manager, src, dst commo
 		srcCredType: sourceCred.CredentialType, dstCredType: destinationCred.CredentialType,
 		srcCredInfo: sourceCred, dstCredInfo: destinationCred,
 		srcTokenCredential: sourceCred.TokenCredential, dstTokenCredential: destinationCred.TokenCredential,
-		s3CredentialProvider: sourceCred.S3CredentialInfo.Provider,
 	}
 	var sourceOptions any
 	if fromTo.From().IsFile() {
