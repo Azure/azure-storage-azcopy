@@ -43,7 +43,7 @@ import (
 type ObjectDeleter func(rootPath string, target common.Location, object traverser.StoredObject) error
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func (s *syncer) newSyncTransferProcessor(
+func (s *syncExecutor) newSyncTransferProcessor(
 	numOfTransfersPerPart int,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) { s.spt.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here

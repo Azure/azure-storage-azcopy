@@ -44,7 +44,7 @@ const (
 	PipingBlockSizeDefault         = 8 * 1024 * 1024
 )
 
-func (e *transferExecutor) redirectionTransfer(ctx context.Context) error {
+func (e *copyExecutor) redirectionTransfer(ctx context.Context) error {
 	if e.opts.fromTo == common.EFromTo.PipeBlob() {
 		return e.redirectionBlobUpload(ctx)
 	} else if e.opts.fromTo == common.EFromTo.BlobPipe() {
@@ -54,7 +54,7 @@ func (e *transferExecutor) redirectionTransfer(ctx context.Context) error {
 }
 
 // redirectionBlobUpload uploads data from os.stdin to a blob destination using piping (redirection).
-func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error) {
+func (e *copyExecutor) redirectionBlobUpload(ctx context.Context) (err error) {
 	// Use the concurrency environment value
 	concurrencyEnvVar := enum.EEnvironmentVariable.ConcurrencyValue().Get()
 
@@ -141,7 +141,7 @@ func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error
 }
 
 // redirectionBlobDownload downloads a blob from a source URL to os.Stdout using piping (redirection).
-func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
+func (e *copyExecutor) redirectionBlobDownload(ctx context.Context) error {
 	// step 0: check the Stdout before downloading
 	_, err := os.Stdout.Stat()
 	if err != nil {
