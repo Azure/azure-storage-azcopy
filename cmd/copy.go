@@ -1149,7 +1149,7 @@ type cliCopyHandler struct {
 }
 
 func (c cliCopyHandler) OnStart(ctx azcopy.JobContext) {
-	StartSystemStatsMonitorForJobID(ctx.JobID)
+	azcopy.StartSystemStatsMonitor(ctx.JobID)
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
 
 }

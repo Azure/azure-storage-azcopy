@@ -284,7 +284,7 @@ type cookedCopyHandler struct{ cooked *CookedCopyCmdArgs }
 
 func (h cookedCopyHandler) OnStart(ctx azcopy.JobContext) {
 	h.cooked.jobID = ctx.JobID
-	StartSystemStatsMonitorForJobID(ctx.JobID)
+	azcopy.StartSystemStatsMonitor(ctx.JobID)
 	h.cooked.jobStartTime = time.Now()
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, h.cooked.isCleanupJob, h.cooked.cleanupJobMessage))
 }
