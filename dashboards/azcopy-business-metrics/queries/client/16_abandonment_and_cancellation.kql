@@ -3,7 +3,7 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. (_endTime + 30m))
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     StatusValue = tostring(customDimensions.JobStatus),

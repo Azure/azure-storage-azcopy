@@ -2,13 +2,15 @@
 customEvents
 | where name == 'azcopy.job.finished'
 | where timestamp between (_startTime .. _endTime)
-| extend ContainersScannedValue = todouble(customMeasurements['azcopy.containers_scanned']),
-    ContainersTouchedValue = todouble(customMeasurements['azcopy.containers_touched']),
-    BucketsScannedValue = todouble(customMeasurements['azcopy.buckets_scanned']),
-    BucketsTouchedValue = todouble(customMeasurements['azcopy.buckets_touched'])
+// Schema 4 omits zero counts; a missing count is unknown only when the scope counts are incomplete.
+| extend ScopeCountsKnown = tostring(customDimensions.SchemaVersion) == '4' and tostring(customDimensions.SourceScopeCountsStatus) != 'incomplete'
+| extend ContainersScannedValue = coalesce(todouble(customMeasurements['azcopy.containers_scanned']), iff(ScopeCountsKnown, 0.0, real(null))),
+    ContainersTouchedValue = coalesce(todouble(customMeasurements['azcopy.containers_touched']), iff(ScopeCountsKnown, 0.0, real(null))),
+    BucketsScannedValue = coalesce(todouble(customMeasurements['azcopy.buckets_scanned']), iff(ScopeCountsKnown, 0.0, real(null))),
+    BucketsTouchedValue = coalesce(todouble(customMeasurements['azcopy.buckets_touched']), iff(ScopeCountsKnown, 0.0, real(null)))
 | summarize
-    SourceObjectsScanned = sum(todouble(customMeasurements['azcopy.source_objects_scanned'])),
-    SourceBytesScanned = sum(todouble(customMeasurements['azcopy.source_bytes_scanned'])),
+    SourceObjectsScanned = sum(coalesce(todouble(customMeasurements['azcopy.source_objects_scanned']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
+    SourceBytesScanned = sum(coalesce(todouble(customMeasurements['azcopy.source_bytes_scanned']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
     ContainersScanned = sumif(ContainersScannedValue, ContainersScannedValue >= 0),
     ContainersTouched = sumif(ContainersTouchedValue, ContainersTouchedValue >= 0),
     BucketsScanned = sumif(BucketsScannedValue, BucketsScannedValue >= 0),

@@ -16,7 +16,7 @@ let ValidAttempts = materialize(cluster('https://adx.monitor.azure.com/subscript
     DestTypeValue = tostring(customDimensions.DestType),
     SourceAccountValue = tostring(customDimensions.SourceStorageAccount),
     DestAccountValue = tostring(customDimensions.DestStorageAccount),
-    ClientStorageHttpAttemptsValue = todouble(customMeasurements['azcopy.storage_http_attempt_count'])
+    ClientStorageHttpAttemptsValue = coalesce(todouble(customMeasurements['azcopy.storage_http_attempt_count']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))
 | where isnotempty(InvocationID) and isnotempty(JobID)
 | summarize
     StartEvents = countif(name == 'azcopy.job.started'),
@@ -34,7 +34,7 @@ let ValidAttempts = materialize(cluster('https://adx.monitor.azure.com/subscript
     ClientStorageHttpAttempts = max(ClientStorageHttpAttemptsValue)
   by InvocationID, JobID
 | where StartEvents == 1 and FinishEvents == 1 and StartTime <= FinishTime
-| where SchemaVersionCount == 1 and SchemaVersion in ('1', '2', '3'));
+| where SchemaVersionCount == 1 and SchemaVersion in ('1', '2', '3', '4'));
 let EndpointAttempts = union
     (ValidAttempts
     | where SourceType in ('Blob', 'BlobFS', 'File', 'FileNFS') and isnotempty(SourceAccount)

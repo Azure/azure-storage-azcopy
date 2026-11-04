@@ -127,6 +127,8 @@ let RawFixture = datatable(Offset:timespan, Invocation:string, Job:string, Statu
         'TerminalStage', 'transfer', 'Command', 'copy', 'OSType', 'linux', 'AzCopyVersion', 'test');
 '@
 $rawSource = "cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents"
+# Schema 4 omits zero counters, so the all-zero partial job must give the same results without them.
+$schema4Partial = ' | extend customDimensions=iff(tostring(customDimensions.InvocationID) == "partial", bag_set_key(customDimensions, "SchemaVersion", "4"), customDimensions), customMeasurements=iff(tostring(customDimensions.InvocationID) == "partial", dynamic({"azcopy.percent_complete": 80}), customMeasurements)'
 $cases = @(
     @{ Panel = 1; Assert = 'summarize Valid=count()==1 and take_any(AffectedCustomers)==2' },
     @{ Panel = 2; Assert = 'summarize Valid=count()==1 and take_any(AffectedPercent)==50.0' },
@@ -164,6 +166,8 @@ $cases = @(
     @{ Panel = 44; Mutation = ' | extend customMeasurements=dynamic({})'; Assert = 'summarize Valid=count()==3 and sum(WithProgress)==0 and countif(isnotnull(AveragePercent))==0' },
     @{ Panel = 45; Mutation = ' | extend customMeasurements=dynamic({})'; Assert = 'summarize Valid=count()==2 and sum(FailedAttempts)==4' },
     @{ Panel = 41; Mutation = ' | extend customMeasurements=bag_set_key(customMeasurements, "azcopy.network_error_attempt_count", 2000)'; Assert = 'summarize Valid=count()==0' },
+    @{ Panel = 41; Mutation = $schema4Partial; Assert = 'summarize Valid=count()==4 and sum(ReportingExecutions)==4 and sum(HTTPAttempts)==1000 and sum(NetworkErrors)==10 and sum(Busy503)==2 and countif(JobStatus=="Completed" and HTTPAttempts==900)==1' },
+    @{ Panel = 43; Mutation = $schema4Partial; Assert = 'summarize Valid=count()==1 and take_any(ReportingExecutions)==4 and take_any(Total503)==2 and take_any(Throughput)==1 and take_any(IOPS)==1 and take_any(Other)==0 and take_any(MismatchedExecutions)==0' },
     @{ Panel = 43; Mutation = ' | extend customMeasurements=bag_set_key(customMeasurements, "azcopy.server_busy_other_count", 1)'; Assert = 'summarize Valid=take_any(MismatchedExecutions)==4' },
     @{ Panel = 45; Source = '["S3"]'; Assert = 'summarize Valid=count()==1 and take_any(ErrorCode)=="Unknown / other" and sum(FailedAttempts)==1' },
     @{ Panel = 45; RunScope = 'e2e'; Assert = 'summarize Valid=count()==1 and take_any(ErrorCode)=="AuthorizationFailure" and sum(FailedAttempts)==1' },

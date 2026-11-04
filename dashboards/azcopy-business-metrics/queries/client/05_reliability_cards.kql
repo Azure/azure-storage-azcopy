@@ -2,7 +2,7 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     JobStatusValue = tostring(customDimensions.JobStatus),
@@ -12,11 +12,11 @@ customEvents
     FinishedRows = countif(name == 'azcopy.job.finished'),
     JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),
     IsResume = take_any(IsResumeValue),
-    ObjectsScheduled = max(todouble(customMeasurements['azcopy.objects_scheduled'])),
-    ObjectsFailed = max(todouble(customMeasurements['azcopy.objects_failed'])),
-    HttpAttempts = max(todouble(customMeasurements['azcopy.storage_http_attempt_count'])),
-    ServerBusy503 = max(todouble(customMeasurements['azcopy.server_busy_503_count'])),
-    NetworkErrors = max(todouble(customMeasurements['azcopy.network_error_attempt_count']))
+    ObjectsScheduled = max(coalesce(todouble(customMeasurements['azcopy.objects_scheduled']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
+    ObjectsFailed = max(coalesce(todouble(customMeasurements['azcopy.objects_failed']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
+    HttpAttempts = max(coalesce(todouble(customMeasurements['azcopy.storage_http_attempt_count']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
+    ServerBusy503 = max(coalesce(todouble(customMeasurements['azcopy.server_busy_503_count']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
+    NetworkErrors = max(coalesce(todouble(customMeasurements['azcopy.network_error_attempt_count']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))))
   by InvocationID
 | where FinishedRows > 0
 | summarize

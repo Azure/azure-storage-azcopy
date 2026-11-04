@@ -5,7 +5,7 @@ let RawFinishedJobs = materialize(
     __APP_INSIGHTS_CUSTOM_EVENTS__
     | where timestamp between (QueryStart .. QueryEnd)
     | where name == 'azcopy.job.finished'
-    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
     | extend
         JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID, customDimensions.InvocationID)),
         InstallationIDValue = tostring(customDimensions.InstallationID),
@@ -26,11 +26,11 @@ let RawFinishedJobs = materialize(
         JobErrorCategoryValue = tostring(customDimensions.JobErrorCategory),
         JobErrorCodeValue = tostring(customDimensions.JobErrorCode),
         CommandValue = tostring(customDimensions.Command),
-        BytesTransferredValue = todouble(customMeasurements['azcopy.bytes_transferred']),
-        ObjectsCompletedValue = todouble(customMeasurements['azcopy.objects_completed']),
-        ObjectsFailedValue = todouble(customMeasurements['azcopy.objects_failed']),
-        TransfersCompletedValue = todouble(customMeasurements['azcopy.transfers_completed']),
-        TransfersFailedValue = todouble(customMeasurements['azcopy.transfers_failed']),
+        BytesTransferredValue = coalesce(todouble(customMeasurements['azcopy.bytes_transferred']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))),
+        ObjectsCompletedValue = coalesce(todouble(customMeasurements['azcopy.objects_completed']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))),
+        ObjectsFailedValue = coalesce(todouble(customMeasurements['azcopy.objects_failed']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))),
+        TransfersCompletedValue = coalesce(todouble(customMeasurements['azcopy.transfers_completed']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))),
+        TransfersFailedValue = coalesce(todouble(customMeasurements['azcopy.transfers_failed']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))),
         JobDurationSecondsValue = todouble(customMeasurements['azcopy.job_duration_seconds']),
         JobThroughputMbpsValue = todouble(customMeasurements['azcopy.job_throughput_mbps'])
     | where isnotempty(JobID)

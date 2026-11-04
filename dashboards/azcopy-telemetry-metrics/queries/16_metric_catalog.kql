@@ -1,7 +1,13 @@
 // Visual: Table
 // Complete inventory of observed metric names and received values.
+// Schema 4 omits zero counters from job.finished, so they are filled back in as 0.
+let Schema4ZeroCounters = dynamic({'azcopy.failure_error_other_count': 0, 'azcopy.bytes_enumerated': 0, 'azcopy.bytes_expected': 0, 'azcopy.bytes_transferred': 0, 'azcopy.bytes_over_wire': 0, 'azcopy.objects_scheduled': 0, 'azcopy.regular_files_scheduled': 0, 'azcopy.symlinks_scheduled': 0, 'azcopy.hardlinks_converted_scheduled': 0, 'azcopy.hardlinks_preserved_scheduled': 0, 'azcopy.folder_properties_scheduled': 0, 'azcopy.objects_completed': 0, 'azcopy.objects_failed': 0, 'azcopy.objects_skipped': 0, 'azcopy.folder_properties_completed': 0, 'azcopy.folder_properties_failed': 0, 'azcopy.folder_properties_skipped': 0, 'azcopy.source_objects_scanned': 0, 'azcopy.source_bytes_scanned': 0, 'azcopy.source_objects_under_1_mib': 0, 'azcopy.transfers_completed': 0, 'azcopy.transfers_failed': 0, 'azcopy.transfers_skipped': 0, 'azcopy.transfers_total': 0, 'azcopy.storage_http_attempt_count': 0, 'azcopy.network_error_attempt_count': 0, 'azcopy.server_busy_503_count': 0, 'azcopy.server_busy_throughput_count': 0, 'azcopy.server_busy_iops_count': 0, 'azcopy.server_busy_other_count': 0});
+let Schema4ZeroScopeCounters = dynamic({'azcopy.containers_scanned': 0, 'azcopy.containers_touched': 0, 'azcopy.buckets_scanned': 0, 'azcopy.buckets_touched': 0});
 customEvents
 | where name startswith 'azcopy.'
+| extend customMeasurements = iff(tostring(customDimensions.SchemaVersion) == '4' and isnotempty(tostring(customDimensions.JobStatus)),
+    bag_merge(customMeasurements, Schema4ZeroCounters, iff(tostring(customDimensions.SourceScopeCountsStatus) == 'incomplete', dynamic({}), Schema4ZeroScopeCounters)),
+    customMeasurements)
 | mv-expand MetricName = bag_keys(customMeasurements)
 | extend name = tostring(MetricName)
 | extend value = todouble(customMeasurements[name])

@@ -2,7 +2,8 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where name == 'azcopy.job.finished'
+// Host fields are on job.started; schema 4 omits them from job.finished.
+| where name == 'azcopy.job.started'
 | extend NumericValue = toint(customDimensions.HostMemoryTotalGB)
 | extend Value = iif(isnull(NumericValue) or NumericValue <= 0, 'unknown', strcat(tostring(NumericValue), ' GB'))
 | summarize Attempts = count() by Value, SortValue = coalesce(NumericValue, int(-1))

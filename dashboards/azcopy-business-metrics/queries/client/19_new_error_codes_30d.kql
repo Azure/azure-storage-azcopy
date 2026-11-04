@@ -4,7 +4,7 @@ let Base = materialize(
     customEvents
     | where timestamp between ((_endTime - 730d) .. _endTime)
     | where name == 'azcopy.job.finished'
-    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
     | extend
         JobErrorCode = tostring(customDimensions.JobErrorCode),
         FailureErrorCodes = tostring(customDimensions.FailureErrorCodes));

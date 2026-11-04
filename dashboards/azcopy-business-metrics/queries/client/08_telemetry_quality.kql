@@ -1,7 +1,9 @@
 // Visual: Multi stat
-// Schema v2 and v3 are accepted. Other schemas are visible here but excluded
+// Schemas 1-4 are accepted. Other schemas are visible here but excluded
 // from the business-metric queries.
 let RequiredFinishMetrics = dynamic(['azcopy.average_storage_http_attempt_e2e_ms', 'azcopy.avg_iops', 'azcopy.bytes_enumerated', 'azcopy.bytes_expected', 'azcopy.bytes_over_wire', 'azcopy.bytes_transferred', 'azcopy.enumeration_phase_duration_seconds', 'azcopy.failure_error_other_count', 'azcopy.folder_properties_completed', 'azcopy.folder_properties_failed', 'azcopy.folder_properties_scheduled', 'azcopy.folder_properties_skipped', 'azcopy.hardlinks_converted_scheduled', 'azcopy.job_duration_seconds', 'azcopy.network_error_attempt_count', 'azcopy.network_error_pct', 'azcopy.objects_completed', 'azcopy.objects_failed', 'azcopy.objects_scheduled', 'azcopy.objects_skipped', 'azcopy.percent_complete', 'azcopy.regular_files_scheduled', 'azcopy.server_busy_503_count', 'azcopy.server_busy_iops_count', 'azcopy.server_busy_other_count', 'azcopy.server_busy_pct', 'azcopy.server_busy_throughput_count', 'azcopy.source_average_object_size_bytes', 'azcopy.source_bytes_scanned', 'azcopy.source_max_directory_depth', 'azcopy.source_object_size_p50_bytes_approx', 'azcopy.source_object_size_p90_bytes_approx', 'azcopy.source_object_size_p95_bytes_approx', 'azcopy.source_objects_scanned', 'azcopy.source_objects_under_1_mib', 'azcopy.source_objects_under_1_mib_ratio_pct', 'azcopy.storage_http_attempt_count', 'azcopy.symlinks_scheduled', 'azcopy.transfer_phase_duration_seconds', 'azcopy.transfers_completed', 'azcopy.transfers_failed', 'azcopy.transfers_skipped', 'azcopy.transfers_total']);
+// Schema 4 omits zero counters, so only values that are always sent are required.
+let RequiredSchema4FinishMetrics = dynamic(['azcopy.average_storage_http_attempt_e2e_ms', 'azcopy.avg_iops', 'azcopy.enumeration_phase_duration_seconds', 'azcopy.job_duration_seconds', 'azcopy.network_error_pct', 'azcopy.percent_complete', 'azcopy.server_busy_pct', 'azcopy.source_average_object_size_bytes', 'azcopy.source_max_directory_depth', 'azcopy.source_object_size_p50_bytes_approx', 'azcopy.source_object_size_p90_bytes_approx', 'azcopy.source_object_size_p95_bytes_approx', 'azcopy.source_objects_under_1_mib_ratio_pct', 'azcopy.transfer_phase_duration_seconds']);
 customEvents
 | where timestamp between (_startTime .. _endTime)
 | where name in ('azcopy.job.started', 'azcopy.job.finished')
@@ -15,9 +17,9 @@ customEvents
     DestTypeValue = tostring(customDimensions.DestType),
     ReportedDurationValue = todouble(customMeasurements['azcopy.job_duration_seconds']),
     FinishMetricCountValue = array_length(bag_keys(customMeasurements)),
-    RequiredMetricKeys = set_union(RequiredFinishMetrics,
+    RequiredMetricKeys = set_union(iff(tostring(customDimensions.SchemaVersion) == '4', RequiredSchema4FinishMetrics, RequiredFinishMetrics),
         iff(tostring(customDimensions.SummaryCounterScope) == 'job-cumulative', dynamic([]), dynamic(['azcopy.job_throughput_mbps', 'azcopy.transfer_phase_throughput_mbps'])),
-        iff(tostring(customDimensions.SourceScopeCountsStatus) == 'incomplete', dynamic([]), dynamic(['azcopy.containers_scanned', 'azcopy.containers_touched', 'azcopy.buckets_scanned', 'azcopy.buckets_touched'])))
+        iff(tostring(customDimensions.SourceScopeCountsStatus) == 'incomplete' or tostring(customDimensions.SchemaVersion) == '4', dynamic([]), dynamic(['azcopy.containers_scanned', 'azcopy.containers_touched', 'azcopy.buckets_scanned', 'azcopy.buckets_touched'])))
 | extend MissingFinishMetricCountValue = array_length(set_difference(RequiredMetricKeys, coalesce(bag_keys(customMeasurements), dynamic([]))))
 | extend AttemptKey = iif(
     isnotempty(InvocationID) and isnotempty(JobID),
@@ -42,7 +44,7 @@ customEvents
         StartEvents > 0 and FinishEvents > 0,
         todouble(datetime_diff('millisecond', FinishTime, StartTime)) / 1000.0,
         real(null)),
-    InvalidSchema = SchemaVersionCount != 1 or SchemaVersion !in ('1', '2', '3'),
+    InvalidSchema = SchemaVersionCount != 1 or SchemaVersion !in ('1', '2', '3', '4'),
     LifecycleAnomaly = StartEvents != 1 or FinishEvents != 1,
     MissingRequiredFields = MissingRequiredDimensionRows > 0,
     IncompleteFinishMetricSet = FinishEvents > 0 and MissingRequiredFinishMetrics > 0

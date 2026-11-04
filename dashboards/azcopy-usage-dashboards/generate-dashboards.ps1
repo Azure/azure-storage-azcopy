@@ -766,7 +766,7 @@ let QueryEnd = _endTime;
 let Events = materialize(
     __APP_INSIGHTS_CUSTOM_EVENTS__
     | where timestamp between (QueryStart .. QueryEnd)
-    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
     | extend InstallationID = tostring(customDimensions.InstallationID), InvocationContext = tostring(customDimensions.InvocationContext)
     | where isnotempty(InstallationID)
 );
@@ -793,7 +793,7 @@ let QueryEnd = _endTime;
 let Events = materialize(
     __APP_INSIGHTS_CUSTOM_EVENTS__
     | where timestamp between (QueryStart .. QueryEnd)
-    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+    | where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
     | extend InstallationID = tostring(customDimensions.InstallationID), InvocationContext = tostring(customDimensions.InvocationContext)
     | where isnotempty(InstallationID)
 );

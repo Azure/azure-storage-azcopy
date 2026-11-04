@@ -9,7 +9,7 @@
         __APP_INSIGHTS_CUSTOM_EVENTS__
         | where timestamp >= startTime - AttemptLookback and timestamp < max_of(endTime, now() + 1m)
         | where name == 'azcopy.job.finished'
-        | where tostring(customDimensions.SchemaVersion) in ('1', '3')
+        | where tostring(customDimensions.SchemaVersion) in ('1', '3', '4')
         | extend
             JobIDValue = tostring(customDimensions.JobID),
             InvocationIDValue = tostring(customDimensions.InvocationID),
@@ -21,8 +21,8 @@
             JobStatusValue = tostring(customDimensions.JobStatus),
             SourceAccountValue = tolower(tostring(customDimensions.SourceStorageAccount)),
             TargetAccountValue = tolower(tostring(customDimensions.DestStorageAccount)),
-            BytesTransferredValue = todouble(customMeasurements['azcopy.bytes_transferred']),
-            ObjectsCompletedValue = todouble(customMeasurements['azcopy.objects_completed'])
+            BytesTransferredValue = coalesce(todouble(customMeasurements['azcopy.bytes_transferred']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))),
+            ObjectsCompletedValue = coalesce(todouble(customMeasurements['azcopy.objects_completed']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))
         | where isnotempty(InstallationIDValue)
         | extend
             JobIDValue = iif(isempty(JobIDValue), InvocationIDValue, JobIDValue),

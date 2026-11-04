@@ -3,7 +3,7 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
@@ -21,7 +21,7 @@ customEvents
     Version = take_any(VersionValue),
     SourceAccount = take_any(SourceAccountValue),
     DestAccount = take_any(DestAccountValue),
-    BytesTransferred = max(todouble(customMeasurements['azcopy.bytes_transferred'])),
+    BytesTransferred = max(coalesce(todouble(customMeasurements['azcopy.bytes_transferred']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null)))),
     JobDurationSeconds = max(todouble(customMeasurements['azcopy.job_duration_seconds'])),
     ThroughputMbps = max(todouble(customMeasurements['azcopy.job_throughput_mbps']))
   by InvocationID, JobID

@@ -2,7 +2,7 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | where name == 'azcopy.job.finished'
 | extend
     SourceType = tostring(customDimensions.SourceType),

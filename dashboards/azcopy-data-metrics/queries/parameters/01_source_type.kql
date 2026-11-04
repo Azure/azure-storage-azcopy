@@ -1,7 +1,7 @@
 customEvents
 | where timestamp between (_startTime .. _endTime)
 | where name == 'azcopy.job.finished'
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | extend Value = tostring(customDimensions.SourceType)
 | extend Value = iif(isempty(Value), 'unknown', Value)
 | distinct Value

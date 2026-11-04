@@ -2,7 +2,8 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where name == 'azcopy.job.finished'
+// Host fields are on job.started; schema 4 omits them from job.finished.
+| where name == 'azcopy.job.started'
 | extend Value = tostring(customDimensions.OSVersion)
 | extend Value = iif(isempty(Value), 'unknown', Value)
 | summarize Attempts = count() by Value

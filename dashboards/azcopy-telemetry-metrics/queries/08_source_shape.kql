@@ -1,6 +1,9 @@
 // Visual: Table
 customEvents
 | where name startswith 'azcopy.'
+// Schema 4 omits a zero source_objects_under_1_mib from job.finished; count it as 0.
+| extend customMeasurements = iff(tostring(customDimensions.SchemaVersion) == '4' and isnotempty(tostring(customDimensions.JobStatus)),
+    bag_merge(customMeasurements, dynamic({'azcopy.source_objects_under_1_mib': 0})), customMeasurements)
 | mv-expand MetricName = bag_keys(customMeasurements)
 | extend name = tostring(MetricName)
 | extend value = todouble(customMeasurements[name])

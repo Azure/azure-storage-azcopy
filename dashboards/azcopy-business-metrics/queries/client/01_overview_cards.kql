@@ -4,7 +4,7 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     JobID = tostring(coalesce(customDimensions.JobID, customDimensions.RunID)),
@@ -14,7 +14,7 @@ customEvents
     StartedRows = countif(name == 'azcopy.job.started'),
     FinishedRows = countif(name == 'azcopy.job.finished'),
     JobStatus = take_anyif(JobStatusValue, isnotempty(JobStatusValue)),
-    BytesTransferred = max(todouble(customMeasurements['azcopy.bytes_transferred']))
+    BytesTransferred = max(coalesce(todouble(customMeasurements['azcopy.bytes_transferred']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))))
     by InvocationID, JobID
 | summarize
     Attempts = countif(FinishedRows > 0),

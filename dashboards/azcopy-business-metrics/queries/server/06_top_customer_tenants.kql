@@ -8,7 +8,7 @@
 let AccountActivity = materialize(cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/sharankur_playground/providers/microsoft.insights/components/sharankur_insights1').database('sharankur_insights1').customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3')
+| where tostring(customDimensions.SchemaVersion) in ('1', '2', '3', '4')
 | extend
     InvocationID = tostring(customDimensions.InvocationID),
     SourceAccountValue = iif(
@@ -25,7 +25,7 @@ let AccountActivity = materialize(cluster('https://adx.monitor.azure.com/subscri
     FinishedRows = countif(name == 'azcopy.job.finished'),
     SourceAccount = take_any(SourceAccountValue),
     DestAccount = take_any(DestAccountValue),
-    BytesTransferred = max(todouble(customMeasurements['azcopy.bytes_transferred']))
+    BytesTransferred = max(coalesce(todouble(customMeasurements['azcopy.bytes_transferred']), iff(tostring(customDimensions.SchemaVersion) == '4', 0.0, real(null))))
   by InvocationID
 | where FinishedRows > 0
 | extend Endpoints = pack_array(

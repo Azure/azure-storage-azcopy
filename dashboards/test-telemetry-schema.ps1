@@ -13,7 +13,7 @@ function Test-SchemaGates([string]$Text, [string]$Context) {
     foreach ($line in ($Text -split "`n")) {
         if ($line -notmatch "SchemaVersion\)?\s+!?in\s+\(([^)]+)\)") { continue }
         $versions = @([regex]::Matches($Matches[1], "'([0-9]+)'") | ForEach-Object { $_.Groups[1].Value })
-        if ('1' -notin $versions -or '3' -notin $versions -or @($versions | Where-Object { $_ -notin @('1', '2', '3') }).Count) {
+        if ('1' -notin $versions -or '3' -notin $versions -or '4' -notin $versions -or @($versions | Where-Object { $_ -notin @('1', '2', '3', '4') }).Count) {
             throw "Incorrect schema compatibility gate: $Context"
         }
         $script:checkedGates++
@@ -78,7 +78,7 @@ foreach ($path in $dataArtifacts) {
     }
 }
 $replay = & (Join-Path $PSScriptRoot 'AzCopyQueries/test-aggregate-replay.ps1') -QueryOnly
-if ($replay -notmatch "SchemaVersion\) in \('1', '3'\)" -or $replay -notmatch 'Schema 1 account names enrich customer' -or
+if ($replay -notmatch "SchemaVersion\) in \('1', '3', '4'\)" -or $replay -notmatch 'Schema 1 account names enrich customer' -or
     [regex]::Matches($replay, 'print Test=').Count -ne 19) { throw 'Aggregate schema-1 replay coverage missing' }
 if ($checkedGates -lt 100) { throw "Unexpectedly few schema checks: $checkedGates" }
 Write-Host "PASS: $checkedGates schema gates; four ADX/Grafana data variants have independent endpoint filters and source charts; 19-case replay generated offline."
@@ -96,6 +96,9 @@ foreach ($entry in @{
     'azcopy.storage_http_attempt_count' = 100; 'azcopy.percent_complete' = 100
 }.GetEnumerator()) { $measurementValues[$entry.Key] = $entry.Value }
 $metricJson = $measurementValues | ConvertTo-Json -Compress
+$omittedNames = @([regex]::Matches($eventSource, '"(azcopy\.[a-z0-9_]+)":\s+true') | ForEach-Object { $_.Groups[1].Value })
+if ($omittedNames.Count -ne 34) { throw 'Expected 34 counters that schema 4 omits when zero.' }
+$zeroCountersJson = ConvertTo-Json -Compress @($omittedNames | Where-Object { $measurementValues[$_] -eq 0 })
 $fixture = @'
 let _startTime = datetime(2026-09-01T00:00:00Z);
 let _endTime = datetime(2026-09-02T00:00:00Z);
@@ -117,7 +120,9 @@ let Fixture = datatable(Scenario:string, Invocation:string, Job:string, EventNam
     'incomplete scope', 'scope', 'job5', 'azcopy.job.started', 'copy', '', 7h,
     'incomplete scope', 'scope', 'job5', 'azcopy.job.finished', 'copy', 'Completed', 421m,
     'missing required', 'invalid', 'job6', 'azcopy.job.started', 'copy', '', 8h,
-    'missing required', 'invalid', 'job6', 'azcopy.job.finished', 'copy', 'Completed', 481m
+    'missing required', 'invalid', 'job6', 'azcopy.job.finished', 'copy', 'Completed', 481m,
+    'schema 4', 'schema4', 'job7', 'azcopy.job.started', 'copy', '', 9h,
+    'schema 4', 'schema4', 'job7', 'azcopy.job.finished', 'copy', 'Completed', 541m
 ]
 | serialize Sequence = row_number()
 | extend customMeasurements = iff(EventName == 'azcopy.job.finished', CompleteMeasurements, dynamic({}))
@@ -126,9 +131,10 @@ let Fixture = datatable(Scenario:string, Invocation:string, Job:string, EventNam
     Scenario == 'resume', bag_remove_keys(customMeasurements, dynamic(['azcopy.job_throughput_mbps', 'azcopy.transfer_phase_throughput_mbps'])),
     Scenario == 'incomplete scope', bag_remove_keys(customMeasurements, dynamic(['azcopy.containers_scanned', 'azcopy.containers_touched', 'azcopy.buckets_scanned', 'azcopy.buckets_touched'])),
     Scenario == 'missing required', bag_remove_keys(customMeasurements, dynamic(['azcopy.bytes_transferred'])),
+    Scenario == 'schema 4', bag_remove_keys(customMeasurements, dynamic(__ZERO_COUNTERS__)),
     customMeasurements)
 | extend customDimensions = bag_pack(
-    'SchemaVersion', '1', 'InvocationID', Invocation, 'JobID', Job, 'InstallationID', 'installation',
+    'SchemaVersion', iff(Scenario == 'schema 4', '4', '1'), 'InvocationID', Invocation, 'JobID', Job, 'InstallationID', 'installation',
     'Command', Command, 'JobStatus', Status, 'TerminalStage', 'completed',
     'SourceType', 'Local', 'DestType', 'Blob', 'DestStorageAccount', 'account',
     'SourceStorageAccount', '', 'AzCopyVersion', 'test', 'OSType', 'linux', 'InvocationContext', 'ci',
@@ -138,7 +144,7 @@ let Fixture = datatable(Scenario:string, Invocation:string, Job:string, EventNam
     'FailureErrorCodes', iff(Status == 'Failed', '403:1', ''), 'PerformanceAdviceCodes', 'NetworkErrors')
 | project Scenario, timestamp = _startTime + Offset, name = EventName, customDimensions, customMeasurements,
     itemId = tostring(Sequence), client_CountryOrRegion = 'US';
-'@.Replace('__MEASUREMENTS__', $metricJson)
+'@.Replace('__MEASUREMENTS__', $metricJson).Replace('__ZERO_COUNTERS__', $zeroCountersJson)
 $token = az account get-access-token --resource https://api.kusto.windows.net --query accessToken -o tsv
 if ($LASTEXITCODE -ne 0 -or -not $token) { throw 'Kusto authentication failed.' }
 function Invoke-ContractQuery([string]$Query) {
@@ -190,14 +196,16 @@ Assert-Value $overview 'Data (TB)' 'Value' 4
 Assert-Value $overview 'Completion rate (%)' 'Value' 75
 Assert-Value $overview 'Unmatched starts' 'Value' 1
 $quality = Invoke-ContractQuery (Get-FixtureQuery 'azcopy-business-metrics/queries/client/08_telemetry_quality.kql')
-Assert-Value $quality 'Observed attempts' 'Value' 7
-Assert-Value $quality 'Accepted attempts' 'Value' 4
+Assert-Value $quality 'Observed attempts' 'Value' 8
+Assert-Value $quality 'Accepted attempts' 'Value' 5
 Assert-Value $quality 'Lifecycle suspects' 'Value' 2
 Assert-Value $quality 'Incomplete finish metrics' 'Value' 1
+$inventory = Invoke-ContractQuery (Get-FixtureQuery 'azcopy-telemetry-metrics/queries/06_source_inventory.kql' "Scenario in ('schema 4', 'incomplete scope')")
+Assert-Value $inventory 'Attempts missing containers scanned' 'Value' 1
 $rejections = Invoke-ContractQuery (Get-FixtureQuery 'azcopy-business-metrics/queries/client/12_telemetry_rejections.kql')
 Assert-Value $rejections 'missing' 'StartEvents' 1 'InvocationID'
 Assert-Value $rejections 'duplicate' 'FinishEvents' 2 'InvocationID'
-Assert-Value $rejections 'invalid' 'FinishMetricCount' 48 'InvocationID'
+Assert-Value $rejections 'invalid' 'FinishMetricCount' ($metricNames.Count - 1) 'InvocationID'
 if ($rejections.Rows.Count -ne 3) { throw 'Valid resume or incomplete-scope events were incorrectly rejected.' }
 $testedQueries = 0
 foreach ($queryFile in @(Get-ChildItem (Join-Path $PSScriptRoot 'azcopy-telemetry-metrics/queries') -Filter '*.kql') +

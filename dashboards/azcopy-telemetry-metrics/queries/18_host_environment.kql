@@ -2,7 +2,8 @@
 customEvents
 | where name startswith 'azcopy.'
 | where timestamp between (_startTime .. _endTime)
-| where name == 'azcopy.job.finished'
+// Host fields are on job.started; schema 4 omits them from job.finished.
+| where name == 'azcopy.job.started'
 | extend
     Version = tostring(coalesce(customDimensions.AzCopyVersion, customDimensions.ServiceVersion)),
     SchemaVersion = tostring(customDimensions.SchemaVersion),

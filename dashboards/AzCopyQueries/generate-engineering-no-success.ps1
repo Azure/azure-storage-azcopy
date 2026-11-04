@@ -35,14 +35,14 @@ $raw = @'
 let Events = materialize(
     cluster('https://adx.monitor.azure.com/subscriptions/31347be8-d066-464e-9866-7e58d85027b7/resourcegroups/azcopy-telemetry-test-rg/providers/microsoft.insights/components/azcopy-telemetry-test-ai').database('azcopy-telemetry-test-ai').customEvents
     | where timestamp between ($__timeFrom .. $__timeTo)
-    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3')
+    | where name == 'azcopy.job.finished' and tostring(customDimensions.SchemaVersion) in ('1', '3', '4')
     | project timestamp, InvocationID=tostring(customDimensions.InvocationID), RunID=tostring(customDimensions.E2ETestRunID),
         SourceType=tostring(customDimensions.SourceType), TargetType=tostring(customDimensions.DestType),
         JobStatus=tostring(customDimensions.JobStatus), Category=tostring(customDimensions.JobErrorCategory),
         Code=tostring(customDimensions.JobErrorCode), Stage=tostring(customDimensions.TerminalStage),
         Command=tostring(customDimensions.Command), FromTo=strcat(tostring(customDimensions.SourceType), tostring(customDimensions.DestType)),
         OS=tostring(customDimensions.OSType), Version=tostring(customDimensions.AzCopyVersion),
-        Measurements=customMeasurements, ErrorHistogram=tostring(customDimensions.FailureErrorCodes)
+        Measurements=customMeasurements, Schema=tostring(customDimensions.SchemaVersion), ErrorHistogram=tostring(customDimensions.FailureErrorCodes)
 );
 let IsAll = (values:dynamic) { array_length(values) == 0 or '$__all' in (values) or '__all' in (values) };
 let Raw = materialize(
@@ -60,13 +60,13 @@ let Raw = materialize(
 
 $reliability = @'
 let Reliability = Raw
-    | extend HTTPAttempts=todouble(Measurements['azcopy.storage_http_attempt_count']),
-        NetworkErrors=todouble(Measurements['azcopy.network_error_attempt_count']),
-        Busy503=todouble(Measurements['azcopy.server_busy_503_count']),
-        BusyThroughput=todouble(Measurements['azcopy.server_busy_throughput_count']),
-        BusyIOPS=todouble(Measurements['azcopy.server_busy_iops_count']),
-        BusyOther=todouble(Measurements['azcopy.server_busy_other_count']),
-        OmittedErrors=todouble(Measurements['azcopy.failure_error_other_count']),
+    | extend HTTPAttempts=coalesce(todouble(Measurements['azcopy.storage_http_attempt_count']), iff(Schema == '4', 0.0, real(null))),
+        NetworkErrors=coalesce(todouble(Measurements['azcopy.network_error_attempt_count']), iff(Schema == '4', 0.0, real(null))),
+        Busy503=coalesce(todouble(Measurements['azcopy.server_busy_503_count']), iff(Schema == '4', 0.0, real(null))),
+        BusyThroughput=coalesce(todouble(Measurements['azcopy.server_busy_throughput_count']), iff(Schema == '4', 0.0, real(null))),
+        BusyIOPS=coalesce(todouble(Measurements['azcopy.server_busy_iops_count']), iff(Schema == '4', 0.0, real(null))),
+        BusyOther=coalesce(todouble(Measurements['azcopy.server_busy_other_count']), iff(Schema == '4', 0.0, real(null))),
+        OmittedErrors=coalesce(todouble(Measurements['azcopy.failure_error_other_count']), iff(Schema == '4', 0.0, real(null))),
         Progress=todouble(Measurements['azcopy.percent_complete']);
 let Requests = Reliability
     | where HTTPAttempts >= 0 and NetworkErrors >= 0 and Busy503 >= 0
