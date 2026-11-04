@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -299,49 +298,11 @@ func initializeClient(resumeJobID common.JobID, isMigratedToLibrary, isBench, sh
 	if !isMigratedToLibrary {
 		traversal.EnumerationParallelism, traversal.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 		if buildmode.IsMover {
-			StartSystemStatsMonitorForJob()
+			azcopy.StartSystemStatsMonitor(Client.CurrentJobID)
 		}
 	}
 	return nil
 
-}
-
-func StartSystemStatsMonitorForJob() {
-	StartSystemStatsMonitorForJobID(Client.CurrentJobID)
-}
-
-func StartSystemStatsMonitorForJobID(jobID common.JobID) {
-
-	if runtime.GOOS != "linux" {
-		// We don't start the stats monitor on Windows, because few functions are OS specific.
-		// It can be done for Windows and Mac, but it will need more testing.
-		return
-	}
-
-	logger := common.NewJobLogger(jobID, LogLevel.Info(), common.LogPathFolder, "-rolling-stats")
-	logger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		logger.CloseLog()
-	})
-
-	config := common.StatsMonitorConfig{
-		Interval:     5 * time.Second,
-		MonitorPaths: []string{common.LogPathFolder, common.AzcopyJobPlanFolder},
-		Logger:       logger,
-		LogConditions: common.LogConditions{
-			LogInterval: 60 * time.Second, // Regular logging
-		},
-	}
-
-	common.GlobalSystemStatsMonitor, _ = common.NewSystemStatsMonitor(config)
-
-	common.GlobalSystemStatsMonitor.Start(context.TODO())
-
-	glcm.RegisterCloseFunc(func() {
-		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
-		common.GlobalSystemStatsMonitor.Stop()
-		common.StopShareControls()
-	})
 }
 
 // RegisterGlobalCustomStatsCallback registers a custom stats callback with a specific ID

@@ -159,7 +159,7 @@ func (h cliSyncHandler) OnStart(job azcopy.JobContext) {
 		h.cooked.jobStartTime = time.Now()
 		h.cooked.intervalStartTime = h.cooked.jobStartTime
 	}
-	StartSystemStatsMonitorForJobID(job.JobID)
+	azcopy.StartSystemStatsMonitor(job.JobID)
 	glcm.Init(GetStandardInitOutputBuilder(job.JobID.String(), job.LogPath, false, ""))
 }
 

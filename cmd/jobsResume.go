@@ -105,7 +105,7 @@ type cliResumeHandler struct{}
 
 func (c cliResumeHandler) OnStart(ctx azcopy.JobContext) {
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
-	StartSystemStatsMonitorForJobID(ctx.JobID)
+	azcopy.StartSystemStatsMonitor(ctx.JobID)
 }
 
 func (c cliResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
