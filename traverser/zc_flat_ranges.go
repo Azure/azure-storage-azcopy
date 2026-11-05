@@ -72,19 +72,18 @@ func (t *BlobTraverser) flatRangeError(bounds flatListRange, err error) *flatLis
 	}
 }
 
-// reportFlatRangeError never blocks enumeration. Undelivered errors remain fatal to the caller.
+// reportFlatRangeError waits for the consumer like other error sends. Errors that cannot be delivered
+// (no channel, cancellation, closed channel) remain fatal to the caller.
 func (t *BlobTraverser) reportFlatRangeError(bounds flatListRange, err error) bool {
 	var info *flatListRangeErrorInfo
-	if !errors.As(err, &info) {
+	if !errors.As(err, &info) || t.errorChannel == nil {
 		return false
 	}
-	select {
-	case t.errorChannel <- info:
-		return true
-	default:
-		WarnStdoutAndScanningLog(fmt.Sprintf("Flat range error channel unavailable or full: %v", info))
+	if sendErr := sendToErrorChannel(t.ctx, t.errorChannel, info); sendErr != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Flat range error could not be delivered (%v): %v", sendErr, info))
 		return false
 	}
+	return true
 }
 
 // flatListParallelism reads the shared environment setting and validates its supported limits.

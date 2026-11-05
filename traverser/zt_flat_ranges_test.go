@@ -352,7 +352,7 @@ func staticTestTraverser(t *testing.T, keys []string, root, failure string) (*Bl
 		InitResourceTraverserOptions{FlatListing: true, Recursive: true, DestResourceType: &location}), calls
 }
 
-// TestStaticFlatRangeReporting checks bounded delivery and explicit failure when delivery is unavailable.
+// TestStaticFlatRangeReporting checks that reporting waits for a slow consumer and fails explicitly without a channel.
 func TestStaticFlatRangeReporting(t *testing.T) {
 	for _, mode := range []string{"available", "full", "nil"} {
 		t.Run(mode, func(t *testing.T) {
@@ -368,6 +368,21 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 			failure := errors.New("listing failed")
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
+			src.ctx = ctx
+
+			// A consumer that starts late proves senders wait instead of failing on a full channel.
+			var received []TraverserErrorItemInfo
+			consumerDone := make(chan struct{})
+			if mode == "full" {
+				go func() {
+					defer close(consumerDone)
+					time.Sleep(50 * time.Millisecond)
+					for item := range ch {
+						received = append(received, item)
+					}
+				}()
+			}
+
 			var calls atomic.Int32
 			err := runFlatListRanges(ctx, 8, src.reportFlatRangeError, func(_ context.Context, bounds flatListRange) error {
 				calls.Add(1)
@@ -376,14 +391,23 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 			require.NoError(t, ctx.Err())
 			require.EqualValues(t, 63, calls.Load())
 			require.Contains(t, logger.text(), "activeWorkers=0/8 queuedRanges=0 completedRanges=0 failedRanges=63 cancelledRanges=0 totalRanges=63 final=true")
-			if mode != "available" {
+			if mode == "nil" {
 				require.ErrorIs(t, err, failure)
 				return
 			}
 			require.NoError(t, err)
 			close(ch)
+			var items []TraverserErrorItemInfo
+			if mode == "full" {
+				<-consumerDone
+				items = received[1:] // the first item is the one that filled the channel
+			} else {
+				for item := range ch {
+					items = append(items, item)
+				}
+			}
 			seen := make(map[flatListRange]bool)
-			for item := range ch {
+			for _, item := range items {
 				info, ok := item.(*flatListRangeErrorInfo)
 				require.True(t, ok)
 				start, end := info.RangeBounds()
@@ -398,6 +422,29 @@ func TestStaticFlatRangeReporting(t *testing.T) {
 			}
 			require.Len(t, seen, 63)
 		})
+	}
+}
+
+// TestStaticFlatRangeReportingStopsWhenCancelled keeps a stalled consumer from hanging enumeration forever.
+func TestStaticFlatRangeReportingStopsWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src := &BlobTraverser{RawURL: "https://account.blob.core.windows.net/c/root/", ctx: ctx,
+		errorChannel: make(chan TraverserErrorItemInfo)} // never read
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	result := make(chan error, 1)
+	go func() {
+		failure := errors.New("listing failed")
+		result <- runFlatListRanges(ctx, 8, src.reportFlatRangeError, func(_ context.Context, bounds flatListRange) error {
+			return src.flatRangeError(bounds, failure)
+		})
+	}()
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancellation did not unblock the blocked range reports")
 	}
 }
 

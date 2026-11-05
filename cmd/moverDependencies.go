@@ -361,32 +361,6 @@ type RawMoverSyncCmdArgs struct {
 	UseFlatListing          bool
 }
 
-type SyncCmdArgsInput struct {
-	Src string
-	Dst string
-
-	// named credentials (bound to --src-cred / --dst-cred flags)
-	SrcCredName string
-	DstCredName string
-
-	FromTo                  string
-	Recursive               bool
-	ExcludeRegex            string
-	FollowSymlinks          bool
-	DeleteDestination       string
-	PreservePOSIXProperties bool
-	PreservePermissions     bool
-	PreserveSMBInfo         bool
-	ForceIfReadOnly         bool
-	Md5ValidationOption     string
-	PutMd5                  bool
-	CompareHash             string
-	LocalHashStorageMode    string
-	Hardlinks               string
-	S2sPreserveAccessTier   bool
-	S2sPreserveBlobTags     bool
-}
-
 func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (*cookedSyncCmdArgs, error) {
 	raw := rawSyncCmdArgs{
 		src:                        args.Src,
