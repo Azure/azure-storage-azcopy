@@ -154,6 +154,9 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	if src == "" || dest == "" {
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
 	}
+	if !common.HasLifecycleMgr() {
+		return SyncResult{}, fmt.Errorf("a lifecycle manager must be configured before sync")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

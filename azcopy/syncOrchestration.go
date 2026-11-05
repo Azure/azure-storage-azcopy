@@ -28,6 +28,9 @@ func (c *Client) PrepareSync(ctx context.Context, src, dst string, opts SyncOpti
 	if src == "" || dst == "" {
 		return nil, fmt.Errorf("source and destination must be specified for sync")
 	}
+	if !common.HasLifecycleMgr() {
+		return nil, fmt.Errorf("a lifecycle manager must be configured before sync")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	jobID := opts.JobID
 	if jobID.IsEmpty() {

@@ -72,6 +72,9 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	if len(opts.IncludeTransfer) != 0 || len(opts.ExcludeTransfer) != 0 {
 		return ResumeJobResult{}, errors.New("include/exclude transfer lists are obsolete and cannot be used when resuming a job")
 	}
+	if !common.HasLifecycleMgr() {
+		return ResumeJobResult{}, errors.New("a lifecycle manager must be configured before resume")
+	}
 	ctx, cancelOperation := context.WithCancel(ctx)
 	defer cancelOperation()
 	// Initialization of logs

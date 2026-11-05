@@ -188,7 +188,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 	// If in library mode, this will not be set and we will use the user-provided handler.
 	// Note: It is not ideal that this is a global, but keeping it this way for now to avoid a larger refactor than this already is.
 	copyHandler := common.GetLifecycleMgr()
-	if copyHandler == nil {
+	if !common.HasLifecycleMgr() {
 		return CopyResult{}, fmt.Errorf("a lifecycle manager must be configured before copy")
 	}
 	jobID := common.NewJobID()

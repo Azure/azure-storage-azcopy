@@ -40,7 +40,6 @@ import (
 func (s *syncExecutor) initSyncEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *jobLifecycleManager) (se *traverser.SyncEnumerator, err error) {
 
 	// TODO: enable symlink support in a future release after evaluating the implications
-	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := s.opts.fromTo.To()
