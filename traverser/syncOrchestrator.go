@@ -154,27 +154,10 @@ func IsDestinationNotFoundDuringSync(err error) bool {
 }
 
 func (r *syncRun) writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncOrchErrorInfo) {
-	if errorChannel != nil {
-		// Use defer/recover to handle the case where the channel is closed during cancellation.
-		// This prevents "panic: send on closed channel" when the job is being cancelled.
-		// [TO DO] - BugFix - Identify the root cause for cases when the error channel is closed prematurely and fix it.
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				// Channel was closed, log the error instead of panicking
-				r.syncOrchestratorLog(
-					common.LogError,
-					fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
-			}
-		}()
-
-		select {
-		case errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			r.syncOrchestratorLog(
-				common.LogError,
-				fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
+	if sendErr := sendToErrorChannel(r.ctx, errorChannel, err); sendErr != nil {
+		r.syncOrchestratorLog(
+			common.LogError,
+			fmt.Sprintf("Could not deliver error to channel (%v): %v", sendErr, err.ErrorMessage()))
 	}
 }
 
@@ -664,8 +647,9 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 // 5. Schedule transfers after comparison is complete
 func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, ctx context.Context) error {
 	startTime := time.Now()
-	mainCtx, cancel := context.WithCancel(ctx) // Use mainCtx for operations, cancel to signal shutdown
-	defer cancel()                             // Ensure cancellation happens on exit
+	var cancel context.CancelFunc
+	r.ctx, cancel = context.WithCancel(ctx) // cancel signals shutdown and releases senders blocked on the error channel
+	defer cancel()                          // Ensure cancellation happens on exit
 
 	if cca.SetCancel != nil {
 		cca.SetCancel(cancel)
@@ -675,7 +659,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 	// Initialize semaphore for directory concurrency control
 	if r.enableThrottling {
-		r.semaphore = r.NewThrottleSemaphore(mainCtx, cca.JobID)
+		r.semaphore = r.NewThrottleSemaphore(cca.JobID)
 		defer r.semaphore.Close()
 	}
 
@@ -701,7 +685,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 		// Acquire semaphore slot to limit concurrent directory processing
 		if r.enableThrottling {
-			err = r.semaphore.AcquireSourceSlot(mainCtx)
+			err = r.semaphore.AcquireSourceSlot(r.ctx)
 			if err != nil {
 				r.syncOrchestratorLog(
 					common.LogError,
@@ -752,12 +736,12 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 			var subDirs []minimalStoredObject
 			var mergeErr error
 
-			// Per-directory cancellable context derived from mainCtx. mergeJoinTwoWaySyncDir cancels it
+			// Per-directory cancellable context derived from r.ctx. mergeJoinTwoWaySyncDir cancels it
 			// and drains/awaits all producer goroutines on EVERY return path, so no detached traverser
 			// goroutine outlives this directory's processing and later writes to the shared sync error
 			// channel after it is closed ("send on closed channel"). Creating the traversers with dirCtx
-			// (not mainCtx) is what lets that cancel abort their in-flight listing promptly.
-			dirCtx, dirCancel := context.WithCancel(mainCtx)
+			// (not r.ctx) is what lets that cancel abort their in-flight listing promptly.
+			dirCtx, dirCancel := context.WithCancel(r.ctx)
 
 			// Channel-based merge-join: bridge source + destination traversers into
 			// back-pressured channels and merge their sorted streams.
@@ -875,7 +859,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		pt, err := cca.NewTraverser(
 			pt_src,
 			ptt.Location,
-			mainCtx,
+			r.ctx,
 			ptt.Options)
 		if err != nil {
 			errMsg = fmt.Sprintf("SyncOrchestrator: Creating source traverser failed for dir %s: %s", pt_src.Value, err)
@@ -894,7 +878,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		st, err := cca.NewTraverser(
 			st_src,
 			stt.Location,
-			mainCtx,
+			r.ctx,
 			stt.Options)
 		if err != nil {
 			errMsg = fmt.Sprintf("SyncOrchestrator: Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
@@ -985,7 +969,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		if isDestinationPresent && traverseDestination {
 			// Acquire target slot for target traversal
 			if r.enableThrottling {
-				err = r.semaphore.AcquireTargetSlot(mainCtx)
+				err = r.semaphore.AcquireTargetSlot(r.ctx)
 				if err != nil {
 					errMsg = fmt.Sprintf("Failed to acquire target slot for dir %s: %s", st_src.Value, err)
 					r.syncOrchestratorLog(common.LogError, errMsg)
@@ -1139,7 +1123,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
 	// merge-join producers) has returned, on both completion and cancellation.
-	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(r.crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: maxQueueDirs})
+	crawlOutput, crawlStats := parallel.CrawlWithStats(r.ctx, root, syncOneDir, int(r.crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: maxQueueDirs})
 
 	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
 	// workers, queued directories, in-flight merge-join directory syncs, and goroutine count. This
@@ -1149,7 +1133,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 			"[CrawlConfig] crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
 			r.crawlParallelism, crawlStats.MaxQueueDirectories, randomDequeue), true)
-		statsCtx, stopStats := context.WithCancel(mainCtx)
+		statsCtx, stopStats := context.WithCancel(r.ctx)
 		defer stopStats()
 		go func() {
 			ticker := time.NewTicker(time.Minute)
@@ -1177,7 +1161,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 	// directory. Closure also guarantees no traverser can write to ErrorChannel after we return.
 	for range crawlOutput {
 	}
-	if mainCtx.Err() != nil {
+	if r.ctx.Err() != nil {
 		r.syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
 	}

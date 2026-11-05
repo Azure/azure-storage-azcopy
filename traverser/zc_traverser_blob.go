@@ -75,7 +75,8 @@ type BlobTraverser struct {
 	includeRoot      bool
 	destResourceType *common.Location
 
-	errorChannel chan<- TraverserErrorItemInfo
+	errorChannel       chan<- TraverserErrorItemInfo
+	incrementScanError func(common.EntityType)
 
 	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
 	isSyncDestination  bool
@@ -137,24 +138,6 @@ func (e ErrorBlobInfo) Location() common.Location {
 // only succeeds against an explicitly-known HNS destination.
 func (t *BlobTraverser) destIsBlobFS() bool {
 	return t.destResourceType != nil && *t.destResourceType == common.ELocation.BlobFS()
-}
-
-func (t *BlobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
-	if t.errorChannel != nil {
-		// Defense-in-depth: the orchestrator drains all traversers before the caller closes this
-		// channel, but recover in case a send still races a close during cancellation.
-		defer func() {
-			if r := recover(); r != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
-			}
-		}()
-		select {
-		case t.errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
-	}
 }
 
 var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
@@ -313,15 +296,15 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if respErr.ErrorCode == string(bloberror.BlobUsesCustomerSpecifiedEncryption) {
-			t.writeToBlobErrorChannel(errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, errorBlobInfo)
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
 		if respErr.RawResponse == nil {
-			t.writeToBlobErrorChannel(errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %w", respErr)
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
-			t.writeToBlobErrorChannel(errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		} else if t.isSyncDestination && t.isDFS && respErr.StatusCode == 404 {
 			// If this is a sync destination traversal and we get a 404, it means the blob doesn't exist
@@ -673,7 +656,7 @@ func (t *BlobTraverser) ParallelList(containerClient *container.Client, containe
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			t.writeToBlobErrorChannel(ErrorBlobInfo{Error: workerError})
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorBlobInfo{Error: workerError, Dir: true})
 			return workerError
 		}
 
@@ -691,7 +674,7 @@ func (t *BlobTraverser) ParallelList(containerClient *container.Client, containe
 		processErr := ProcessIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
-			t.writeToBlobErrorChannel(ErrorBlobInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorBlobInfo{
 				BlobName:             object.Name,
 				BlobPath:             object.RelativePath,
 				BlobLastModifiedTime: object.LastModifiedTime,
@@ -1049,6 +1032,7 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       ternary.DerefOrZero(ternary.FirstOrZero(blobOpts).IsDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
+		incrementScanError:          opts.IncrementScanError,
 		isSyncDestination:           opts.IsSyncDestination,
 		suppressCrawlStats:          opts.SuppressCrawlStats,
 	}

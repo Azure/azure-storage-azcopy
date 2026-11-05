@@ -107,6 +107,8 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor Obje
 
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
 			IncrementEnumeration:    t.opts.IncrementEnumeration,
+			ErrorChannel:            t.opts.ErrorChannel,
+			IncrementScanError:      t.opts.IncrementScanError,
 		})
 
 		if err != nil {

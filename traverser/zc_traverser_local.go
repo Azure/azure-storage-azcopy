@@ -266,19 +266,6 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
-func writeToErrorChannel(errorChannel chan<- TraverserErrorItemInfo, err ErrorFileInfo) {
-	if errorChannel != nil {
-		select {
-		case errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
-	} else {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Error channel is nil, cannot send error: %v", err.ErrorMessage()))
-	}
-}
-
 type WalkWithSymlinksOptions struct {
 	FromTo                             common.FromTo
 	SymlinkHandling                    common.SymlinkHandlingType
@@ -342,7 +329,7 @@ func WalkWithSymlinks(
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
-				writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
+				sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				if options.IncrementEnumerationFailureCounter != nil {
 					options.IncrementEnumerationFailureCounter(common.EEntityType.File())
 				}
@@ -364,7 +351,7 @@ func WalkWithSymlinks(
 			if fileInfo == nil {
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
 				WarnStdoutAndScanningLog(err.Error())
-				writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: nil, ErrorMsg: err})
+				sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: nil, ErrorMsg: err})
 				if options.IncrementEnumerationFailureCounter != nil {
 					// Assuming it's a file, since we don't know what else it could be
 					options.IncrementEnumerationFailureCounter(common.EEntityType.File())
@@ -378,7 +365,7 @@ func WalkWithSymlinks(
 
 					if err != nil {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
-						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						if options.IncrementEnumerationCounter != nil {
 							options.IncrementEnumerationCounter(common.EEntityType.Symlink(), options.SymlinkHandling, options.HardlinkHandling)
 						}
@@ -390,7 +377,7 @@ func WalkWithSymlinks(
 					skipped, err := getProcessingError(err)
 
 					if err != nil {
-						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						if options.IncrementEnumerationCounter != nil {
 							options.IncrementEnumerationCounter(common.EEntityType.Symlink(), options.SymlinkHandling, options.HardlinkHandling)
 						}
@@ -409,7 +396,7 @@ func WalkWithSymlinks(
 						HandleSymlinkForNFS(fileInfo.Name(), options.SymlinkHandling, options.IncrementEnumerationCounter)
 
 						// Using errorChannel to log skipped files
-						writeToErrorChannel(options.ErrorChannel,
+						sendToErrorChannelOrLog(appCtx, options.ErrorChannel,
 							ErrorFileInfo{
 								FilePath: filePath,
 								FileInfo: fileInfo,
@@ -432,7 +419,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					if options.IncrementEnumerationFailureCounter != nil {
 						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 					}
@@ -443,7 +430,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					if options.IncrementEnumerationFailureCounter != nil {
 						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 					}
@@ -454,7 +441,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					if options.IncrementEnumerationFailureCounter != nil {
 						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 					}
@@ -465,7 +452,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					if options.IncrementEnumerationFailureCounter != nil {
 						options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 					}
@@ -481,7 +468,7 @@ func WalkWithSymlinks(
 							skipped, err := getProcessingError(err)
 
 							if err != nil {
-								writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
+								sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
 								if options.IncrementEnumerationFailureCounter != nil {
 									options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
 								}
@@ -507,7 +494,7 @@ func WalkWithSymlinks(
 						finalSlPath, err := filepath.Abs(common.GenerateFullPath(fullPath, computedRelativePath))
 						if err != nil {
 							err = fmt.Errorf("Failed to get absolute path of %s: %s", common.GenerateFullPath(fullPath, computedRelativePath), err.Error())
-							writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+							sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 							if options.IncrementEnumerationFailureCounter != nil {
 								options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 							}
@@ -522,7 +509,7 @@ func WalkWithSymlinks(
 						if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
 							err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
 							WarnStdoutAndScanningLog(err.Error())
-							writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+							sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 							if options.IncrementEnumerationFailureCounter != nil {
 								options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 							}
@@ -530,7 +517,7 @@ func WalkWithSymlinks(
 						} else if ok {
 							err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
 							WarnStdoutAndScanningLog(err.Error())
-							writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
+							sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
 							if options.IncrementEnumerationFailureCounter != nil {
 								options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
 							}
@@ -541,7 +528,7 @@ func WalkWithSymlinks(
 							skipped, err := getProcessingError(err)
 
 							if err != nil {
-								writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
+								sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: rStat, ErrorMsg: err})
 								if options.IncrementEnumerationFailureCounter != nil {
 									options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
 								}
@@ -566,7 +553,7 @@ func WalkWithSymlinks(
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					_, err = getProcessingError(err)
 					if err != nil {
-						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						if options.IncrementEnumerationFailureCounter != nil {
 							// symlink is already resolved to a file
 							options.IncrementEnumerationFailureCounter(common.EEntityType.File())
@@ -586,7 +573,7 @@ func WalkWithSymlinks(
 						}
 
 						// Using errorChannel to log skipped files
-						writeToErrorChannel(options.ErrorChannel,
+						sendToErrorChannelOrLog(appCtx, options.ErrorChannel,
 							ErrorFileInfo{
 								FilePath: filePath,
 								FileInfo: fileInfo,
@@ -603,7 +590,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					if options.IncrementEnumerationFailureCounter != nil {
 						if fileInfo.IsDir() {
 							options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
@@ -619,7 +606,7 @@ func WalkWithSymlinks(
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
 					if err != nil {
-						writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						if options.IncrementEnumerationFailureCounter != nil {
 							if fileInfo.IsDir() {
 								options.IncrementEnumerationFailureCounter(common.EEntityType.Folder())
@@ -957,12 +944,13 @@ var (
 )
 
 func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
+	// Binds the traversal's context to the shared error delivery.
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
 		common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 
-		writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+		sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 			FilePath: t.fullPath,
 			FileInfo: nil,
 			ErrorMsg: err,
@@ -1122,7 +1110,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 			// is with /* (aka stripTopDir).
 			entries, err := os.ReadDir(t.fullPath)
 			if err != nil {
-				writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+				sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 					FilePath: t.fullPath,
 					FileInfo: nil,
 					ErrorMsg: fmt.Errorf("failed to read directory %s: %w", t.fullPath, err),
@@ -1138,10 +1126,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				fileInfo, err := entry.Info()
 				path := common.GenerateFullPath(t.fullPath, relativePath)
 				if err != nil {
-					writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+					infoErr := fmt.Errorf("failed to get file info for %s: %w", path, err)
+					WarnStdoutAndScanningLog(infoErr.Error())
+					sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 						FilePath: path,
 						FileInfo: nil,
-						ErrorMsg: fmt.Errorf("failed to get file info for %s: %w", path, err),
+						ErrorMsg: infoErr,
 					})
 					// Update the counter for failed enumerations
 					if t.incrementEnumerationFailureCounter != nil {
@@ -1162,7 +1152,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						if t.fromTo.IsNFS() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink(), t.symlinkHandling, t.hardlinkHandling)
 							// Using errorChannel to log skipped files
-							writeToErrorChannel(t.errorChannel,
+							sendToErrorChannelOrLog(t.appCtx, t.errorChannel,
 								ErrorFileInfo{
 									FilePath: path,
 									FileInfo: fileInfo,
@@ -1181,10 +1171,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						result, err := UnfurlSymlinks(path)
 
 						if err != nil {
-							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+							resolveErr := fmt.Errorf("failed to resolve symlink %s: %w", path, err)
+							WarnStdoutAndScanningLog(resolveErr.Error())
+							sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 								FilePath: path,
 								FileInfo: fileInfo,
-								ErrorMsg: fmt.Errorf("failed to resolve symlink %s: %w", path, err),
+								ErrorMsg: resolveErr,
 							})
 							if t.incrementEnumerationFailureCounter != nil {
 								t.incrementEnumerationFailureCounter(common.EEntityType.Symlink())
@@ -1196,10 +1188,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						result, err = filepath.Abs(result)
 
 						if err != nil {
-							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+							absErr := fmt.Errorf("failed to get absolute path of symlink result %s: %w", path, err)
+							WarnStdoutAndScanningLog(absErr.Error())
+							sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 								FilePath: path,
 								FileInfo: fileInfo,
-								ErrorMsg: fmt.Errorf("failed to get absolute path of symlink result %s: %w", path, err),
+								ErrorMsg: absErr,
 							})
 							if t.incrementEnumerationFailureCounter != nil {
 								t.incrementEnumerationFailureCounter(common.EEntityType.Symlink())
@@ -1211,10 +1205,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						fileInfo, err = common.OSStat(result)
 
 						if err != nil {
-							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+							statErr := fmt.Errorf("failed to get file info for symlink result %s: %w", path, err)
+							WarnStdoutAndScanningLog(statErr.Error())
+							sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 								FilePath: path,
 								FileInfo: nil, // Will be treated as a file
-								ErrorMsg: fmt.Errorf("failed to get file info for symlink result %s: %w", path, err),
+								ErrorMsg: statErr,
 							})
 							if t.incrementEnumerationFailureCounter != nil {
 								t.incrementEnumerationFailureCounter(common.EEntityType.Symlink())
@@ -1228,7 +1224,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							ok, _ := checkSymlinkCausesDirectoryLoop(path)
 							if ok {
 								err := errors.New("symlink caused cyclic loop")
-								writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+								WarnStdoutAndScanningLog(fmt.Sprintf("%s: %s", path, err))
+								sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{
 									FilePath: path,
 									FileInfo: fileInfo,
 									ErrorMsg: err})
@@ -1254,7 +1251,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						}
 
 						// Using errorChannel to log skipped files
-						writeToErrorChannel(t.errorChannel,
+						sendToErrorChannelOrLog(t.appCtx, t.errorChannel,
 							ErrorFileInfo{
 								FilePath: path,
 								FileInfo: fileInfo,
@@ -1296,11 +1293,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						// What do we here?
 						// During enumeration, we can check for Zero time and skip any optimization.
 						// The upload layer will fetch the properties again.
-						writeToErrorChannel(t.errorChannel,
+						propsErr := fmt.Errorf("failed to get extended properties for %s: %s", path, err.Error())
+						WarnStdoutAndScanningLog(propsErr.Error())
+						sendToErrorChannelOrLog(t.appCtx, t.errorChannel,
 							ErrorFileInfo{
 								FilePath: path,
 								FileInfo: fileInfo,
-								ErrorMsg: fmt.Errorf("failed to get extended properties for %s: %s", path, err.Error())})
+								ErrorMsg: propsErr})
 						continue
 					} else {
 						storedObject.updateTimestamps(

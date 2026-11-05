@@ -160,6 +160,7 @@ func (t *copyExecutor) initCopyEnumerator(ctx context.Context, logLevel common.L
 			}
 		},
 		IncrementEnumerationFailure: t.tpt.incEnumerationFailure,
+		IncrementScanError:          t.tpt.incEnumerationFailure,
 		ErrorChannel:                t.opts.errorChannel,
 
 		FlatListing: t.opts.useFlatListing,

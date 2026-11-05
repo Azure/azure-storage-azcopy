@@ -60,7 +60,8 @@ type fileTraverser struct {
 	symlinkHandling             common.SymlinkHandlingType
 	fromTo                      common.FromTo
 
-	errorChannel chan<- TraverserErrorItemInfo
+	errorChannel       chan<- TraverserErrorItemInfo
+	incrementScanError func(common.EntityType)
 
 	// skipRootProperties bool // if true, we skip properties of the root directory/file
 	skipRootProperties bool
@@ -121,17 +122,6 @@ func (e ErrorAzFileInfo) Location() common.Location {
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo
-
-func (t *fileTraverser) writeToErrorChannel(err ErrorAzFileInfo) {
-	if t.errorChannel != nil {
-		select {
-		case t.errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
-	}
-}
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
 	shareClient := client.NewShareClient(fileURLParts.ShareName)
@@ -231,7 +221,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 	targetURLParts, err := file.ParseURL(t.rawURL)
 	if err != nil {
-		t.writeToErrorChannel(ErrorAzFileInfo{
+		countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
 			FilePath: t.rawURL,
 			Error:    err,
 		})
@@ -245,7 +235,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	// if not pointing to a share, check if we are pointing to a single file
 	if !UseSyncOrchestrator && targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
-			t.writeToErrorChannel(ErrorAzFileInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
 				FilePath: targetURLParts.DirectoryOrFilePath,
 				FileName: getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				Error:    err,
@@ -268,7 +258,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		// check if the url points to a single file
 		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
 		if err != nil {
-			t.writeToErrorChannel(ErrorAzFileInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
 				FilePath: targetURLParts.DirectoryOrFilePath,
 				FileName: getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				Error:    err,
@@ -585,7 +575,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			if common.AzcopyScanningLogger != nil {
 				common.AzcopyScanningLogger.Log(common.LogError, workerError.Error())
 			}
-			t.writeToErrorChannel(ErrorAzFileInfo{Error: workerError})
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{Error: workerError, Dir: true})
 
 			// In non-recursive mode, only fail on directory enumeration errors, not property errors
 			if !t.recursive && strings.Contains(workerError.Error(), listErrPrefix) {
@@ -601,7 +591,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		processErr := processStoredObject(object)
 		if processErr != nil {
 			cancelWorkers()
-			t.writeToErrorChannel(ErrorAzFileInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
 				FileName:             object.Name,
 				FilePath:             object.RelativePath,
 				FileLastModifiedTime: object.LastModifiedTime,
@@ -629,6 +619,7 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		symlinkHandling:             opts.SymlinkHandling,
 		fromTo:                      opts.FromTo,
 		errorChannel:                opts.ErrorChannel,
+		incrementScanError:          opts.IncrementScanError,
 	}
 
 	// Meter enumeration (metadata) IOPS against the source share's per-share

@@ -32,6 +32,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
@@ -813,6 +814,10 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 
 	if c.useFlatListing && (c.fromTo != common.EFromTo.BlobBlob() || !c.recursive || c.includeDirectoryStubs) {
 		return errors.New("flat listing requires a recursive Blob-to-Blob copy without directory stubs")
+	}
+
+	if buildmode.IsMover && c.errorChannel == nil {
+		return errors.New("CopyOptions.ErrorChannel is required in Mover builds")
 	}
 
 	return nil

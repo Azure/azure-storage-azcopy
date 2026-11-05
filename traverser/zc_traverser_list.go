@@ -123,6 +123,8 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			ListOfVersionIDs: nil,
 			ErrorChannel:     options.ErrorChannel,
 
+			IncrementScanError: options.IncrementScanError,
+
 			CpkOptions: options.CpkOptions,
 
 			PreservePermissions: options.PreservePermissions,

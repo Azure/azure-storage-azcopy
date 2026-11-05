@@ -116,8 +116,9 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor Ob
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
 		containerTraverser := NewBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
 			IncrementEnumeration: t.opts.IncrementEnumeration,
-
-			CpkOptions: t.opts.CpkOptions,
+			ErrorChannel:         t.opts.ErrorChannel,
+			IncrementScanError:   t.opts.IncrementScanError,
+			CpkOptions:           t.opts.CpkOptions,
 
 			Recursive:             true,
 			IncludeDirectoryStubs: t.opts.IncludeDirectoryStubs,
