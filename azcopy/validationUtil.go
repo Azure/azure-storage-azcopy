@@ -535,15 +535,18 @@ func validateShareProtocolCompatibility(
 
 	// We can ignore the error if we fail to get the share properties.
 	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
+	return checkShareProtocolMatchesFromTo(shareProtocol, isSource, fromTo)
+}
 
+func checkShareProtocolMatchesFromTo(shareProtocol common.Location, isSource bool, fromTo common.FromTo) error {
 	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
 			return errors.New("the source share has SMB protocol enabled. " +
 				"To copy from a SMB share, use the appropriate --from-to flag value")
 		}
 		if !isSource && fromTo.To() != common.ELocation.File() {
-			return errors.New("the destination share has NFS protocol enabled. " +
-				"To copy to a NFS share, use the appropriate --from-to flag value")
+			return errors.New("the destination share has SMB protocol enabled. " +
+				"To copy to a SMB share, use the appropriate --from-to flag value")
 		}
 	}
 

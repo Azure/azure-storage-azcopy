@@ -156,3 +156,38 @@ func TestValidateProtocolCompatibility_ConditionalLogic(t *testing.T) {
 	err = ValidateProtocolCompatibility(ctx, common.EFromTo.LocalBlob(), src, dst, nil, nil)
 	a.NoError(err, "Local->Blob should skip validation and not panic with nil service clients")
 }
+
+func TestCheckShareProtocolMatchesFromTo(t *testing.T) {
+	smb, nfs := common.ELocation.File(), common.ELocation.FileNFS()
+	testCases := []struct {
+		name          string
+		shareProtocol common.Location
+		isSource      bool
+		fromTo        common.FromTo
+		expectedErr   string
+	}{
+		{"SMB source, SMB from", smb, true, common.EFromTo.FileSMBFileNFS(), ""},
+		{"SMB destination, SMB to", smb, false, common.EFromTo.FileNFSFileSMB(), ""},
+		{"NFS source, NFS from", nfs, true, common.EFromTo.FileNFSFileSMB(), ""},
+		{"NFS destination, NFS to", nfs, false, common.EFromTo.FileSMBFileNFS(), ""},
+		{"SMB source, NFS from", smb, true, common.EFromTo.FileNFSFileNFS(),
+			"the source share has SMB protocol enabled. To copy from a SMB share, use the appropriate --from-to flag value"},
+		{"SMB destination, NFS to", smb, false, common.EFromTo.FileNFSFileNFS(),
+			"the destination share has SMB protocol enabled. To copy to a SMB share, use the appropriate --from-to flag value"},
+		{"NFS source, SMB from", nfs, true, common.EFromTo.FileSMBFileSMB(),
+			"the source share has NFS protocol enabled. To copy from a NFS share, use the appropriate --from-to flag value"},
+		{"NFS destination, SMB to", nfs, false, common.EFromTo.FileSMBFileSMB(),
+			"the destination share has NFS protocol enabled. To copy to a NFS share, use the appropriate --from-to flag value"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkShareProtocolMatchesFromTo(tc.shareProtocol, tc.isSource, tc.fromTo)
+			if tc.expectedErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tc.expectedErr)
+			}
+		})
+	}
+}
