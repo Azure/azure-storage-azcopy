@@ -104,6 +104,16 @@ func GetLifecycleMgr() LifecycleMgr {
 	return lcm
 }
 
+// HasLifecycleMgr reports whether a host registered a full lifecycle manager. UI hooks alone do not count.
+func HasLifecycleMgr() bool {
+	lifecycleMu.RLock()
+	defer lifecycleMu.RUnlock()
+	if adapter, ok := lcm.(*hookLifecycleMgr); ok {
+		return adapter.LifecycleMgr != nil
+	}
+	return lcm != nil
+}
+
 // SetLifecycleMgr installs a host implementation, including progress, cancellation and close hooks.
 func SetLifecycleMgr(manager LifecycleMgr) {
 	if manager == nil {
