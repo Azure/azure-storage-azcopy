@@ -481,6 +481,21 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				return fmt.Errorf("%s %w", listErrPrefix, err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
+				if fileInfo.Name == nil || fileInfo.Properties == nil || fileInfo.Properties.ContentLength == nil {
+					skipped := "a file (missing name)"
+					if fileInfo.Name != nil {
+						skipped = fmt.Sprintf("file %q", *fileInfo.Name)
+					}
+					parts, err := file.ParseURL(currentDirectoryClient.URL())
+					directoryLocation := "a directory (missing name)"
+					if err == nil {
+						directoryLocation = parts.ShareName + common.AZCOPY_PATH_SEPARATOR_STRING + parts.DirectoryOrFilePath
+					}
+
+					enqueueOutput(nil, fmt.Errorf("skipped %s in the Azure Files listing of %s: the response omitted its name and/or size, possibly altered by a proxy",
+						skipped, directoryLocation))
+					continue
+				}
 				if invalidBlobOrWindowsName(*fileInfo.Name) {
 					//Throw a warning on console and continue
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *fileInfo.Name))
@@ -527,6 +542,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				}
 				var fileListBuilder strings.Builder
 				for _, fileInfo := range lResp.Segment.Files {
+					if fileInfo.Name == nil {
+						continue
+					}
 					fmt.Fprintf(&fileListBuilder, " %s,", *fileInfo.Name)
 				}
 

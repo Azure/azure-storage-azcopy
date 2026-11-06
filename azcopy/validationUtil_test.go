@@ -381,6 +381,18 @@ func TestValidateProtocolCompatibility(t *testing.T) {
 			shouldValidate: true,
 			description:    "Blob to File should validate (destination is File)",
 		},
+		{
+			name:           "FileToBlobFS",
+			fromTo:         common.EFromTo.FileBlobFS(),
+			shouldValidate: true,
+			description:    "File to BlobFS should validate (source is File)",
+		},
+		{
+			name:           "BlobFSToFile",
+			fromTo:         common.EFromTo.BlobFSFile(),
+			shouldValidate: true,
+			description:    "BlobFS to File should validate (destination is File)",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -399,15 +411,9 @@ func TestValidateProtocolCompatibility(t *testing.T) {
 				err := ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, srcClient, dstClient)
 				a.NoError(err, "validateProtocolCompatibility should not fail for %s: %s", tc.name, tc.description)
 			} else {
-				// For File transfers, we expect the function to attempt validation
-				// Since we're passing nil service clients, we expect it to fail gracefully
-				// This tests that the conditional logic correctly identifies File transfers
+				// A File share's protocol can only be checked through its service client, so a missing client is an error.
 				err := ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, srcClient, dstClient)
-				// We expect an error here because we're passing nil service clients for File transfers
-				// The important thing is that it doesn't panic and attempts validation
-				if tc.fromTo.From().IsFile() || tc.fromTo.To().IsFile() {
-					a.Error(err, "validateProtocolCompatibility should attempt validation for %s and fail with nil clients: %s", tc.name, tc.description)
-				}
+				a.ErrorContains(err, "file service client is required", "validateProtocolCompatibility should require a client for %s: %s", tc.name, tc.description)
 			}
 		})
 	}

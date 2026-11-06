@@ -496,3 +496,27 @@ func TestAlibabaURLParseAndBucketLookup(t *testing.T) {
 	a.Equal("path/to/internal-file3.txt", p.ObjectKey)
 	a.Equal("cn-hangzhou", p.Region)
 }
+
+func TestS3URLParseAWSChinaEndpoints(t *testing.T) {
+	a := assert.New(t)
+	for _, test := range []struct {
+		raw, endpoint, bucket, key, region string
+	}{
+		{"http://bucket.s3.cn-north-1.amazonaws.com.cn/dir/key", "s3.cn-north-1.amazonaws.com.cn", "bucket", "dir/key", "cn-north-1"},
+		{"http://s3.cn-northwest-1.amazonaws.com.cn/bucket/dir/key", "s3.cn-northwest-1.amazonaws.com.cn", "bucket", "dir/key", "cn-northwest-1"},
+		{"http://bucket.s3-cn-north-1.amazonaws.com.cn", "s3-cn-north-1.amazonaws.com.cn", "bucket", "", "cn-north-1"},
+	} {
+		u, _ := url.Parse(test.raw)
+		p, err := NewS3URLParts(*u)
+		a.NoError(err, test.raw)
+		a.Equal(test.endpoint, p.Endpoint, test.raw)
+		a.Equal(test.bucket, p.BucketName, test.raw)
+		a.Equal(test.key, p.ObjectKey, test.raw)
+		a.Equal(test.region, p.Region, test.raw)
+	}
+
+	// Only the AWS China domain is added; unrelated hosts that merely end in .cn stay invalid.
+	u, _ := url.Parse("http://bucket.s3.example.com.cn")
+	_, err := NewS3URLParts(*u)
+	a.Error(err)
+}
