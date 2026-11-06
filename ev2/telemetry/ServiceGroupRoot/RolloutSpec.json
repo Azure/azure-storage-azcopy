@@ -1,0 +1,28 @@
+{
+  "$schema": "https://ev2schema.azure.net/schemas/2020-04-01/RegionAgnosticRolloutSpecification.json",
+  "contentVersion": "1.0.0.0",
+  "rolloutMetadata": {
+    "serviceModelPath": "ServiceModel.json",
+    "name": "AzCopy Telemetry PROD infrastructure",
+    "buildSource": {
+      "parameters": {
+        "versionFile": "version.txt"
+      }
+    },
+    "notification": {
+      "email": {
+        "to": "xdatamovecore@microsoft.com"
+      }
+    }
+  },
+  "orchestratedSteps": [
+    {
+      "name": "DeployAzCopyTelemetry",
+      "targetType": "ServiceResourceDefinition",
+      "targetName": "AzCopyTelemetryResources",
+      "actions": [
+        "deploy"
+      ]
+    }
+  ]
+}
