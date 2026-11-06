@@ -72,19 +72,18 @@ func (t *blobTraverser) flatRangeError(bounds flatListRange, err error) *flatLis
 	}
 }
 
-// reportFlatRangeError never blocks enumeration. Undelivered errors remain fatal to the caller.
+// reportFlatRangeError never blocks enumeration unless the caller requires
+// delivery (see RequireErrorDelivery). Undelivered errors remain fatal to the caller.
 func (t *blobTraverser) reportFlatRangeError(bounds flatListRange, err error) bool {
 	var info *flatListRangeErrorInfo
 	if !errors.As(err, &info) {
 		return false
 	}
-	select {
-	case t.errorChannel <- info:
-		return true
-	default:
+	if !sendScanError(t.errorChannel, info) {
 		WarnStdoutAndScanningLog(fmt.Sprintf("Flat range error channel unavailable or full: %v", info))
 		return false
 	}
+	return true
 }
 
 // flatBlobObjectPath joins a root and key without normalizing the blob name.
