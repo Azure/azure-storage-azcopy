@@ -21,6 +21,7 @@ type SyncJob struct {
 	NewTraverser          func(common.ResourceString, common.Location, context.Context, InitResourceTraverserOptions) (ResourceTraverser, error)
 
 	SetCancel                                    func(context.CancelFunc)
+	EncodeSourcePath                             func(string) string
 	EncodeDestinationPath                        func(string) string
 	IncrementSourceFolderEnumerationFailed       func()
 	IncrementDestinationFolderEnumerationFailed  func()

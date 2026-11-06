@@ -543,12 +543,13 @@ func TestStaticFlatRangesOrchestratorReporting(t *testing.T) {
 			src, _ := staticTestTraverser(t, []string{"0/early", "a/file", "z/new"}, "source/", "403-a")
 			dst, _ := staticTestTraverser(t, []string{"a/keep", "m/remove", "z/extra"}, "destination/", "403-z")
 			orchestratorOptions := &SyncOrchestratorOptions{fromTo: common.EFromTo.BlobBlob()}
-			cca := mirrorSyncArgs()
-			cca.Source = common.ResourceString{Value: strings.TrimSuffix(src.RawURL, "/")}
-			cca.Destination = common.ResourceString{Value: strings.TrimSuffix(dst.RawURL, "/")}
-			cca.UseFlatListing, cca.UseStreamingMergeJoin = true, true
-			cca.NewTraverser = InitResourceTraverser
-			cca.EncodeDestinationPath = func(path string) string { return path }
+			syncJob := mirrorSyncArgs()
+			syncJob.Source = common.ResourceString{Value: strings.TrimSuffix(src.RawURL, "/")}
+			syncJob.Destination = common.ResourceString{Value: strings.TrimSuffix(dst.RawURL, "/")}
+			syncJob.UseFlatListing, syncJob.UseStreamingMergeJoin = true, true
+			syncJob.NewTraverser = InitResourceTraverser
+			syncJob.EncodeSourcePath = func(path string) string { return path }
+			syncJob.EncodeDestinationPath = func(path string) string { return path }
 			var ch chan TraverserErrorItemInfo
 			if channelAvailable {
 				ch = make(chan TraverserErrorItemInfo, 100)
@@ -558,7 +559,7 @@ func TestStaticFlatRangesOrchestratorReporting(t *testing.T) {
 			}
 			targetOptions := options
 			targetOptions.IsSyncDestination = true
-			configureFlatSyncTraversers(cca, &options, &targetOptions)
+			configureFlatSyncTraversers(syncJob, &options, &targetOptions)
 			var deleted []string
 			var mu sync.Mutex
 			e, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
@@ -570,8 +571,8 @@ func TestStaticFlatRangesOrchestratorReporting(t *testing.T) {
 			e.finalize = func() error { finalized = true; return nil }
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			run := &syncRun{job: *cca, orchestratorOptions: orchestratorOptions, crawlParallelism: 1}
-			err := run.runSyncOrchestrator(cca, e, ctx)
+			run := &syncRun{job: *syncJob, orchestratorOptions: orchestratorOptions, crawlParallelism: 1}
+			err := run.runSyncOrchestrator(syncJob, e, ctx)
 			require.NoError(t, ctx.Err())
 			if !channelAvailable {
 				require.Error(t, err)
@@ -673,11 +674,11 @@ func TestStaticFlatRangesCopyAndPairedSync(t *testing.T) {
 			enumerator, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
 			var unchanged int
 			enumerator.primaryTraverserTemplate.Options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
-			cca := mirrorSyncArgs()
+			syncJob := mirrorSyncArgs()
 			if !mirror {
-				cca.DeleteDestination = common.EDeleteDestination.False()
+				syncJob.DeleteDestination = common.EDeleteDestination.False()
 			}
-			require.NoError(t, (&syncRun{}).mergeStaticFlatRanges(context.Background(), 8, enumerator, cca, src, dst))
+			require.NoError(t, (&syncRun{}).mergeStaticFlatRanges(context.Background(), 8, enumerator, syncJob, src, dst))
 			sourceSet, destinationSet := map[string]bool{}, map[string]bool{}
 			for _, key := range srcKeys {
 				sourceSet[key] = true

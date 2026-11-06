@@ -34,6 +34,7 @@ func TestM2ConcurrentSyncRunsKeepJobStateSeparate(t *testing.T) {
 				FromTo:                common.EFromTo.S3Blob(),
 				JobID:                 common.NewJobID(),
 				UseStreamingMergeJoin: true,
+				EncodeSourcePath:      func(path string) string { return path },
 				EncodeDestinationPath: func(path string) string { return path },
 				Log:                   func(common.LogLevel, string, bool) {},
 			}

@@ -158,7 +158,11 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 		if err != nil {
 			return true, err
 		}
-		shareClient := t.serviceClient.NewShareClient(fileURLParts.ShareName)
+		// Probe the same share snapshot that will be enumerated, not the live share.
+		shareClient, err := createShareClientFromServiceClient(fileURLParts, t.serviceClient)
+		if err != nil {
+			return true, err
+		}
 		p := shareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
 		_, err = p.NextPage(t.ctx)
 
@@ -170,7 +174,10 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	directoryClient := t.serviceClient.NewShareClient(fileURLParts.ShareName).NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
+	directoryClient, err := createDirectoryClientFromServiceClient(fileURLParts, t.serviceClient)
+	if err != nil {
+		return false, err
+	}
 	_, err = directoryClient.GetProperties(t.ctx, nil)
 	if err != nil {
 		if common.AzcopyScanningLogger != nil {

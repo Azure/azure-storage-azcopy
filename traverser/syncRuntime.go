@@ -44,7 +44,7 @@ func RunSyncOrchestrator(ctx context.Context, job SyncJob, enumerator *SyncEnume
 	if ctx == nil || enumerator == nil || enumerator.orchestratorOptions == nil {
 		return errors.New("sync orchestration requires a context, enumerator, and options")
 	}
-	if enumerator.scheduleTransfer == nil || enumerator.finalize == nil || job.EncodeDestinationPath == nil {
+	if enumerator.scheduleTransfer == nil || enumerator.finalize == nil || job.EncodeSourcePath == nil || job.EncodeDestinationPath == nil {
 		return errors.New("sync orchestration requires transfer, finalization, and destination-path callbacks")
 	}
 	if job.NewTraverser == nil {

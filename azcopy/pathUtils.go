@@ -157,7 +157,7 @@ func StartsWith(s string, t string) bool {
 }
 
 // Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
-var encodedInvalidCharacters = map[rune]string{
+var EncodedInvalidCharacters = map[rune]string{
 	'<':  "%3C",
 	'>':  "%3E",
 	'\\': "%5C",
@@ -169,7 +169,7 @@ var encodedInvalidCharacters = map[rune]string{
 	'*':  "%2A",
 }
 
-var reverseEncodedChars = map[string]rune{
+var ReverseEncodedChars = map[string]rune{
 	"%3C": '<',
 	"%3E": '>',
 	"%5C": '\\',
@@ -196,7 +196,7 @@ func PathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		(!source && loc == common.ELocation.File()) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
-		for k, c := range encodedInvalidCharacters {
+		for k, c := range EncodedInvalidCharacters {
 			for part, p := range pathParts {
 				pathParts[part] = strings.ReplaceAll(p, string(k), c)
 			}
@@ -212,7 +212,7 @@ func PathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
 		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding && !fromTo.IsDelete() {
 
-		for encoded, c := range reverseEncodedChars {
+		for encoded, c := range ReverseEncodedChars {
 			for k, p := range pathParts {
 				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
 			}

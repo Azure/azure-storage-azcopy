@@ -636,6 +636,23 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 	return r.runSyncOrchestrator(cca, enumerator, ctx)
 }
 
+func (r *syncRun) syncDirectoryResources(relativePath string) (common.ResourceString, common.ResourceString) {
+	source := r.job.Source
+	destination := r.job.Destination
+	// Listings return literal names. Escape only the relative path, not the
+	// already-escaped root, so %, # and ? cannot change the URL's meaning.
+	source.Value += r.job.EncodeSourcePath(relativePath)
+	destination.Value += r.job.EncodeDestinationPath(relativePath)
+
+	if runtime.GOOS == "windows" {
+		if r.job.FromTo.From() == common.ELocation.Local() {
+			source.Value = strings.ReplaceAll(source.Value, "/", "\\")
+		}
+		destination.Value = strings.ReplaceAll(destination.Value, "\\", "/")
+	}
+	return source, destination
+}
+
 // runSyncOrchestrator coordinates the entire sync operation using a sliding window approach.
 // It processes directories in parallel while respecting resource limits and handles graceful shutdown.
 //
@@ -696,25 +713,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 		r.srcDirEnumerating.Add(1) // Increment active directory count
 
-		// func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string
-		// srcRelativePath = pathEncodeRules(dir.(minimalStoredObject).relativePath, cca.fromTo, false, true)
-		dstRelativePath := cca.EncodeDestinationPath(dir.(minimalStoredObject).RelativePath)
-
-		// Build source and destination paths for current directory
-		sync_src := []string{cca.Source.Value, dir.(minimalStoredObject).RelativePath}
-		sync_dst := []string{cca.Destination.Value, dstRelativePath}
-
-		pt_src := cca.Source
-		st_src := cca.Destination
-
-		pt_src.Value = strings.Join(sync_src, "")
-		st_src.Value = strings.Join(sync_dst, "")
-
-		// Handle Windows path separators
-		if runtime.GOOS == "windows" {
-			pt_src.Value = strings.ReplaceAll(pt_src.Value, "/", "\\")
-			st_src.Value = strings.ReplaceAll(st_src.Value, "\\", "/")
-		}
+		pt_src, st_src := r.syncDirectoryResources(dir.(minimalStoredObject).RelativePath)
 
 		// Get traverser templates from enumerator
 		ptt := enumerator.primaryTraverserTemplate

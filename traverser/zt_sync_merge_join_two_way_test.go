@@ -90,15 +90,16 @@ func TestSyncOrchestratorContinuesAfterDirectoryErrors(t *testing.T) {
 
 			orchestratorOptions := &SyncOrchestratorOptions{fromTo: common.EFromTo.BlobBlob()}
 			baseURL := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
-			cca := &SyncJob{
+			syncJob := &SyncJob{
 				FromTo:                common.EFromTo.BlobBlob(),
 				Source:                common.ResourceString{Value: baseURL + "/source"},
 				Destination:           common.ResourceString{Value: baseURL + "/target"},
 				UseStreamingMergeJoin: mergeJoin,
 				NewTraverser:          InitResourceTraverser,
+				EncodeSourcePath:      func(path string) string { return path },
 				EncodeDestinationPath: func(path string) string { return path },
 			}
-			run := &syncRun{job: *cca, orchestratorOptions: orchestratorOptions, crawlParallelism: 64}
+			run := &syncRun{job: *syncJob, orchestratorOptions: orchestratorOptions, crawlParallelism: 64}
 			errorChannel := make(chan TraverserErrorItemInfo, 3*failedDirs)
 			options := InitResourceTraverserOptions{
 				Credential:   &common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
@@ -106,7 +107,7 @@ func TestSyncOrchestratorContinuesAfterDirectoryErrors(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			primaryTraverser, err := InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, options)
+			primaryTraverser, err := InitResourceTraverser(syncJob.Source, syncJob.FromTo.From(), ctx, options)
 			require.NoError(t, err)
 			finalized := false
 			enumerator := &SyncEnumerator{
@@ -128,7 +129,7 @@ func TestSyncOrchestratorContinuesAfterDirectoryErrors(t *testing.T) {
 					return nil
 				},
 			}
-			require.NoError(t, run.runSyncOrchestrator(cca, enumerator, ctx))
+			require.NoError(t, run.runSyncOrchestrator(syncJob, enumerator, ctx))
 			require.NoError(t, ctx.Err(), "enumeration must finish without waiting for cancellation")
 			assert.True(t, finalized)
 			assert.True(t, healthyListed.Load(), "healthy directories must still be enumerated")
@@ -179,15 +180,16 @@ func TestSyncOrchestratorIncludesRootOnlyForTheRootDirectory(t *testing.T) {
 
 			baseURL := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
 			orchestratorOptions := &SyncOrchestratorOptions{fromTo: common.EFromTo.BlobBlob()}
-			cca := &SyncJob{
+			syncJob := &SyncJob{
 				FromTo:                common.EFromTo.BlobBlob(),
 				Source:                common.ResourceString{Value: baseURL + "/source"},
 				Destination:           common.ResourceString{Value: baseURL + "/target"},
 				UseStreamingMergeJoin: mergeJoin,
 				NewTraverser:          recordingTraverser,
+				EncodeSourcePath:      func(path string) string { return path },
 				EncodeDestinationPath: func(path string) string { return path },
 			}
-			run := &syncRun{job: *cca, orchestratorOptions: orchestratorOptions, crawlParallelism: 4}
+			run := &syncRun{job: *syncJob, orchestratorOptions: orchestratorOptions, crawlParallelism: 4}
 			options := InitResourceTraverserOptions{
 				Credential:   &common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
 				ErrorChannel: make(chan TraverserErrorItemInfo, 64),
@@ -195,7 +197,7 @@ func TestSyncOrchestratorIncludesRootOnlyForTheRootDirectory(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			primaryTraverser, err := InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, options)
+			primaryTraverser, err := InitResourceTraverser(syncJob.Source, syncJob.FromTo.From(), ctx, options)
 			require.NoError(t, err)
 			enumerator := &SyncEnumerator{
 				primaryTraverser:           primaryTraverser,
@@ -207,7 +209,7 @@ func TestSyncOrchestratorIncludesRootOnlyForTheRootDirectory(t *testing.T) {
 				scheduleTransfer:           func(StoredObject) error { return nil },
 				finalize:                   func() error { return nil },
 			}
-			require.NoError(t, run.runSyncOrchestrator(cca, enumerator, ctx))
+			require.NoError(t, run.runSyncOrchestrator(syncJob, enumerator, ctx))
 
 			for _, side := range []string{"source", "target"} {
 				require.True(t, includeRoot[baseURL+"/"+side+"/"], "the root directory keeps IncludeRoot on the %s side", side)
@@ -441,7 +443,7 @@ func TestTwoWaySyncDir_MirrorDeletesFilesAndFolders(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enum := newMergeJoinTestEnumerator(&deleted, &mu)
-	cca := mirrorSyncArgs()
+	syncJob := mirrorSyncArgs()
 
 	src := &fakeMergeJoinTraverser{} // empty source
 	dst := &fakeMergeJoinTraverser{objects: []StoredObject{
@@ -450,7 +452,7 @@ func TestTwoWaySyncDir_MirrorDeletesFilesAndFolders(t *testing.T) {
 	}}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+	_, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, syncJob, "", src, dst, true)
 	a.NoError(err)
 
 	mu.Lock()
@@ -469,7 +471,7 @@ func TestTwoWaySyncDir_SourceErrorNoDeleteBothMerges(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enum := newMergeJoinTestEnumerator(&deleted, &mu)
-	cca := mirrorSyncArgs()
+	syncJob := mirrorSyncArgs()
 
 	src := &fakeMergeJoinTraverser{finalErr: errors.New("source listing failed: token expired")}
 	dst := &fakeMergeJoinTraverser{objects: []StoredObject{
@@ -478,13 +480,13 @@ func TestTwoWaySyncDir_SourceErrorNoDeleteBothMerges(t *testing.T) {
 	}}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+	_, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, syncJob, "", src, dst, true)
 
 	a.Error(err)
 	var mjErr *mergeJoinTraversalError
 	a.True(errors.As(err, &mjErr), "expected *mergeJoinTraversalError, got %T: %v", err, err)
 	if mjErr != nil {
-		a.Equal(cca.FromTo.From(), mjErr.location, "error must be attributed to source")
+		a.Equal(syncJob.FromTo.From(), mjErr.location, "error must be attributed to source")
 	}
 	mu.Lock()
 	a.Empty(deleted, "no destination objects (files or folders) may be deleted when the source failed")
@@ -498,7 +500,7 @@ func TestTwoWaySyncDir_SourceFoldersRecursionCanonical(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enum := newMergeJoinTestEnumerator(&deleted, &mu)
-	cca := &SyncJob{FromTo: common.EFromTo.BlobBlob(), DeleteDestination: common.EDeleteDestination.False()}
+	syncJob := &SyncJob{FromTo: common.EFromTo.BlobBlob(), DeleteDestination: common.EDeleteDestination.False()}
 
 	// HNS raw order (shorter-name-first). Virtual prefixes => recurse-only (no ACL transfer).
 	src := &fakeMergeJoinTraverser{objects: []StoredObject{
@@ -510,7 +512,7 @@ func TestTwoWaySyncDir_SourceFoldersRecursionCanonical(t *testing.T) {
 	dst := &fakeMergeJoinTraverser{} // empty dest
 
 	ctx, cancel := context.WithCancel(context.Background())
-	subDirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+	subDirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, syncJob, "", src, dst, true)
 	a.NoError(err)
 	a.Len(subDirs, 4)
 
@@ -536,7 +538,7 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enum := newMergeJoinTestEnumerator(&deleted, &mu)
-	cca := &SyncJob{FromTo: common.EFromTo.BlobBlob(), DeleteDestination: common.EDeleteDestination.False()}
+	syncJob := &SyncJob{FromTo: common.EFromTo.BlobBlob(), DeleteDestination: common.EDeleteDestination.False()}
 
 	// Build a large identical set of interleaved folders and files (> the 4000 channel buffer so the
 	// fast side actually backs up while the slow side lags).
@@ -556,7 +558,7 @@ func TestTwoWaySyncDir_LivenessAsymmetric(t *testing.T) {
 	var subDirs []minimalStoredObject
 	go func() {
 		var e error
-		subDirs, e = (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+		subDirs, e = (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, syncJob, "", src, dst, true)
 		done <- e
 	}()
 
@@ -617,7 +619,7 @@ func TestTwoWaySyncDir_DestNotFoundIsBenignAndTransfersSource(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enum, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	cca := &SyncJob{FromTo: common.EFromTo.S3Blob(), DeleteDestination: common.EDeleteDestination.False()}
+	syncJob := &SyncJob{FromTo: common.EFromTo.S3Blob(), DeleteDestination: common.EDeleteDestination.False()}
 
 	src := &fakeMergeJoinTraverser{objects: []StoredObject{
 		mjTestFile("a.txt"), mjTestFile("z.txt"),
@@ -628,7 +630,7 @@ func TestTwoWaySyncDir_DestNotFoundIsBenignAndTransfersSource(t *testing.T) {
 	dst := &fakeMergeJoinTraverser{finalErr: mjDestNotFoundErr("stg_millennium/working_view_A/")}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	subDirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+	subDirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, syncJob, "", src, dst, true)
 
 	a.NoError(err, "destination not-found (empty prefix) must be benign, not a fatal directory error")
 
@@ -658,19 +660,19 @@ func TestTwoWaySyncDir_DestRealErrorStillFatal(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enum, _ := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	cca := &SyncJob{FromTo: common.EFromTo.S3Blob(), DeleteDestination: common.EDeleteDestination.False()}
+	syncJob := &SyncJob{FromTo: common.EFromTo.S3Blob(), DeleteDestination: common.EDeleteDestination.False()}
 
 	src := &fakeMergeJoinTraverser{objects: []StoredObject{mjTestFile("a.txt")}}
 	dst := &fakeMergeJoinTraverser{finalErr: errors.New("destination listing failed: 500 InternalServerError")}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, cca, "", src, dst, true)
+	_, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enum, syncJob, "", src, dst, true)
 
 	a.Error(err, "a genuine destination traversal error must remain fatal")
 	var mjErr *mergeJoinTraversalError
 	a.True(errors.As(err, &mjErr), "expected *mergeJoinTraversalError, got %T: %v", err, err)
 	if mjErr != nil {
-		a.Equal(cca.FromTo.To(), mjErr.location, "error must be attributed to the destination")
+		a.Equal(syncJob.FromTo.To(), mjErr.location, "error must be attributed to the destination")
 	}
 }
 
@@ -699,12 +701,12 @@ func TestFlatSyncTraverserConfiguration(t *testing.T) {
 
 // TestFlatSyncRequiresStreamingMergeJoin covers orchestrator validation; cmd tests cover argument cooking.
 func TestFlatSyncRequiresStreamingMergeJoin(t *testing.T) {
-	cca := &SyncJob{FromTo: common.EFromTo.BlobBlob(), UseFlatListing: true, UseStreamingMergeJoin: true}
+	syncJob := &SyncJob{FromTo: common.EFromTo.BlobBlob(), UseFlatListing: true, UseStreamingMergeJoin: true}
 	run := &syncRun{orchestratorOptions: &SyncOrchestratorOptions{}}
-	require.True(t, useStreamingMergeJoin(cca))
-	require.NoError(t, run.validate(cca, run.orchestratorOptions))
-	cca.UseStreamingMergeJoin = false
-	require.ErrorContains(t, run.validate(cca, run.orchestratorOptions), "flat sync requires the Blob-to-Blob streaming merge-join")
+	require.True(t, useStreamingMergeJoin(syncJob))
+	require.NoError(t, run.validate(syncJob, run.orchestratorOptions))
+	syncJob.UseStreamingMergeJoin = false
+	require.ErrorContains(t, run.validate(syncJob, run.orchestratorOptions), "flat sync requires the Blob-to-Blob streaming merge-join")
 }
 
 func TestFlatSyncMergeNestedFiles(t *testing.T) {
@@ -719,15 +721,15 @@ func TestFlatSyncMergeNestedFiles(t *testing.T) {
 			var deleted []string
 			var mu sync.Mutex
 			enumerator, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
-			cca := &SyncJob{FromTo: common.EFromTo.BlobBlob(), UseFlatListing: true}
+			syncJob := &SyncJob{FromTo: common.EFromTo.BlobBlob(), UseFlatListing: true}
 			if tc.mirror {
-				cca.DeleteDestination = common.EDeleteDestination.True()
+				syncJob.DeleteDestination = common.EDeleteDestination.True()
 			} else {
-				cca.DeleteDestination = common.EDeleteDestination.False()
+				syncJob.DeleteDestination = common.EDeleteDestination.False()
 			}
 			var unchanged int
 			enumerator.primaryTraverserTemplate.Options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
-			dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, syncJob, "", src, dst, true)
 			require.NoError(t, err)
 			require.Empty(t, dirs, "flat sync must not accumulate any child-directory frontier")
 			require.Equal(t, []string{"a/new", "d/new"}, scheduledTransferSources())
@@ -761,11 +763,11 @@ func TestFlatSyncEmptyOrMissingDestination(t *testing.T) {
 			var deleted []string
 			var mu sync.Mutex
 			enumerator, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
-			cca := &SyncJob{FromTo: common.EFromTo.BlobBlob(), UseFlatListing: true, DeleteDestination: common.EDeleteDestination.False()}
+			syncJob := &SyncJob{FromTo: common.EFromTo.BlobBlob(), UseFlatListing: true, DeleteDestination: common.EDeleteDestination.False()}
 			if missing {
-				cca.DeleteDestination = common.EDeleteDestination.True()
+				syncJob.DeleteDestination = common.EDeleteDestination.True()
 			}
-			dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, syncJob, "", src, dst, true)
 			require.NoError(t, err)
 			require.Empty(t, dirs)
 			require.Equal(t, []string{"a/b/c", "x/y"}, scheduledTransferSources())
@@ -786,9 +788,9 @@ func TestFlatSyncPreservesLastModifiedComparison(t *testing.T) {
 	target[2].LastModifiedTime = target[2].LastModifiedTime.Add(time.Hour)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cca := mirrorSyncArgs()
-	cca.UseFlatListing = true
-	dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "",
+	syncJob := mirrorSyncArgs()
+	syncJob.UseFlatListing = true
+	dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, syncJob, "",
 		&fakeMergeJoinTraverser{objects: source}, &fakeMergeJoinTraverser{objects: target}, true)
 	require.NoError(t, err)
 	require.Empty(t, dirs)
@@ -913,9 +915,9 @@ func TestFlatSyncPrefetchAsymmetricSetOracle(t *testing.T) {
 			enumerator, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
 			unchanged := 0
 			enumerator.primaryTraverserTemplate.Options.IncrementNotTransferred = func(common.EntityType) { unchanged++ }
-			cca := mirrorSyncArgs()
-			cca.UseFlatListing = true
-			dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, "", src, dst, true)
+			syncJob := mirrorSyncArgs()
+			syncJob.UseFlatListing = true
+			dirs, err := (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, syncJob, "", src, dst, true)
 			require.NoError(t, err)
 			require.Empty(t, dirs)
 			require.Equal(t, wantCopies, scheduledTransferSources())
@@ -939,9 +941,9 @@ func TestFlatSyncPrefetchPreservesLeadingSlashKeys(t *testing.T) {
 	var deleted []string
 	var mu sync.Mutex
 	enumerator, scheduledTransferSources := newMergeJoinRecordingEnumerator(&deleted, &mu)
-	cca := mirrorSyncArgs()
-	cca.UseFlatListing = true
-	_, err = (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, cca, root.RelativePath, src, dst, true)
+	syncJob := mirrorSyncArgs()
+	syncJob.UseFlatListing = true
+	_, err = (&syncRun{}).mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, syncJob, root.RelativePath, src, dst, true)
 	require.NoError(t, err)
 	require.Equal(t, []string{"/a"}, scheduledTransferSources())
 	require.Equal(t, []string{"a"}, deleted)
