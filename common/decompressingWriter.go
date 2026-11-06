@@ -29,8 +29,9 @@ import (
 )
 
 type decompressingWriter struct {
-	pipeWriter  *io.PipeWriter
-	workerError chan error
+	pipeWriter *io.PipeWriter
+	done       chan struct{} // closed when the worker exits
+	workerErr  error         // read only after done is closed
 }
 
 const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromise perf
@@ -46,17 +47,17 @@ func NewDecompressingWriter(destination io.WriteCloser, ct CompressionType) io.W
 	preader, pwriter := io.Pipe()
 
 	d := &decompressingWriter{
-		pipeWriter:  pwriter,
-		workerError: make(chan error, 1),
+		pipeWriter: pwriter,
+		done:       make(chan struct{}),
 	}
 
 	// start the output processor worker
-	go d.worker(ct, preader, destination, d.workerError)
+	go d.worker(ct, preader, destination)
 
 	return d
 }
 
-func (d decompressingWriter) decompressorFactory(tp CompressionType, preader *io.PipeReader) (io.ReadCloser, error) {
+func (d *decompressingWriter) decompressorFactory(tp CompressionType, preader *io.PipeReader) (io.ReadCloser, error) {
 	switch tp {
 	case ECompressionType.ZLib():
 		return zlib.NewReader(preader)
@@ -67,7 +68,7 @@ func (d decompressingWriter) decompressorFactory(tp CompressionType, preader *io
 	}
 }
 
-func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, destination io.WriteCloser, workerError chan error) {
+func (d *decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, destination io.WriteCloser) {
 
 	var err error
 	var dec io.ReadCloser
@@ -75,7 +76,8 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 	defer func() {
 		_ = destination.Close() // always close the destination file before we exit, since its a WriteCloser
 		_ = preader.Close()
-		workerError <- err // send the error AFTER we have closed everything, to avoid race conditions where callers assume all closes are completed when we return
+		d.workerErr = err
+		close(d.done) // signal AFTER we have closed everything, to avoid race conditions where callers assume all closes are completed when we return
 	}()
 
 	// make the decompressor. Must be in the worker method because,
@@ -96,17 +98,20 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 // Write, conceptually, takes a slice of compressed data, decompresses it, and writes it into the final destination.
 // In actuality, all it really does is writes the compressed data to the pipe, and leaves
 // it up to the worker to do the rest
-func (d decompressingWriter) Write(p []byte) (n int, err error) {
+func (d *decompressingWriter) Write(p []byte) (n int, err error) {
 	n, writeErr := d.pipeWriter.Write(p)
 
 	// check for worker error, and report it in preference to the writeError,
 	// since the worker error is likely to be more meaningful
 	select {
-	case workerErr := <-d.workerError:
-		if workerErr == nil {
-			return n, errors.New("decompression worker exited early") // we don't expect this
+	case <-d.done:
+		if d.workerErr != nil {
+			return n, errors.New("error in decompression worker when writing: " + d.workerErr.Error())
 		}
-		return n, errors.New("error in decompression worker when writing: " + workerErr.Error())
+		// A clean exit is expected when this write held the end of the stream.
+		if writeErr != nil {
+			return n, errors.New("decompression worker exited early")
+		}
 	default:
 		// no worker error
 	}
@@ -114,7 +119,7 @@ func (d decompressingWriter) Write(p []byte) (n int, err error) {
 	return n, writeErr
 }
 
-func (d decompressingWriter) Close() error {
+func (d *decompressingWriter) Close() error {
 	// close pipe, so reader will get EOF
 	closeError := d.pipeWriter.Close()
 	if closeError != nil {
@@ -123,11 +128,11 @@ func (d decompressingWriter) Close() error {
 
 	// check for worker completion and error state
 	select {
-	case workerErr := <-d.workerError:
-		if workerErr == nil {
+	case <-d.done:
+		if d.workerErr == nil {
 			return nil
 		}
-		return errors.New("error in decompression worker when closing: " + workerErr.Error())
+		return errors.New("error in decompression worker when closing: " + d.workerErr.Error())
 	case <-time.After(time.Minute * 15): // should never take THIS long to flush final data to destination, but better to wait too long than too short and stop it before its closed
 		return errors.New("timed out closing decompression worker")
 	}
