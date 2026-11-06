@@ -88,6 +88,22 @@ func totalMemoryGB() int {
 	return hostinfointernal.PhysicalMemoryGB(ms.ullTotalPhys)
 }
 
+var procIsWow64Process2 = modkernel32.NewProc("IsWow64Process2")
+
+// osArchitecture returns "" before Windows 10 version 1511, which lacks IsWow64Process2.
+// See https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2
+func osArchitecture() string {
+	if procIsWow64Process2.Find() != nil {
+		return ""
+	}
+	var processMachine, nativeMachine uint16
+	ok, _, _ := procIsWow64Process2.Call(uintptr(windows.CurrentProcess()), uintptr(unsafe.Pointer(&processMachine)), uintptr(unsafe.Pointer(&nativeMachine)))
+	if ok == 0 {
+		return ""
+	}
+	return hostinfointernal.WindowsArchitecture(nativeMachine)
+}
+
 // localMountType classifies the filesystem backing a local Windows path as
 // "nas-nfs", "nas-smb", "nas-other" (RDP drive redirection or WebDAV), "vm-share"
 // (WSL, VirtualBox, or VMware shared folders), or

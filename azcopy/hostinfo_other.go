@@ -28,9 +28,10 @@ import "github.com/Azure/azure-storage-azcopy/v10/telemetry"
 // reported as sentinels (unknown). The telemetry pipeline treats these as
 // "not collected".
 
-func osVersion() string  { return "" }
-func cpuModel() string   { return "" }
-func totalMemoryGB() int { return -1 }
+func osVersion() string      { return "" }
+func osArchitecture() string { return "" }
+func cpuModel() string       { return "" }
+func totalMemoryGB() int     { return -1 }
 
 // localMountType is not implemented on this platform; the caller falls back to
 // "local-disk".

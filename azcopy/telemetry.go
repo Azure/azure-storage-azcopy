@@ -663,6 +663,7 @@ func buildResourceAttributes() telemetry.ResourceAttributes {
 		OSType:            runtime.GOOS,
 		OSVersion:         hw.osVersion,
 		HostArch:          runtime.GOARCH,
+		OSArch:            hw.osArch,
 		HostNumCPU:        runtime.NumCPU(),
 		HostCPUModel:      hw.cpuModel,
 		HostMemoryTotalGB: hw.memoryTotalGB,
