@@ -63,37 +63,34 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 //    (whereas with filepath.Walk it will usually (always?) have a value).
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
 //    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
-func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
+//
+// Like filepath.Walk, Walk returns the error that stopped it.
+func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) error {
 	var ctx context.Context
 	var cancel context.CancelFunc
-	signalRootError := func(e error) {
-		_ = walkFn(root, nil, e)
+	signalRootError := func(e error) error {
+		return walkFn(root, nil, e)
 	}
 
 	root, err := filepath.Abs(root)
 	if err != nil {
-		signalRootError(err)
-		return
+		return signalRootError(err)
 	}
 
 	// Call walkfunc on the root.  This is necessary for compatibility with filePath.Walk
 	// TODO: add at a test that CrawlLocalDirectory does NOT include the root (i.e. add test to define that behaviour)
 	r, err := os.Open(root) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
-		signalRootError(err)
-		return
+		return signalRootError(err)
 	}
 	rs, err := r.Stat()
-	if err != nil {
-		signalRootError(err)
-		return
-	}
-	err = walkFn(root, rs, nil)
-	if err != nil {
-		signalRootError(err)
-		return
-	}
 	_ = r.Close()
+	if err != nil {
+		return signalRootError(err)
+	}
+	if err = walkFn(root, rs, nil); err != nil {
+		return err
+	}
 
 	// walk the stuff inside the root
 	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
@@ -117,9 +114,10 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 			}
 		}
 		if err != nil {
-			return
+			return err
 		}
 	}
+	return nil
 }
 
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
