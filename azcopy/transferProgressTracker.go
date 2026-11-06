@@ -217,10 +217,6 @@ func (tpt *transferProgressTracker) getSkippedHardlinkCount() uint32 {
 	return atomic.LoadUint32(&tpt.atomicSkippedHardlinkCount)
 }
 
-func (tpt *transferProgressTracker) incSkippedArchive() {
-	tpt.atomicSkippedArchiveFileCount.Add(1)
-}
-
 func (tpt *transferProgressTracker) getSkippedArchiveFileCount() uint64 {
 	return tpt.atomicSkippedArchiveFileCount.Load()
 }
@@ -253,29 +249,27 @@ func (tpt *transferProgressTracker) incEnumerationFailure(entityType common.Enti
 
 func (tpt *transferProgressTracker) incEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 	switch entityType {
-	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
+	case common.EEntityType.File(), common.EEntityType.Hardlink():
 		tpt.atomicFilesScanned.Add(1)
+		if entityType == common.EEntityType.Hardlink() && tpt.fromTo.IsNFS() && hardlinkHandling == common.SkipHardlinkHandlingType {
+			atomic.AddUint32(&tpt.atomicSkippedHardlinkCount, 1)
+		}
 	case common.EEntityType.Folder():
 		tpt.atomicFoldersScanned.Add(1)
-	case common.EEntityType.Other():
-		if tpt.fromTo.IsNFS() || tpt.fromTo.From() == common.ELocation.S3() {
-			tpt.atomicFilesScanned.Add(1)
+	case common.EEntityType.Symlink():
+		tpt.atomicFilesScanned.Add(1)
+		// Blob symlinks are metadata and always copied, so only Local and NFS Files sources skip them.
+		if symlinkOption == common.ESymlinkHandlingType.Skip() &&
+			(tpt.fromTo.From() == common.ELocation.Local() || tpt.fromTo.From() == common.ELocation.FileNFS()) {
+			atomic.AddUint32(&tpt.atomicSkippedSymlinkCount, 1)
 		}
-	}
-
-	if tpt.fromTo.IsNFS() {
-		if entityType == common.EEntityType.Other() {
+	case common.EEntityType.Other():
+		if tpt.fromTo.IsNFS() {
 			atomic.AddUint32(&tpt.atomicSkippedSpecialFileCount, 1)
-		} else if entityType == common.EEntityType.Symlink() {
-			switch symlinkOption {
-			case common.ESymlinkHandlingType.Skip():
-				atomic.AddUint32(&tpt.atomicSkippedSymlinkCount, 1)
-			}
-		} else if entityType == common.EEntityType.Hardlink() {
-			switch hardlinkHandling {
-			case common.SkipHardlinkHandlingType:
-				atomic.AddUint32(&tpt.atomicSkippedHardlinkCount, 1)
-			}
+			tpt.atomicFilesScanned.Add(1)
+		} else if tpt.fromTo.From() == common.ELocation.S3() {
+			tpt.atomicSkippedArchiveFileCount.Add(1)
+			tpt.atomicFilesScanned.Add(1)
 		}
 	}
 }

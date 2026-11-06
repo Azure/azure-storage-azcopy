@@ -403,6 +403,8 @@ func WalkWithSymlinks(
 								ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
 							})
 						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping symlink - '%s' for NFS", filePath))
+					} else if options.IncrementEnumerationCounter != nil {
+						options.IncrementEnumerationCounter(common.EEntityType.Symlink(), options.SymlinkHandling, options.HardlinkHandling)
 					}
 					return nil // skip it
 				}
@@ -1064,7 +1066,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				return nil
 			}
 
-			if t.incrementEnumerationCounter != nil {
+			if t.incrementEnumerationCounter != nil && !(t.stripTopDir && entityType == common.EEntityType.Folder() && relPath == "") {
 				t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 			}
 
@@ -1159,6 +1161,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 									ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
 								})
 							WarnStdoutAndScanningLog(fmt.Sprintf("Skipping symlink - '%s' for NFS", path))
+						} else if t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(common.EEntityType.Symlink(), t.symlinkHandling, t.hardlinkHandling)
 						}
 						continue
 

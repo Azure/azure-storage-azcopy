@@ -433,7 +433,7 @@ type InitResourceTraverserOptions struct {
 	GetPropertiesInFrontend bool // Files, GCP, S3
 	IncludeDirectoryStubs   bool // Blob, BlobFS
 	PreserveBlobTags        bool // Blob, BlobFS
-	StripTopDir             bool // Local
+	StripTopDir             bool // Local, Files
 
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob

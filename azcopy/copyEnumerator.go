@@ -152,13 +152,8 @@ func (t *copyExecutor) initCopyEnumerator(ctx context.Context, logLevel common.L
 		HardlinkHandling:        t.opts.hardlinks,
 		FromTo:                  t.opts.fromTo,
 
-		ExcludeContainers: t.opts.excludeContainers,
-		IncrementEnumeration: func(entityType common.EntityType, symlinks common.SymlinkHandlingType, hardlinks common.HardlinkHandlingType) {
-			t.tpt.incEnumeration(entityType, symlinks, hardlinks)
-			if t.opts.fromTo.From() == common.ELocation.S3() && entityType == common.EEntityType.Other() {
-				t.tpt.incSkippedArchive()
-			}
-		},
+		ExcludeContainers:           t.opts.excludeContainers,
+		IncrementEnumeration:        t.tpt.incEnumeration,
 		IncrementEnumerationFailure: t.tpt.incEnumerationFailure,
 		IncrementScanError:          t.tpt.incEnumerationFailure,
 		ErrorChannel:                t.opts.errorChannel,

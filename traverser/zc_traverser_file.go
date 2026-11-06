@@ -58,6 +58,7 @@ type fileTraverser struct {
 	destination                 *common.Location
 	hardlinkHandling            common.HardlinkHandlingType
 	symlinkHandling             common.SymlinkHandlingType
+	stripTopDir                 bool
 	fromTo                      common.FromTo
 
 	errorChannel       chan<- TraverserErrorItemInfo
@@ -401,7 +402,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	processStoredObject := func(s StoredObject) error {
-		if t.incrementEnumerationCounter != nil {
+		// The root is not part of the transfer when StripTopDir is set, so it isn't counted either.
+		if t.incrementEnumerationCounter != nil && !(t.stripTopDir && s.IsSourceRootFolder()) {
 			t.incrementEnumerationCounter(s.EntityType, t.symlinkHandling, t.hardlinkHandling)
 		}
 		err := ProcessIfPassedFilters(filters, s, processor)
@@ -635,6 +637,7 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		hardlinkHandling:            opts.HardlinkHandling,
 		scanPacer:                   opts.ScanPacer,
 		symlinkHandling:             opts.SymlinkHandling,
+		stripTopDir:                 opts.StripTopDir,
 		fromTo:                      opts.FromTo,
 		errorChannel:                opts.ErrorChannel,
 		incrementScanError:          opts.IncrementScanError,

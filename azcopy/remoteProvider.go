@@ -28,6 +28,14 @@ type remoteProvider struct {
 	s3CredentialProvider credentials.Provider
 }
 
+func applyS3CredentialProvider(info *cred.CredentialInfo, provider credentials.Provider) {
+	if provider == nil {
+		return
+	}
+	info.CredentialType = enum.ECredentialType.S3AccessKey()
+	info.S3CredentialInfo.Provider = provider
+}
+
 func newRemoteProvider(ctx context.Context, manager cred.Manager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption, s3Provider credentials.Provider, credentialNames ...string) (*remoteProvider, error) {
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	var sourceName, destinationName string
@@ -45,8 +53,7 @@ func newRemoteProvider(ctx context.Context, manager cred.Manager, src, dst commo
 		return nil, fmt.Errorf("source authorization failed: %w", err)
 	}
 	if s3Provider != nil && fromTo.From() == common.ELocation.S3() {
-		sourceCred.CredentialType = enum.ECredentialType.S3AccessKey()
-		sourceCred.S3CredentialInfo.Provider = s3Provider
+		applyS3CredentialProvider(&sourceCred, s3Provider)
 	}
 	destinationCred, err := GetTargetCredInfo(dst, fromTo.To(), GetTargetCredInfoOptions{
 		Context: ctx, SharedKeyAllowed: !fromTo.IsS2S(),
