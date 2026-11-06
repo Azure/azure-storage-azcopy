@@ -165,7 +165,11 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 		if err != nil {
 			return true, err
 		}
-		shareClient := t.serviceClient.NewShareClient(fileURLParts.ShareName)
+		// Probe the same share snapshot that will be enumerated, not the live share.
+		shareClient, err := createShareClientFromServiceClient(fileURLParts, t.serviceClient)
+		if err != nil {
+			return true, err
+		}
 		p := shareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
 		_, err = p.NextPage(t.ctx)
 
@@ -177,7 +181,10 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	directoryClient := t.serviceClient.NewShareClient(fileURLParts.ShareName).NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
+	directoryClient, err := createDirectoryClientFromServiceClient(fileURLParts, t.serviceClient)
+	if err != nil {
+		return false, err
+	}
 	_, err = directoryClient.GetProperties(t.ctx, nil)
 	if err != nil {
 		if azcopyScanningLogger != nil {
@@ -426,7 +433,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				// Charged per attempt: a retry is another real request against the share's IOPS budget.
 				if err := common.ScanPacerAcquire(t.ctx, t.scanPacer, 1); err != nil {
 					return directory.GetPropertiesResponse{}, err
-				}			
+				}
 				return directoryClient.GetProperties(t.ctx, nil)
 			})
 		if err == nil || targetURLParts.DirectoryOrFilePath == "" {
@@ -667,7 +674,7 @@ func newAzFileFileEntity(parentDirectoryClient *directory.Client, fileInfo *dire
 						// Charged per attempt: a retry is another real request against the share's IOPS budget.
 						if err := common.ScanPacerAcquire(ctx, scanPacer, 1); err != nil {
 							return file.GetPropertiesResponse{}, err
-						}					
+						}
 						return fileClient.GetProperties(ctx, nil)
 					})
 				if err != nil {
@@ -710,11 +717,11 @@ func newAzFileRootDirectoryEntity(directoryClient *directory.Client, dirInfo *di
 					ctx,
 					azcopyScanningLogger,
 					"directory properties",
-					func() (directory.GetPropertiesResponse, error) {						
+					func() (directory.GetPropertiesResponse, error) {
 						// Charged per attempt: a retry is another real request against the share's IOPS budget.
 						if err := common.ScanPacerAcquire(ctx, scanPacer, 1); err != nil {
 							return directory.GetPropertiesResponse{}, err
-						}					
+						}
 						return directoryClient.GetProperties(ctx, nil)
 					})
 				if err != nil {
