@@ -763,7 +763,7 @@ func TestProgressTrackersOnlyCollectSourceShapeWhenEligible(t *testing.T) {
 func TestBuildResourceAttributesSchemaVersion(t *testing.T) {
 	t.Setenv(common.EEnvironmentVariable.UserDir().Name, t.TempDir())
 	resource := buildResourceAttributes()
-	assert.Equal(t, "1", resource.SchemaVersion)
+	assert.Equal(t, telemetry.SchemaVersion, resource.SchemaVersion)
 	assert.Equal(t, probeAzureVM(), resource.AzureVMDetected)
 	assert.Equal(t, osArchitecture(), resource.OSArch)
 }

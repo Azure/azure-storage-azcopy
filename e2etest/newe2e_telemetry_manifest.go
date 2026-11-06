@@ -16,6 +16,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 )
 
 type telemetryExpectation struct {
@@ -257,12 +258,19 @@ func checkTelemetryManifest(expected []telemetryExpectation, events []observedTe
 				}
 				for key, want := range attempt.Measurements {
 					got, exists := event.Measurements[key]
+					if !exists && want == 0 && telemetry.MeasurementOmittedWhenZero(key) {
+						continue
+					}
 					if !exists || math.IsNaN(got) || math.IsInf(got, 0) || math.Abs(got-want) > math.Max(0.001, math.Abs(want)*1e-10) {
 						return nil, fmt.Errorf("measurement %s mismatch for process %s", key, attempt.ProcessRunID)
 					}
 				}
 				for _, key := range attempt.PresentMeasurements {
-					if got, exists := event.Measurements[key]; !exists || math.IsNaN(got) || math.IsInf(got, 0) || got < 0 {
+					got, exists := event.Measurements[key]
+					if !exists && telemetry.MeasurementOmittedWhenZero(key) {
+						continue
+					}
+					if !exists || math.IsNaN(got) || math.IsInf(got, 0) || got < 0 {
 						return nil, fmt.Errorf("measurement %s missing or invalid for process %s", key, attempt.ProcessRunID)
 					}
 				}
@@ -317,7 +325,7 @@ func registerTelemetryExpectation(processRunID, jobID string, verb AzCopyVerb, s
 	expected := telemetryExpectation{
 		ProcessRunID: processRunID, JobID: jobID, Command: strings.ReplaceAll(string(verb), " ", "."),
 		InstallationGroup: jobID,
-		Properties:        map[string]string{"SchemaVersion": "1"},
+		Properties:        map[string]string{"SchemaVersion": telemetry.SchemaVersion},
 	}
 	if verb == AzCopyVerbJobsResume {
 		expected.Properties["SummaryCounterScope"] = "job-cumulative"
@@ -355,6 +363,7 @@ func registerTelemetryExpectation(processRunID, jobID string, verb AzCopyVerb, s
 			"azcopy.percent_complete":                    float64(summary.PercentComplete),
 		}
 		// CLI JSON output omits these counters, so their values cannot be predicted here.
+		// job.finished omits them when they are zero.
 		expected.PresentMeasurements = []string{
 			"azcopy.storage_http_attempt_count", "azcopy.network_error_attempt_count", "azcopy.server_busy_503_count",
 			"azcopy.server_busy_throughput_count", "azcopy.server_busy_iops_count", "azcopy.server_busy_other_count",
@@ -397,7 +406,7 @@ func registerCommandTelemetryExpectation(processRunID string, verb AzCopyVerb, e
 	if expected.Properties == nil {
 		expected.Properties = map[string]string{}
 	}
-	expected.Properties["SchemaVersion"] = "1"
+	expected.Properties["SchemaVersion"] = telemetry.SchemaVersion
 	globalAppInsightsValidation.mu.Lock()
 	defer globalAppInsightsValidation.mu.Unlock()
 	globalAppInsightsValidation.expectedAttempts = append(globalAppInsightsValidation.expectedAttempts, expected)

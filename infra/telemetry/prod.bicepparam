@@ -2,9 +2,12 @@ using './main.bicep'
 
 // Prod instance, deployed only through Ev2 (ev2/telemetry). The region comes from
 // the Ev2 rollout via the resource group, so location is intentionally not set.
-// 730-day (2 year) retention satisfies the design requirement.
+// AzCopy events are kept 730 days (2 years) to satisfy the design requirement: the
+// first 90 days are searchable (included for Application Insights data), and days
+// 91-730 are in long-term retention, which costs about a fifth as much per GB-month.
 param environmentName = 'prod'
-param retentionInDays = 730
+param retentionInDays = 90
+param totalRetentionInDays = 730
 // Expected volume is ~13.2 GB/day (5.5M events at ~2.4 KB billed each), so 50 GB/day leaves ~3.8x headroom.
 param dailyQuotaGb = '50'
 // At least twice the workspace cap: the caps reset at different hours, so one Application Insights

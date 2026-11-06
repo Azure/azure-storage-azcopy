@@ -90,7 +90,7 @@ func liveTelemetryAgent(connection string, client *liveTelemetryClient) *telemet
 		reporter: telemetry.NewReporter(telemetry.Config{
 			ConnectionString: connection, HTTPClient: client,
 		}),
-		resource: telemetry.ResourceAttributes{AzCopyVersion: "manual-live-test", SchemaVersion: telemetrySchemaVersion, InstallationID: "manual-live-test"},
+		resource: telemetry.ResourceAttributes{AzCopyVersion: "manual-live-test", SchemaVersion: telemetry.SchemaVersion, InstallationID: "manual-live-test"},
 	}
 }
 

@@ -606,7 +606,18 @@ func TestTelemetryExistingWorkflowAssertions(t *testing.T) {
 	events := makeEvents()
 	delete(events[1].Measurements, "azcopy.network_error_attempt_count")
 	_, err = checkTelemetryManifest(expected, events)
-	require.ErrorContains(t, err, "measurement azcopy.network_error_attempt_count")
+	require.NoError(t, err, "job.finished omits zero counters")
+	require.Zero(t, expected[0].Measurements["azcopy.hardlinks_preserved_scheduled"])
+	events = makeEvents()
+	delete(events[1].Measurements, "azcopy.hardlinks_preserved_scheduled")
+	_, err = checkTelemetryManifest(expected, events)
+	require.NoError(t, err, "job.finished omits zero counters")
+	for _, key := range []string{"azcopy.objects_failed", "azcopy.avg_iops"} {
+		events = makeEvents()
+		delete(events[1].Measurements, key)
+		_, err = checkTelemetryManifest(expected, events)
+		require.ErrorContains(t, err, "measurement "+key, "only zero counters may be omitted")
+	}
 	events = makeEvents()
 	events[1].Measurements["azcopy.network_error_attempt_count"] = -1
 	_, err = checkTelemetryManifest(expected, events)

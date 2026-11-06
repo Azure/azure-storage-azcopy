@@ -19,10 +19,15 @@ param location string = resourceGroup().location
 @description('Base name used to derive resource names.')
 param baseName string = 'azcopy-telemetry'
 
-@description('Data retention in days. 730 (2 years) satisfies the telemetry design requirement.')
+@description('Interactive (searchable) retention in days for every workspace table. Application Insights tables include 90 days at no retention charge.')
 @minValue(30)
 @maxValue(730)
-param retentionInDays int = 730
+param retentionInDays int = 90
+
+@description('Total retention in days for AzCopy events (the AppEvents table). Days beyond retentionInDays are kept in low-cost long-term retention and are read with search jobs or restore. 730 (2 years) satisfies the telemetry design requirement.')
+@minValue(30)
+@maxValue(4383)
+param totalRetentionInDays int = 730
 
 @description('Log Analytics workspace daily ingestion cap in GB. Decimal values are passed as strings because Bicep has no floating-point type.')
 param dailyQuotaGb string = '10'
@@ -77,6 +82,17 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
     }
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
+  }
+}
+
+// AzCopy sends only custom events, which land in AppEvents.
+resource appEventsTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01' = {
+  parent: workspace
+  name: 'AppEvents'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: retentionInDays
+    totalRetentionInDays: totalRetentionInDays
   }
 }
 
