@@ -60,6 +60,10 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.chinacloudapi.cn", "", true},
 		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.cloudapi.de", "", true},
 		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.core.usgovcloudapi.net", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.sovcloud-api.fr", "", true},
+		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.sovcloud-api.de", "", true},
+		{common.ECredentialType.SharedKey(), common.ELocation.BlobFS(), "http://myaccount.dfs.core.sovcloud-api.sg", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.sovcloud-api.future", "", true},
 		{common.ECredentialType.SharedKey(), common.ELocation.BlobFS(), "http://myaccount.dfs.core.windows.net", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.eu-central-1.amazonaws.com", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.cn-north-1.amazonaws.com.cn", "", true},
@@ -71,6 +75,8 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 		// These should fail (they are not storage)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
 		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.sovcloud-api.fr.evil.com", "", false},
+		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.sovcloud-api", "", false},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://somethingelseinaws.amazonaws.com", "", false},
 		{common.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://appengine.google.com", "", false},
 
@@ -166,4 +172,71 @@ func TestIsPublic(t *testing.T) {
 
 		a.True(isPublic(ctx, bb.URL(), common.CpkOptions{}))
 	*/
+}
+
+func TestSuffixFunction(t *testing.T) {
+	type test struct {
+		domain, suffix string
+		result         bool
+		name           string
+	}
+
+	tests := []test{
+		// Exact and plain suffix matches.
+		{domain: "blob.core.windows.net", suffix: "blob.core.windows.net", result: true, name: "exact match"},
+		{domain: "myaccount.blob.core.windows.net", suffix: "blob.core.windows.net", result: true, name: "subdomain matches parent suffix"},
+		{domain: "a.b.blob.core.windows.net", suffix: "blob.core.windows.net", result: true, name: "deep subdomain matches parent suffix"},
+		{domain: "myaccount.blob.core.windows.net", suffix: "windows.net", result: true, name: "short suffix matches tail"},
+
+		// Wildcards resolve one segment at a time from the end.
+		{domain: "myaccount.blob.core.windows.net", suffix: "*.blob.core.windows.net", result: true, name: "leading wildcard matches one segment"},
+		{domain: "a.b.blob.core.windows.net", suffix: "*.blob.core.windows.net", result: true, name: "leading wildcard allows extra leading segments"},
+		{domain: "myaccount.blob.core.windows.net", suffix: "myaccount.blob.core.windows.*", result: true, name: "trailing wildcard matches tld"},
+		{domain: "asdf.blob.core.windows.net", suffix: "*.blob.core.windows.*", result: true, name: "wildcards at both ends match"},
+		{domain: "foobar.asdf.blob.core.windows.net", suffix: "*.blob.core.windows.*", result: true, name: "both wildcards with extra leading segment match"},
+		{domain: "anything.com", suffix: "*", result: true, name: "lone wildcard matches any non-empty domain"},
+
+		// A wildcard must line up with a segment that exists.
+		{domain: "blob.core.windows.net", suffix: "*.blob.core.windows.net", result: false, name: "wildcard does not match a missing leading segment"},
+		{domain: "foo.xyz.blob.core.windows.net", suffix: "abc.*.blob.core.windows.net", result: false, name: "fixed segment before wildcard must match"},
+		{domain: "", suffix: "*", result: false, name: "wildcard does not match empty domain"},
+		{domain: "asdf.blob.core.windows.evil.net", suffix: "*.blob.core.windows.*", result: false, name: "trailing wildcard does not span multiple segments"},
+		{domain: "asdf.blob.core.foo.bar.baz", suffix: "core.foo.*.*", result: true, name: "multiple * can be used in a row"},
+		{domain: "asdf.blob.core.foo.bar.baz", suffix: "core.*.*.baz", result: true, name: "multiple * in middle of URI resolve correctly"},
+
+		// The sovereign cloud suffix uses a trailing wildcard for the top-level domain.
+		{domain: "acct.blob.core.sovcloud-api.fr", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix matches fr"},
+		{domain: "acct.blob.core.sovcloud-api.de", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix matches de"},
+		{domain: "acct.dfs.core.sovcloud-api.sg", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix matches sg"},
+		{domain: "acct.blob.core.sovcloud-api.us", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix matches an unlisted future tld"},
+		{domain: "acct.blob.core.sovcloud-api.future", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix matches an arbitrary future tld"},
+		{domain: "core.sovcloud-api.fr", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix matches bare domain"},
+		{domain: "ACCT.BLOB.CORE.SOVCLOUD-API.FR", suffix: "core.sovcloud-api.*", result: true, name: "sovcloud suffix is case-insensitive"},
+		{domain: "acct.blob.core.sovcloud-api.fr.evil", suffix: "core.sovcloud-api.*", result: false, name: "sovcloud suffix rejects extra trailing segment"},
+		{domain: "acct.blob.core.sovcloud-api.fr.evil.com", suffix: "core.sovcloud-api.*", result: false, name: "sovcloud suffix rejects evil suffix"},
+		{domain: "acct.blob.core.sovcloud-api", suffix: "core.sovcloud-api.*", result: false, name: "sovcloud suffix requires a tld"},
+		{domain: "acct.blob.core.notsovcloud-api.fr", suffix: "core.sovcloud-api.*", result: false, name: "sovcloud suffix rejects similar host"},
+
+		// Mismatched suffixes.
+		{domain: "myaccount.blob.core.chinacloudapi.cn", suffix: "blob.core.windows.net", result: false, name: "different cloud suffix"},
+		{domain: "myaccount.blob.core.windows.net", suffix: "table.core.windows.net", result: false, name: "different service segment"},
+		{domain: "foo.bar", suffix: "baz.bar", result: false, name: "matching tld but different first segment"},
+		{domain: "myaccount.blob.core.windows.net", suffix: "myaccount.blob.core.windows.net.example.com", result: false, name: "suffix string longer than domain"},
+		{domain: "windows.net", suffix: "blob.core.windows.net", result: false, name: "suffix has more segments than domain"},
+		{domain: "blob.core.windows.net", suffix: "", result: false, name: "empty suffix"},
+		{domain: "blob.core.windows.net", suffix: "blob.core.windows.net.", result: false, name: "trailing dot in suffix"},
+
+		// Matching is case-insensitive.
+		{domain: "MyAccount.Blob.Core.Windows.Net", suffix: "blob.core.windows.net", result: true, name: "domain is case-insensitive"},
+		{domain: "myaccount.blob.core.windows.net", suffix: "BLOB.CORE.WINDOWS.NET", result: true, name: "suffix is case-insensitive"},
+
+		// Degenerate empty inputs.
+		{domain: "", suffix: "", result: true, name: "empty domain and suffix"},
+	}
+
+	for _, v := range tests {
+		t.Run(v.name, func(t *testing.T) {
+			assert.Equal(t, v.result, resourceMatchesSuffix(v.domain, v.suffix))
+		})
+	}
 }

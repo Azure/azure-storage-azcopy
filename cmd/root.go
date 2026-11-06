@@ -332,7 +332,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, azcopy.TrustedSuffixesNameAAD, "",
 		"\nSpecifies additional domain suffixes where Azure Active Directory login tokens may be sent.  \nThe default is '"+
 			azcopy.TrustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
-			"\n Separate multiple entries with semi-colons.")
+			"\n Separate multiple entries with semi-colons. * acts as a wildcard domain level, accepting any subdomain.")
 
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")

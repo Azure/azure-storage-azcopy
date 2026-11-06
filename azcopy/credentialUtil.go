@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 
@@ -39,7 +40,9 @@ import (
 
 const (
 	TrustedSuffixesNameAAD = "trusted-microsoft-suffixes"
-	TrustedSuffixesAAD     = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
+	// The trailing wildcard on the sovereign cloud suffix is intentional: it lets new
+	// national/sovereign (NCOE) clouds be trusted without updating this list per cloud.
+	TrustedSuffixesAAD = "core.windows.net;core.chinacloudapi.cn;core.cloudapi.de;core.usgovcloudapi.net;storage.azure.net;core.sovcloud-api.*"
 )
 
 var autoOAuth sync.Once
@@ -82,6 +85,43 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 	return credType
 }
 
+// A * segment resolves one domain level at a time.
+// Since this is a suffix, it must align with the end of the domain name.
+// Suffixes beginning with any amount of "*." effectively trim the *. prefixes, and resolve to the remainder.
+// I.e. *.blob.core.windows.* could resolve to asdf.blob.core.windows.net but not asdf.blob.core.windows.evil.net
+// It could also resolve to foobar.asdf.blob.core.windows.net
+func resourceMatchesSuffix(domain, suffix string) bool {
+	// If the suffix is larger than the domain, we definitely cannot match. short circuit.
+	if len(suffix) > len(domain) {
+		return false
+	}
+
+	domainSegments := strings.Split(domain, ".")
+	suffixSegments := strings.Split(suffix, ".")
+
+	// If the suffix is larger than the domain syntactically, we definitely cannot match. short circuit.
+	if len(suffixSegments) > len(domainSegments) {
+		return false
+	}
+
+	// Reverse the slices and resolve from the end
+	slices.Reverse(domainSegments)
+	slices.Reverse(suffixSegments)
+
+	for len(suffixSegments) > 0 {
+		// if suffix is *, ignore, otherwise equalfold to determine equivalence. if not same, this does not match.
+		if suffixSegments[0] != "*" && !strings.EqualFold(suffixSegments[0], domainSegments[0]) {
+			return false
+		}
+
+		// since all tests passed, step both.
+		domainSegments = domainSegments[1:]
+		suffixSegments = suffixSegments[1:]
+	}
+
+	return true
+}
+
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
 // This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
@@ -103,9 +143,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		host := strings.ToLower(u.Host)
 
 		for _, s := range suffixes {
-			s = strings.Trim(s, " *") // trim *.foo to .foo
-			s = strings.ToLower(s)
-			if strings.HasSuffix(host, s) {
+			if resourceMatchesSuffix(host, s) {
 				return host, true
 			}
 		}

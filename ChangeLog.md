@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.34.2
+
+### New Features
+
+1. Added support for Microsoft Entra ID authentication to sovereign/national (NCOE) cloud storage endpoints on the `core.sovcloud-api.*` domain. The wildcard top-level domain means new NCOE clouds are trusted without requiring an AzCopy update.
+
 ## Version 10.32.6
 
 ### Dependency updates
