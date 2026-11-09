@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     environment: Release
     steps:
       - uses: actions/checkout@v3
