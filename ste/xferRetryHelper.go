@@ -46,6 +46,10 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
 				errorCodes := getErrorCodes(resp)
+				if len(errorCodes) == 0 && storageErrorCodes.GetWildcardPolicy() {
+					// No x-ms-error-code (e.g. a gateway's 503): the status alone decides.
+					return true
+				}
 				for _, errorCode := range errorCodes {
 					if policy, ok := storageErrorCodes[errorCode]; ok {
 						if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {

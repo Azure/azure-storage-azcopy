@@ -111,6 +111,8 @@ func TestGetShouldRetry(t *testing.T) {
 				ErrorTest(errors.New("read tcp 10.0.0.1:443: read: connection reset by peer"), true),
 				ErrorTest(errors.New("context deadline exceeded"), true),
 				RespTest(404, string(bloberror.BlobNotFound), false),
+				{Resp: &http.Response{StatusCode: 503, Header: http.Header{}}, ShouldRetry: true}, // no x-ms-error-code
+				{Resp: &http.Response{StatusCode: 404, Header: http.Header{}}, ShouldRetry: false},
 			},
 		},
 		{ // A server-side copy is retried on the copy source's status code.
