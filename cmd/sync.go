@@ -69,20 +69,19 @@ type rawSyncCmdArgs struct {
 	compareHash           string
 	localHashStorageMode  string
 
-	includeDirectoryStubs      bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
-	preservePermissions        bool
-	preserveSMBPermissions     bool // deprecated and synonymous with preservePermissions
-	preserveOwner              bool
-	preserveSMBInfo            bool
-	preservePOSIXProperties    bool
-	posixPropertiesStyle       string
-	followSymlinks             bool
-	allowLocalSymlinkFollowing bool // Set only by the embedded Mover API.
-	preserveSymlinks           bool
-	backupMode                 bool
-	putMd5                     bool
-	md5ValidationOption        string
-	includeRoot                bool
+	includeDirectoryStubs   bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
+	preservePermissions     bool
+	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
+	preserveOwner           bool
+	preserveSMBInfo         bool
+	preservePOSIXProperties bool
+	posixPropertiesStyle    string
+	followSymlinks          bool
+	preserveSymlinks        bool
+	backupMode              bool
+	putMd5                  bool
+	md5ValidationOption     string
+	includeRoot             bool
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -158,7 +157,6 @@ func (raw rawSyncCmdArgs) toCookedOptions() (cooked *cookedSyncCmdArgs, err erro
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
 		useStreamingMergeJoin:            raw.useStreamingMergeJoin,
-		allowLocalSymlinkFollowing:       raw.allowLocalSymlinkFollowing,
 		hashMetaDir:                      ternary.Iff(raw.hashMetaDir != "", raw.hashMetaDir, common.LocalHashDir),
 		useFlatListing:                   raw.useFlatListing,
 
@@ -383,11 +381,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 			return err
 		}
 
-		if cooked.symlinkHandling == common.ESymlinkHandlingType.Follow() &&
-			!(cooked.allowLocalSymlinkFollowing && cooked.fromTo.From() == common.ELocation.Local()) {
-			return fmt.Errorf("The '--follow-symlink' flag is not applicable for sync operations.")
+		if cooked.symlinkHandling == common.ESymlinkHandlingType.Follow() && cooked.fromTo.From() != common.ELocation.Local() {
+			return fmt.Errorf("The '--follow-symlink' flag is only applicable when uploading from local filesystem.")
 		} else if cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
-			return fmt.Errorf("The '--preserve-symlink' flag is not applicable for sync operations.")
+			return fmt.Errorf("The '--preserve-symlinks' flag is not supported for SMB.")
 		}
 	}
 
@@ -495,16 +492,15 @@ type cookedSyncCmdArgs struct {
 	DstCredName string
 
 	// filters
-	allowLocalSymlinkFollowing bool
-	recursive                  bool
-	symlinkHandling            common.SymlinkHandlingType
-	includePatterns            []string
-	excludePatterns            []string
-	excludePaths               []string
-	includeFileAttributes      []string
-	excludeFileAttributes      []string
-	includeRegex               []string
-	excludeRegex               []string
+	recursive             bool
+	symlinkHandling       common.SymlinkHandlingType
+	includePatterns       []string
+	excludePatterns       []string
+	excludePaths          []string
+	includeFileAttributes []string
+	excludeFileAttributes []string
+	includeRegex          []string
+	excludeRegex          []string
 
 	// options
 	compareHash             common.SyncHashType
@@ -1284,18 +1280,12 @@ func init() {
 		"\n valid options are: HiddenFiles (OS Agnostic), "+
 		"\n XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), \n AlternateDataStreams (Windows only; requires named streams on target volume)")
 
-	// TODO: Follow symlink is not implemented for Blob or Azure Files SMB.
-	// TODO: Clarify expected behavior before enabling for Blob scenarios.
-
-	// Defining this flag specifically for NFS.
-	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
+	// Follow is only implemented for local sources; Azure Files NFS sources do not follow symlinks yet.
 	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
-		"Follow symbolic links when uploading from local file system."+
-			"This flag is applicable only if destination is an NFS file share. "+
-			"Note: This flag is not supported for Azure Files SMB shares or Blob storage in case of sync")
+		"Follow symbolic links when syncing from the local file system. "+
+			"This flag is not applicable when the source is Azure Blob or Azure Files.")
 
-	// Defining this flag specifically for NFS.
-	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
+	// Preserve is only implemented for Azure Files NFS.
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, "preserve-symlinks", false,
 		"Preserve symbolic links when performing sync for NFS resources. "+
 			"This flag is only applicable when either the source or destination is an NFS file share. "+

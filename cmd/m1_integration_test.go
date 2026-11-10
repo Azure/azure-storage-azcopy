@@ -52,7 +52,7 @@ func TestM1MoverSymlinkFollowingRemainsAvailable(t *testing.T) {
 			rawCLI.followSymlinks = true
 			cliOptions, err := rawCLI.toCookedOptions()
 			require.NoError(t, err)
-			require.ErrorContains(t, cliOptions.validate(), "not applicable for sync")
+			require.NoError(t, cliOptions.validate())
 		})
 	}
 }

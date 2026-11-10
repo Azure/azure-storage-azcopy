@@ -31,15 +31,14 @@ import (
 )
 
 type cookedSyncOptions struct {
-	useSyncOrchestrator        bool
-	useStreamingMergeJoin      bool
-	useFlatListing             bool
-	orchestratorOptions        *traverser.SyncOrchestratorOptions
-	errorChannel               chan<- traverser.TraverserErrorItemInfo
-	allowLocalSymlinkFollowing bool
-	blobType                   common.BlobType
-	blockBlobTier              common.BlockBlobTier
-	backupMode                 bool
+	useSyncOrchestrator   bool
+	useStreamingMergeJoin bool
+	useFlatListing        bool
+	orchestratorOptions   *traverser.SyncOrchestratorOptions
+	errorChannel          chan<- traverser.TraverserErrorItemInfo
+	blobType              common.BlobType
+	blockBlobTier         common.BlockBlobTier
+	backupMode            bool
 	// defaulted, inferred, processed and validated user options
 	source      common.ResourceString
 	destination common.ResourceString
@@ -165,7 +164,6 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.useStreamingMergeJoin = opts.UseStreamingMergeJoin
 	s.useFlatListing = opts.UseFlatListing
 	s.errorChannel = opts.ErrorChannel
-	s.allowLocalSymlinkFollowing = opts.AllowLocalSymlinkFollowing
 	s.blobType, s.blockBlobTier, s.backupMode = opts.BlobType, opts.BlockBlobTier, opts.BackupMode
 	if opts.UseSyncOrchestrator {
 		settings := traverser.NewDefaultSyncOrchestratorOptions()
@@ -327,11 +325,10 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 		if err != nil {
 			return err
 		}
-		if s.symlinks == common.ESymlinkHandlingType.Follow() &&
-			!(s.allowLocalSymlinkFollowing && s.fromTo.From() == common.ELocation.Local()) {
-			return fmt.Errorf("the '--follow-symlinks' flag is not applicable for sync operations")
+		if s.symlinks == common.ESymlinkHandlingType.Follow() && s.fromTo.From() != common.ELocation.Local() {
+			return fmt.Errorf("the '--follow-symlinks' flag is only applicable when the sync source is the local file system")
 		} else if s.symlinks == common.ESymlinkHandlingType.Preserve() {
-			return fmt.Errorf("the '--preserve-symlinks' flag is not applicable for sync operations")
+			return fmt.Errorf("the '--preserve-symlinks' flag is only supported for sync with Azure Files NFS resources")
 		}
 	}
 
