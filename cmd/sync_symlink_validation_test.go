@@ -20,8 +20,8 @@ func TestSyncSymlinkFlagValidation(t *testing.T) {
 		wantErr  string
 	}{
 		{"follow from local to blob", local, container, common.EFromTo.LocalBlob(), true, false, ""},
-		{"follow from blob", container, local, common.EFromTo.BlobLocal(), true, false, "only applicable when the sync source is the local file system"},
-		{"preserve to blob", local, container, common.EFromTo.LocalBlob(), false, true, "only supported for sync with Azure Files NFS"},
+		{"follow from blob", container, local, common.EFromTo.BlobLocal(), true, false, "only applicable when uploading from the local file system"},
+		{"preserve to blob", local, container, common.EFromTo.LocalBlob(), false, true, "only supported when syncing between local and Azure Files NFS, or between Azure Files NFS shares"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			raw := getDefaultSyncRawInput(test.src, test.dst)

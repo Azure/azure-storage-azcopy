@@ -382,9 +382,9 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		}
 
 		if cooked.symlinkHandling == common.ESymlinkHandlingType.Follow() && cooked.fromTo.From() != common.ELocation.Local() {
-			return fmt.Errorf("The '--follow-symlink' flag is only applicable when uploading from local filesystem.")
+			return fmt.Errorf("the '--follow-symlinks' flag is only applicable when uploading from the local file system.")
 		} else if cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
-			return fmt.Errorf("The '--preserve-symlinks' flag is not supported for SMB.")
+			return fmt.Errorf("The '--preserve-symlinks' flag is only supported when syncing between local and Azure Files NFS, or between Azure Files NFS shares.")
 		}
 	}
 
