@@ -17,6 +17,7 @@
 
 ### Bug Fixes
 1. Fixed a bug where when copying a file that has already been deleted with `--trailing-dot=Disable` resulted in the wrong error instead of a 404. ([#3092](https://github.com/Azure/azure-storage-azcopy/pull/3092))
+2. Fixed NFS sync with `--delete-destination` to delete extra destination symlinks, even without `--preserve-symlinks`, while retaining links also present at the source. ([#3459](https://github.com/Azure/azure-storage-azcopy/pull/3459))
 
 ### Supportability
 1. Removed the warning message when failing to create a container. This message can be misleading when there is insufficient permissions to create a container and the container already exists. ([#3045](https://github.com/Azure/azure-storage-azcopy/pull/3045))

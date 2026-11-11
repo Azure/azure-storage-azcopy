@@ -191,6 +191,16 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		return cooked, err
 	}
 
+	cooked.destSymlinks = cooked.symlinkHandling
+	cooked.srcSymLinkTracker = cooked.symlinkHandling
+	if cooked.deleteDestination != common.EDeleteDestination.False() &&
+		(cooked.fromTo.From() == common.ELocation.FileNFS() || cooked.fromTo.To() == common.ELocation.FileNFS()) {
+		cooked.destSymlinks = common.ESymlinkHandlingType.Preserve()
+		// Track source links so matching destination links are not mistaken for extras.
+		// Transfer scheduling still uses symlinkHandling.
+		cooked.srcSymLinkTracker = common.ESymlinkHandlingType.Preserve()
+	}
+
 	// warn on legacy filters
 	if raw.legacyInclude != "" || raw.legacyExclude != "" {
 		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern and exclude-pattern. They work on filenames only (not paths)")
@@ -458,6 +468,8 @@ type cookedSyncCmdArgs struct {
 	// filters
 	recursive             bool
 	symlinkHandling       common.SymlinkHandlingType
+	destSymlinks          common.SymlinkHandlingType
+	srcSymLinkTracker     common.SymlinkHandlingType
 	includePatterns       []string
 	excludePatterns       []string
 	excludePaths          []string

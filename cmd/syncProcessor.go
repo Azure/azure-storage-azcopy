@@ -219,8 +219,10 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
-	if object.entityType == common.EEntityType.File() {
-		msg := "Deleting extra file: " + object.relativePath
+	if object.entityType == common.EEntityType.File() ||
+		object.entityType == common.EEntityType.Hardlink() ||
+		object.entityType == common.EEntityType.Symlink() {
+		msg := fmt.Sprintf("Deleting extra %s: %s", object.entityType.String(), object.relativePath)
 		glcm.Info(msg)
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogInfo, msg)

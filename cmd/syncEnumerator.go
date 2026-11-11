@@ -145,7 +145,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
-		SymlinkHandling:         cca.symlinkHandling,
+		SymlinkHandling:         cca.srcSymLinkTracker,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 
 			switch entityType {
@@ -201,7 +201,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
-		SymlinkHandling:         cca.symlinkHandling,
+		SymlinkHandling:         cca.destSymlinks,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
@@ -510,7 +510,8 @@ func GetSyncEnumeratorWithDestComparator(
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 	}
-	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately,
+		cca.destSymlinks, common.EHardlinkHandlingType.Follow())
 
 	if UseSyncOrchestrator && cca.fromTo == common.EFromTo.S3Blob() {
 		// newFpoAwareProcessor sets the destCleanerFunc to nil for a non folder aware source destination pair like S3->Blob.
@@ -582,9 +583,11 @@ func GetSyncEnumeratorWithSrcComparator(
 			if err != nil {
 				return err
 			}
-			deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
+			deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately,
+				cca.destSymlinks, common.EHardlinkHandlingType.Follow())
 		default:
-			deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
+			deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately,
+				cca.destSymlinks, common.EHardlinkHandlingType.Follow())
 		}
 
 		err := indexer.traverse(deleteScheduler, nil)
