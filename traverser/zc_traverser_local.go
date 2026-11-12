@@ -55,14 +55,20 @@ type localTraverser struct {
 
 	targetHashType common.SyncHashType
 	hashAdapter    common.HashDataAdapter
-	// receives fullPath entries and manages hashing of files lacking metadata.
-	hashTargetChannel chan string
+	// receives files lacking usable hash data, for the hashing threads.
+	hashTargetChannel chan hashTarget
 	hashingStopped    chan struct{} // closed once a hashing error ends the scan
 	hashingErr        error
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
 	basePath          string
 	inodeStore        *common.InodeStore
+}
+
+// hashTarget is a file queued for hashing, with the properties the scan read before queuing it.
+type hashTarget struct {
+	relPath string
+	info    os.FileInfo
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -422,7 +428,7 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 	}
 
 	fullPath := filepath.Join(t.fullPath, relPath)
-	fi, err := os.Stat(fullPath) // grab the stat so we can tell if the hash is valid
+	fi, err := os.Stat(fullPath) // checks the stored hash, and goes to the hashing thread if the file is queued
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +450,7 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 
 		// defer hashing to the goroutine
 		select {
-		case t.hashTargetChannel <- relPath:
+		case t.hashTargetChannel <- hashTarget{relPath: relPath, info: fi}:
 			return nil, ErrorHashAsyncCalculation
 		case <-t.hashingStopped:
 			return nil, t.hashingErr
@@ -489,7 +495,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	}
 
 	// set up for threaded hashing
-	t.hashTargetChannel = make(chan string, 1_000) // "reasonable" backlog
+	t.hashTargetChannel = make(chan hashTarget, 1_000) // "reasonable" backlog
 	t.hashingStopped = make(chan struct{})
 	// Use half of the available CPU cores for hashing to prevent throttling the STE too hard if hashing is still occurring when the first job part gets sent out
 	hashingThreadCount := max(1, runtime.NumCPU()/2)
@@ -564,7 +570,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 			defer wg.Done() // mark the hashing thread as completed
 
 			// Keep taking files until the channel closes, so the scan never waits on a queue nobody drains.
-			for relPath := range t.hashTargetChannel {
+			for target := range t.hashTargetChannel {
 				if atomic.LoadInt32(&immediateStopHashing) == 1 { // should we stop hashing?
 					return
 				}
@@ -574,22 +580,12 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 				default:
 				}
 
-				fullPath := filepath.Join(t.fullPath, relPath)
-				fi, err := os.Stat(fullPath) // query LMT & if it's a directory
+				relPath, fi := target.relPath, target.info
+				sum, err := hashFile(filepath.Join(t.fullPath, relPath))
 				if errors.Is(err, fs.ErrNotExist) {
 					logSkippedRemovedFile(relPath, err)
 					continue
 				} else if err != nil {
-					stopHashing(fmt.Errorf("failed to get properties of file result %s: %w", relPath, err))
-					continue
-				}
-
-				if fi.IsDir() { // this should never happen
-					panic(relPath)
-				}
-
-				sum, err := hashFile(fullPath)
-				if err != nil {
 					warnHashFailure()
 					if common.AzcopyScanningLogger != nil {
 						common.AzcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to hash %s, so sync can't compare it by hash: %v", relPath, err))
@@ -598,7 +594,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 					hashData := common.SyncHashData{
 						Mode: t.targetHashType,
 						Data: base64.StdEncoding.EncodeToString(sum),
-						LMT:  fi.ModTime(),
+						LMT:  fi.ModTime(), // taken before the read, so a later change makes this hash stale
 					}
 
 					// failing to store hash data doesn't mean we can't transfer (e.g. RO directory)
