@@ -190,9 +190,7 @@ func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncO
 			}
 		}()
 
-		select {
-		case errorChannel <- err:
-		default:
+		if !sendScanError(errorChannel, err) {
 			// Channel might be full, log the error instead
 			syncOrchestratorLog(
 				common.LogError,
@@ -800,12 +798,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				ptt.options)
 			if ptErr != nil {
 				dirCancel()
-				errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, ptErr)
+				syncErr := fmt.Errorf("Creating source traverser failed for dir %s: %w", pt_src.Value, ptErr)
+				errMsg = syncErr.Error()
 				syncOrchestratorLog(common.LogError, errMsg)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           pt_src.Value,
 					DirName:           dir.(minimalStoredObject).relativePath,
-					ErrorMsg:          errors.New(errMsg),
+					ErrorMsg:          syncErr,
 					TraverserLocation: cca.fromTo.From(),
 				})
 				srcDirEnumerating.Add(-1)
@@ -822,12 +821,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				stt.options)
 			if stErr != nil {
 				dirCancel()
-				errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, stErr)
+				syncErr := fmt.Errorf("Creating target traverser failed for dir %s: %w\n", st_src.Value, stErr)
+				errMsg = syncErr.Error()
 				syncOrchestratorLog(common.LogError, errMsg)
 				writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           st_src.Value,
 					DirName:           dir.(minimalStoredObject).relativePath,
-					ErrorMsg:          errors.New(errMsg),
+					ErrorMsg:          syncErr,
 					TraverserLocation: cca.fromTo.To(),
 				})
 				srcDirEnumerating.Add(-1)
@@ -880,12 +880,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					errLocation = cca.fromTo.To()
 					errPath = st_src.Value
 				}
-				errMsg = fmt.Sprintf("Merge-join sync failed for dir %s: %s", errPath, mergeErr)
+				syncErr := fmt.Errorf("Merge-join sync failed for dir %s: %w", errPath, mergeErr)
+				errMsg = syncErr.Error()
 				syncOrchestratorLog(common.LogError, errMsg, true)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           errPath,
 					DirName:           dir.(minimalStoredObject).relativePath,
-					ErrorMsg:          errors.New(errMsg),
+					ErrorMsg:          syncErr,
 					TraverserLocation: errLocation,
 				})
 				return mergeErr
@@ -910,12 +911,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			mainCtx,
 			ptt.options)
 		if err != nil {
-			errMsg = fmt.Sprintf("SyncOrchestrator: Creating source traverser failed for dir %s: %s", pt_src.Value, err)
+			syncErr := fmt.Errorf("SyncOrchestrator: Creating source traverser failed for dir %s: %w", pt_src.Value, err)
+			errMsg = syncErr.Error()
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
-				ErrorMsg:          errors.New(errMsg),
+				ErrorMsg:          syncErr,
 				TraverserLocation: cca.fromTo.From(),
 			})
 			cca.IncrementSourceFolderEnumerationFailed()
@@ -929,12 +931,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			mainCtx,
 			stt.options)
 		if err != nil {
-			errMsg = fmt.Sprintf("SyncOrchestrator: Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
+			syncErr := fmt.Errorf("SyncOrchestrator: Creating target traverser failed for dir %s: %w\n", st_src.Value, err)
+			errMsg = syncErr.Error()
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           st_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
-				ErrorMsg:          errors.New(errMsg),
+				ErrorMsg:          syncErr,
 				TraverserLocation: cca.fromTo.To(),
 			})
 			cca.IncrementDestinationFolderEnumerationFailed()
@@ -953,12 +956,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		if err != nil {
-			errMsg = fmt.Sprintf("SyncOrchestrator: primary traversal failed for dir %s : %s\n", pt_src.Value, err)
+			syncErr := fmt.Errorf("SyncOrchestrator: primary traversal failed for dir %s : %w\n", pt_src.Value, err)
+			errMsg = syncErr.Error()
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
-				ErrorMsg:          errors.New(errMsg),
+				ErrorMsg:          syncErr,
 				TraverserLocation: cca.fromTo.From(),
 			})
 			cca.IncrementSourceFolderEnumerationFailed()
@@ -1039,7 +1043,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			}
 
 			if err != nil {
-				errMsg = fmt.Sprintf("SyncOrchestrator: Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
+				syncErr := fmt.Errorf("SyncOrchestrator: Secondary traversal failed for dir %s = %w\n", st_src.Value, err)
+				errMsg = syncErr.Error()
 				syncOrchestratorLog(common.LogError, errMsg)
 				// Only report unexpected errors (404s are normal for new files)
 				if IsDestinationNotFoundDuringSync(err) {
@@ -1048,7 +1053,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 						DirPath:           st_src.Value,
 						DirName:           dir.(minimalStoredObject).relativePath,
-						ErrorMsg:          errors.New(errMsg),
+						ErrorMsg:          syncErr,
 						TraverserLocation: cca.fromTo.To(),
 					})
 

@@ -50,6 +50,19 @@ func TestGetShouldRetry(t *testing.T) {
 		}
 	}
 
+	CopySourceTest := func(status int, copySourceStatus string, retry bool) *ResponseRetryPair {
+		return &ResponseRetryPair{
+			Resp: &http.Response{
+				StatusCode: status,
+				Header: map[string][]string{
+					"x-ms-error-code":              {string(bloberror.CannotVerifyCopySource)},
+					"x-ms-copy-source-status-code": {copySourceStatus},
+				},
+			},
+			ShouldRetry: retry,
+		}
+	}
+
 	_ = ParseRules
 
 	matrix := []TestEntry{
@@ -90,6 +103,23 @@ func TestGetShouldRetry(t *testing.T) {
 			Tests: []*ResponseRetryPair{
 				RespTest(400, "foo", false),
 				RespTest(400, "bar", true),
+			},
+		},
+		{ // A request that failed without a response is retried, as azcore's default policy does.
+			Rules: ParseRules("408;429;500;502;503;504"),
+			Tests: []*ResponseRetryPair{
+				ErrorTest(errors.New("read tcp 10.0.0.1:443: read: connection reset by peer"), true),
+				ErrorTest(errors.New("context deadline exceeded"), true),
+				RespTest(404, string(bloberror.BlobNotFound), false),
+				{Resp: &http.Response{StatusCode: 503, Header: http.Header{}}, ShouldRetry: true}, // no x-ms-error-code
+				{Resp: &http.Response{StatusCode: 404, Header: http.Header{}}, ShouldRetry: false},
+			},
+		},
+		{ // A server-side copy is retried on the copy source's status code.
+			Rules: ParseRules("408;429;500;502;503;504"),
+			Tests: []*ResponseRetryPair{
+				CopySourceTest(409, "500", true),
+				CopySourceTest(409, "403", false),
 			},
 		},
 		{ // Inverse code removal

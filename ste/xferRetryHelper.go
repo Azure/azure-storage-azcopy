@@ -46,6 +46,10 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
 				errorCodes := getErrorCodes(resp)
+				if len(errorCodes) == 0 && storageErrorCodes.GetWildcardPolicy() {
+					// No x-ms-error-code (e.g. a gateway's 503): the status alone decides.
+					return true
+				}
 				for _, errorCode := range errorCodes {
 					if policy, ok := storageErrorCodes[errorCode]; ok {
 						if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
@@ -82,11 +86,13 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 			}
 		}
 		// fall back to our platform retry policy
-		if platformRetryPolicy != nil {
-			return platformRetryPolicy(resp, err)
-		} else {
-			return false // If we have none, don't retry.
+		if platformRetryPolicy != nil && platformRetryPolicy(resp, err) {
+			return true
 		}
+		// Otherwise behave like azcore's default policy, which this function
+		// replaces once set: retry a request that failed without a response
+		// (connection reset, timeout), not one whose status matched no rule.
+		return err != nil
 	}
 }
 
