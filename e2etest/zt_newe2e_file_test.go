@@ -193,12 +193,12 @@ func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationMana
 		Targets: []ResourceManager{srcObj, dstObj},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive: pointerTo(true),
+				Recursive:       pointerTo(true),
+				ContentType:     contentType,
+				ContentEncoding: contentEncoding,
+				NoGuessMimeType: pointerTo(true),
 			},
-			Metadata:        metadata,
-			ContentType:     contentType,
-			ContentEncoding: contentEncoding,
-			NoGuessMimeType: pointerTo(true),
+			Metadata: metadata,
 		},
 	})
 
