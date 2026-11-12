@@ -2,10 +2,11 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"runtime/debug"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var _ Assertion = NoError{}
@@ -210,6 +211,21 @@ func (e Equal) Assert(items ...any) bool {
 	}
 
 	return true
+}
+
+func (e Equal) Format(items ...any) string {
+	var out strings.Builder
+	out.WriteString("\n")
+	for idx, v := range items {
+		val := reflect.ValueOf(v)
+		if val.Kind() == reflect.Pointer && !val.IsNil() {
+			val = val.Elem()
+		}
+
+		out.WriteString(fmt.Sprintf("item %d: %#v\n", idx, val.Interface()))
+	}
+
+	return out.String()
 }
 
 // ====== Contains ======
