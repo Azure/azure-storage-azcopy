@@ -93,19 +93,23 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. "+
 		"\n Required for certificate-based service principal auth.")
 
-	// Deprecate these flags in favor of a new login type flag
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Deprecated. Please use --login-type=MSI. "+
-		"\nLog in using virtual machine's identity, also known as managed service identity (MSI).")
-	_ = lgCmd.PersistentFlags().MarkHidden("identity")
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Deprecated. Please use --login-type=SPN. "+
-		"\nLog in via Service Principal Name (SPN) by using a certificate or a secret. "+
-		"\nThe client secret or certificate password must be placed in the appropriate environment variable. "+
-		"\nType AzCopy env to see names and descriptions of environment variables.")
-	_ = lgCmd.PersistentFlags().MarkHidden("service-principal")
+	{ // Hidden flags placed into closure to help better identify them
+		// Deprecate these flags in favor of a new login type flag
+		lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Deprecated. Please use --login-type=MSI. "+
+			"\nLog in using virtual machine's identity, also known as managed service identity (MSI).")
+		lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Deprecated. Please use --login-type=SPN. "+
+			"\nLog in via Service Principal Name (SPN) by using a certificate or a secret. "+
+			"\nThe client secret or certificate password must be placed in the appropriate environment variable. "+
+			"\nType AzCopy env to see names and descriptions of environment variables.")
+		// Deprecate the identity-object-id flag
+		lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity. This parameter is deprecated. Please use client id or resource id")
 
-	// Deprecate the identity-object-id flag
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity. This parameter is deprecated. Please use client id or resource id")
-	_ = lgCmd.PersistentFlags().MarkHidden("identity-object-id") // Object ID of user-assigned identity.
+		if !displayDeveloperOptions {
+			_ = lgCmd.PersistentFlags().MarkHidden("identity")
+			_ = lgCmd.PersistentFlags().MarkHidden("service-principal")
+			_ = lgCmd.PersistentFlags().MarkHidden("identity-object-id") // Object ID of user-assigned identity.
+		}
+	}
 
 }
 
