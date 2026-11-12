@@ -20,8 +20,10 @@ type JPPTCompatibleFolderCreationTracker interface {
 
 func newFolderCreationTrackerForJob(fpo common.FolderPropertyOption, fetcher TransferFetcher, fromTo common.FromTo) FolderCreationTracker {
 	lockFolderCreation := true
-	if buildmode.IsMover && (fromTo.From() == common.ELocation.Local() || fromTo.From() == common.ELocation.BlobFS()) {
-		switch fromTo.To() {
+	from, to := fromTo.From(), fromTo.To()
+	if buildmode.IsMover && (from == common.ELocation.Local() ||
+		from == common.ELocation.BlobFS() || (from.IsFile() && to.IsFile())) {
+		switch to {
 		case common.ELocation.File(), common.ELocation.FileNFS():
 			lockFolderCreation = false
 		case common.ELocation.Blob(), common.ELocation.BlobFS():
