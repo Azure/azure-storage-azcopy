@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"os"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -545,8 +546,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		})
 		dstHLink := dstContainer.GetObject(svm, rootDir+"/hardlinked.txt", common.EEntityType.Hardlink())
 		dstHLink.Create(svm, nil, ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
 			HardLinkedFileName: rootDir + "/horiginal.txt",
 		})
+		if !svm.Dryrun() {
+			originalInfo, err := os.Stat(dstHOrig.URI())
+			svm.NoError("stat destination hardlink original", err, true)
+			linkedInfo, err := os.Stat(dstHLink.URI())
+			svm.NoError("stat destination hardlink", err, true)
+			svm.AssertNow("destination fixture must share an inode", Equal{}, os.SameFile(originalInfo, linkedInfo), true)
+		}
 
 		dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	} else {
@@ -714,7 +723,20 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			ValidateHardlinksConvertedCount(svm, stdOut, 2)
 		}
 	case common.PreserveHardlinkHandlingType:
-		ValidateHardlinksTransferCount(svm, stdOut, 2)
+		if azCopyVerb == AzCopyVerbSync {
+			ValidateHardlinksTransferCount(svm, stdOut, 1)
+		} else {
+			ValidateHardlinksTransferCount(svm, stdOut, 2)
+		}
+		if !svm.Dryrun() {
+			original := dstContainer.GetObject(svm, hOriginalFileName, common.EEntityType.File())
+			linked := dstContainer.GetObject(svm, hardLinkedFileName, common.EEntityType.Hardlink())
+			originalInfo, err := os.Stat(original.URI())
+			svm.NoError("stat preserved original", err, true)
+			linkedInfo, err := os.Stat(linked.URI())
+			svm.NoError("stat preserved hardlink", err, true)
+			svm.AssertNow("preserved destination paths must share an inode", Equal{}, os.SameFile(originalInfo, linkedInfo), true)
+		}
 	}
 
 	if !followSymlinks && !preserveSymlinks {
