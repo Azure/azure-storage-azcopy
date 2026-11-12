@@ -93,6 +93,45 @@ func TestLocalHashingScanSkipsFilesRemovedBeforeHashing(t *testing.T) {
 	require.ElementsMatch(t, []string{"kept-1.dat", "kept-2.dat"}, files)
 }
 
+// A file whose properties can't be read when the scan checks its stored hash is indexed without a hash,
+// so sync doesn't treat it as deleted.
+func TestLocalHashingScanIndexesFilesWithUnreadableProperties(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows reports a file under a replaced folder as not found, so its properties can't be made unreadable this way")
+	}
+	var warnings atomic.Int32
+	hooks := common.NewJobUIHooks()
+	hooks.Warn = func(string) { warnings.Add(1) }
+	prevHooks := common.GetLifecycleMgr()
+	common.SetUIHooks(hooks)
+	t.Cleanup(func() { common.SetUIHooks(prevHooks) })
+
+	root := tempDir(t)
+	useTempHashStorage(t)
+	createReadableFile(t, filepath.Join(root, "kept-1.dat"))
+	createReadableFile(t, filepath.Join(root, "kept-2.dat"))
+	require.NoError(t, os.Mkdir(filepath.Join(root, "blocked"), 0o755))
+	createReadableFile(t, filepath.Join(root, "blocked", "file.dat"))
+
+	trav, err := NewLocalTraverser(root, context.Background(), InitResourceTraverserOptions{
+		Recursive:    true,
+		SyncHashType: common.ESyncHashType.MD5(),
+		FromTo:       common.EFromTo.LocalFile(),
+	})
+	require.NoError(t, err)
+
+	indexer := NewObjectIndexer()
+	require.NoError(t, trav.Traverse(NoPreProccessor, indexer.Store, []ObjectFilter{blockingFilter{t: t, root: root}}))
+	require.EqualValues(t, 1, warnings.Load())
+
+	blocked, ok := indexer.IndexMap["blocked/file.dat"]
+	require.True(t, ok, "blocked/file.dat must be indexed")
+	require.Nil(t, blocked.Md5)
+	for _, name := range []string{"kept-1.dat", "kept-2.dat"} {
+		require.Len(t, indexer.IndexMap[name].Md5, md5.Size, name)
+	}
+}
+
 // A file left open can't be deleted or renamed by anyone else on Windows.
 func TestLocalHashingScanClosesHashedFiles(t *testing.T) {
 	if runtime.GOOS != "windows" {
@@ -221,6 +260,29 @@ func (a removingHashAdapter) GetHashData(relPath string) (*common.SyncHashData, 
 		}
 	}
 	return a.HashDataAdapter.GetHashData(relPath)
+}
+
+// blockingFilter replaces the blocked folder with a file after the scan lists blocked/file.dat,
+// so getting that file's properties fails with "not a directory".
+type blockingFilter struct {
+	t    *testing.T
+	root string
+}
+
+func (blockingFilter) DoesSupportThisOS() (string, bool) { return "", true }
+func (blockingFilter) AppliesOnlyToFiles() bool          { return true }
+
+func (f blockingFilter) DoesPass(obj StoredObject) bool {
+	if obj.RelativePath == "blocked/file.dat" {
+		dir := filepath.Join(f.root, "blocked")
+		if err := os.RemoveAll(dir); err != nil {
+			f.t.Errorf("remove %s: %v", dir, err)
+		}
+		if err := os.WriteFile(dir, nil, 0o644); err != nil {
+			f.t.Errorf("replace %s with a file: %v", dir, err)
+		}
+	}
+	return true
 }
 
 // tempDir is t.TempDir without failing the test when files the hashing threads left open block removal.

@@ -422,6 +422,9 @@ func WalkWithSymlinks(appCtx context.Context,
 	return
 }
 
+// errFilePropertiesUnavailable means a listed file's properties couldn't be read, so its stored hash can't be checked.
+var errFilePropertiesUnavailable = errors.New("failed to get file properties")
+
 func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, error) {
 	if t.targetHashType == common.ESyncHashType.None() {
 		return nil, nil // no-op
@@ -429,8 +432,10 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 
 	fullPath := filepath.Join(t.fullPath, relPath)
 	fi, err := os.Stat(fullPath) // checks the stored hash, and goes to the hashing thread if the file is queued
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil, err
+	} else if err != nil {
+		return nil, fmt.Errorf("%w: %w", errFilePropertiesUnavailable, err)
 	}
 
 	if fi.IsDir() {
@@ -511,6 +516,12 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	warnHashFailure := sync.OnceFunc(func() {
 		common.GetLifecycleMgr().Warn("Failed to hash one or more files, so sync can't compare them by hash. Check the scanning log for details.")
 	})
+	reportHashFailure := func(relPath string, err error) {
+		warnHashFailure()
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to hash %s, so sync can't compare it by hash: %v", relPath, err))
+		}
+	}
 
 	// create return wrapper to handle hashing errors
 	finalizer = func(existingErr error) error {
@@ -586,10 +597,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 					logSkippedRemovedFile(relPath, err)
 					continue
 				} else if err != nil {
-					warnHashFailure()
-					if common.AzcopyScanningLogger != nil {
-						common.AzcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to hash %s, so sync can't compare it by hash: %v", relPath, err))
-					}
+					reportHashFailure(relPath, err)
 				} else {
 					hashData := common.SyncHashData{
 						Mode: t.targetHashType,
@@ -659,6 +667,11 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 		if errors.Is(err, fs.ErrNotExist) {
 			logSkippedRemovedFile(storedObject.RelativePath, err)
 			return nil
+		}
+		if errors.Is(err, errFilePropertiesUnavailable) {
+			reportHashFailure(storedObject.RelativePath, err)
+			storedObject.Md5 = nil // nil, not empty, so sync compares it by last modified time
+			return processor(storedObject)
 		}
 
 		if err != nil {
