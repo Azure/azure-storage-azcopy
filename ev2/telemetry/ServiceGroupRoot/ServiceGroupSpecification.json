@@ -1,0 +1,10 @@
+{
+  "$schema": "https://ev2schema.azure.net/schemas/2023-06-01/ServiceGroupSpecification.json",
+  "name": "Microsoft.Azure.Storage.StorageMover.AzCopyTelemetry",
+  "description": "AzCopy client telemetry backend (Application Insights and Log Analytics)",
+  "ownerGroupContactEmail": "xdatamovecore@microsoft.com",
+  "contentVersion": "1.0.0.0",
+  "servicePresence": [
+    "eastus"
+  ]
+}

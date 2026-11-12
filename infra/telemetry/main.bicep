@@ -4,7 +4,7 @@
 // (the only supported type now that classic App Insights is retired) bound to a
 // dedicated Log Analytics workspace. Two environments are expected:
 //   - test : fed only by the E2E pipeline (synthetic telemetry)
-//   - prod : fed by released AzCopy builds (real telemetry)
+//   - prod : fed by released AzCopy builds; deployed through Ev2 (ev2/telemetry)
 
 @description('Deployment environment. Drives resource names and is stamped as a tag.')
 @allowed([
@@ -30,18 +30,25 @@ param dailyQuotaGb string = '10'
 @description('Optional object ID of the E2E workload identity. When provided, grants only the read/query roles required by telemetry validation.')
 param e2eQueryPrincipalId string = ''
 
+@description('Additional tags required by the target subscription, for example policy-enforced tags.')
+param extraTags object = {}
+
+@description('Emergency kill switch. Rejects connection-string ingestion, so AzCopy stops sending telemetry; the connection string does not change.')
+param disableIngestion bool = false
+
+@description('Adds CanNotDelete locks to the workspace and component. A recreated component gets a new connection string, which released AzCopy builds cannot pick up.')
+param lockResources bool = false
+
 var workspaceName = '${baseName}-${environmentName}-law'
 var appInsightsName = '${baseName}-${environmentName}-ai'
 var logAnalyticsReaderRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '73c42c96-874c-492b-b04d-ab87d138a893')
 var readerRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
 
-var commonTags = {
+var commonTags = union(extraTags, {
   service: 'azcopy-telemetry'
   environment: environmentName
   managedBy: 'bicep'
-  Mover: 'Dev'
-  team: 'Discovery'
-}
+})
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: workspaceName
@@ -72,12 +79,30 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
     Application_Type: 'web'
     WorkspaceResourceId: workspace.id
     IngestionMode: 'LogAnalytics'
-    // ikey/connection-string ingestion is intentionally open: the connection
-    // string is embedded in the open-source AzCopy binary and is not a secret.
-    DisableLocalAuth: false
+    // Connection-string ingestion stays open except in an emergency: the
+    // connection string is embedded in the open-source AzCopy binary and is not a secret.
+    DisableLocalAuth: disableIngestion
     RetentionInDays: retentionInDays
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
+  }
+}
+
+resource workspaceLock 'Microsoft.Authorization/locks@2020-05-01' = if (lockResources) {
+  name: 'do-not-delete'
+  scope: workspace
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'Stores telemetry from released AzCopy builds.'
+  }
+}
+
+resource appInsightsLock 'Microsoft.Authorization/locks@2020-05-01' = if (lockResources) {
+  name: 'do-not-delete'
+  scope: appInsights
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'Released AzCopy builds embed this component\'s connection string; a recreated component gets a new one.'
   }
 }
 
