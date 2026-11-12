@@ -26,8 +26,8 @@ func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
 	dir, fName := filepath.Split(relativePath)
 	fName = fmt.Sprintf(".%s%s", fName, AzCopyHashDataStream)
 
-	// Try to create the directory
-	err := os.Mkdir(filepath.Join(basePath, dir), 0775)
+	// Try to create the directory recursively
+	err := os.MkdirAll(filepath.Join(basePath, dir), 0775)
 	if err != nil && !os.IsExist(err) {
 		lcm.Warn("Failed to create hash data directory")
 	}
