@@ -949,8 +949,8 @@ func (s *scenario) CancelOnly() {
 	s.chToStdin <- "cancel"
 }
 
-func (s *scenario) SkipTest() {
-	s.a.Skip("Skipping test")
+func (s *scenario) SkipTest(reason string) {
+	s.a.Skip(reason)
 }
 
 func (s *scenario) GetAsserter() asserter {
