@@ -59,11 +59,11 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	}
 }
 
-// compareBlobNames compares valid UTF-8 names using UTF-16 ordinal ordering,
-// matching the Azure Blob listing order observed in our investigation.
+// compareFNSNames compares valid UTF-8 names using UTF-16 ordinal ordering,
+// matching the FNS Blob listing order observed in investigation.
 // It does not allocate or normalize names. The only inversion versus UTF-8
 // byte order is supplementary characters versus U+E000..U+FFFF.
-func compareBlobNames(a, b string) int {
+func compareFNSNames(a, b string) int {
 	for i := 0; i < len(a) && i < len(b); i++ {
 		x, y := a[i], b[i]
 		if x == y {
@@ -76,6 +76,28 @@ func compareBlobNames(a, b string) int {
 			return 1
 		}
 		if x < y {
+			return -1
+		}
+		return 1
+	}
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(a) > len(b) {
+		return 1
+	}
+	return 0
+}
+
+// compareHNSNames uses UTF-8 byte order with '/' ranked before other characters,
+// matching HNS file listings and canonical folder keys (including their trailing '/').
+func compareHNSNames(a, b string) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		x, y := a[i], b[i]
+		if x == y {
+			continue
+		}
+		if x == '/' || (y != '/' && x < y) {
 			return -1
 		}
 		return 1

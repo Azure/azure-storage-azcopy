@@ -3,6 +3,7 @@ package cmd
 import (
 	"math/rand"
 	"slices"
+	"strings"
 	"testing"
 	"unicode/utf16"
 
@@ -13,7 +14,7 @@ func referenceBlobNameCompare(a, b string) int {
 	return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(b)))
 }
 
-func TestCompareBlobNames(t *testing.T) {
+func TestCompareFNSNames(t *testing.T) {
 	names := []string{
 		"", "/", "a", "a/", "a-1", "a//b", "a/../b", "\u00e9", "e\u0301",
 		"leaf/x\ufeffy.txt", "leaf/x\U0001f600y.txt",
@@ -36,7 +37,7 @@ func TestCompareBlobNames(t *testing.T) {
 	}
 	for _, a := range names {
 		for _, b := range names {
-			require.Equal(t, referenceBlobNameCompare(a, b), compareBlobNames(a, b), "%q vs %q", a, b)
+			require.Equal(t, referenceBlobNameCompare(a, b), compareFNSNames(a, b), "%q vs %q", a, b)
 		}
 	}
 }
@@ -49,4 +50,21 @@ func TestFlatListRequestBoundsUnicode(t *testing.T) {
 
 	_, _, empty = flatListRequestBounds("", "x\ufeff", flatListRange{"x\U00010000", "x\U0001f601"})
 	require.True(t, empty, "the entire supplementary range precedes the high-BMP prefix")
+}
+
+func referenceHNSNameCompare(a, b string) int {
+	return strings.Compare(strings.ReplaceAll(a, "/", "\x01"), strings.ReplaceAll(b, "/", "\x01"))
+}
+
+func TestCompareHNSNames(t *testing.T) {
+	names := []string{
+		"", "/", "a", "a/", "a!/", "a /", "a%41/", "a-1/", "a/b", "a-/b",
+		"x\U0001f600", "x\U0001f601", "x\uff03", "x\uff21", "x\ufeff",
+		"root/\U0001f600/", "root/\uff21/", "\u00e9", "e\u0301",
+	}
+	for _, a := range names {
+		for _, b := range names {
+			require.Equal(t, referenceHNSNameCompare(a, b), compareHNSNames(a, b), "%q vs %q", a, b)
+		}
+	}
 }

@@ -782,7 +782,7 @@ func TestStaticFlatRangeSyncProducerOrdering(t *testing.T) {
 	listing, _ := newFlatTestListing(t, ctx, [][]string{{"c"}, {}, {"b"}}, "root/", nil)
 	traverser := &flatRangeTraverser{blob: listing.traverser, bounds: flatListRange{"a", "d"}}
 	sideErr := &twoWaySideErr{}
-	folderCh, fileCh := traverserToTypedChannels(ctx, traverser, nil, "SRC[]", sideErr, false, compareBlobNames)
+	folderCh, fileCh := traverserToTypedChannels(ctx, traverser, nil, "SRC[]", sideErr, false, compareFNSNames)
 	drainTypedChannelsForTest(folderCh, fileCh)
 	require.ErrorContains(t, sideErr.get(), "ORDER VIOLATION")
 }

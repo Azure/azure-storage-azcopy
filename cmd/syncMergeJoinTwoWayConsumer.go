@@ -46,13 +46,12 @@ import (
 // ============================================================================
 
 func mergeJoinNameComparer(fromTo common.FromTo) func(string, string) int {
-	isAzure := func(location common.Location) bool {
-		return location == common.ELocation.Blob() || location == common.ELocation.BlobFS()
+	switch fromTo {
+	case common.EFromTo.BlobBlob():
+		return compareFNSNames
+	case common.EFromTo.BlobFSBlobFS():
+		return compareHNSNames
 	}
-	if isAzure(fromTo.From()) && isAzure(fromTo.To()) {
-		return compareBlobNames
-	}
-	// Preserve S3's existing byte comparison until cross-provider ordering is redesigned.
 	return strings.Compare
 }
 
@@ -454,12 +453,11 @@ func resolveMergeJoinParallelTraversers() int32 {
 //     merge instead of building an in-memory index map.
 //
 // azcopy no longer reads any enablement env var itself. When the flag is set, the merge-join is
-// still restricted to the source/destination pairs whose listing order is proven lexicographically
-// sorted and validated end-to-end:
-//   - S3 -> Blob (S3 source list-order fix + per-level merge)
-//   - Azure -> Azure, i.e. Blob/BlobFS (FNS or HNS) in any combination
+// still restricted to same-namespace Azure pairs with compatible listing orders:
+//   - Blob -> Blob (FNS, UTF-16 ordinal)
+//   - BlobFS -> BlobFS (HNS, UTF-8 with '/' ranked lowest)
 //
-// Everything else (Azure Files, Local, GCP, etc.) always stays on the indexMap flow.
+// Mixed namespaces, S3, Azure Files, Local and GCP stay on the indexMap flow.
 // Keep this allow-list conservative: any source whose listing is not guaranteed
 // globally sorted would silently break the two-pointer merge.
 func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
@@ -470,22 +468,11 @@ func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
 }
 
 // isStreamingMergeJoinSupportedPair reports whether the source/destination location pair is on the
-// streaming merge-join allow-list: S3 -> Blob, or Azure -> Azure (Blob/BlobFS in any combination).
+// streaming merge-join allow-list: FNS -> FNS or HNS -> HNS.
 // Keep this conservative: any source whose listing is not guaranteed globally sorted would silently
 // break the two-pointer merge.
 func isStreamingMergeJoinSupportedPair(fromTo common.FromTo) bool {
-	isAzure := func(loc common.Location) bool {
-		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
-	}
-	from, to := fromTo.From(), fromTo.To()
-	switch {
-	case from == common.ELocation.S3() && to == common.ELocation.Blob():
-		return true // S3 -> Blob
-	case isAzure(from) && isAzure(to):
-		return true // Azure -> Azure (Blob/BlobFS)
-	default:
-		return false
-	}
+	return fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlobFS()
 }
 
 // isSelfReferentialDirSentinel returns true when a BlobFS (HNS) traverser emits

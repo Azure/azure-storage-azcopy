@@ -15,19 +15,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func sortUnicodeTestObjects(objects []StoredObject) {
+func sortUnicodeTestObjects(objects []StoredObject, compare func(string, string) int) {
 	sort.SliceStable(objects, func(i, j int) bool {
-		return referenceBlobNameCompare(objects[i].relativePath, objects[j].relativePath) < 0
+		return compare(objects[i].relativePath, objects[j].relativePath) < 0
 	})
 }
 
 func TestTwoWaySyncDirUnicodeAzurePairs(t *testing.T) {
 	for _, pair := range []common.FromTo{
-		common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(),
-		common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS(),
+		common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(),
 	} {
 		for _, mirror := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/mirror=%t", pair, mirror), func(t *testing.T) {
+				compare := referenceBlobNameCompare
+				if pair == common.EFromTo.BlobFSBlobFS() {
+					compare = referenceHNSNameCompare
+				}
 				var source, destination []StoredObject
 				for _, name := range []string{
 					"ascii.txt", "leaf/x\ud7ffy.txt", "leaf/x\uff21y.txt",
@@ -45,15 +48,15 @@ func TestTwoWaySyncDirUnicodeAzurePairs(t *testing.T) {
 				old := mjTestFile(changed)
 				old.lastModifiedTime = old.lastModifiedTime.Add(-time.Hour)
 				destination = append(destination, old, mjTestFile(extra))
-				folders := []string{"h2", "h2-4.2", "h2\ufeff", "h2\U0001f600", "h2\U0001f600-1", "h2\U0001f600\ufeff"}
+				folders := []string{"h2", "h2 ", "h2!", "h2%41", "h2-4.2", "h2\ufeff", "h2\U0001f600", "h2\U0001f600-1", "h2\U0001f600\ufeff"}
 				for _, name := range folders {
 					source = append(source, mjTestVirtualFolder(name))
 					destination = append(destination, mjTestVirtualFolder(name))
 				}
 				source = append(source, mjTestVirtualFolder("only\U0001f600"))
 				destination = append(destination, mjTestVirtualFolder("only\ufeff"))
-				sortUnicodeTestObjects(source)
-				sortUnicodeTestObjects(destination)
+				sortUnicodeTestObjects(source, compare)
+				sortUnicodeTestObjects(destination, compare)
 
 				var deleted []string
 				var mu sync.Mutex
@@ -84,7 +87,7 @@ func TestTwoWaySyncDirUnicodeAzurePairs(t *testing.T) {
 				for i, dir := range subDirs {
 					require.Equal(t, dir.relativePath != "/only\U0001f600/", dir.isPresentAtDestination)
 					if i > 0 {
-						require.Less(t, referenceBlobNameCompare(subDirs[i-1].relativePath, dir.relativePath), 0)
+						require.Less(t, compare(subDirs[i-1].relativePath, dir.relativePath), 0)
 					}
 				}
 
@@ -92,7 +95,7 @@ func TestTwoWaySyncDirUnicodeAzurePairs(t *testing.T) {
 				enumerator = newMergeJoinRecordingEnumerator(&deleted, &mu)
 				enumerator.ctp.copyJobTemplate.FromTo = pair
 				destination = append([]StoredObject(nil), source...)
-				sortUnicodeTestObjects(destination)
+				sortUnicodeTestObjects(destination, compare)
 				ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				_, err = mergeJoinTwoWaySyncDir(ctx, cancel, enumerator, args, "",
@@ -100,6 +103,22 @@ func TestTwoWaySyncDirUnicodeAzurePairs(t *testing.T) {
 				require.NoError(t, err)
 				require.Empty(t, scheduledTransferSources(enumerator), "rerunning a completed sync must be a no-op")
 				require.Empty(t, deleted)
+			})
+		}
+	}
+}
+
+func TestStreamingMergeJoinSameNamespaceGate(t *testing.T) {
+	for _, pair := range []common.FromTo{
+		common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(),
+		common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(),
+		common.EFromTo.S3Blob(), common.EFromTo.FileFile(), common.EFromTo.LocalBlob(),
+	} {
+		for _, enabled := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/enabled=%t", pair, enabled), func(t *testing.T) {
+				args := &cookedSyncCmdArgs{fromTo: pair, useStreamingMergeJoin: enabled}
+				want := enabled && (pair == common.EFromTo.BlobBlob() || pair == common.EFromTo.BlobFSBlobFS())
+				require.Equal(t, want, useStreamingMergeJoin(args))
 			})
 		}
 	}
@@ -142,7 +161,7 @@ func TestStaticFlatRangeUnicodePageEdgesAndProducer(t *testing.T) {
 		listing, _ := newFlatTestListing(t, ctx, pages, "root/", nil)
 		traverser := &flatRangeTraverser{blob: listing.traverser, bounds: flatListRange{"l", "m"}}
 		sideErr := &twoWaySideErr{}
-		folders, files := traverserToTypedChannels(ctx, traverser, nil, "SRC[]", sideErr, false, compareBlobNames)
+		folders, files := traverserToTypedChannels(ctx, traverser, nil, "SRC[]", sideErr, false, compareFNSNames)
 		gotFolders, gotFiles := drainTypedChannelsForTest(folders, files)
 		cancel()
 		require.NoError(t, sideErr.get())
