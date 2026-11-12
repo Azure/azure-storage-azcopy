@@ -163,12 +163,11 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 	}
 }
 
-// Current size of block names in AzCopy is 48B. To be consistent with this,
-// we have to generate a 36B string and then base64-encode this to retain the
-// same size.
-// Block Names of blobs are of format noted below.
-// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum>
-const AZCOPY_BLOCKNAME_LENGTH = 48
+// All block IDs of a blob must have the same length, so the width of every field must be fixed.
+// PartNum is 8 digits so that jobs with more than 99,999 parts (>1B files) keep the same ID length.
+// Block Names of blobs are of format noted below (39B, base64-encoded to 52B).
+// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><8B PartNum><5B TransferIndex (index of the file within the job part)><5B blockNum>
+const AZCOPY_BLOCKNAME_LENGTH = 52
 
 func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
 	blockID := []byte(fmt.Sprintf("%s%05d", blockNamePrefix, index))
