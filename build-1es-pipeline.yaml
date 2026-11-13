@@ -1,7 +1,7 @@
 # For testing, the safest approach is to run the pipeline on a fork of the AzCopy repo. After that validation, changes can
 # be moved to the main pipeline. Do not test by running the prod pipeline in ADO with an already existing version of AzCopy.
 variables:
-  AZCOPY_GOLANG_VERSION: '1.27.3'
+  AZCOPY_GOLANG_VERSION: '1.27.4'
 
 parameters:
   - name: publish_to_m1_container
@@ -308,9 +308,9 @@ extends:
           - job: MacOS_M1
             timeoutInMinutes: 360
             pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
+              name: AcesShared
+              os: macOS
+              demands: ImageOverride -equals ACES_VM_SharedPool_GoldenGate
             templateContext:
               outputs:
                 - output: pipelineArtifact

@@ -5,7 +5,7 @@ parameters:
   Pattern: '*.zip'
 
 steps:
-- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@6
   displayName: 'Sign Mac executable'
   inputs:
     ConnectedServiceName: 'azcopy-release'
@@ -33,7 +33,7 @@ steps:
       ]
     SessionTimeout: 30
 
-- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@6
   displayName: 'Notarize Mac executable'
   inputs:
     ConnectedServiceName: 'azcopy-release'

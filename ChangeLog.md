@@ -1,6 +1,20 @@
 
 # Change Log
 
+## Version 10.34.2
+
+### Bug Fixes
+
+1. Fixed a hang when `sync --compare-hash` could not read a source file. The hashing scan no longer waits forever on its queue, keeps hashing the remaining files, warns once, and logs the unreadable file. A file whose properties can't be read is now indexed with the properties the scan listed and no hash, so `--delete-destination=true` no longer deletes destination files that were never scanned. Files are also closed after hashing, and the scan always uses at least one hashing thread. ([#3643](https://github.com/Azure/azure-storage-azcopy/pull/3643))
+2. Added the NCOE sovereign cloud suffixes (`*.core.sovcloud-api.fr`, `*.core.sovcloud-api.sg`, `*.core.sovcloud-api.de`) to the default trusted Microsoft suffixes so token credentials are accepted for those hosts. ([#3679](https://github.com/Azure/azure-storage-azcopy/pull/3679))
+
+### Dependency updates
+
+1. Golang 1.27.3 -> 1.27.4
+2. golang.org/x/crypto v0.57.0 -> v0.59.0, golang.org/x/net v0.60.0 -> v0.62.0, golang.org/x/sync v0.23.0 -> v0.25.0, golang.org/x/sys v0.48.0 -> v0.50.0, golang.org/x/text v0.42.0 -> v0.44.0
+3. Remaining direct and indirect dependencies refreshed to their latest minor/patch releases, including azcore v1.23.2 -> v1.24.0, azidentity v1.14.0 -> v1.15.0, azblob v1.8.2 -> v1.8.3, azdatalake v1.6.0 -> v1.7.1, azfile (replacement target) -> v1.7.2, cloud.google.com/go/storage v1.65.1 -> v1.70.0, google.golang.org/api v0.294.0 -> v0.313.0, google.golang.org/grpc v1.83.2 -> v1.85.0, minio-go/v7 v7.3.0 -> v7.4.1 and klauspost/compress v1.19.2 -> v1.20.4.
+4. `govulncheck ./...` is clean after these upgrades; the changes pick up fixes for GO-2026-6865 (`klauspost/compress`), GO-2026-6866 and GO-2026-6860 (`golang.org/x/net`), and GO-2026-5932 (`golang.org/x/crypto`).
+
 ## Version 10.34.1
 
 ### Bug Fixes
