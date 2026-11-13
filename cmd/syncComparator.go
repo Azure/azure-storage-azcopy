@@ -134,7 +134,8 @@ func newSyncDestinationComparator(
 
 	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
 		(orchestratorOptions.fromTo.From() == common.ELocation.Local() ||
-		 orchestratorOptions.fromTo.From() == common.ELocation.File())
+			orchestratorOptions.fromTo.From() == common.ELocation.File() ||
+			orchestratorOptions.fromTo.From() == common.ELocation.FileNFS())
 
 	return comp
 }
@@ -366,7 +367,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	// service bumps on any metadata/property change. At this point, size and
 	// LastWriteTime are already known to be equal, so if only the LMT differs we
 	// treat it as a metadata-only change.
-	if f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
+	if !common.IsNFSCopy() && f.orchestratorOptions.fromTo.From() == common.ELocation.File() {
 		if !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 
 			if sourceObject.lastModifiedTime.IsZero() {
