@@ -23,6 +23,7 @@ package azcopy
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
@@ -107,7 +108,16 @@ func (s *cookedSyncOptions) applyFromToSrcDest(src, dst string, fromTo common.Fr
 	case common.EFromTo.Unknown():
 		return fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", src, dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		s.source = common.ResourceString{Value: common.ToExtendedPath(traverser.CleanLocalPath(src))}
+		localSource := traverser.CleanLocalPath(src)
+		// Sync always strips the top directory, so "dir/*" is just "dir"; a glob would hand the orchestrator a non-directory traverser.
+		root, err := NormalizeResourceRoot(localSource, common.ELocation.Local())
+		if err != nil {
+			return err
+		}
+		if diff := strings.TrimPrefix(localSource, root); diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+			localSource = root
+		}
+		s.source = common.ResourceString{Value: common.ToExtendedPath(localSource)}
 		s.destination, err = traverser.SplitResourceString(dst, s.fromTo.To())
 		if err != nil {
 			return err
@@ -310,6 +320,11 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 
 	if s.useSyncOrchestrator && !traverser.UseSyncOrchestrator {
 		return errors.New("sync orchestration requires the smslidingwindow build tag")
+	}
+	if s.useSyncOrchestrator && s.fromTo.From() == common.ELocation.Local() && strings.Contains(s.source.ValueLocal(), "*") {
+		if _, statErr := common.OSStat(s.source.ValueLocal()); statErr != nil { // an existing path literally containing '*' is not a glob
+			return errors.New("Wildcards other than a trailing /* are not supported for sync with the sync orchestrator.")
+		}
 	}
 	if s.useFlatListing && (s.fromTo != common.EFromTo.BlobBlob() || !s.useSyncOrchestrator || !s.useStreamingMergeJoin) {
 		return errors.New("flat sync requires FNS-to-FNS Blob transfers, the sync orchestrator, and streaming merge-join")
