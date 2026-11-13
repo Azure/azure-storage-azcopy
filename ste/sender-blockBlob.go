@@ -145,15 +145,14 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 	return
 }
 
-// Current size of block names in AzCopy is 48B. To be consistent with this,
-// we have to generate a 36B string and then base64-encode this to conform
-// to the same size. We generate prefix here.
+// Block IDs encode 39 bytes as 52 base64 characters. Generate the prefix here;
+// GenerateBlockBlobBlockID appends the fixed-width block number.
 // Block Names of blobs are of format noted below.
-// <5B empty placeholder><16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum>
+// <5B empty placeholder><16B GUID of AzCopy re-interpreted as string><8B PartNum><5B TransferIndex (index of the file within the job part)><5B blockNum>
 func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32) string {
 	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobID))[:])
 	placeHolderPrefix := "00000"
-	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
+	return fmt.Sprintf("%s%s%08d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
 func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {

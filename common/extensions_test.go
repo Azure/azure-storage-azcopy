@@ -147,19 +147,23 @@ func TestBlockblobBlockIDGeneration(t *testing.T) {
 	// Make sure that for a given JobID, jobPart, an index in job part and a block index,
 	// the blockID generated is consistent.
 	numOfFilesPerDispatchJobPart :=int32(10000) // == cmd.NumOfFilesPerDispatchJobPart
-	maxNumberOfParts := int32(99999) // Depends on our plan file Name, we support max of 99999 parts
-	azCopyBlockLength := 48 // Current size of blocks in AzCopy
+	azCopyBlockLength := AZCOPY_BLOCKNAME_LENGTH
 
 	placeHolder := "00000" // 5B placeholder
 	jobId := NewUUID()
 	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobId))[:]) // 16Byte jobID
-	partNum := rand.Int31n(maxNumberOfParts) // 5B partNumber
-	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart) // 5Byte index of file in part
+	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart) // 5Byte TransferIndex (index of the file within the job part)
 	blockIndex := rand.Int31n(blockblob.MaxBlocks) // 5B blockIndex
 
-	blockNamePrefix := fmt.Sprintf("%s%s%05d%05d", placeHolder, jobIdStr, partNum, fileIndex)
-	blockName := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
-	a.Equal(azCopyBlockLength, len(blockName))
+	// The block ID length must not change with the part number (e.g. 5 digits vs 6 digits)
+	var blockName string
+	for _, partNum := range []int32{0, 1, 99999, 100000, 590000, 99999999} {
+		blockNamePrefix := fmt.Sprintf("%s%s%08d%05d", placeHolder, jobIdStr, partNum, fileIndex)
+		name := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
+		a.Equal(azCopyBlockLength, len(name))
+		blockName = name
+	}
+	blockNamePrefix := fmt.Sprintf("%s%s%08d%05d", placeHolder, jobIdStr, int32(99999999), fileIndex)
 
 	for i := 1; i <= 10; i++ {
 		tmp := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)

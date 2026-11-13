@@ -657,8 +657,12 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	// passed to azcopy as the single cca.useStreamingMergeJoin flag. This makes it easy to confirm
 	// the gating in production logs.
 	if useStreamingMergeJoin(cca) {
+		nameOrder := "UTF-16 ordinal"
+		if cca.fromTo == common.EFromTo.BlobFSBlobFS() {
+			nameOrder = "UTF-8, slash-lowest"
+		}
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.fromTo.From(), cca.fromTo.To()), true)
+			"Streaming merge-join ENABLED (mover flag) for %s->%s; name ordering: %s", cca.fromTo.From(), cca.fromTo.To(), nameOrder), true)
 
 		// Flat sync needs only the root crawl task; its range scheduler controls concurrency.
 		// Directory-based merge-join uses MOVER_SYNC_MJ_TRAV instead of the indexMap setting.

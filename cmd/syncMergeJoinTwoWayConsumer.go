@@ -45,6 +45,16 @@ import (
 // writes subDirs, so there is no shared-state contention. See two-way-merge-join-design.md.
 // ============================================================================
 
+func mergeJoinNameComparer(fromTo common.FromTo) func(string, string) int {
+	switch fromTo {
+	case common.EFromTo.BlobBlob():
+		return compareFNSNames
+	case common.EFromTo.BlobFSBlobFS():
+		return compareHNSNames
+	}
+	return strings.Compare
+}
+
 // twoWayClosedObjCh returns an already-closed StoredObject channel (used when the destination is
 // absent, so a merge sees an immediately-exhausted destination stream).
 func twoWayClosedObjCh() <-chan StoredObject {
@@ -102,6 +112,7 @@ func mergeJoinTwoWayMergeFiles(
 ) error {
 	srcNext := func() (StoredObject, bool) { return mergeJoinRecv(srcFileCh) }
 	dstNext := func() (StoredObject, bool) { return mergeJoinRecv(dstFileCh) }
+	compareNames := mergeJoinNameComparer(cca.fromTo)
 
 	srcObj, srcOk := srcNext()
 	dstObj, dstOk := dstNext()
@@ -112,7 +123,7 @@ func mergeJoinTwoWayMergeFiles(
 		}
 		srcPath := buildChildPath(dir, srcObj.relativePath, false)
 		dstPath := buildChildPath(dir, dstObj.relativePath, false)
-		cmp := strings.Compare(srcPath, dstPath)
+		cmp := compareNames(srcPath, dstPath)
 		mergeJoinTraceLog("FILE-CMP dir=%q SRC=%q vs DST=%q => %s", dir, srcPath, dstPath, mergeJoinCmpLabel(cmp))
 		switch {
 		case cmp < 0:
@@ -177,6 +188,7 @@ func mergeJoinTwoWayMergeFolders(
 	subDirs := make([]minimalStoredObject, 0, 64)
 	srcNext := func() (StoredObject, bool) { return mergeJoinRecv(srcFolderCh) }
 	dstNext := func() (StoredObject, bool) { return mergeJoinRecv(dstFolderCh) }
+	compareNames := mergeJoinNameComparer(cca.fromTo)
 
 	srcObj, srcOk := srcNext()
 	dstObj, dstOk := dstNext()
@@ -189,7 +201,7 @@ func mergeJoinTwoWayMergeFolders(
 		srcOrigPath := srcObj.relativePath
 		srcPath := buildChildPath(dir, srcObj.relativePath, true)
 		dstPath := buildChildPath(dir, dstObj.relativePath, true)
-		cmp := strings.Compare(srcPath, dstPath)
+		cmp := compareNames(srcPath, dstPath)
 		mergeJoinTraceLog("FOLDER-CMP dir=%q SRC=%q vs DST=%q => %s", dir, srcPath, dstPath, mergeJoinCmpLabel(cmp))
 		switch {
 		case cmp < 0:
@@ -269,11 +281,12 @@ func mergeJoinTwoWaySyncDir(
 	srcSideErr := &twoWaySideErr{}
 	dstSideErr := &twoWaySideErr{}
 
-	srcFolderCh, srcFileCh := traverserToTypedChannels(ctx, pt, enumerator.filters, srcLabel, srcSideErr, false)
+	compareNames := mergeJoinNameComparer(cca.fromTo)
+	srcFolderCh, srcFileCh := traverserToTypedChannels(ctx, pt, enumerator.filters, srcLabel, srcSideErr, false, compareNames)
 
 	var dstFolderCh, dstFileCh <-chan StoredObject
 	if isDestinationPresent {
-		dstFolderCh, dstFileCh = traverserToTypedChannels(ctx, st, enumerator.filters, dstLabel, dstSideErr, true)
+		dstFolderCh, dstFileCh = traverserToTypedChannels(ctx, st, enumerator.filters, dstLabel, dstSideErr, true, compareNames)
 	} else {
 		dstFolderCh = twoWayClosedObjCh()
 		dstFileCh = twoWayClosedObjCh()
@@ -405,7 +418,7 @@ type mergeJoinTraversalError struct {
 }
 
 func (e *mergeJoinTraversalError) Error() string { return e.err.Error() }
-func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
+func (e *mergeJoinTraversalError) Unwrap() error { return e.err }
 
 // mergeJoinDefaultParallelTraversers is the default directory-crawl parallelism used ONLY for
 // streaming merge-join jobs. It is intentionally separate from (and lower than) the indexMap
@@ -440,12 +453,11 @@ func resolveMergeJoinParallelTraversers() int32 {
 //     merge instead of building an in-memory index map.
 //
 // azcopy no longer reads any enablement env var itself. When the flag is set, the merge-join is
-// still restricted to the source/destination pairs whose listing order is proven lexicographically
-// sorted and validated end-to-end:
-//   - S3 -> Blob (S3 source list-order fix + per-level merge)
-//   - Azure -> Azure, i.e. Blob/BlobFS (FNS or HNS) in any combination
+// still restricted to same-namespace Azure pairs with compatible listing orders:
+//   - Blob -> Blob (FNS, UTF-16 ordinal)
+//   - BlobFS -> BlobFS (HNS, UTF-8 with '/' ranked lowest)
 //
-// Everything else (Azure Files, Local, GCP, etc.) always stays on the indexMap flow.
+// Mixed namespaces, S3, Azure Files, Local and GCP stay on the indexMap flow.
 // Keep this allow-list conservative: any source whose listing is not guaranteed
 // globally sorted would silently break the two-pointer merge.
 func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
@@ -456,22 +468,11 @@ func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
 }
 
 // isStreamingMergeJoinSupportedPair reports whether the source/destination location pair is on the
-// streaming merge-join allow-list: S3 -> Blob, or Azure -> Azure (Blob/BlobFS in any combination).
+// streaming merge-join allow-list: FNS -> FNS or HNS -> HNS.
 // Keep this conservative: any source whose listing is not guaranteed globally sorted would silently
 // break the two-pointer merge.
 func isStreamingMergeJoinSupportedPair(fromTo common.FromTo) bool {
-	isAzure := func(loc common.Location) bool {
-		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
-	}
-	from, to := fromTo.From(), fromTo.To()
-	switch {
-	case from == common.ELocation.S3() && to == common.ELocation.Blob():
-		return true // S3 -> Blob
-	case isAzure(from) && isAzure(to):
-		return true // Azure -> Azure (Blob/BlobFS)
-	default:
-		return false
-	}
+	return fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlobFS()
 }
 
 // isSelfReferentialDirSentinel returns true when a BlobFS (HNS) traverser emits
