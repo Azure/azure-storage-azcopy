@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -84,9 +83,6 @@ func (cca *cookedSyncCmdArgs) syncResourceStrings() (string, string, error) {
 	destination, err := stringify(cca.destination, cca.fromTo.To())
 	if err != nil {
 		return "", "", fmt.Errorf("invalid sync destination: %w", err)
-	}
-	if cca.stripTopDir && cca.fromTo.From().IsLocal() && !strings.HasSuffix(source, "/*") {
-		source = strings.TrimRight(source, "/\\") + "/*"
 	}
 	return source, destination, nil
 }
