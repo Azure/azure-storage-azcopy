@@ -723,6 +723,12 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		stt.Options.SuppressCrawlStats = true
 		configureFlatSyncTraversers(cca, &ptt.Options, &stt.Options)
 
+		// Only the root directory should emit itself; every other directory is already emitted by its parent's listing.
+		if dir.(minimalStoredObject).RelativePath != common.AZCOPY_PATH_SEPARATOR_STRING {
+			ptt.Options.IncludeRoot = false
+			stt.Options.IncludeRoot = false
+		}
+
 		var errMsg string
 
 		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
