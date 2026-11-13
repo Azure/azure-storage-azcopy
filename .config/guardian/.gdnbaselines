@@ -25,6 +25,51 @@
       "createdDate": "2025-04-24 18:58:31Z",
       "expirationDate": "2025-10-11 19:47:23Z",
       "justification": "This error is baselined with an expiration date of 180 days from 2025-04-24 19:47:23Z"
+    },
+    "5e5e0132c298c02eb202d6416220e6b64bc034ad0200a9f2e016ac97442c8bd7": {
+      "signature": "5e5e0132c298c02eb202d6416220e6b64bc034ad0200a9f2e016ac97442c8bd7",
+      "alternativeSignatures": [
+        "5e5e0132c298c02eb202d6416220e6b64bc034ad0200a9f2e016ac97442c8bd7"
+      ],
+      "target": "binaries/azcopy_windows_386.exe",
+      "memberOf": [
+        "default"
+      ],
+      "tool": "binskim",
+      "ruleId": "BA2012",
+      "createdDate": "2026-11-13 00:00:00Z",
+      "expirationDate": "2027-05-12 00:00:00Z",
+      "justification": "This error is baselined with an expiration date of 180 days from 2026-11-13 00:00:00Z"
+    },
+    "c2c57898f00f005d843feb7fc3396bc3d1ceb13a8483c6fc68f425c119ebe09c": {
+      "signature": "c2c57898f00f005d843feb7fc3396bc3d1ceb13a8483c6fc68f425c119ebe09c",
+      "alternativeSignatures": [
+        "c2c57898f00f005d843feb7fc3396bc3d1ceb13a8483c6fc68f425c119ebe09c"
+      ],
+      "target": "binaries/azcopy_windows_amd64.exe",
+      "memberOf": [
+        "default"
+      ],
+      "tool": "binskim",
+      "ruleId": "BA2012",
+      "createdDate": "2026-11-13 00:00:00Z",
+      "expirationDate": "2027-05-12 00:00:00Z",
+      "justification": "This error is baselined with an expiration date of 180 days from 2026-11-13 00:00:00Z"
+    },
+    "8add2cb55f38b572d66a2ee204fef348a21d3538c9ea1aff55f5454a142b0288": {
+      "signature": "8add2cb55f38b572d66a2ee204fef348a21d3538c9ea1aff55f5454a142b0288",
+      "alternativeSignatures": [
+        "8add2cb55f38b572d66a2ee204fef348a21d3538c9ea1aff55f5454a142b0288"
+      ],
+      "target": "binaries/azcopy_windows_arm64.exe",
+      "memberOf": [
+        "default"
+      ],
+      "tool": "binskim",
+      "ruleId": "BA2012",
+      "createdDate": "2026-11-13 00:00:00Z",
+      "expirationDate": "2027-05-12 00:00:00Z",
+      "justification": "This error is baselined with an expiration date of 180 days from 2026-11-13 00:00:00Z"
     }
   }
 }
