@@ -39,7 +39,7 @@ import (
 
 const (
 	TrustedSuffixesNameAAD = "trusted-microsoft-suffixes"
-	TrustedSuffixesAAD     = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
+	TrustedSuffixesAAD     = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net;*.core.sovcloud-api.fr;*.core.sovcloud-api.sg;*.core.sovcloud-api.de"
 )
 
 var autoOAuth sync.Once

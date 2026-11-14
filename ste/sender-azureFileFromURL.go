@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
@@ -76,11 +77,15 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 			ctx = context.WithValue(u.ctx, addFileRequestIntent, true)
 		}
 		ctx = context.WithValue(ctx, removeSourceContentCRC64, true)
+		options := &file.UploadRangeFromURLOptions{
+			CopySourceAuthorization: token,
+		}
+		if u.jptm.Info().PreserveInfo && u.jptm.FromTo().To() == common.ELocation.File() {
+			options.LastWrittenMode = to.Ptr(file.LastWrittenModePreserve)
+		}
 		_, err = u.getFileClient().UploadRangeFromURL(
 			ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
-			&file.UploadRangeFromURLOptions{
-				CopySourceAuthorization: token,
-			})
+			options)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
 			return
