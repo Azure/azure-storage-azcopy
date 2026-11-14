@@ -741,6 +741,11 @@ type syncSourceComparator struct {
 	srcInodeHasIndependentDestFile map[string]bool
 
 	inodeStore *common.InodeStore
+
+	// autoDecompress indicates that compressed source files are decompressed on download,
+	// in which case their compression extension (e.g. .gz) is stripped at the destination.
+	// The destination index must therefore be looked up by the decompressed name.
+	autoDecompress bool
 }
 
 func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner, hardlinkRestructureDeleter traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, inodeStore *common.InodeStore) *syncSourceComparator {
@@ -771,6 +776,9 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 	}
 
 	relPath := sourceObject.RelativePath
+	if f.autoDecompress && sourceObject.EntityType == common.EEntityType.File() {
+		relPath = traverser.StripCompressionExtension(relPath, sourceObject.ContentEncoding)
+	}
 	if f.destinationIndex.IsDestinationCaseInsensitive {
 		relPath = strings.ToLower(relPath)
 	}

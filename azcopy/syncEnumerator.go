@@ -190,6 +190,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                s.opts.forceIfReadOnly,
+		AutoDecompress:                 s.opts.autoDecompress,
 		LogLevel:                       logLevel,
 		PreservePermissions:            s.opts.preservePermissions,
 		PreserveInfo:                   s.opts.preserveInfo,
@@ -330,6 +331,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			preferSMBTime = false
 		}
 		comparatorInstance := NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, hardlinkDeleteScheduler, s.opts.compareHash, preferSMBTime, s.opts.mirrorMode, s.inodeStore)
+		comparatorInstance.autoDecompress = s.opts.autoDecompress
 		comparator = comparatorInstance.ProcessIfNecessary
 
 		finalize = func() error {
