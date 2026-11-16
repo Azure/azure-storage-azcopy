@@ -304,5 +304,12 @@ func (t *BlobTraverser) rangeClone(ctx context.Context, mu *sync.Mutex) *BlobTra
 			t.incrementEnumerationCounter(entity, symlink, hardlink)
 		}
 	}
+	if t.incrementEnumerationFailure != nil {
+		clone.incrementEnumerationFailure = func(entity common.EntityType) {
+			mu.Lock()
+			defer mu.Unlock()
+			t.incrementEnumerationFailure(entity)
+		}
+	}
 	return &clone
 }

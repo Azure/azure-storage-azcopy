@@ -496,9 +496,18 @@ func TestStaticFlatRangesCopyReporting(t *testing.T) {
 			}
 			if tc.reporting {
 				close(ch)
-				require.Len(t, ch, 1)
-				info := (<-ch).(*flatListRangeErrorInfo)
-				require.Equal(t, flatListRange{"a", "b"}, info.bounds)
+				rangeErrors, processingErrors := 0, 0
+				for item := range ch {
+					if info, ok := item.(*flatListRangeErrorInfo); ok {
+						rangeErrors++
+						require.Equal(t, flatListRange{"a", "b"}, info.bounds)
+					} else {
+						processingErrors++
+						require.ErrorIs(t, item.ErrorMessage(), failure)
+					}
+				}
+				require.Equal(t, 1, rangeErrors)
+				require.Equal(t, tc.processingFailure, processingErrors > 0, "processor failures are sent to the channel as well")
 			}
 		})
 	}

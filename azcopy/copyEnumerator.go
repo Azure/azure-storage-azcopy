@@ -155,7 +155,6 @@ func (t *copyExecutor) initCopyEnumerator(ctx context.Context, logLevel common.L
 		ExcludeContainers:           t.opts.excludeContainers,
 		IncrementEnumeration:        t.tpt.incEnumeration,
 		IncrementEnumerationFailure: t.tpt.incEnumerationFailure,
-		IncrementScanError:          t.tpt.incEnumerationFailure,
 		ErrorChannel:                t.opts.errorChannel,
 
 		FlatListing: t.opts.useFlatListing,

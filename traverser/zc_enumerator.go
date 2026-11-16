@@ -416,11 +416,6 @@ type InitResourceTraverserOptions struct {
 	// until the traversal returns and the channel must not be closed before then.
 	ErrorChannel chan<- TraverserErrorItemInfo
 
-	// IncrementScanError is called once for every error the Blob, Files and S3 traversers report, before it
-	// is sent to ErrorChannel and whether or not a channel is attached. The local traverser counts through
-	// IncrementEnumerationFailure instead.
-	IncrementScanError func(common.EntityType)
-
 	CpkOptions common.CpkOptions // Used by Blob
 
 	PreservePermissions common.PreservePermissionsOption // Blob, BlobFS

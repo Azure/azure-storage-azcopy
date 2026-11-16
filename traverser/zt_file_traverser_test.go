@@ -131,7 +131,7 @@ func TestFileTraverserReportsIncompleteListingEntries(t *testing.T) {
 		filesTestListing(`<File><Name>no-properties.txt</Name></File>`, filesTestFile("a.txt")),
 		InitResourceTraverserOptions{
 			Recursive: true, ErrorChannel: ch,
-			IncrementScanError: func(common.EntityType) { counted++ },
+			IncrementEnumerationFailure: func(common.EntityType) { counted++ },
 		})
 	files := collectFilesTestObjects(t, traversal)
 

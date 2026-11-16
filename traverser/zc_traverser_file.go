@@ -61,8 +61,8 @@ type fileTraverser struct {
 	stripTopDir                 bool
 	fromTo                      common.FromTo
 
-	errorChannel       chan<- TraverserErrorItemInfo
-	incrementScanError func(common.EntityType)
+	errorChannel                chan<- TraverserErrorItemInfo
+	incrementEnumerationFailure func(common.EntityType)
 
 	// skipRootProperties bool // if true, we skip properties of the root directory/file
 	skipRootProperties bool
@@ -222,7 +222,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 	targetURLParts, err := file.ParseURL(t.rawURL)
 	if err != nil {
-		countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
+		countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
 			FilePath: t.rawURL,
 			Error:    err,
 		})
@@ -236,7 +236,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	// if not pointing to a share, check if we are pointing to a single file
 	if !UseSyncOrchestrator && targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
 				FilePath: targetURLParts.DirectoryOrFilePath,
 				FileName: getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				Error:    err,
@@ -259,7 +259,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		// check if the url points to a single file
 		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
 		if err != nil {
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
 				FilePath: targetURLParts.DirectoryOrFilePath,
 				FileName: getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				Error:    err,
@@ -304,14 +304,20 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 					storedObject.EntityType = common.EEntityType.Hardlink()
 				}
 			}
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(storedObject.EntityType, t.symlinkHandling, t.hardlinkHandling)
-			}
-
 			storedObject.updateTimestamps(*fileProperties.FileLastWriteTime, *fileProperties.FileChangeTime)
 
 			err := ProcessIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
+			if err != nil {
+				countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
+					FileName:             storedObject.Name,
+					FilePath:             targetURLParts.DirectoryOrFilePath,
+					FileLastModifiedTime: storedObject.LastModifiedTime,
+					Error:                err})
+			} else if t.incrementEnumerationCounter != nil {
+				// A failed entity is counted as scanned by the failure callback, so only successes are counted here.
+				t.incrementEnumerationCounter(storedObject.EntityType, t.symlinkHandling, t.hardlinkHandling)
+			}
 
 			return err
 		}
@@ -402,18 +408,24 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	processStoredObject := func(s StoredObject) error {
-		// The root is not part of the transfer when StripTopDir is set, so it isn't counted either.
-		if t.incrementEnumerationCounter != nil && !(t.stripTopDir && s.IsSourceRootFolder()) {
-			t.incrementEnumerationCounter(s.EntityType, t.symlinkHandling, t.hardlinkHandling)
-		}
 		err := ProcessIfPassedFilters(filters, s, processor)
 		_, err = getProcessingError(err)
+		// A failed entity is counted as scanned by the failure callback, so only successes are counted here.
+		// The root is not part of the transfer when StripTopDir is set, so it isn't counted either.
+		if err == nil && t.incrementEnumerationCounter != nil && !(t.stripTopDir && s.IsSourceRootFolder()) {
+			t.incrementEnumerationCounter(s.EntityType, t.symlinkHandling, t.hardlinkHandling)
+		}
 		return err
 	}
 
 	// get the directory URL so that we can list the files
 	directoryClient, err := createDirectoryClientFromServiceClient(targetURLParts, t.serviceClient)
 	if err != nil {
+		countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
+			FilePath: targetURLParts.DirectoryOrFilePath,
+			Error:    err,
+			Dir:      true,
+		})
 		return err
 	}
 
@@ -436,11 +448,24 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		if err == nil || targetURLParts.DirectoryOrFilePath == "" {
 			s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, nil))
 			if err != nil {
+				countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
+					FilePath: targetURLParts.DirectoryOrFilePath,
+					Error:    err,
+					Dir:      true,
+				})
 				return err
 			}
 			if s != nil {
-				err = processStoredObject(s.(StoredObject))
+				root := s.(StoredObject)
+				err = processStoredObject(root)
 				if err != nil {
+					countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
+						FileName:             root.Name,
+						FilePath:             root.RelativePath,
+						FileLastModifiedTime: root.LastModifiedTime,
+						Dir:                  true,
+						Error:                err,
+					})
 					return err
 				}
 			}
@@ -586,7 +611,14 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			}
 			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
 				cancelWorkers()
-				return fmt.Errorf(allDotsErrorMsg, relativePath)
+				allDotsErr := fmt.Errorf(allDotsErrorMsg, relativePath)
+				countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
+					FileName: getObjectNameOnly(relativePath),
+					FilePath: relativePath,
+					Dir:      item.(StoredObject).EntityType == common.EEntityType.Folder(),
+					Error:    allDotsErr,
+				})
+				return allDotsErr
 			}
 			if !buildmode.IsMover {
 				common.GetLifecycleMgr().Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
@@ -595,7 +627,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			if common.AzcopyScanningLogger != nil {
 				common.AzcopyScanningLogger.Log(common.LogError, workerError.Error())
 			}
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{Error: workerError, Dir: true})
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{Error: workerError, Dir: true})
 
 			// In non-recursive mode, only fail on directory enumeration errors, not property errors
 			if !t.recursive && strings.Contains(workerError.Error(), listErrPrefix) {
@@ -611,7 +643,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		processErr := processStoredObject(object)
 		if processErr != nil {
 			cancelWorkers()
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorAzFileInfo{
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorAzFileInfo{
 				FileName:             object.Name,
 				FilePath:             object.RelativePath,
 				FileLastModifiedTime: object.LastModifiedTime,
@@ -640,7 +672,7 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		stripTopDir:                 opts.StripTopDir,
 		fromTo:                      opts.FromTo,
 		errorChannel:                opts.ErrorChannel,
-		incrementScanError:          opts.IncrementScanError,
+		incrementEnumerationFailure: opts.IncrementEnumerationFailure,
 	}
 
 	// Meter enumeration (metadata) IOPS against the source share's per-share

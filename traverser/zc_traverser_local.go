@@ -87,6 +87,18 @@ func (t *localTraverser) IsDirectory(bool) (bool, error) {
 	return props.IsDir(), nil
 }
 
+// rootScanError marks a Traverse failure on the root path itself, which the traverser does not count.
+type rootScanError struct{ err error }
+
+func (e *rootScanError) Error() string { return e.err.Error() }
+func (e *rootScanError) Unwrap() error { return e.err }
+
+func (t *localTraverser) countEnumerationFailure(entityType common.EntityType) {
+	if t.incrementEnumerationFailureCounter != nil {
+		t.incrementEnumerationFailureCounter(entityType)
+	}
+}
+
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	if t.stripTopDir {
 		return nil, false, nil // StripTopDir can NEVER be a single file. If a user wants to target a single file, they must escape the *.
@@ -378,8 +390,8 @@ func WalkWithSymlinks(
 
 					if err != nil {
 						sendToErrorChannelOrLog(appCtx, options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
-						if options.IncrementEnumerationCounter != nil {
-							options.IncrementEnumerationCounter(common.EEntityType.Symlink(), options.SymlinkHandling, options.HardlinkHandling)
+						if options.IncrementEnumerationFailureCounter != nil {
+							options.IncrementEnumerationFailureCounter(common.EEntityType.Symlink())
 						}
 					}
 
@@ -779,6 +791,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 			close(hashError)             // close out the error channel
 			for err := range hashError { // inspect all hashing errors
 				if err != nil {
+					t.countEnumerationFailure(common.EEntityType.File())
 					return err
 				}
 			}
@@ -958,7 +971,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 			ErrorMsg: err,
 		})
 
-		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
+		return &rootScanError{fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)}
 	}
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
 
@@ -1007,10 +1020,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 			}
 		}
 
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
-		}
-
 		err := ProcessIfPassedFilters(filters,
 			NewStoredObject(
 				preprocessor,
@@ -1027,6 +1036,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
 		_, err = getProcessingError(err)
+		if err != nil {
+			t.countEnumerationFailure(entityType)
+			sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{FilePath: t.fullPath, FileInfo: singleFileInfo, ErrorMsg: err})
+		} else if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
+		}
 
 		return finalizer(err)
 	} else {
@@ -1066,12 +1081,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				return nil
 			}
 
-			if t.incrementEnumerationCounter != nil && !(t.stripTopDir && entityType == common.EEntityType.Folder() && relPath == "") {
-				t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
-			}
-
 			// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
-			return ProcessIfPassedFilters(filters,
+			err := ProcessIfPassedFilters(filters,
 				NewStoredObject(
 					preprocessor,
 					fileInfo.Name(),
@@ -1086,6 +1097,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				),
 				hashingProcessor, // hashingProcessor handles the mutex wrapper
 			)
+
+			// A failed entity is counted as scanned by the failure callback, so only successes are counted here.
+			if _, processErr := getProcessingError(err); processErr == nil && t.incrementEnumerationCounter != nil &&
+				!(t.stripTopDir && entityType == common.EEntityType.Folder() && relPath == "") {
+				t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
+			}
+			return err
 		}
 
 		if t.recursive {
@@ -1117,6 +1135,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					FileInfo: nil,
 					ErrorMsg: fmt.Errorf("failed to read directory %s: %w", t.fullPath, err),
 				})
+				t.countEnumerationFailure(common.EEntityType.Folder())
 				return err
 			}
 
@@ -1274,10 +1293,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					}
 				}
 
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
-				}
-
 				storedObject := NewStoredObject(
 					preprocessor,
 					entry.Name(),
@@ -1304,6 +1319,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								FilePath: path,
 								FileInfo: fileInfo,
 								ErrorMsg: propsErr})
+						if t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
+						}
 						continue
 					} else {
 						storedObject.updateTimestamps(
@@ -1318,7 +1336,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				)
 				_, err = getProcessingError(err)
 				if err != nil {
+					t.countEnumerationFailure(entityType)
+					sendToErrorChannelOrLog(t.appCtx, t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err})
 					return finalizer(err)
+				}
+				// A failed entity is counted as scanned by the failure callback, so only successes are counted here.
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 				}
 			}
 		}

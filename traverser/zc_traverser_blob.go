@@ -75,8 +75,8 @@ type BlobTraverser struct {
 	includeRoot      bool
 	destResourceType *common.Location
 
-	errorChannel       chan<- TraverserErrorItemInfo
-	incrementScanError func(common.EntityType)
+	errorChannel                chan<- TraverserErrorItemInfo
+	incrementEnumerationFailure func(common.EntityType)
 
 	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
 	isSyncDestination  bool
@@ -296,15 +296,15 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if respErr.ErrorCode == string(bloberror.BlobUsesCustomerSpecifiedEncryption) {
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, errorBlobInfo)
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
 		if respErr.RawResponse == nil {
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %w", respErr)
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		} else if t.isSyncDestination && t.isDFS && respErr.StatusCode == 404 {
 			// If this is a sync destination traversal and we get a 404, it means the blob doesn't exist
@@ -359,12 +359,10 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				storedObject.BlobTags = blobTagsMap
 			}
 		}
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-		}
 
 		err := ProcessIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
+		t.countProcessedObject(storedObject, storedObject.EntityType, err)
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
 		if !t.include.Deleted() && (isBlob || err != nil) {
@@ -391,12 +389,10 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.Folder(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-		}
 
 		err := ProcessIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
+		t.countProcessedObject(storedObject, common.EEntityType.Folder(), err)
 		if err != nil {
 			return err
 		}
@@ -426,13 +422,9 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				blobURLParts.ContainerName,
 			)
 
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.Folder(),
-					common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-			}
-
 			err = ProcessIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
+			t.countProcessedObject(storedObject, common.EEntityType.Folder(), err)
 			if err != nil {
 				return err
 			}
@@ -461,6 +453,23 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	return t.serialList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+}
+
+// countProcessedObject counts a successfully processed object as scanned. A failed one is counted as a failure,
+// which also counts it as scanned, and is sent to the error channel.
+func (t *BlobTraverser) countProcessedObject(object StoredObject, entityType common.EntityType, processErr error) {
+	if processErr != nil {
+		countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{
+			BlobName:             object.Name,
+			BlobPath:             object.RelativePath,
+			BlobLastModifiedTime: object.LastModifiedTime,
+			Dir:                  entityType == common.EEntityType.Folder(),
+			Error:                processErr})
+		return
+	}
+	if t.incrementEnumerationCounter != nil {
+		t.incrementEnumerationCounter(entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
+	}
 }
 
 func (t *BlobTraverser) ParallelList(containerClient *container.Client, containerName string, searchPrefix string,
@@ -656,12 +665,25 @@ func (t *BlobTraverser) ParallelList(containerClient *container.Client, containe
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorBlobInfo{Error: workerError, Dir: true})
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{Error: workerError, Dir: true})
 			return workerError
 		}
 
 		object := item.(StoredObject)
 
+		processErr := ProcessIfPassedFilters(filters, object, processor)
+		_, processErr = getProcessingError(processErr)
+		if processErr != nil {
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{
+				BlobName:             object.Name,
+				BlobPath:             object.RelativePath,
+				BlobLastModifiedTime: object.LastModifiedTime,
+				Dir:                  object.EntityType == common.EEntityType.Folder(),
+				Error:                processErr})
+			return processErr
+		}
+
+		// A failed entity is counted as scanned by the failure callback, so only successes are counted here.
 		if t.incrementEnumerationCounter != nil {
 			if UseSyncOrchestrator && !object.IsVirtualPrefix {
 				t.incrementEnumerationCounter(object.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
@@ -669,18 +691,6 @@ func (t *BlobTraverser) ParallelList(containerClient *container.Client, containe
 				// XDM: Retaining the old behavior but this seems like a bug.
 				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
-		}
-
-		processErr := ProcessIfPassedFilters(filters, object, processor)
-		_, processErr = getProcessingError(processErr)
-		if processErr != nil {
-			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementScanError, ErrorBlobInfo{
-				BlobName:             object.Name,
-				BlobPath:             object.RelativePath,
-				BlobLastModifiedTime: object.LastModifiedTime,
-				Dir:                  object.EntityType == common.EEntityType.Folder(),
-				Error:                processErr})
-			return processErr
 		}
 	}
 
@@ -936,6 +946,9 @@ func (t *BlobTraverser) serialListRange(containerClient *container.Client, conta
 		}
 		resp, err := page.response, page.err
 		if err != nil {
+			if bounds == nil { // a failed range is reported through reportFlatRangeError instead
+				countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{Error: err, Dir: true})
+			}
 			return fmt.Errorf("cannot list blobs. Failed with error %w", err)
 		}
 		contentType := ternary.DerefOrZero(resp.ContentType)
@@ -994,12 +1007,9 @@ func (t *BlobTraverser) serialListRange(containerClient *container.Client, conta
 				storedObject.BlobTags = blobTagsMap
 			}
 
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-			}
-
 			processErr := ProcessIfPassedFilters(filters, storedObject, processor)
 			_, processErr = getProcessingError(processErr)
+			t.countProcessedObject(storedObject, common.EEntityType.File(), processErr)
 			if processErr != nil {
 				return processErr
 			}
@@ -1032,7 +1042,7 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       ternary.DerefOrZero(ternary.FirstOrZero(blobOpts).IsDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
-		incrementScanError:          opts.IncrementScanError,
+		incrementEnumerationFailure: opts.IncrementEnumerationFailure,
 		isSyncDestination:           opts.IsSyncDestination,
 		suppressCrawlStats:          opts.SuppressCrawlStats,
 	}

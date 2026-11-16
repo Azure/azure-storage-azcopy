@@ -919,7 +919,11 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.FromTo.From(),
 			})
-			r.reportSourceFailure()
+			// Traversers count their own failures, except a root path they could not scan.
+			var rootErr *rootScanError
+			if errors.As(err, &rootErr) {
+				r.reportSourceFailure()
+			}
 			return err
 		}
 

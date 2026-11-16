@@ -109,11 +109,11 @@ func TestS3TraverserReceivesErrorChannelAndCounter(t *testing.T) {
 	counted := 0
 	traversal, err := NewS3Traverser(resource, context.Background(), InitResourceTraverserOptions{
 		Credential: &info, S3ClientManager: &S3ClientManager{}, ErrorChannel: ch,
-		IncrementScanError: func(common.EntityType) { counted++ },
+		IncrementEnumerationFailure: func(common.EntityType) { counted++ },
 	})
 	require.NoError(t, err)
 
-	countScanErrorAndSendToErrorChannel(traversal.ctx, traversal.errorChannel, traversal.incrementScanError, ErrorS3Info{S3Name: "bad"})
+	countScanErrorAndSendToErrorChannel(traversal.ctx, traversal.errorChannel, traversal.incrementEnumerationFailure, ErrorS3Info{S3Name: "bad"})
 	require.Len(t, ch, 1)
 	require.Equal(t, 1, counted)
 }
@@ -132,11 +132,11 @@ func TestBlobAndFileTraverserConstructorsWireErrorChannelAndCounter(t *testing.T
 	constructors := map[string]func(opts InitResourceTraverserOptions) wiring{
 		"blob": func(opts InitResourceTraverserOptions) wiring {
 			tr := NewBlobTraverser("https://account.blob.core.windows.net/container", blobClient, context.Background(), opts)
-			return wiring{tr.ctx, tr.errorChannel, tr.incrementScanError}
+			return wiring{tr.ctx, tr.errorChannel, tr.incrementEnumerationFailure}
 		},
 		"file": func(opts InitResourceTraverserOptions) wiring {
 			tr := NewFileTraverser("https://account.file.core.windows.net/share", fileClient, context.Background(), opts)
-			return wiring{tr.ctx, tr.errorChannel, tr.incrementScanError}
+			return wiring{tr.ctx, tr.errorChannel, tr.incrementEnumerationFailure}
 		},
 	}
 	for name, construct := range constructors {
@@ -144,8 +144,8 @@ func TestBlobAndFileTraverserConstructorsWireErrorChannelAndCounter(t *testing.T
 			ch := make(chan TraverserErrorItemInfo, 1)
 			counted := 0
 			w := construct(InitResourceTraverserOptions{
-				ErrorChannel:       ch,
-				IncrementScanError: func(common.EntityType) { counted++ },
+				ErrorChannel:                ch,
+				IncrementEnumerationFailure: func(common.EntityType) { counted++ },
 			})
 
 			countScanErrorAndSendToErrorChannel(w.ctx, w.ch, w.count, ErrorBlobInfo{BlobName: "bad"})
