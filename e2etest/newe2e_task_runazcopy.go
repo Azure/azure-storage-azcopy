@@ -136,6 +136,10 @@ type AzCopyCommand struct {
 	// pipe, which can be used to write commands (e.g. "cancel\n" when
 	// --cancel-from-stdin is enabled).
 	AfterStart func(stdin io.WriteCloser)
+
+	// AfterStartProcess, if non-nil, is called after the azcopy process has
+	// started but before Wait. It can simulate abrupt process termination.
+	AfterStartProcess func(process *os.Process)
 }
 
 type AzCopyEnvironment struct {
@@ -524,6 +528,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	if commandSpec.AfterStart != nil {
 		commandSpec.AfterStart(in)
+	}
+	if commandSpec.AfterStartProcess != nil {
+		commandSpec.AfterStartProcess(command.Process)
 	}
 
 	err = command.Wait()
