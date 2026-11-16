@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package ste
@@ -54,11 +55,17 @@ func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
 }
 
 func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
+	return f.getSDDL(f.jptm.Info().Source)
+}
+
+func (f localFileSourceInfoProvider) getSDDL(path string) (string, error) {
 	// We only need Owner, Group, and DACLs for azure files.
-	fd, err := f.getHandle(f.jptm.Info().Source)
+	fd, err := f.getHandle(path)
 	if err != nil {
 		return "", err
 	}
+	defer windows.Close(windows.Handle(fd))
+
 	buf := make([]byte, 512)
 	bufLen := uint32(len(buf))
 	needValidate := false
@@ -91,12 +98,12 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	}, &buf, &bufLen)
 
 	if status != ntdll.STATUS_SUCCESS {
-		return "", fmt.Errorf("failed to query security object %s (ntstatus: %s)", f.jptm.Info().Source, status.String())
+		return "", fmt.Errorf("failed to query security object %s (ntstatus: %s)", path, status.String())
 	}
 
 	sd := (*windows.SECURITY_DESCRIPTOR)(unsafe.Pointer(&buf[0])) // ntdll.SecurityDescriptor is equivalent
 	if needValidate && !sd.IsValid() {
-		return "", fmt.Errorf("failed to query security object %s (invalid security descriptor returned w/ success status)", f.jptm.Info().Source)
+		return "", fmt.Errorf("failed to query security object %s (invalid security descriptor returned w/ success status)", path)
 	}
 	fSDDL, err := sddl.ParseSDDL(sd.String())
 
