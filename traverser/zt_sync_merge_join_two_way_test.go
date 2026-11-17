@@ -146,6 +146,82 @@ func TestSyncOrchestratorContinuesAfterDirectoryErrors(t *testing.T) {
 	}
 }
 
+// Only the root directory's traverser may emit the root, otherwise every directory is reported twice.
+func TestSyncOrchestratorIncludesRootOnlyForTheRootDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the sync orchestrator normalizes source URLs as filesystem paths on Windows")
+	}
+	for _, mergeJoin := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mergeJoin=%t", mergeJoin), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodHead {
+					w.Header().Set("x-ms-error-code", "BlobNotFound")
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				var blobs string
+				if strings.TrimSuffix(r.URL.Path, "/") == "/source" && r.URL.Query().Get("prefix") == "" {
+					blobs = "<BlobPrefix><Name>a/</Name></BlobPrefix><BlobPrefix><Name>b/</Name></BlobPrefix>"
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><EnumerationResults><Blobs>%s</Blobs><NextMarker /></EnumerationResults>`, blobs)
+			}))
+			defer server.Close()
+
+			var mu sync.Mutex
+			includeRoot := map[string]bool{}
+			recordingTraverser := func(resource common.ResourceString, location common.Location, ctx context.Context, opts InitResourceTraverserOptions) (ResourceTraverser, error) {
+				mu.Lock()
+				includeRoot[resource.Value] = opts.IncludeRoot
+				mu.Unlock()
+				return InitResourceTraverser(resource, location, ctx, opts)
+			}
+
+			baseURL := strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
+			orchestratorOptions := &SyncOrchestratorOptions{fromTo: common.EFromTo.BlobBlob()}
+			cca := &SyncJob{
+				FromTo:                common.EFromTo.BlobBlob(),
+				Source:                common.ResourceString{Value: baseURL + "/source"},
+				Destination:           common.ResourceString{Value: baseURL + "/target"},
+				UseStreamingMergeJoin: mergeJoin,
+				NewTraverser:          recordingTraverser,
+				EncodeDestinationPath: func(path string) string { return path },
+			}
+			run := &syncRun{job: *cca, orchestratorOptions: orchestratorOptions, crawlParallelism: 4}
+			options := InitResourceTraverserOptions{
+				Credential:   &common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
+				ErrorChannel: make(chan TraverserErrorItemInfo, 64),
+				IncludeRoot:  true,
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			primaryTraverser, err := InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, options)
+			require.NoError(t, err)
+			enumerator := &SyncEnumerator{
+				primaryTraverser:           primaryTraverser,
+				primaryTraverserTemplate:   ResourceTraverserTemplate{Location: common.ELocation.Blob(), Options: options},
+				secondaryTraverserTemplate: ResourceTraverserTemplate{Location: common.ELocation.Blob(), Options: options},
+				ObjectIndexer:              NewObjectIndexer(),
+				objectComparator:           func(StoredObject) error { return nil },
+				orchestratorOptions:        orchestratorOptions,
+				scheduleTransfer:           func(StoredObject) error { return nil },
+				finalize:                   func() error { return nil },
+			}
+			require.NoError(t, run.runSyncOrchestrator(cca, enumerator, ctx))
+
+			for _, side := range []string{"source", "target"} {
+				require.True(t, includeRoot[baseURL+"/"+side+"/"], "the root directory keeps IncludeRoot on the %s side", side)
+				for _, dir := range []string{"a", "b"} {
+					key := baseURL + "/" + side + "/" + dir + "/"
+					value, traversed := includeRoot[key]
+					require.True(t, traversed, "%s must be traversed", key)
+					require.False(t, value, "%s must not emit itself as a root", key)
+				}
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Shared test helpers for the streaming (two-way) merge-join tests.
 // ---------------------------------------------------------------------------
