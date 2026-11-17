@@ -32,6 +32,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
@@ -156,6 +157,7 @@ type CookedTransferOptions struct {
 	deleteDestinationFileIfNecessary bool
 
 	useFlatListing bool
+	errorChannel   chan<- traverser.TraverserErrorItemInfo
 }
 
 func newCookedCopyOptions(src, dst string, opts CopyOptions) (c *CookedTransferOptions, err error) {
@@ -294,6 +296,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	c.checkLength = opts.CheckLength
 	c.includeDirectoryStubs = opts.IncludeDirectoryStubs
 	c.useFlatListing = opts.UseFlatListing
+	c.errorChannel = opts.ErrorChannel
 	c.backupMode = opts.BackupMode
 	c.s2sPreserveProperties = boolDefaultTrue{value: opts.S2SPreserveProperties}
 	c.s2sPreserveAccessTier = boolDefaultTrue{value: opts.S2SPreserveAccessTier}
@@ -811,6 +814,10 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 
 	if c.useFlatListing && (c.fromTo != common.EFromTo.BlobBlob() || !c.recursive || c.includeDirectoryStubs) {
 		return errors.New("flat listing requires a recursive Blob-to-Blob copy without directory stubs")
+	}
+
+	if buildmode.IsMover && c.errorChannel == nil {
+		return errors.New("CopyOptions.ErrorChannel is required in Mover builds")
 	}
 
 	return nil

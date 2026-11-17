@@ -11,6 +11,8 @@ import (
 )
 
 type syncRun struct {
+	// ctx bounds how long error sends wait for the consumer; set when the run starts.
+	ctx                                  context.Context
 	job                                  SyncJob
 	orchestratorOptions                  *SyncOrchestratorOptions
 	semaphore                            *ThrottleSemaphore

@@ -268,9 +268,9 @@ type ThrottleSemaphore struct {
 
 // NewThrottleSemaphore creates and initializes a new ThrottleSemaphore with pre-filled tokens
 // and starts the associated stats monitor for dynamic throttling adjustments.
-func (r *syncRun) NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *ThrottleSemaphore {
+func (r *syncRun) NewThrottleSemaphore(jobID common.JobID) *ThrottleSemaphore {
 	// Create child context for this semaphore
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithCancel(r.ctx)
 
 	// Calculate target semaphore capacity (25% of source capacity by default, configurable)
 	sourceCapacity := r.crawlParallelism

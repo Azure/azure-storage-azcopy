@@ -39,21 +39,23 @@ import (
 type SyncOptions struct {
 	Handler SyncHandler
 
-	JobID                      common.JobID
-	CredentialManager          cred.Manager
-	SrcCredName                string
-	DstCredName                string
-	UseSyncOrchestrator        bool
-	UseStreamingMergeJoin      bool
-	UseFlatListing             bool
-	OrchestratorOptions        *traverser.SyncOrchestratorOptions
-	ErrorChannel               chan<- traverser.TraverserErrorItemInfo
-	AllowLocalSymlinkFollowing bool
-	BlobType                   common.BlobType
-	BlockBlobTier              common.BlockBlobTier
-	BackupMode                 bool
-	PreserveOwner              *bool
-	RetainJobState             bool
+	JobID                 common.JobID
+	CredentialManager     cred.Manager
+	SrcCredName           string
+	DstCredName           string
+	UseSyncOrchestrator   bool
+	UseStreamingMergeJoin bool
+	UseFlatListing        bool
+	OrchestratorOptions   *traverser.SyncOrchestratorOptions
+	// ErrorChannel is required in Mover builds and optional otherwise. It receives enumeration errors.
+	// Sends wait for the reader, so it must be drained to avoid blocking.
+	// The Azure CLI has no reader, so the channel is set to nil by default.
+	ErrorChannel   chan<- traverser.TraverserErrorItemInfo
+	BlobType       common.BlobType
+	BlockBlobTier  common.BlockBlobTier
+	BackupMode     bool
+	PreserveOwner  *bool
+	RetainJobState bool
 
 	FromTo                  common.FromTo
 	Recursive               *bool // Default true

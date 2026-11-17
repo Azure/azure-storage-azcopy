@@ -50,7 +50,9 @@ type CopyOptions struct {
 	// S3CredentialProviderFactory is only called for S3 sources.
 	S3CredentialProviderFactory S3CredentialProviderFactory
 	UseFlatListing              bool
-	// ErrorChannel receives enumeration errors without blocking; errors are dropped when it is full. The caller owns closing it.
+	// ErrorChannel is required in Mover builds and optional otherwise. It receives enumeration errors.
+	// Sends wait for the reader, so it must be drained to avoid blocking.
+	// The Azure CLI has no reader, so the channel is set to nil by default.	ErrorChannel chan<- traverser.TraverserErrorItemInfo
 	ErrorChannel chan<- traverser.TraverserErrorItemInfo
 
 	IncludeBefore               *time.Time

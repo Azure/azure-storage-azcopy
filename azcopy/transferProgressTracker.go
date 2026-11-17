@@ -32,8 +32,30 @@ import (
 
 var _ jobProgressTracker = &transferProgressTracker{}
 
+type CopyEnumerationStats struct {
+	FilesScanned            uint64
+	FoldersScanned          uint64
+	FileEnumerationFailed   uint64
+	FolderEnumerationFailed uint64
+	SkippedArchiveFileCount uint64
+	SkippedSymlinkCount     uint32
+	SkippedSpecialFileCount uint32
+	SkippedHardlinkCount    uint32
+	FirstPartOrdered        bool
+	ScanningComplete        bool
+}
+
+// CopyEnumerationStatsHandler is optional so existing CopyHandler implementations remain compatible.
+type CopyEnumerationStatsHandler interface {
+	OnEnumerationStats(CopyEnumerationStats)
+}
+
 type transferProgressTracker struct {
 	atomicSkippedArchiveFileCount atomic.Uint64
+	atomicFilesScanned            atomic.Uint64
+	atomicFoldersScanned          atomic.Uint64
+	atomicFileEnumerationFailed   atomic.Uint64
+	atomicFolderEnumerationFailed atomic.Uint64
 	jobID                         common.JobID
 	fromTo                        common.FromTo
 	handler                       CopyHandler
@@ -74,6 +96,10 @@ func (tpt *transferProgressTracker) Start() {
 }
 
 func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
+	if handler, ok := tpt.handler.(CopyEnumerationStatsHandler); ok {
+		handler.OnEnumerationStats(tpt.GetEnumerationStats())
+	}
+
 	if tpt.firstPartOrdered() {
 		// fetch a job status
 		summary := jobsAdmin.GetJobSummary(tpt.jobID, !buildmode.IsMover)

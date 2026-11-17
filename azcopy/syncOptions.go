@@ -364,6 +364,10 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 			"Assuming source is encrypted.")
 	}
 
+	if buildmode.IsMover && s.errorChannel == nil {
+		return errors.New("SyncOptions.ErrorChannel is required in Mover builds")
+	}
+
 	return nil
 }
 
