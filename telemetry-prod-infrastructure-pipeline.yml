@@ -79,6 +79,8 @@ extends:
         displayName: 'PROD: Managed SDP'
         dependsOn: Build_Ev2_Artifacts
         templateContext:
+          # Same Approval Service configuration as the Storage Mover RP (ob_release_servicetreeid).
+          serviceTreeId: c88bf702-9a3e-4962-a15d-dbc3c3a8f42f
           cloud: Public
           isProduction: true
           approval:
