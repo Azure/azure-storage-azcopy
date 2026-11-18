@@ -27,7 +27,7 @@ param baseName string = 'azcopy-telemetry'
 @maxValue(730)
 param retentionInDays int = 90
 
-@description('Total retention in days for AzCopy events (the AppEvents table). Days beyond retentionInDays are kept in low-cost long-term retention and are read with search jobs or restore. 730 (2 years) satisfies the telemetry design requirement.')
+@description('Total retention in days for AzCopy events (the AppEvents table). Days beyond retentionInDays are kept in low-cost long-term retention and are read with search jobs or restore. Prod keeps 90 days here and its 2-year history in the Kusto export.')
 @minValue(30)
 @maxValue(4383)
 param totalRetentionInDays int = 730
