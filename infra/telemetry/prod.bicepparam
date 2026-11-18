@@ -16,12 +16,10 @@ param appInsightsDailyCapGb = 200
 // Pay-as-you-go: expected ingestion is about $0.9k/month, and the 100 GB/day cap allows about $7k
 // ($2.30/GB), so the budget alerts only when spending approaches the cap's pace every day.
 param monthlyBudget = 7000
+// Cap and budget alerts go only to sharankur for now; add rajpathak, shnayak, srilanka and
+// azcopydev@microsoft.com once the new caps and budget have settled.
 param capAlertEmails = [
   'sharankur@microsoft.com'
-  'rajpathak@microsoft.com'
-  'shnayak@microsoft.com'
-  'srilanka@microsoft.com'
-  'azcopydev@microsoft.com'
 ]
 param lockResources = true
 // Set to true to stop AzCopy telemetry in an emergency.
