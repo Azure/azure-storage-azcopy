@@ -21,11 +21,46 @@
 package ste
 
 import (
+	"context"
+	"errors"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
+
+// liveTestJPTM is the part of a transfer ValidateTier uses.
+type liveTestJPTM struct{ IJobPartTransferMgr }
+
+func (liveTestJPTM) IsLive() bool { return true }
+
+// accountInfoTestClient is a destination whose account info cannot be read,
+// as under OAuth without the getInfo action.
+type accountInfoTestClient struct{ calls int }
+
+func (c *accountInfoTestClient) URL() string {
+	return "https://acct.blob.core.windows.net/cont/blob"
+}
+
+func (c *accountInfoTestClient) GetAccountInfo(context.Context, *blob.GetAccountInfoOptions) (blob.GetAccountInfoResponse, error) {
+	c.calls++
+	return blob.GetAccountInfoResponse{}, errors.New("AuthorizationPermissionMismatch")
+}
+
+// A source blob in Smart is written without a tier, decided without a
+// request, even where the destination's account info is unknown and every
+// other tier is therefore let through.
+func Test_ValidateTier_Smart(t *testing.T) {
+	a := assert.New(t)
+	tierSetPossibleFail = true
+	client := &accountInfoTestClient{}
+
+	a.False(ValidateTier(liveTestJPTM{}, to.Ptr(blob.AccessTierSmart), client, context.Background(), true))
+	a.Zero(client.calls)
+
+	a.True(ValidateTier(liveTestJPTM{}, to.Ptr(blob.AccessTierHot), client, context.Background(), true))
+}
 
 func Test_BlobTierAllowed_TierNotPossible(t *testing.T) {
 	a := assert.New(t)

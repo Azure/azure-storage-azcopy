@@ -51,6 +51,7 @@ type IBlobClient interface {
 // That's alright, but it's good to know on the off chance.
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var tierNotAllowedFailure sync.Once
+var smartTierNotSet sync.Once
 var checkLengthFailureOnReadOnlyDst sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
@@ -164,6 +165,23 @@ func BlobTierAllowed(destTier *blob.AccessTier) bool {
 }
 
 func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IBlobClient, ctx context.Context, performQuietly bool) (isValid bool) {
+
+	if blobTier != nil && *blobTier == blob.AccessTierSmart {
+		// A blob is in the Smart tier by inheriting its account's default
+		// access tier. Setting it explicitly (x-ms-access-tier: Smart) fails
+		// with 400 InvalidHeaderValue: on accounts without zone redundancy,
+		// and as of 2026-11 on zone-redundant accounts whose default is Smart
+		// too, at every service version. So a source blob in Smart is written
+		// without a tier, and gets the destination account's default tier,
+		// which keeps it in Smart where that default is Smart. Deciding here
+		// needs no request, unlike the account info below.
+		if !performQuietly {
+			smartTierNotSet.Do(func() {
+				common.GetLifecycleMgr().Info("Blobs in the Smart access tier are written without a tier, so they get the destination account's default tier.")
+			})
+		}
+		return false
+	}
 
 	if jptm.IsLive() && blobTier != nil {
 
