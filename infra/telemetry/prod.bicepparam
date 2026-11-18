@@ -25,3 +25,39 @@ param capAlertEmails = [
 param lockResources = true
 // Set to true to stop AzCopy telemetry in an emergency.
 param disableIngestion = false
+
+// Raw-event export to Storage Mover's prod Kusto cluster. Before the first Ev2 rollout with this:
+// - Privacy review: the approved design covered aggregates only; a raw copy needs sign-off.
+// - The Ev2 deployment identity needs Contributor on the cluster and Microsoft.Resources/deployments/*
+//   on its resource group (Monitoring Contributor has it), granted by a XDataMove-Prod owner, as in PPE.
+//   The cluster also needs a system-assigned identity, which reads the Event Hub (PPE's has one).
+// - After the first rollout, the completeness alert identity (output exportCompletenessAlertPrincipalId)
+//   needs Reader on the cluster; that alert's evaluations fail until it has it.
+// TODO: confirm the cluster ID with Storage Mover. It is inferred from sm-ppe-westeurope, which sits in
+// rg-sm-ur-ppe-common, and from rg-sm-ur-prd-common being the prod common resource group in XDataMove-Prod.
+param kustoClusterResourceId = '/subscriptions/ccd84cb7-896e-441a-8981-8b48ac987b1c/resourceGroups/rg-sm-ur-prd-common/providers/Microsoft.Kusto/clusters/sm-prd-westeurope'
+// TODO: replace with a security group before enabling, since the database holds raw per-job events.
+param kustoDatabaseAdmins = [
+  {
+    // sharankur@microsoft.com
+    principalId: '234aee49-ff5b-4d36-9228-3c261158d363'
+    principalType: 'User'
+    tenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
+  }
+]
+// Kusto is the queryable copy; history beyond 90 days stays in the workspace's 730-day retention.
+param kustoRetentionDays = 90
+// Expected traffic is ~17 GB/day on the hub (13.2 GB billed x 1.31), about 0.2 MB/s, which one
+// throughput unit carries. The 200 GB/day Application Insights cap bounds it at ~3 MB/s, within the
+// 4 partitions and 4 throughput units auto-inflate may reach.
+param exportEventHubPartitionCount = 4
+param exportEventHubMaxThroughputUnits = 4
+// Three days covers a weekend Kusto outage; at expected volume it fits in the storage one throughput unit includes.
+param exportEventHubRetentionHours = 72
+// Alerts go only to sharankur while the export stabilizes; send them to azcopydev@microsoft.com once it has.
+param exportAlertEmails = [
+  'sharankur@microsoft.com'
+]
+// Normal traffic is ~0.7 GB/hour on the hub; 5 GB/hour is roughly the 100 GB/day workspace cap's pace,
+// which this stream ignores.
+param exportHourlyVolumeAlertMb = 5000
