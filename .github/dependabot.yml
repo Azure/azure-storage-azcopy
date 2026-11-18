@@ -5,5 +5,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Version updates skip indirect modules by default; include them so
+    # vulnerable transitive dependencies are bumped too.
+    allow:
+      - dependency-type: "all"
 
 
