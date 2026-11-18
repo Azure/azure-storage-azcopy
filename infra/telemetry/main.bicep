@@ -5,6 +5,9 @@
 // dedicated Log Analytics workspace. Two environments are expected:
 //   - test : fed only by the E2E pipeline (synthetic telemetry)
 //   - prod : fed by released AzCopy builds; deployed through Ev2 (ev2/telemetry)
+//
+// When kustoClusterResourceId is set, kusto-export.bicep also streams the raw AzCopy events to a
+// database on that Kusto cluster and alerts on the health of the export.
 
 @description('Deployment environment. Drives resource names and is stamped as a tag.')
 @allowed([
@@ -60,6 +63,56 @@ param disableIngestion bool = false
 
 @description('Adds CanNotDelete locks to the workspace and component. A recreated component gets a new connection string, which released AzCopy builds cannot pick up.')
 param lockResources bool = false
+
+@description('Resource ID of the Kusto cluster that receives the raw AzCopy events. Empty deploys no export. The deploying identity needs Contributor on the cluster and Microsoft.Resources/deployments/* on its resource group.')
+param kustoClusterResourceId string = ''
+
+@description('Kusto database created for AzCopy telemetry.')
+param kustoDatabaseName string = 'azcopy-telemetry'
+
+@description('Days of Kusto data kept in the hot cache.')
+@minValue(1)
+param kustoHotCacheDays int = 31
+
+@description('Days the de-duplicated Kusto view (AppEventsDedup), the table to query, keeps events.')
+@minValue(1)
+param kustoRetentionDays int = 90
+
+@description('Days the Kusto raw and typed staging tables keep data. Must exceed the view\'s 1-day de-duplication lookback.')
+@minValue(2)
+param kustoStagingRetentionDays int = 2
+
+@description('How long Kusto batches Event Hub messages before ingesting them (hh:mm:ss). Shorter means fresher data and more, smaller extents.')
+param kustoIngestionBatchingTime string = '00:05:00'
+
+@description('Kusto database admins: objects with principalId, principalType (User, Group or App; App uses the application ID) and tenantId.')
+param kustoDatabaseAdmins array = []
+
+@description('Partitions of the export Event Hub. Fixed at creation on the Standard tier.')
+@minValue(1)
+@maxValue(32)
+param exportEventHubPartitionCount int = 4
+
+@description('Throughput units the export Event Hub namespace may auto-inflate to (1 TU = 1 MB/s or 1,000 events/s in). 1 disables auto-inflate.')
+@minValue(1)
+@maxValue(40)
+param exportEventHubMaxThroughputUnits int = 4
+
+@description('Hours the export Event Hub keeps events, which bounds how long Kusto can fall behind without losing data.')
+@minValue(1)
+@maxValue(168)
+param exportEventHubRetentionHours int = 24
+
+@description('Email addresses notified by the export health alerts.')
+param exportAlertEmails array = []
+
+@description('Alert when the export Event Hub receives more than this many MB in an hour.')
+@minValue(1)
+param exportHourlyVolumeAlertMb int = 10000
+
+@description('Completeness alert: minimum number of events missing from Kusto before it fires.')
+@minValue(1)
+param exportCompletenessMinMissingEvents int = 100
 
 var workspaceName = '${baseName}-${environmentName}-law'
 var appInsightsName = '${baseName}-${environmentName}-ai'
@@ -264,6 +317,31 @@ resource appInsightsReader 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
+module kustoExport 'kusto-export.bicep' = if (!empty(kustoClusterResourceId)) {
+  name: '${baseName}-${environmentName}-kusto-export'
+  params: {
+    environmentName: environmentName
+    baseName: baseName
+    location: location
+    tags: commonTags
+    appInsightsName: appInsights.name
+    workspaceName: workspace.name
+    kustoClusterResourceId: kustoClusterResourceId
+    kustoDatabaseName: kustoDatabaseName
+    kustoHotCacheDays: kustoHotCacheDays
+    kustoRetentionDays: kustoRetentionDays
+    kustoStagingRetentionDays: kustoStagingRetentionDays
+    kustoIngestionBatchingTime: kustoIngestionBatchingTime
+    kustoDatabaseAdmins: kustoDatabaseAdmins
+    eventHubPartitionCount: exportEventHubPartitionCount
+    eventHubMaxThroughputUnits: exportEventHubMaxThroughputUnits
+    eventHubRetentionHours: exportEventHubRetentionHours
+    alertEmails: exportAlertEmails
+    hourlyVolumeAlertMb: exportHourlyVolumeAlertMb
+    completenessMinMissingEvents: exportCompletenessMinMissingEvents
+  }
+}
+
 @description('The Application Insights connection string for runtime E2E injection or production build embedding.')
 output connectionString string = appInsights.properties.ConnectionString
 
@@ -275,3 +353,12 @@ output appInsightsName string = appInsights.name
 output workspaceResourceId string = workspace.id
 output workspaceName string = workspace.name
 output workspaceCustomerId string = workspace.properties.customerId
+
+@description('Export Event Hub namespace; empty when the Kusto export is not deployed.')
+output exportEventHubNamespaceName string = kustoExport.?outputs.eventHubNamespaceName ?? ''
+
+@description('Kusto database receiving the export; empty when the Kusto export is not deployed.')
+output exportKustoDatabaseResourceId string = kustoExport.?outputs.kustoDatabaseResourceId ?? ''
+
+@description('Principal ID of the completeness alert identity, which needs Reader on the Kusto cluster; empty when the export is not deployed.')
+output exportCompletenessAlertPrincipalId string = kustoExport.?outputs.completenessAlertIdentityPrincipalId ?? ''

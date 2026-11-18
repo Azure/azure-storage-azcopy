@@ -1,0 +1,89 @@
+.create-merge table AppEventsRaw (Message: dynamic, EventHubEnqueuedTime: datetime, EventHubSequenceNumber: long, EventHubOffset: string) with (folder = 'AzCopy', docstring = 'One row per Event Hub message from the Application Insights diagnostic setting. The update policy expands each message into AppEvents.')
+
+.create-or-alter table AppEventsRaw ingestion json mapping 'AppEventsRawMapping' '[{"column":"Message","Properties":{"Path":"$"}},{"column":"EventHubEnqueuedTime","Properties":{"Path":"$.x-opt-enqueued-time"}},{"column":"EventHubSequenceNumber","Properties":{"Path":"$.x-opt-sequence-number"}},{"column":"EventHubOffset","Properties":{"Path":"$.x-opt-offset"}}]'
+
+.alter-merge table AppEventsRaw policy retention softdelete = {{RawRetention}} recoverability = disabled
+
+.alter table AppEventsRaw policy ingestionbatching @'{"MaximumBatchingTimeSpan":"{{BatchingTime}}"}'
+
+.create-merge table AppEvents (TimeGenerated: datetime, TimeReceived: datetime, Name: string, SchemaVersion: string, InvocationID: string, JobID: string, InstallationID: string, Command: string, InvocationContext: string, AzCopyVersion: string, OSType: string, OSVersion: string, Arch: string, HostCPUModel: string, HostNumCPU: int, HostMemoryTotalGB: real, AzureVMDetected: bool, SourceType: string, DestType: string, SourceStorageAccount: string, DestStorageAccount: string, SourceAuthMechanism: string, DestAuthMechanism: string, SourceEndpointKind: string, DestEndpointKind: string, SourceProtocol: string, DestProtocol: string, SourceScope: string, DestScope: string, SourceCloudType: string, DestCloudType: string, SourceMountType: string, JobStatus: string, TerminalStage: string, JobErrorCode: string, JobErrorCategory: string, BytesTransferred: long, BytesExpected: long, ObjectsScheduled: long, ObjectsCompleted: long, ObjectsFailed: long, ObjectsSkipped: long, TransfersTotal: long, TransfersCompleted: long, TransfersFailed: long, TransfersSkipped: long, JobDurationSeconds: real, TransferPhaseDurationSeconds: real, JobThroughputMbps: real, PercentComplete: real, ServerBusyPct: real, NetworkErrorPct: real, ClientCountryOrRegion: string, ClientStateOrProvince: string, ClientCity: string, ItemCount: int, BilledSize: real, Properties: dynamic, Measurements: dynamic, EventHubSequenceNumber: long, EventHubOffset: string) with (folder = 'AzCopy', docstring = 'One typed row per AzCopy telemetry event. Frequently used fields are columns; Properties and Measurements keep only the remaining keys. Query AppEventsDedup, which removes Event Hub redeliveries.')
+
+.create-or-alter function with (folder = 'AzCopy', docstring = 'Expands diagnostic-setting messages ({"records":[...]}) into AppEvents rows. TimeGenerated is the client timestamp; TimeReceived is the Event Hub enqueue time, about 10-20 seconds after Application Insights received the event. Schema 4 omits summed counters when they are zero, so they are zero-filled on azcopy.job.finished.') ExpandAppEventsFrom(T:(Message:dynamic, EventHubEnqueuedTime:datetime, EventHubSequenceNumber:long, EventHubOffset:string)) {
+    // Keys stored as columns; removed from the bags so each value is stored once.
+    let PromotedProperties = dynamic(['SchemaVersion', 'InvocationID', 'JobID', 'InstallationID', 'Command', 'InvocationContext', 'AzCopyVersion', 'OSType', 'OSVersion', 'HostCPUModel', 'HostNumCPU', 'HostMemoryTotalGB', 'AzureVMDetected', 'SourceType', 'DestType', 'SourceStorageAccount', 'DestStorageAccount', 'SourceAuthMechanism', 'DestAuthMechanism', 'SourceEndpointKind', 'DestEndpointKind', 'SourceProtocol', 'DestProtocol', 'SourceScope', 'DestScope', 'SourceCloudType', 'DestCloudType', 'SourceMountType', 'JobStatus', 'TerminalStage', 'JobErrorCode', 'JobErrorCategory']);
+    let PromotedMeasurements = dynamic(['azcopy.bytes_transferred', 'azcopy.bytes_expected', 'azcopy.objects_scheduled', 'azcopy.objects_completed', 'azcopy.objects_failed', 'azcopy.objects_skipped', 'azcopy.transfers_total', 'azcopy.transfers_completed', 'azcopy.transfers_failed', 'azcopy.transfers_skipped', 'azcopy.job_duration_seconds', 'azcopy.transfer_phase_duration_seconds', 'azcopy.job_throughput_mbps', 'azcopy.percent_complete', 'azcopy.server_busy_pct', 'azcopy.network_error_pct']);
+    T
+    | mv-expand r = Message.records
+    | extend P = r.Properties, M = r.Measurements, EventName = tostring(r.Name), Schema = tostring(r.Properties.SchemaVersion)
+    | extend ZeroFill = EventName == 'azcopy.job.finished' and Schema == '4'
+    | project
+        TimeGenerated = todatetime(r['time']),
+        TimeReceived = EventHubEnqueuedTime,
+        Name = EventName,
+        SchemaVersion = Schema,
+        InvocationID = tostring(P.InvocationID),
+        JobID = tostring(P.JobID),
+        InstallationID = tostring(P.InstallationID),
+        Command = tostring(P.Command),
+        InvocationContext = tostring(P.InvocationContext),
+        AzCopyVersion = tostring(P.AzCopyVersion),
+        OSType = tostring(P.OSType),
+        OSVersion = tostring(P.OSVersion),
+        Arch = tostring(coalesce(P.OSArch, P.HostArch)),
+        HostCPUModel = tostring(P.HostCPUModel),
+        HostNumCPU = toint(P.HostNumCPU),
+        HostMemoryTotalGB = toreal(P.HostMemoryTotalGB),
+        AzureVMDetected = tobool(P.AzureVMDetected),
+        SourceType = tostring(P.SourceType),
+        DestType = tostring(P.DestType),
+        SourceStorageAccount = tolower(tostring(P.SourceStorageAccount)),
+        DestStorageAccount = tolower(tostring(P.DestStorageAccount)),
+        SourceAuthMechanism = tostring(P.SourceAuthMechanism),
+        DestAuthMechanism = tostring(P.DestAuthMechanism),
+        SourceEndpointKind = tostring(P.SourceEndpointKind),
+        DestEndpointKind = tostring(P.DestEndpointKind),
+        SourceProtocol = tostring(P.SourceProtocol),
+        DestProtocol = tostring(P.DestProtocol),
+        SourceScope = tostring(P.SourceScope),
+        DestScope = tostring(P.DestScope),
+        SourceCloudType = tostring(P.SourceCloudType),
+        DestCloudType = tostring(P.DestCloudType),
+        SourceMountType = tostring(P.SourceMountType),
+        JobStatus = tostring(P.JobStatus),
+        TerminalStage = tostring(P.TerminalStage),
+        JobErrorCode = tostring(P.JobErrorCode),
+        JobErrorCategory = tostring(P.JobErrorCategory),
+        BytesTransferred = tolong(coalesce(todouble(M['azcopy.bytes_transferred']), iff(ZeroFill, 0.0, real(null)))),
+        BytesExpected = tolong(coalesce(todouble(M['azcopy.bytes_expected']), iff(ZeroFill, 0.0, real(null)))),
+        ObjectsScheduled = tolong(coalesce(todouble(M['azcopy.objects_scheduled']), iff(ZeroFill, 0.0, real(null)))),
+        ObjectsCompleted = tolong(coalesce(todouble(M['azcopy.objects_completed']), iff(ZeroFill, 0.0, real(null)))),
+        ObjectsFailed = tolong(coalesce(todouble(M['azcopy.objects_failed']), iff(ZeroFill, 0.0, real(null)))),
+        ObjectsSkipped = tolong(coalesce(todouble(M['azcopy.objects_skipped']), iff(ZeroFill, 0.0, real(null)))),
+        TransfersTotal = tolong(coalesce(todouble(M['azcopy.transfers_total']), iff(ZeroFill, 0.0, real(null)))),
+        TransfersCompleted = tolong(coalesce(todouble(M['azcopy.transfers_completed']), iff(ZeroFill, 0.0, real(null)))),
+        TransfersFailed = tolong(coalesce(todouble(M['azcopy.transfers_failed']), iff(ZeroFill, 0.0, real(null)))),
+        TransfersSkipped = tolong(coalesce(todouble(M['azcopy.transfers_skipped']), iff(ZeroFill, 0.0, real(null)))),
+        JobDurationSeconds = todouble(M['azcopy.job_duration_seconds']),
+        TransferPhaseDurationSeconds = todouble(M['azcopy.transfer_phase_duration_seconds']),
+        JobThroughputMbps = todouble(M['azcopy.job_throughput_mbps']),
+        PercentComplete = todouble(M['azcopy.percent_complete']),
+        ServerBusyPct = todouble(M['azcopy.server_busy_pct']),
+        NetworkErrorPct = todouble(M['azcopy.network_error_pct']),
+        ClientCountryOrRegion = tostring(r.ClientCountryOrRegion),
+        ClientStateOrProvince = tostring(r.ClientStateOrProvince),
+        ClientCity = tostring(r.ClientCity),
+        ItemCount = toint(r.ItemCount),
+        BilledSize = toreal(r._BilledSize),
+        Properties = bag_remove_keys(P, PromotedProperties),
+        Measurements = bag_remove_keys(M, PromotedMeasurements),
+        EventHubSequenceNumber,
+        EventHubOffset
+}
+
+.create-or-alter function with (folder = 'AzCopy', docstring = 'Update-policy query: expands AppEventsRaw into AppEvents.') ExpandAppEvents() { ExpandAppEventsFrom(AppEventsRaw) }
+
+.alter table AppEvents policy update @'[{"IsEnabled":true,"Source":"AppEventsRaw","Query":"ExpandAppEvents()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+.alter-merge table AppEvents policy retention softdelete = {{TableRetention}} recoverability = disabled
+
+.create ifnotexists materialized-view with (lookback = 1d, folder = 'AzCopy', docString = 'AppEvents with Event Hub redeliveries removed: one row per (Name, InvocationID). Query this view. It keeps data for the database retention period; changing its query needs .alter materialized-view, not this script.') AppEventsDedup on table AppEvents { AppEvents | summarize take_any(*) by Name, InvocationID }
