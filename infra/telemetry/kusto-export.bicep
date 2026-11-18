@@ -152,6 +152,10 @@ resource appEventsExport 'Microsoft.Insights/diagnosticSettings@2021-05-01-previ
       }
     ]
   }
+  // A new data connection reads only events enqueued after its creation, so the stream starts once the reader exists.
+  dependsOn: [
+    kustoDatabase
+  ]
 }
 
 resource kustoReadsExportHub 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
