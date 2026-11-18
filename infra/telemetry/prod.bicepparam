@@ -2,12 +2,13 @@ using './main.bicep'
 
 // Prod instance, deployed only through Ev2 (ev2/telemetry). The region comes from
 // the Ev2 rollout via the resource group, so location is intentionally not set.
-// The workspace keeps AzCopy events 90 days, which the Application Insights ingestion price
-// includes. The 2-year history the design requires lives in the Kusto export (kustoRetentionDays),
-// which stores an event in about 300 bytes against the workspace's ~2.4 KB.
+// The workspace keeps AzCopy events a year: 90 days searchable, which the Application Insights
+// ingestion price includes, then long-term retention to 365 days, read with search jobs or restore
+// at about a fifth of the per-GB-month price. The 2-year history the design requires lives in the
+// Kusto export (kustoRetentionDays), which stores an event in about 300 bytes against ~2.4 KB here.
 param environmentName = 'prod'
 param retentionInDays = 90
-param totalRetentionInDays = 90
+param totalRetentionInDays = 365
 // Expected volume is ~13.2 GB/day (5.5M events at ~2.4 KB billed each), so 100 GB/day leaves ~7.6x headroom.
 param dailyQuotaGb = '100'
 // At least twice the workspace cap: the caps reset at different hours, so one Application Insights
@@ -27,19 +28,19 @@ param disableIngestion = false
 
 // Raw-event export to Storage Mover's prod Kusto cluster. Before the first Ev2 rollout with this:
 // - Privacy review: the approved design covered aggregates only; a raw copy needs sign-off.
-// - The Ev2 deployment identity needs Contributor on the cluster and Microsoft.Resources/deployments/*
-//   on its resource group (Monitoring Contributor has it), granted by a XDataMove-Prod owner, as in PPE.
-//   The cluster also needs a system-assigned identity, which reads the Event Hub (PPE's has one).
+// - Managed SDP deploys as the release approver, who needs Owner (JIT) on both XDataMove-AzCopy-Prod
+//   and XDataMove-Prod while the rollout runs, since the Kusto module deploys into the cluster's
+//   resource group.
 // - After the first rollout, the completeness alert identity (output exportCompletenessAlertPrincipalId)
 //   needs Reader on the cluster; that alert's evaluations fail until it has it.
-// - After the first rollout, copy the history into Kusto with kusto/backfill.ps1 before it ages out of
-//   the workspace (90 days; events from 2026-10-20 go on about 2027-01-18). Kusto is then the only
-//   copy beyond 90 days.
-// TODO: confirm the cluster ID with Storage Mover. It is inferred from sm-ppe-westeurope, which sits in
-// rg-sm-ur-ppe-common, and from rg-sm-ur-prd-common being the prod common resource group in XDataMove-Prod.
+// - After the first rollout, copy the history into Kusto with kusto/backfill.ps1 while the workspace can
+//   still query it (90 days; events from 2026-10-20 leave on about 2027-01-18).
+// Confirmed in the AME portal (2026-11-18): the cluster's system-assigned identity, which reads the
+// Event Hub, is enabled (principal 95233fe0-b157-4f3f-a65c-246d75078ab3).
 param kustoClusterResourceId = '/subscriptions/ccd84cb7-896e-441a-8981-8b48ac987b1c/resourceGroups/rg-sm-ur-prd-common/providers/Microsoft.Kusto/clusters/sm-prd-westeurope'
-// TODO: replace with a security group before enabling, since the database holds raw per-job events, and
-// add the AME account that runs backfill.ps1: the backfill reads the AME workspace as its caller.
+// TODO: replace with a security group of the release approvers: the database holds raw per-job events,
+// and Kusto schema scripts need the deploying approver to be an admin. The approver whose rollout
+// creates the database becomes an admin automatically, and can then run backfill.ps1.
 param kustoDatabaseAdmins = [
   {
     // sharankur@microsoft.com
