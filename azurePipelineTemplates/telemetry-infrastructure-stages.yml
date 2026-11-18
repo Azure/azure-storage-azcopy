@@ -97,7 +97,9 @@ stages:
                 instructions: |
                   Review the validation stage's ARM what-if output. Resume only if
                   the changes are limited to the dedicated AzCopy telemetry test
-                  resources and their scoped role assignments.
+                  resources and their scoped role assignments, plus the AzCopy
+                  telemetry database (its scripts and Event Hub data connection)
+                  on the Storage Mover PPE Kusto cluster.
                 onTimeout: reject
 
     - stage: DeployTelemetryInfrastructure
@@ -159,4 +161,17 @@ stages:
                     --output none
                   if ($LASTEXITCODE -ne 0) {
                     throw 'Log Analytics smoke query failed.'
+                  }
+
+                  $kustoDatabaseId = $deployment.properties.outputs.exportKustoDatabaseResourceId.value
+                  if ($kustoDatabaseId) {
+                    $connections = az rest --method get `
+                      --url "https://management.azure.com$kustoDatabaseId/dataConnections?api-version=2023-08-15" `
+                      --query "value[].properties.provisioningState" `
+                      --output json | ConvertFrom-Json
+                    if ($LASTEXITCODE -ne 0 -or $connections.Count -eq 0 -or ($connections | Where-Object { $_ -ne 'Succeeded' })) {
+                      throw 'Kusto export data connection verification failed.'
+                    }
+                    $alertPrincipalId = $deployment.properties.outputs.exportCompletenessAlertPrincipalId.value
+                    Write-Host "The export completeness alert identity ($alertPrincipalId) needs Reader on the Kusto cluster; until it has it, that alert's evaluations fail."
                   }
