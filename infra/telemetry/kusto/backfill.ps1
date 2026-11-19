@@ -162,13 +162,17 @@ if ($PlanOnly) {
     return
 }
 
+function Format-Duration([timespan]$Span) { '{0}:{1:mm\:ss}' -f ($Span.Days * 24 + $Span.Hours), $Span }
+
 $appended = 0L
 $started = Get-Date
 for ($i = 0; $i -lt $slices.Count; $i++) {
     $slice = $slices[$i]
     $rows = Copy-Slice $slice.Start $slice.End
     $appended += $rows
-    Write-Host ("[{0}/{1}] {2:u} .. {3:u}: ~{4} workspace events, {5} appended ({6:hh\:mm\:ss} elapsed)" -f ($i + 1), $slices.Count, $slice.Start, $slice.End, $slice.Events, $rows, ((Get-Date) - $started))
+    $elapsed = (Get-Date) - $started
+    $remaining = New-TimeSpan -Seconds ([int]($elapsed.TotalSeconds / ($i + 1) * ($slices.Count - $i - 1)))
+    Write-Host ("[{0}/{1}] {2:u} .. {3:u}: ~{4} workspace events, {5} appended ({6} elapsed, ~{7} left)" -f ($i + 1), $slices.Count, $slice.Start, $slice.End, $slice.Events, $rows, (Format-Duration $elapsed), (Format-Duration $remaining))
 }
 Write-Host "Appended $appended rows to AppEvents."
 
@@ -186,6 +190,7 @@ let WorkspaceEvents = toscalar($workspace.AppEvents
 let KustoEvents = toscalar(AppEventsDedup | where TimeGenerated >= $from and TimeGenerated < $to | count);
 print Workspace = WorkspaceEvents, Kusto = KustoEvents
 "@
+    Write-Host ("  {0:yyyy-MM-dd}: workspace {1}, Kusto {2}" -f $day, $counts.Workspace, $counts.Kusto)
     if ([long]$counts.Workspace -gt 0 -or [long]$counts.Kusto -gt 0) {
         New-Object -TypeName psobject -Property @{ Day = $day.ToString('yyyy-MM-dd'); Workspace = [long]$counts.Workspace; Kusto = [long]$counts.Kusto; Missing = [long]$counts.Workspace - [long]$counts.Kusto }
     }
