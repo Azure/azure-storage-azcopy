@@ -4,7 +4,8 @@
 # path uses, and appends to AppEvents only the events AppEventsDedup lacks. Overlapping or repeated runs add
 # nothing, so a failed run can simply be rerun.
 #
-# The caller needs Log Analytics Reader on the workspace and Ingestor (or Admin) on the database. Only data in the
+# The caller needs Log Analytics Reader on the workspace, and Admin (or both Viewer and Ingestor) on the database:
+# Ingestor for the appends, Viewer for the counts and the AppEventsDedup lookups. Only data in the
 # workspace's interactive retention is readable; older data must be restored or searched into a table first.
 # A slice of 20,000 events takes about 10 seconds. For a long range, run several instances on separate date ranges
 # at once; Log Analytics allows 5 concurrent queries per user.
@@ -67,13 +68,13 @@ function Invoke-Kusto([string]$Csl, [switch]$Command) {
         $response | Where-Object TableKind -eq 'PrimaryResult' | Select-Object -First 1
     }
     foreach ($row in $table.Rows) {
-        $record = [ordered]@{}
+        $record = @{}
         for ($i = 0; $i -lt $table.Columns.Count; $i++) { $record[$table.Columns[$i].ColumnName] = $row[$i] }
-        [pscustomobject]$record
+        New-Object -TypeName psobject -Property $record
     }
 }
 
-function Format-KustoTime([datetime]$Time) { "datetime($($Time.ToString("yyyy-MM-ddTHH:mm:ss.fffffff'Z'", [Globalization.CultureInfo]::InvariantCulture)))" }
+function Format-KustoTime([datetime]$Time) { "datetime($($Time.ToUniversalTime().ToString('o')))" }
 
 function Copy-Slice([datetime]$SliceStart, [datetime]$SliceEnd) {
     $from = Format-KustoTime $SliceStart
@@ -116,38 +117,43 @@ $workspace.AppEvents
 
 # Slices tile the whole range, so events that reach the workspace late still fall in one. Consecutive hours share a
 # slice while it stays under the limit; a busier hour is split evenly.
-$ends = [Collections.Generic.List[object]]::new()
+# The script avoids .NET types beyond core ones so it also runs in ConstrainedLanguage mode (SAW, Windows PowerShell 5.1).
+function New-Boundary([datetime]$BoundaryEnd, [long]$Events) { New-Object -TypeName psobject -Property @{ End = $BoundaryEnd; Events = $Events } }
+function Get-CeilingDivision([long]$Dividend, [long]$Divisor) { [long](($Dividend - $Dividend % $Divisor) / $Divisor) + [long]($Dividend % $Divisor -ne 0) }
 $pending = 0L
-foreach ($hour in $hours) {
-    $hourStart = ([datetime]$hour.Hour).ToUniversalTime()
-    $hourEnd = $hourStart.AddHours(1)
-    if ($hourStart -lt $Start) { $hourStart = $Start }
-    if ($hourEnd -gt $End) { $hourEnd = $End }
-    $events = [long]$hour.Events
-    if ($events -gt $MaxEventsPerSlice) {
-        if ($pending -gt 0) { $ends.Add([pscustomobject]@{ End = $hourStart; Events = $pending }); $pending = 0 }
-        $parts = [long][math]::Ceiling($events / $MaxEventsPerSlice)
-        $step = [long](($hourEnd - $hourStart).Ticks / $parts)
-        for ($i = 1; $i -le $parts; $i++) {
-            $partEnd = if ($i -eq $parts) { $hourEnd } else { $hourStart.AddTicks($step * $i) }
-            $ends.Add([pscustomobject]@{ End = $partEnd; Events = [long][math]::Ceiling($events / $parts) })
+$ends = @(
+    foreach ($hour in $hours) {
+        $hourStart = ([datetime]$hour.Hour).ToUniversalTime()
+        $hourEnd = $hourStart.AddHours(1)
+        if ($hourStart -lt $Start) { $hourStart = $Start }
+        if ($hourEnd -gt $End) { $hourEnd = $End }
+        $events = [long]$hour.Events
+        if ($events -gt $MaxEventsPerSlice) {
+            if ($pending -gt 0) { New-Boundary $hourStart $pending; $pending = 0 }
+            $parts = Get-CeilingDivision $events $MaxEventsPerSlice
+            $step = [long](($hourEnd - $hourStart).Ticks / $parts)
+            for ($i = 1; $i -le $parts; $i++) {
+                $partEnd = if ($i -eq $parts) { $hourEnd } else { $hourStart.AddTicks($step * $i) }
+                New-Boundary $partEnd (Get-CeilingDivision $events $parts)
+            }
+        } elseif ($pending + $events -gt $MaxEventsPerSlice) {
+            New-Boundary $hourStart $pending
+            $pending = $events
+        } else {
+            $pending += $events
         }
-    } elseif ($pending + $events -gt $MaxEventsPerSlice) {
-        $ends.Add([pscustomobject]@{ End = $hourStart; Events = $pending })
-        $pending = $events
-    } else {
-        $pending += $events
     }
-}
-$ends.Add([pscustomobject]@{ End = $End; Events = $pending })
-$slices = [Collections.Generic.List[object]]::new()
+    New-Boundary $End $pending
+)
 $sliceStart = $Start
-foreach ($boundary in $ends) {
-    if ($boundary.End -gt $sliceStart) {
-        $slices.Add([pscustomobject]@{ Start = $sliceStart; End = $boundary.End; Events = $boundary.Events })
-        $sliceStart = $boundary.End
+$slices = @(
+    foreach ($boundary in $ends) {
+        if ($boundary.End -gt $sliceStart) {
+            New-Object -TypeName psobject -Property @{ Start = $sliceStart; End = $boundary.End; Events = $boundary.Events }
+            $sliceStart = $boundary.End
+        }
     }
-}
+)
 
 $total = ($hours | Measure-Object -Property Events -Sum).Sum
 Write-Host "$total workspace events in $($hours.Count) hours -> $($slices.Count) slices"
@@ -157,12 +163,12 @@ if ($PlanOnly) {
 }
 
 $appended = 0L
-$watch = [Diagnostics.Stopwatch]::StartNew()
+$started = Get-Date
 for ($i = 0; $i -lt $slices.Count; $i++) {
     $slice = $slices[$i]
     $rows = Copy-Slice $slice.Start $slice.End
     $appended += $rows
-    Write-Host ("[{0}/{1}] {2:u} .. {3:u}: ~{4} workspace events, {5} appended ({6:mm\:ss} elapsed)" -f ($i + 1), $slices.Count, $slice.Start, $slice.End, $slice.Events, $rows, $watch.Elapsed)
+    Write-Host ("[{0}/{1}] {2:u} .. {3:u}: ~{4} workspace events, {5} appended ({6:hh\:mm\:ss} elapsed)" -f ($i + 1), $slices.Count, $slice.Start, $slice.End, $slice.Events, $rows, ((Get-Date) - $started))
 }
 Write-Host "Appended $appended rows to AppEvents."
 
@@ -181,10 +187,10 @@ let KustoEvents = toscalar(AppEventsDedup | where TimeGenerated >= $from and Tim
 print Workspace = WorkspaceEvents, Kusto = KustoEvents
 "@
     if ([long]$counts.Workspace -gt 0 -or [long]$counts.Kusto -gt 0) {
-        [pscustomobject]@{ Day = $day.ToString('yyyy-MM-dd'); Workspace = [long]$counts.Workspace; Kusto = [long]$counts.Kusto; Missing = [long]$counts.Workspace - [long]$counts.Kusto }
+        New-Object -TypeName psobject -Property @{ Day = $day.ToString('yyyy-MM-dd'); Workspace = [long]$counts.Workspace; Kusto = [long]$counts.Kusto; Missing = [long]$counts.Workspace - [long]$counts.Kusto }
     }
 }
-$comparison | Format-Table | Out-String | Write-Host
+$comparison | Format-Table Day, Workspace, Kusto, Missing | Out-String | Write-Host
 $short = @($comparison | Where-Object Missing -gt 0)
 if ($short) {
     Write-Warning "$($short.Count) day(s) have events missing from Kusto; rerun for those days."
