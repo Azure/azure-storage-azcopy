@@ -23,6 +23,7 @@ package azcopy
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
@@ -31,14 +32,14 @@ import (
 )
 
 type cookedSyncOptions struct {
-	useSyncOrchestrator        bool
-	useStreamingMergeJoin      bool
-	orchestratorOptions        *traverser.SyncOrchestratorOptions
-	errorChannel               chan<- traverser.TraverserErrorItemInfo
-	allowLocalSymlinkFollowing bool
-	blobType                   common.BlobType
-	blockBlobTier              common.BlockBlobTier
-	backupMode                 bool
+	useSyncOrchestrator   bool
+	useStreamingMergeJoin bool
+	useFlatListing        bool
+	orchestratorOptions   *traverser.SyncOrchestratorOptions
+	errorChannel          chan<- traverser.TraverserErrorItemInfo
+	blobType              common.BlobType
+	blockBlobTier         common.BlockBlobTier
+	backupMode            bool
 	// defaulted, inferred, processed and validated user options
 	source      common.ResourceString
 	destination common.ResourceString
@@ -107,7 +108,16 @@ func (s *cookedSyncOptions) applyFromToSrcDest(src, dst string, fromTo common.Fr
 	case common.EFromTo.Unknown():
 		return fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", src, dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		s.source = common.ResourceString{Value: common.ToExtendedPath(traverser.CleanLocalPath(src))}
+		localSource := traverser.CleanLocalPath(src)
+		// Sync always strips the top directory, so "dir/*" is just "dir"; a glob would hand the orchestrator a non-directory traverser.
+		root, err := NormalizeResourceRoot(localSource, common.ELocation.Local())
+		if err != nil {
+			return err
+		}
+		if diff := strings.TrimPrefix(localSource, root); diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+			localSource = root
+		}
+		s.source = common.ResourceString{Value: common.ToExtendedPath(localSource)}
 		s.destination, err = traverser.SplitResourceString(dst, s.fromTo.To())
 		if err != nil {
 			return err
@@ -162,8 +172,8 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.s2SPreserveAccessTier = ternary.IffNotNil(opts.S2SPreserveAccessTier, true)
 	s.useSyncOrchestrator = opts.UseSyncOrchestrator
 	s.useStreamingMergeJoin = opts.UseStreamingMergeJoin
+	s.useFlatListing = opts.UseFlatListing
 	s.errorChannel = opts.ErrorChannel
-	s.allowLocalSymlinkFollowing = opts.AllowLocalSymlinkFollowing
 	s.blobType, s.blockBlobTier, s.backupMode = opts.BlobType, opts.BlockBlobTier, opts.BackupMode
 	if opts.UseSyncOrchestrator {
 		settings := traverser.NewDefaultSyncOrchestratorOptions()
@@ -311,6 +321,14 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 	if s.useSyncOrchestrator && !traverser.UseSyncOrchestrator {
 		return errors.New("sync orchestration requires the smslidingwindow build tag")
 	}
+	if s.useSyncOrchestrator && s.fromTo.From() == common.ELocation.Local() && strings.Contains(s.source.ValueLocal(), "*") {
+		if _, statErr := common.OSStat(s.source.ValueLocal()); statErr != nil { // an existing path literally containing '*' is not a glob
+			return errors.New("Wildcards other than a trailing /* are not supported for sync with the sync orchestrator.")
+		}
+	}
+	if s.useFlatListing && (s.fromTo != common.EFromTo.BlobBlob() || !s.useSyncOrchestrator || !s.useStreamingMergeJoin) {
+		return errors.New("flat sync requires FNS-to-FNS Blob transfers, the sync orchestrator, and streaming merge-join")
+	}
 	if s.fromTo.IsNFS() {
 		err = PerformNFSSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, &s.hardlinks, s.symlinks)
 		if err != nil {
@@ -322,11 +340,10 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 		if err != nil {
 			return err
 		}
-		if s.symlinks == common.ESymlinkHandlingType.Follow() &&
-			!(s.allowLocalSymlinkFollowing && s.fromTo.From() == common.ELocation.Local()) {
-			return fmt.Errorf("the '--follow-symlinks' flag is not applicable for sync operations")
+		if s.symlinks == common.ESymlinkHandlingType.Follow() && s.fromTo.From() != common.ELocation.Local() {
+			return fmt.Errorf("the '--follow-symlinks' flag is only applicable when uploading from the local file system.")
 		} else if s.symlinks == common.ESymlinkHandlingType.Preserve() {
-			return fmt.Errorf("the '--preserve-symlinks' flag is not applicable for sync operations")
+			return fmt.Errorf("The '--preserve-symlinks' flag is only supported when syncing between local and Azure Files NFS, or between Azure Files NFS shares.")
 		}
 	}
 
@@ -357,6 +374,10 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 	if s.cpkOptions.IsSourceEncrypted {
 		common.GetLifecycleMgr().Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
 			"Assuming source is encrypted.")
+	}
+
+	if buildmode.IsMover && s.errorChannel == nil {
+		return errors.New("SyncOptions.ErrorChannel is required in Mover builds")
 	}
 
 	return nil

@@ -154,27 +154,10 @@ func IsDestinationNotFoundDuringSync(err error) bool {
 }
 
 func (r *syncRun) writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncOrchErrorInfo) {
-	if errorChannel != nil {
-		// Use defer/recover to handle the case where the channel is closed during cancellation.
-		// This prevents "panic: send on closed channel" when the job is being cancelled.
-		// [TO DO] - BugFix - Identify the root cause for cases when the error channel is closed prematurely and fix it.
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				// Channel was closed, log the error instead of panicking
-				r.syncOrchestratorLog(
-					common.LogError,
-					fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
-			}
-		}()
-
-		select {
-		case errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			r.syncOrchestratorLog(
-				common.LogError,
-				fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
+	if sendErr := sendToErrorChannel(r.ctx, errorChannel, err); sendErr != nil {
+		r.syncOrchestratorLog(
+			common.LogError,
+			fmt.Sprintf("Could not deliver error to channel (%v): %v", sendErr, err.ErrorMessage()))
 	}
 }
 
@@ -582,6 +565,9 @@ func (r *syncRun) validate(cca *SyncJob, orchestratorOptions *SyncOrchestratorOp
 	if cca.Recursive {
 		return errors.New("sync orchestrator does not support recursive traversal. Use --recursive=false.")
 	}
+	if cca.UseFlatListing && (cca.FromTo != common.EFromTo.BlobBlob() || !useStreamingMergeJoin(cca)) {
+		return errors.New("flat sync requires the Blob-to-Blob streaming merge-join")
+	}
 
 	if r.orchestratorOptions == nil {
 		return errors.New("orchestrator options are required for sync orchestrator")
@@ -622,16 +608,17 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.FromTo.From(), cca.FromTo.To()), true)
 
-		// The streaming merge-join uses its own directory-crawl parallelism
-		// (MOVER_SYNC_MJ_TRAV, default 32)
-		// — separate from the indexMap path, which keeps
-		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
-		// source and destination concurrently within each directory.
+		// Flat sync needs only the root crawl task; its range scheduler controls concurrency.
+		// Directory-based merge-join uses MOVER_SYNC_MJ_TRAV instead of the indexMap setting.
 		if r.orchestratorOptions != nil {
-			mjTrav := resolveMergeJoinParallelTraversers()
-			r.orchestratorOptions.parallelTraversers = mjTrav
-			r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-				"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+			if cca.UseFlatListing {
+				r.orchestratorOptions.parallelTraversers = 1
+			} else {
+				mjTrav := resolveMergeJoinParallelTraversers()
+				r.orchestratorOptions.parallelTraversers = mjTrav
+				r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+					"Streaming merge-join directory-crawl parallelism set to %d (%s)", mjTrav, enum.EEnvironmentVariable.MoverSyncMergeJoinTraversers().Name), true)
+			}
 		}
 	} else if cca.UseStreamingMergeJoin {
 		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -640,6 +627,11 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 	}
 
 	// Initialize resource limits based on source/destination types
+	if cca.UseFlatListing {
+		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Flat FNS-to-FNS sync enabled: %s controls bounded range concurrency",
+			enum.EEnvironmentVariable.MoverFlatListParallelism().Name), true)
+	}
 	r.initializeLimits(r.orchestratorOptions)
 	return r.runSyncOrchestrator(cca, enumerator, ctx)
 }
@@ -655,16 +647,19 @@ func (r *syncRun) syncOrchestratorHandler(cca *SyncJob, enumerator *SyncEnumerat
 // 5. Schedule transfers after comparison is complete
 func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, ctx context.Context) error {
 	startTime := time.Now()
-	mainCtx, cancel := context.WithCancel(ctx) // Use mainCtx for operations, cancel to signal shutdown
-	defer cancel()                             // Ensure cancellation happens on exit
+	var cancel context.CancelFunc
+	r.ctx, cancel = context.WithCancel(ctx) // cancel signals shutdown and releases senders blocked on the error channel
+	defer cancel()                          // Ensure cancellation happens on exit
 
 	if cca.SetCancel != nil {
 		cca.SetCancel(cancel)
 	}
+	var rangeFailure error
+	var rangeFailureOnce sync.Once
 
 	// Initialize semaphore for directory concurrency control
 	if r.enableThrottling {
-		r.semaphore = r.NewThrottleSemaphore(mainCtx, cca.JobID)
+		r.semaphore = r.NewThrottleSemaphore(cca.JobID)
 		defer r.semaphore.Close()
 	}
 
@@ -676,8 +671,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 			cca.Destination.Value,
 			r.orchestratorOptions.ToStringMap()))
 
-	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
-
 	// syncOneDir processes a single directory by creating source and destination traversers,
 	// enumerating files, comparing them, and scheduling transfers. It also discovers
 	// subdirectories and enqueues them for further processing.
@@ -685,8 +678,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		dir parallel.Directory,
 		enqueueDir func(parallel.Directory),
 		enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		defer crawlWg.Done() // Signal this task is done when it finishes
-
 		// Track that this directory entered the processing queue
 		defer r.totalDirectoriesProcessed.Add(1)
 
@@ -694,7 +685,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 		// Acquire semaphore slot to limit concurrent directory processing
 		if r.enableThrottling {
-			err = r.semaphore.AcquireSourceSlot(mainCtx)
+			err = r.semaphore.AcquireSourceSlot(r.ctx)
 			if err != nil {
 				r.syncOrchestratorLog(
 					common.LogError,
@@ -728,6 +719,15 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		// Get traverser templates from enumerator
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
+		ptt.Options.SuppressCrawlStats = true
+		stt.Options.SuppressCrawlStats = true
+		configureFlatSyncTraversers(cca, &ptt.Options, &stt.Options)
+
+		// Only the root directory should emit itself; every other directory is already emitted by its parent's listing.
+		if dir.(minimalStoredObject).RelativePath != common.AZCOPY_PATH_SEPARATOR_STRING {
+			ptt.Options.IncludeRoot = false
+			stt.Options.IncludeRoot = false
+		}
 
 		var errMsg string
 
@@ -737,18 +737,17 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		// listings are lexicographically sorted; keep the existing indexMap-based flow for
 		// local filesystem sources (which do not guarantee sorted listing order).
 		if useStreamingMergeJoin(cca) {
-			r.mergeJoinSyncOneDirLog(common.LogDebug,
-				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).RelativePath))
+			r.mergeJoinTraceLog("Processing dir '%s'", dir.(minimalStoredObject).RelativePath)
 
 			var subDirs []minimalStoredObject
 			var mergeErr error
 
-			// Per-directory cancellable context derived from mainCtx. mergeJoinTwoWaySyncDir cancels it
+			// Per-directory cancellable context derived from r.ctx. mergeJoinTwoWaySyncDir cancels it
 			// and drains/awaits all producer goroutines on EVERY return path, so no detached traverser
 			// goroutine outlives this directory's processing and later writes to the shared sync error
 			// channel after it is closed ("send on closed channel"). Creating the traversers with dirCtx
-			// (not mainCtx) is what lets that cancel abort their in-flight listing promptly.
-			dirCtx, dirCancel := context.WithCancel(mainCtx)
+			// (not r.ctx) is what lets that cancel abort their in-flight listing promptly.
+			dirCtx, dirCancel := context.WithCancel(r.ctx)
 
 			// Channel-based merge-join: bridge source + destination traversers into
 			// back-pressured channels and merge their sorted streams.
@@ -796,16 +795,30 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 				return stErr
 			}
 
-			subDirs, mergeErr = r.mergeJoinTwoWaySyncDir(
-				dirCtx,
-				dirCancel,
-				enumerator,
-				cca,
-				dir.(minimalStoredObject).RelativePath,
-				pt,
-				st,
-				isDestinationPresent,
-			)
+			workers := 1
+			if cca.UseFlatListing {
+				workers, mergeErr = flatListParallelism()
+			}
+			if mergeErr != nil {
+				dirCancel()
+			} else if workers > 1 {
+				mergeErr = r.mergeStaticFlatRanges(dirCtx, workers, enumerator, cca, pt, st)
+				dirCancel()
+				if mergeErr != nil {
+					rangeFailureOnce.Do(func() { rangeFailure = mergeErr })
+				}
+			} else {
+				subDirs, mergeErr = r.mergeJoinTwoWaySyncDir(
+					dirCtx,
+					dirCancel,
+					enumerator,
+					cca,
+					dir.(minimalStoredObject).RelativePath,
+					pt,
+					st,
+					isDestinationPresent,
+				)
+			}
 
 			r.srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
 
@@ -838,7 +851,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 			// Enqueue discovered subdirectories for processing
 			for _, sub_dir := range subDirs {
-				crawlWg.Add(1)
 				enqueueDir(minimalStoredObject{
 					RelativePath:           sub_dir.RelativePath,
 					ChangeTime:             sub_dir.ChangeTime,
@@ -853,7 +865,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		pt, err := cca.NewTraverser(
 			pt_src,
 			ptt.Location,
-			mainCtx,
+			r.ctx,
 			ptt.Options)
 		if err != nil {
 			errMsg = fmt.Sprintf("SyncOrchestrator: Creating source traverser failed for dir %s: %s", pt_src.Value, err)
@@ -872,7 +884,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		st, err := cca.NewTraverser(
 			st_src,
 			stt.Location,
-			mainCtx,
+			r.ctx,
 			stt.Options)
 		if err != nil {
 			errMsg = fmt.Sprintf("SyncOrchestrator: Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
@@ -907,7 +919,11 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.FromTo.From(),
 			})
-			r.reportSourceFailure()
+			// Traversers count their own failures, except a root path they could not scan.
+			var rootErr *rootScanError
+			if errors.As(err, &rootErr) {
+				r.reportSourceFailure()
+			}
 			return err
 		}
 
@@ -963,7 +979,7 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 		if isDestinationPresent && traverseDestination {
 			// Acquire target slot for target traversal
 			if r.enableThrottling {
-				err = r.semaphore.AcquireTargetSlot(mainCtx)
+				err = r.semaphore.AcquireTargetSlot(r.ctx)
 				if err != nil {
 					errMsg = fmt.Sprintf("Failed to acquire target slot for dir %s: %s", st_src.Value, err)
 					r.syncOrchestratorLog(common.LogError, errMsg)
@@ -1040,7 +1056,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 
 		// Enqueue discovered subdirectories for processing
 		for _, sub_dir := range stra.sub_dirs {
-			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
 			enqueueDir(minimalStoredObject{
 				RelativePath:           sub_dir.RelativePath,
 				ChangeTime:             sub_dir.ChangeTime,
@@ -1100,8 +1115,6 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 	}
 	defer cleanupFunc()
 
-	crawlWg.Add(1) // Add the root directory to the WaitGroup
-
 	// Random dequeue is only used for mover-high-perf Blob/BlobFS<->Blob/BlobFS transfers: it helps
 	// avoid partition hotspotting when writing to Azure Blob Storage. Fall back to the original
 	// BFS/DFS-hybrid dequeue for everything else (default azcopy CLI, mover-default builds, and
@@ -1111,19 +1124,29 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 	}
 	randomDequeue := buildmode.HighPerf() && isAzureBlobLocation(cca.FromTo.From()) && isAzureBlobLocation(cca.FromTo.To())
 
+	// In the mover high-perf profile, raise the crawler's queue-depth self-shutdown threshold
+	// (MOVER_HIGH_PERF_MAX_QUEUED_DIRS, default 50M) so a flat blob namespace with tens of millions of
+	// virtual directories keeps full crawl parallelism instead of collapsing to parallelism/4. Left at
+	// the generic 1M default for the default CLI and mover-default builds. The parallelism/4 shutdown is
+	// retained as a deadlock-safe last resort at this raised threshold.
+	maxQueueDirs := ResolveHighPerfMaxQueueDirs()
+
 	// crawlOutput closes only after every crawler worker (and thus every in-flight syncOneDir + its
-	// merge-join producers) has returned — the drain signal we use on cancellation below.
-	crawlOutput, crawlStats := parallel.CrawlWithStats(mainCtx, root, syncOneDir, int(r.crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue})
+	// merge-join producers) has returned, on both completion and cancellation.
+	crawlOutput, crawlStats := parallel.CrawlWithStats(r.ctx, root, syncOneDir, int(r.crawlParallelism), parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: maxQueueDirs})
 
 	// Periodically log crawl/merge-join concurrency stats (mover-high-perf only): active crawl
 	// workers, queued directories, in-flight merge-join directory syncs, and goroutine count. This
 	// is diagnostic-only output to help investigate concurrency/throughput issues in high-perf runs;
 	// it is not needed for the default azcopy CLI or mover-default builds.
 	if buildmode.HighPerf() {
-		statsCtx, stopStats := context.WithCancel(mainCtx)
+		r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"[CrawlConfig] crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
+			r.crawlParallelism, crawlStats.MaxQueueDirectories, randomDequeue), true)
+		statsCtx, stopStats := context.WithCancel(r.ctx)
 		defer stopStats()
 		go func() {
-			ticker := time.NewTicker(30 * time.Second)
+			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 			for {
 				select {
@@ -1132,37 +1155,30 @@ func (r *syncRun) runSyncOrchestrator(cca *SyncJob, enumerator *SyncEnumerator, 
 				case <-ticker.C:
 					active := atomic.LoadInt64(&crawlStats.ActiveWorkers)
 					queued := atomic.LoadInt64(&crawlStats.QueuedDirs)
+					peakQueued := atomic.LoadInt64(&crawlStats.PeakQueuedDirs)
 					activeMJ := r.activeMergeJoinDirs.Load()
 					goroutines := runtime.NumGoroutine()
 					r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-						"[CrawlStats] activeWorkers=%d/%d, queuedDirs=%d, activeMergeJoin=%d, goroutines=%d",
-						active, int(r.crawlParallelism), queued, activeMJ, goroutines), true)
+						"[CrawlStats] activeWorkers=%d/%d, queuedDirs=%d, activeMergeJoin=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d",
+						active, int(r.crawlParallelism), queued, activeMJ, goroutines, crawlStats.MaxQueueDirectories, peakQueued), true)
 				}
 			}
 		}()
 	}
 
-	// Cancellation-aware wait
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		crawlWg.Wait() // Wait for all goroutines in background
-	}()
-
-	select {
-	case <-done:
-		// All goroutines completed normally
-		r.syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
-
-	case <-mainCtx.Done():
-		// On cancel, drain crawlOutput until it closes so no producer is still alive to write to the
-		// caller-owned sync ErrorChannel after it is closed. (crawlWg can't be used here: the crawler
-		// abandons queued dirs on cancel, so it would never reach zero.)
-		r.syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected; waiting for in-flight traversers to drain.")
-		for range crawlOutput {
-		}
+	// syncOneDir already reports failures through ErrorChannel. Consume the crawler's duplicate
+	// error results continuously so its bounded output cannot block workers from taking the next
+	// directory. Closure also guarantees no traverser can write to ErrorChannel after we return.
+	for range crawlOutput {
+	}
+	if r.ctx.Err() != nil {
 		r.syncOrchestratorLog(common.LogInfo, "All in-flight traversers drained after cancellation.")
 		return nil
+	}
+	r.syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
+	// A range error returned here could not be recorded through the scanner channel.
+	if rangeFailure != nil {
+		return rangeFailure
 	}
 
 	// Always try to finalize the enumerator. This will set cancellation complete and dispatch final part
@@ -1223,5 +1239,19 @@ func (r *syncRun) syncOrchestratorLog(level common.LogLevel, toLog string, logTo
 		default:
 			common.GetLifecycleMgr().Info(toLog)
 		}
+	}
+}
+
+func configureFlatSyncTraversers(cca *SyncJob, source, destination *InitResourceTraverserOptions) {
+	if !cca.UseFlatListing || cca.FromTo != common.EFromTo.BlobBlob() {
+		return
+	}
+	// List the entire selected prefix once. No virtual directories are emitted,
+	// so the root is the only crawl task and the existing file merge streams all blobs.
+	for _, options := range []*InitResourceTraverserOptions{source, destination} {
+		location := common.ELocation.Blob()
+		options.FlatListing = true
+		options.Recursive = true
+		options.DestResourceType = &location
 	}
 }

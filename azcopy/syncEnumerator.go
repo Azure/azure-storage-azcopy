@@ -31,17 +31,15 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *jobLifecycleManager) (se *traverser.SyncEnumerator, err error) {
+func (s *syncExecutor) initSyncEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *jobLifecycleManager) (se *traverser.SyncEnumerator, err error) {
 
 	// TODO: enable symlink support in a future release after evaluating the implications
-	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := s.opts.fromTo.To()
@@ -209,9 +207,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		SrcServiceClient: s.srp.srcServiceClient,
 		DstServiceClient: s.srp.dstServiceClient,
 	}
-	if provider, ok := ctx.Value("customS3CredsForSTE").(credentials.Provider); ok {
-		copyJobTemplate.Provider = provider
-	}
+	copyJobTemplate.Provider = s.srp.s3CredentialProvider
 
 	// transferScheduler is responsible for batching up transfers and sending them to the job service
 	transferScheduler := s.newSyncTransferProcessor(NumOfFilesPerDispatchJobPart, copyJobTemplate)

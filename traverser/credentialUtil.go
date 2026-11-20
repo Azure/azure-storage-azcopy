@@ -4,6 +4,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -24,6 +25,10 @@ func CreateClientOptions(logger common.ILoggerResetable, srcCred, reauthCred azc
 	// Process-wide HTTP client (initialized at startup from ConcurrencySettings) so we
 	// reuse connections and transports across the front-end and STE.
 	client := common.GetGlobalHTTPClient(logger)
+	var transport policy.Transporter = client
+	if buildmode.HighPerf() {
+		transport = &flatListPoolTransport{shared: client}
+	}
 
 	return ste.NewClientOptions(
 		policy.RetryOptions{
@@ -35,7 +40,7 @@ func CreateClientOptions(logger common.ILoggerResetable, srcCred, reauthCred azc
 		policy.TelemetryOptions{
 			ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
 		},
-		client, /*Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace*/
+		transport, /*Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace*/
 		logOptions,
 		srcCred,
 		reauthCred)

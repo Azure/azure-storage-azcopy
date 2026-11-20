@@ -127,6 +127,11 @@ func (cooked *CookedCopyCmdArgs) SetS2sGetPropertiesInBackend(value bool) {
 	cooked.s2sGetPropertiesInBackend = value
 }
 
+// SetUseFlatListing opts an FNS-to-FNS Blob copy into flat listing. The caller must confirm both accounts are FNS.
+func (cooked *CookedCopyCmdArgs) SetUseFlatListing(value bool) {
+	cooked.useFlatListing = value
+}
+
 // ============================================================================
 // End CookedCopyCmdArgs - Property Setters
 // ============================================================================
@@ -353,63 +358,38 @@ type RawMoverSyncCmdArgs struct {
 	BlockSizeMB             float64
 	BlockBlobTier           string
 	UseStreamingMergeJoin   bool
+	UseFlatListing          bool
 }
 
-type SyncCmdArgsInput struct {
-	Src string
-	Dst string
-
-	// named credentials (bound to --src-cred / --dst-cred flags)
-	SrcCredName string
-	DstCredName string
-
-	FromTo                  string
-	Recursive               bool
-	ExcludeRegex            string
-	FollowSymlinks          bool
-	DeleteDestination       string
-	PreservePOSIXProperties bool
-	PreservePermissions     bool
-	PreserveSMBInfo         bool
-	ForceIfReadOnly         bool
-	Md5ValidationOption     string
-	PutMd5                  bool
-	CompareHash             string
-	LocalHashStorageMode    string
-	Hardlinks               string
-	S2sPreserveAccessTier   bool
-	S2sPreserveBlobTags     bool
-}
-
-func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
+func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (*cookedSyncCmdArgs, error) {
 	raw := rawSyncCmdArgs{
-		src:                        args.Src,
-		dst:                        args.Dst,
-		SrcCredName:                args.SrcCredName,
-		DstCredName:                args.DstCredName,
-		fromTo:                     args.FromTo,
-		recursive:                  args.Recursive,
-		excludeRegex:               args.ExcludeRegex,
-		followSymlinks:             args.FollowSymlinks,
-		allowLocalSymlinkFollowing: true,
-		deleteDestination:          args.DeleteDestination,
-		preservePOSIXProperties:    args.PreservePOSIXProperties,
-		preservePermissions:        args.PreservePermissions,
-		preserveSMBInfo:            args.PreserveSMBInfo,
-		preserveInfo:               args.PreserveInfo,
-		forceIfReadOnly:            args.ForceIfReadOnly,
-		md5ValidationOption:        args.Md5ValidationOption,
-		putMd5:                     args.PutMd5,
-		compareHash:                args.CompareHash,
-		localHashStorageMode:       args.LocalHashStorageMode,
-		hardlinks:                  args.Hardlinks,
-		includeDirectoryStubs:      args.IncludeDirectoryStubs,
-		s2sPreserveAccessTier:      args.S2sPreserveAccessTier,
-		s2sPreserveBlobTags:        args.S2sPreserveBlobTags,
-		blobType:                   args.BlobType.String(),
-		blockSizeMB:                args.BlockSizeMB,
-		blockBlobTier:              args.BlockBlobTier,
-		useStreamingMergeJoin:      args.UseStreamingMergeJoin,
+		src:                     args.Src,
+		dst:                     args.Dst,
+		SrcCredName:             args.SrcCredName,
+		DstCredName:             args.DstCredName,
+		fromTo:                  args.FromTo,
+		recursive:               args.Recursive,
+		excludeRegex:            args.ExcludeRegex,
+		followSymlinks:          args.FollowSymlinks,
+		deleteDestination:       args.DeleteDestination,
+		preservePOSIXProperties: args.PreservePOSIXProperties,
+		preservePermissions:     args.PreservePermissions,
+		preserveSMBInfo:         args.PreserveSMBInfo,
+		preserveInfo:            args.PreserveInfo,
+		forceIfReadOnly:         args.ForceIfReadOnly,
+		md5ValidationOption:     args.Md5ValidationOption,
+		putMd5:                  args.PutMd5,
+		compareHash:             args.CompareHash,
+		localHashStorageMode:    args.LocalHashStorageMode,
+		hardlinks:               args.Hardlinks,
+		includeDirectoryStubs:   args.IncludeDirectoryStubs,
+		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
+		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
+		blobType:                args.BlobType.String(),
+		blockSizeMB:             args.BlockSizeMB,
+		blockBlobTier:           args.BlockBlobTier,
+		useStreamingMergeJoin:   args.UseStreamingMergeJoin,
+		useFlatListing:          args.UseFlatListing,
 	}
 	return raw.cook()
 }

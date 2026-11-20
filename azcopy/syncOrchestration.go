@@ -14,7 +14,7 @@ import (
 // PreparedSync supports existing embedded callers that separately prepare and run enumeration.
 // Both this adapter and Client.Sync use the same library executor.
 type PreparedSync struct {
-	syncer     *syncer
+	syncer     *syncExecutor
 	enumerator *traverser.SyncEnumerator
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -28,6 +28,9 @@ func (c *Client) PrepareSync(ctx context.Context, src, dst string, opts SyncOpti
 	if src == "" || dst == "" {
 		return nil, fmt.Errorf("source and destination must be specified for sync")
 	}
+	if !common.HasLifecycleMgr() {
+		return nil, fmt.Errorf("a lifecycle manager must be configured before sync")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	jobID := opts.JobID
 	if jobID.IsEmpty() {
@@ -37,14 +40,14 @@ func (c *Client) PrepareSync(ctx context.Context, src, dst string, opts SyncOpti
 	if manager == nil {
 		manager = c.GetCredentialManager()
 	}
-	s, err := newSyncer(ctx, jobID, src, dst, opts, manager)
+	s, err := newSyncExecutor(ctx, jobID, src, dst, opts, manager)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	s.logger = common.AzcopyScanningLogger
 	mgr := NewJobLifecycleManager(common.GetLifecycleMgr())
-	enumerator, err := s.initEnumerator(ctx, c.GetLogLevel(), mgr)
+	enumerator, err := s.initSyncEnumerator(ctx, c.GetLogLevel(), mgr)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -106,7 +109,7 @@ func (p *PreparedSync) State() PreparedSyncState {
 	}
 }
 
-func (s *syncer) cancelAndDrain(cancel context.CancelFunc, jobID common.JobID, lifecycle *jobLifecycleManager) error {
+func (s *syncExecutor) cancelAndDrain(cancel context.CancelFunc, jobID common.JobID, lifecycle *jobLifecycleManager) error {
 	cancel()
 	cleanupCtx, stopCleanup := context.WithTimeout(context.Background(), time.Minute)
 	defer stopCleanup()
@@ -126,7 +129,7 @@ func (s *syncer) cancelAndDrain(cancel context.CancelFunc, jobID common.JobID, l
 	return lifecycle.CancelAndDrain(cleanupCtx, jobID)
 }
 
-func (s *syncer) enumerate(ctx context.Context, enumerator *traverser.SyncEnumerator) error {
+func (s *syncExecutor) enumerate(ctx context.Context, enumerator *traverser.SyncEnumerator) error {
 	if !s.opts.useSyncOrchestrator {
 		return enumerator.Enumerate()
 	}
@@ -139,6 +142,7 @@ func (s *syncer) enumerate(ctx context.Context, enumerator *traverser.SyncEnumer
 		Source: s.opts.source, Destination: s.opts.destination, FromTo: s.opts.fromTo,
 		JobID: s.spt.jobID, Recursive: s.opts.recursive, DeleteDestination: s.opts.deleteDestination,
 		PreserveInfo: s.opts.preserveInfo, UseStreamingMergeJoin: s.opts.useStreamingMergeJoin,
+		UseFlatListing:        s.opts.useFlatListing,
 		EncodeDestinationPath: func(path string) string { return PathEncodeRules(path, s.opts.fromTo, false, false) },
 		Log: func(level common.LogLevel, message string, console bool) {
 			if logger != nil {

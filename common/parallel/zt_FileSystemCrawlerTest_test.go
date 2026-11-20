@@ -22,17 +22,190 @@ package parallel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var windowsSystemDirectory = ""
+
+func TestCrawlContinuesAfterDirectoryErrors(t *testing.T) {
+	for _, message := range []string{"403 AuthorizationPermissionMismatch", "directory listing failed"} {
+		t.Run(message, func(t *testing.T) {
+			const failedDirs, healthyDirs = 1100, 100
+			directoryErr := errors.New(message)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			var healthy atomic.Int64
+			output, stats := CrawlWithStats(ctx, -1, func(dir Directory, enqueue func(Directory), _ func(DirectoryEntry, error)) error {
+				n := dir.(int)
+				if n == -1 {
+					for i := 0; i < failedDirs+healthyDirs; i++ {
+						enqueue(i)
+					}
+					return nil
+				}
+				if n < failedDirs {
+					return directoryErr
+				}
+				healthy.Add(1)
+				return nil
+			}, 64)
+
+			var received int
+			for result := range output {
+				_, err := result.Item()
+				assert.ErrorIs(t, err, directoryErr)
+				received++
+			}
+			require.NoError(t, ctx.Err(), "crawl must finish rather than wait for cancellation")
+			assert.Equal(t, failedDirs, received)
+			assert.Equal(t, int64(healthyDirs), healthy.Load())
+			assert.Zero(t, atomic.LoadInt64(&stats.ActiveWorkers))
+			assert.Zero(t, atomic.LoadInt64(&stats.QueuedDirs))
+		})
+	}
+}
+
+func TestCrawlErrorSendStopsOnCancellation(t *testing.T) {
+	// Exercise the worker directly so the output stays full until the worker exits.
+	// Reading it before exit would hide an uncancellable send.
+	const workers = 64
+	directoryErr := errors.New("403 AuthorizationPermissionMismatch")
+	output := make(chan CrawlResult, 1000)
+	for i := 0; i < cap(output); i++ {
+		output <- CrawlResult{err: directoryErr}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{}, workers)
+	c := &crawler{
+		output:      output,
+		parallelism: workers,
+		stats:       &CrawlStats{},
+		cond:        sync.NewCond(&sync.Mutex{}),
+		workerBody: func(Directory, func(Directory), func(DirectoryEntry, error)) error {
+			started <- struct{}{}
+			return directoryErr
+		},
+	}
+	for i := 0; i < workers+1; i++ {
+		c.unstartedDirs = append(c.unstartedDirs, i)
+	}
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go c.workerLoop(ctx, &wg, i)
+	}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		// Unblock workers even if the implementation regresses, without leaking goroutines.
+		for i := 0; i < workers; i++ {
+			select {
+			case <-output:
+			default:
+			}
+		}
+		<-done
+	})
+	for i := 0; i < workers; i++ {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("workers did not reach directory error handling")
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("workers remained blocked on full output after cancellation")
+	}
+	assert.Len(t, output, cap(output), "cancellation must not require draining output")
+	assert.Zero(t, atomic.LoadInt64(&c.stats.ActiveWorkers))
+	assert.Equal(t, int64(1), atomic.LoadInt64(&c.stats.QueuedDirs))
+}
+
+func TestCrawlQueueLimitOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int
+		want  int64
+	}{
+		{"default", 0, 1_000_000},
+		{"negative", -1, 1_000_000},
+		{"override", 100_000_000, 100_000_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output, stats := CrawlWithStats(context.Background(), "root",
+				func(Directory, func(Directory), func(DirectoryEntry, error)) error { return nil },
+				8, CrawlOptions{MaxQueueDirectories: tc.limit})
+			for range output {
+			}
+			if stats.MaxQueueDirectories != tc.want {
+				t.Fatalf("effective threshold = %d, want %d", stats.MaxQueueDirectories, tc.want)
+			}
+		})
+	}
+}
+
+func TestCrawlQueueLimitShutdown(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		limit, queued, worker int
+		recentShutdown        bool
+		wantShutdown          bool
+	}{
+		{"at threshold", 4, 4, 7, false, false},
+		{"above threshold", 4, 5, 7, false, true},
+		{"protected worker", 4, 5, 2, false, false},
+		{"gradual shutdown", 4, 5, 7, true, false},
+		{"old million limit", 1_000_000, 1_000_001, 7, false, true},
+		{"raised fifty million limit", 50_000_000, 1_000_001, 7, false, false},
+		{"raised hundred million limit", 100_000_000, 1_000_001, 7, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &crawler{
+				unstartedDirs:       []Directory{"root"},
+				parallelism:         8,
+				maxQueueDirectories: tc.limit,
+				stats:               &CrawlStats{},
+				cond:                sync.NewCond(&sync.Mutex{}),
+				workerBody: func(_ Directory, enqueue func(Directory), _ func(DirectoryEntry, error)) error {
+					for i := 0; i < tc.queued; i++ {
+						enqueue("child")
+					}
+					return nil
+				},
+			}
+			if tc.recentShutdown {
+				c.lastAutoShutdown = time.Now()
+			}
+			keepWorking, err := c.processOneDirectory(context.Background(), tc.worker)
+			if err != nil || keepWorking == tc.wantShutdown {
+				t.Fatalf("keepWorking=%t, err=%v, want shutdown=%t", keepWorking, err, tc.wantShutdown)
+			}
+			if c.stats.PeakQueuedDirs != int64(tc.queued) || c.stats.QueuedDirs != int64(tc.queued) || c.stats.ActiveWorkers != 0 {
+				t.Fatalf("unexpected stats: %+v", c.stats)
+			}
+		})
+	}
+}
 
 func TestParallelEnumerationFindsTheRightFiles(t *testing.T) {
 	a := assert.New(t)

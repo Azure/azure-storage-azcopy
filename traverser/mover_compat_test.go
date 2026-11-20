@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/stretchr/testify/assert"
@@ -56,8 +57,15 @@ func TestM1SyncComparisonUsesJobProtocol(t *testing.T) {
 func TestM2TraversalReusesSharedTransport(t *testing.T) {
 	first := CreateClientOptions(nil, nil, nil)
 	second := CreateClientOptions(nil, nil, nil)
-	require.Same(t, common.GetGlobalHTTPClient(nil), first.Transport)
-	require.Same(t, first.Transport, second.Transport)
+	// High-perf builds wrap the shared client so flat listings get a dedicated pool; all other requests still use the shared client.
+	sharedClient := func(transport policy.Transporter) policy.Transporter {
+		if pool, ok := transport.(*flatListPoolTransport); ok {
+			return pool.shared
+		}
+		return transport
+	}
+	require.Same(t, common.GetGlobalHTTPClient(nil), sharedClient(first.Transport))
+	require.Same(t, sharedClient(first.Transport), sharedClient(second.Transport))
 	require.NotSame(t, first.PerRetryPolicies[len(first.PerRetryPolicies)-1], second.PerRetryPolicies[len(second.PerRetryPolicies)-1],
 		"transport reuse must not share per-job credential policies")
 }

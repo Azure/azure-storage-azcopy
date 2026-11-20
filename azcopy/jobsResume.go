@@ -44,6 +44,8 @@ type ResumeJobOptions struct {
 	Handler        ResumeJobHandler
 	SrcCredName    string
 	DstCredName    string
+	// S3CredentialProviderFactory is only called for S3 sources.
+	S3CredentialProviderFactory S3CredentialProviderFactory
 	// Retained for compatibility; nonempty transfer selections are rejected as obsolete.
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
@@ -69,6 +71,9 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	}
 	if len(opts.IncludeTransfer) != 0 || len(opts.ExcludeTransfer) != 0 {
 		return ResumeJobResult{}, errors.New("include/exclude transfer lists are obsolete and cannot be used when resuming a job")
+	}
+	if !common.HasLifecycleMgr() {
+		return ResumeJobResult{}, errors.New("a lifecycle manager must be configured before resume")
 	}
 	ctx, cancelOperation := context.WithCancel(ctx)
 	defer cancelOperation()
@@ -133,6 +138,9 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	)
 	if err != nil {
 		return ResumeJobResult{}, fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
+	}
+	if opts.S3CredentialProviderFactory != nil && jobDetails.FromTo.From() == common.ELocation.S3() {
+		applyS3CredentialProvider(&srcCredInfo, opts.S3CredentialProviderFactory())
 	}
 
 	resumeHandler := common.GetLifecycleMgr()

@@ -170,6 +170,18 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 	}
 }
 
+// FlatBlobObjectPath joins a root and key without normalizing the blob name.
+// Leading/repeated separators and dot segments must remain literal.
+func FlatBlobObjectPath(root, key string) string {
+	if key == "" {
+		return root
+	}
+	if root == "" || strings.HasSuffix(root, "/") {
+		return root + key
+	}
+	return root + "/" + key
+}
+
 // Current size of block names in AzCopy is 48B. To be consistent with this,
 // we have to generate a 36B string and then base64-encode this to retain the
 // same size.

@@ -154,14 +154,23 @@ func (r *syncRun) initializeLimits(orchestratorOptions *SyncOrchestratorOptions)
 	}
 
 	// Validate if the crawl parallelism is within acceptable limits
-	// We need to check how many directories can be enumerated in parallel based on system memory
-	safeParallelismLimit := GetSafeParallelismLimit(r.maxActiveFiles, maxDirectoryDirectChildCount, r.orchestratorOptions.fromTo)
-	if r.crawlParallelism > safeParallelismLimit {
+	// We need to check how many directories can be enumerated in parallel based on system memory.
+	// The high-perf mover profile opts out: callers set crawlParallelism explicitly (MOVER_SYNC_MJ_TRAV)
+	// and accept the memory tradeoff, so honor the requested value verbatim instead of clamping.
+	if buildmode.HighPerf() {
 		r.syncOrchestratorLog(
-			common.LogWarning,
-			fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", r.crawlParallelism, safeParallelismLimit),
+			common.LogInfo,
+			fmt.Sprintf("High-perf profile: bypassing GetSafeParallelismLimit, using crawl parallelism = %d", r.crawlParallelism),
 			true)
-		r.crawlParallelism = safeParallelismLimit
+	} else {
+		safeParallelismLimit := GetSafeParallelismLimit(r.maxActiveFiles, maxDirectoryDirectChildCount, r.orchestratorOptions.fromTo)
+		if r.crawlParallelism > safeParallelismLimit {
+			r.syncOrchestratorLog(
+				common.LogWarning,
+				fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", r.crawlParallelism, safeParallelismLimit),
+				true)
+			r.crawlParallelism = safeParallelismLimit
+		}
 	}
 
 	r.syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
@@ -259,9 +268,9 @@ type ThrottleSemaphore struct {
 
 // NewThrottleSemaphore creates and initializes a new ThrottleSemaphore with pre-filled tokens
 // and starts the associated stats monitor for dynamic throttling adjustments.
-func (r *syncRun) NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *ThrottleSemaphore {
+func (r *syncRun) NewThrottleSemaphore(jobID common.JobID) *ThrottleSemaphore {
 	// Create child context for this semaphore
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithCancel(r.ctx)
 
 	// Calculate target semaphore capacity (25% of source capacity by default, configurable)
 	sourceCapacity := r.crawlParallelism

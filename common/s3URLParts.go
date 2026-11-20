@@ -125,7 +125,7 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 
 	// Dispatcher based on configured suffix (allows per-provider parsing differences)
 	switch {
-	case strings.HasSuffix(hostLower, "."+suffix) || hostLower == suffix:
+	case strings.HasSuffix(hostLower, "."+suffix) || hostLower == suffix || isAWSChinaHost(hostLower, suffix):
 		// Pick provider-specific matcher using well-known suffixes
 		switch {
 		case suffix == "amazonaws.com":
@@ -171,6 +171,11 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	}
 
 	return nil, false
+}
+
+// isAWSChinaHost reports whether host is an AWS China endpoint, which ends in amazonaws.com.cn instead of amazonaws.com.
+func isAWSChinaHost(hostLower, suffix string) bool {
+	return suffix == "amazonaws.com" && strings.HasSuffix(hostLower, ".amazonaws.com.cn")
 }
 
 // matchAWSHost uses the legacy AWS regex; requires suffix to be present.

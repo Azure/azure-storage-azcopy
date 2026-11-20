@@ -23,8 +23,12 @@ package traverser
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -35,6 +39,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/pkg/errors"
 
@@ -51,7 +56,8 @@ type BlobTraverser struct {
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization for the sake of saving costs
-	ParallelListing bool
+	ParallelListing    bool
+	FlatListingEnabled bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -69,10 +75,12 @@ type BlobTraverser struct {
 	includeRoot      bool
 	destResourceType *common.Location
 
-	errorChannel chan<- TraverserErrorItemInfo
+	errorChannel                chan<- TraverserErrorItemInfo
+	incrementEnumerationFailure func(common.EntityType)
 
 	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
-	isSyncDestination bool
+	isSyncDestination  bool
+	suppressCrawlStats bool
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
@@ -130,24 +138,6 @@ func (e ErrorBlobInfo) Location() common.Location {
 // only succeeds against an explicitly-known HNS destination.
 func (t *BlobTraverser) destIsBlobFS() bool {
 	return t.destResourceType != nil && *t.destResourceType == common.ELocation.BlobFS()
-}
-
-func (t *BlobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
-	if t.errorChannel != nil {
-		// Defense-in-depth: the orchestrator drains all traversers before the caller closes this
-		// channel, but recover in case a send still races a close during cancellation.
-		defer func() {
-			if r := recover(); r != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
-			}
-		}()
-		select {
-		case t.errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
-	}
 }
 
 var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
@@ -306,15 +296,15 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if respErr.ErrorCode == string(bloberror.BlobUsesCustomerSpecifiedEncryption) {
-			t.writeToBlobErrorChannel(errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, errorBlobInfo)
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
 		if respErr.RawResponse == nil {
-			t.writeToBlobErrorChannel(errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %w", respErr)
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
-			t.writeToBlobErrorChannel(errorBlobInfo)
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		} else if t.isSyncDestination && t.isDFS && respErr.StatusCode == 404 {
 			// If this is a sync destination traversal and we get a 404, it means the blob doesn't exist
@@ -369,12 +359,10 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				storedObject.BlobTags = blobTagsMap
 			}
 		}
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-		}
 
 		err := ProcessIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
+		t.countProcessedObject(storedObject, storedObject.EntityType, err)
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
 		if !t.include.Deleted() && (isBlob || err != nil) {
@@ -401,12 +389,10 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.Folder(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-		}
 
 		err := ProcessIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
+		t.countProcessedObject(storedObject, common.EEntityType.Folder(), err)
 		if err != nil {
 			return err
 		}
@@ -436,13 +422,9 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				blobURLParts.ContainerName,
 			)
 
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.Folder(),
-					common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-			}
-
 			err = ProcessIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
+			t.countProcessedObject(storedObject, common.EEntityType.Folder(), err)
 			if err != nil {
 				return err
 			}
@@ -467,13 +449,30 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
 	if t.ParallelListing {
-		return t.parallelList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+		return t.ParallelList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 	}
 
 	return t.serialList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 }
 
-func (t *BlobTraverser) parallelList(containerClient *container.Client, containerName string, searchPrefix string,
+// countProcessedObject counts a successfully processed object as scanned. A failed one is counted as a failure,
+// which also counts it as scanned, and is sent to the error channel.
+func (t *BlobTraverser) countProcessedObject(object StoredObject, entityType common.EntityType, processErr error) {
+	if processErr != nil {
+		countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{
+			BlobName:             object.Name,
+			BlobPath:             object.RelativePath,
+			BlobLastModifiedTime: object.LastModifiedTime,
+			Dir:                  entityType == common.EEntityType.Folder(),
+			Error:                processErr})
+		return
+	}
+	if t.incrementEnumerationCounter != nil {
+		t.incrementEnumerationCounter(entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
+	}
+}
+
+func (t *BlobTraverser) ParallelList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	emptyPrefix := true
 
@@ -657,16 +656,34 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 	// Blob/BlobFS -> Local, File, S3, etc.
 	randomDequeue := buildmode.HighPerf() && t.destResourceType != nil &&
 		(*t.destResourceType == common.ELocation.Blob() || *t.destResourceType == common.ELocation.BlobFS())
-	cCrawled, _ := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, parallel.CrawlOptions{RandomDequeue: randomDequeue})
+	cCrawled, crawlStats := parallel.CrawlWithStats(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism,
+		parallel.CrawlOptions{RandomDequeue: randomDequeue, MaxQueueDirectories: ResolveHighPerfMaxQueueDirs()})
+	if !t.suppressCrawlStats {
+		stopStats := StartBlobCrawlStats(workerContext, crawlStats, EnumerationParallelism, randomDequeue)
+		defer stopStats()
+	}
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			t.writeToBlobErrorChannel(ErrorBlobInfo{Error: workerError})
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{Error: workerError, Dir: true})
 			return workerError
 		}
 
 		object := item.(StoredObject)
 
+		processErr := ProcessIfPassedFilters(filters, object, processor)
+		_, processErr = getProcessingError(processErr)
+		if processErr != nil {
+			countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{
+				BlobName:             object.Name,
+				BlobPath:             object.RelativePath,
+				BlobLastModifiedTime: object.LastModifiedTime,
+				Dir:                  object.EntityType == common.EEntityType.Folder(),
+				Error:                processErr})
+			return processErr
+		}
+
+		// A failed entity is counted as scanned by the failure callback, so only successes are counted here.
 		if t.incrementEnumerationCounter != nil {
 			if UseSyncOrchestrator && !object.IsVirtualPrefix {
 				t.incrementEnumerationCounter(object.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
@@ -674,18 +691,6 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 				// XDM: Retaining the old behavior but this seems like a bug.
 				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
-		}
-
-		processErr := ProcessIfPassedFilters(filters, object, processor)
-		_, processErr = getProcessingError(processErr)
-		if processErr != nil {
-			t.writeToBlobErrorChannel(ErrorBlobInfo{
-				BlobName:             object.Name,
-				BlobPath:             object.RelativePath,
-				BlobLastModifiedTime: object.LastModifiedTime,
-				Dir:                  object.EntityType == common.EEntityType.Folder(),
-				Error:                processErr})
-			return processErr
 		}
 	}
 
@@ -697,6 +702,45 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 	}
 
 	return nil
+}
+
+func logBlobCrawlStats(message string) {
+	common.GetLifecycleMgr().Info("[AzCopy] [INFO] " + message)
+}
+
+func StartBlobCrawlStats(ctx context.Context, stats *parallel.CrawlStats, parallelism int, randomDequeue bool) func() {
+	if !buildmode.HighPerf() {
+		return func() {}
+	}
+	logBlobCrawlStats(fmt.Sprintf(
+		"[CrawlConfig] mode=blob-parallel, crawlParallelism=%d, maxQueueDirectories=%d, randomDequeue=%t; queue limit is a worker-shedding threshold, not a hard queue or memory cap",
+		parallelism, stats.MaxQueueDirectories, randomDequeue))
+	statsCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		logStats := func(final bool) {
+			logBlobCrawlStats(fmt.Sprintf(
+				"[CrawlStats] mode=blob-parallel, activeWorkers=%d/%d, queuedDirs=%d, goroutines=%d, maxQueueDirectories=%d, peakQueuedDirs=%d, final=%t",
+				atomic.LoadInt64(&stats.ActiveWorkers), parallelism, atomic.LoadInt64(&stats.QueuedDirs),
+				runtime.NumGoroutine(), stats.MaxQueueDirectories, atomic.LoadInt64(&stats.PeakQueuedDirs), final))
+		}
+		for {
+			select {
+			case <-statsCtx.Done():
+				logStats(true)
+				return
+			case <-ticker.C:
+				logStats(false)
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func GetEntityType(metadata map[string]*string) common.EntityType {
@@ -742,23 +786,200 @@ func (t *BlobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	return object
 }
 
+type flatListPoolKey struct{}
+
+// Only requests carrying a flat-page context use the isolated pool; STE and other calls keep theirs.
+type flatListPoolTransport struct {
+	shared  *http.Client
+	once    sync.Once
+	listing *http.Client
+	err     error
+}
+
+func (t *flatListPoolTransport) Do(req *http.Request) (*http.Response, error) {
+	if req.Context().Value(flatListPoolKey{}) == nil {
+		return t.shared.Do(req)
+	}
+	t.once.Do(func() {
+		workers, err := flatListParallelism()
+		if err != nil {
+			t.err = err
+			return
+		}
+		connections := 4
+		if workers > 1 {
+			connections = 2 * workers
+		}
+		t.listing, t.err = common.NewIsolatedHTTPClient(t.shared, connections)
+		if t.err == nil {
+			logFlatListing(common.LogInfo, fmt.Sprintf("[FlatListPool] mode=dedicated pools=1 max_connections_per_host=%d", connections))
+		}
+	})
+	if t.err != nil {
+		return nil, t.err
+	}
+	return t.listing.Do(req)
+}
+
+type flatListPage struct {
+	response container.ListBlobsFlatResponse
+	err      error
+}
+
 func (t *BlobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
+	if t.FlatListingEnabled {
+		workers, err := flatListParallelism()
+		if err != nil {
+			return err
+		}
+		if workers > 1 {
+			if err := t.validateFlatRanges(); err != nil {
+				return err
+			}
+			var countMu, processMu sync.Mutex
+			return runFlatListRanges(t.ctx, workers, t.reportFlatRangeError, func(ctx context.Context, bounds flatListRange) error {
+				clone := t.rangeClone(ctx, &countMu)
+				processingFailed := false
+				err := clone.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, nil,
+					func(object StoredObject) error {
+						processMu.Lock()
+						defer processMu.Unlock()
+						if preprocessor != nil {
+							preprocessor(&object)
+						}
+						_, err := getProcessingError(ProcessIfPassedFilters(filters, object, processor))
+						if err != nil {
+							processingFailed = true
+						}
+						return err
+					}, nil, &bounds)
+				if err != nil && !processingFailed {
+					return clone.flatRangeError(bounds, err)
+				}
+				return err
+			})
+		}
+	}
+	return t.serialListRange(containerClient, containerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters, nil)
+}
 
+func (t *BlobTraverser) serialListRange(containerClient *container.Client, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter, bounds *flatListRange) error {
+	prefetch := t.FlatListingEnabled
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
-	})
-	for pager.More() {
-		resp, err := pager.NextPage(t.ctx)
+	responseFormat := container.StorageResponseFormatAuto
+	listCtx := t.ctx
+	if buildmode.HighPerf() {
+		listCtx = context.WithValue(listCtx, flatListPoolKey{}, struct{}{})
+	}
+	if t.FlatListingEnabled {
+		responseFormat = container.StorageResponseFormatArrow
+		// Scope the newer contract to listing; the shared client and transfer context stay unchanged.
+		listCtx = context.WithValue(listCtx, ste.ServiceAPIVersionOverride, "2026-06-06")
+	}
+	options := &container.ListBlobsFlatOptions{
+		Prefix:         &prefix,
+		Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		ResponseFormat: responseFormat,
+	}
+	if bounds != nil {
+		start, end, empty := flatListRequestBounds(searchPrefix, prefix, *bounds)
+		if empty {
+			return nil
+		}
+		if start != "" {
+			options.StartFrom = &start
+		}
+		if end != "" {
+			options.EndBefore = &end
+		}
+	}
+	pager := containerClient.NewListBlobsFlatPager(options)
+	fetchPage := func(ctx context.Context) (flatListPage, bool) {
+		if !pager.More() {
+			return flatListPage{}, false
+		}
+		page := flatListPage{}
+		page.response, page.err = pager.NextPage(ctx)
+		return page, true
+	}
+	nextPage := func() (flatListPage, bool) { return fetchPage(listCtx) }
+	if prefetch {
+		ctx, cancel := context.WithCancel(listCtx)
+		pages := make(chan flatListPage)
+		// The unbuffered handoff permits only one page ahead, including in-flight work.
+		// Only this goroutine accesses the pager; the consumer retains ordered processing.
+		go func() {
+			defer close(pages)
+			for ctx.Err() == nil {
+				page, more := fetchPage(ctx)
+				if !more {
+					return
+				}
+				pages <- page
+				if page.err != nil {
+					return
+				}
+			}
+		}()
+		nextPage = func() (flatListPage, bool) {
+			page, more := <-pages
+			return page, more
+		}
+		defer func() {
+			cancel()
+			// Drain and join so no prefetch request outlives traversal, even on processor failure.
+			for range pages {
+			}
+		}()
+	}
+	for {
+		if prefetch && t.ctx.Err() != nil {
+			return t.ctx.Err()
+		}
+		page, more := nextPage()
+		if !more {
+			break
+		}
+		resp, err := page.response, page.err
 		if err != nil {
+			if bounds == nil { // a failed range is reported through reportFlatRangeError instead
+				countScanErrorAndSendToErrorChannel(t.ctx, t.errorChannel, t.incrementEnumerationFailure, ErrorBlobInfo{Error: err, Dir: true})
+			}
 			return fmt.Errorf("cannot list blobs. Failed with error %w", err)
+		}
+		contentType := ternary.DerefOrZero(resp.ContentType)
+		if bounds != nil {
+			if !strings.HasPrefix(contentType, "application/vnd.apache.arrow.stream") {
+				return fmt.Errorf("static range listing requires Arrow; received %q (no partial-result fallback)", contentType)
+			}
+			if resp.Segment == nil {
+				return fmt.Errorf("static range listing returned a nil segment")
+			}
+			// Trust service pagination; validate this page's boundary records before emission.
+			items := resp.Segment.BlobItems
+			if len(items) > 0 {
+				first, last := items[0], items[len(items)-1]
+				if first == nil || last == nil || first.Name == nil || last.Name == nil ||
+					!strings.HasPrefix(*first.Name, prefix) || !strings.HasPrefix(*last.Name, prefix) {
+					return fmt.Errorf("static range listing returned a name outside prefix %q", prefix)
+				}
+				firstKey := strings.TrimPrefix(*first.Name, searchPrefix)
+				lastKey := strings.TrimPrefix(*last.Name, searchPrefix)
+				if firstKey < bounds.start || (bounds.end != "" && lastKey >= bounds.end) ||
+					firstKey > lastKey || (len(items) > 1 && firstKey == lastKey) {
+					return fmt.Errorf("static range bounds/order violation: first=%q last=%q range=[%q,%q)", firstKey, lastKey, bounds.start, bounds.end)
+				}
+			}
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
+			if prefetch && t.ctx.Err() != nil {
+				return t.ctx.Err()
+			}
 			// if the blob represents a hdi folder, then skip it
 			if DoesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
@@ -786,18 +1007,18 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 				storedObject.BlobTags = blobTagsMap
 			}
 
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
-			}
-
 			processErr := ProcessIfPassedFilters(filters, storedObject, processor)
 			_, processErr = getProcessingError(processErr)
+			t.countProcessedObject(storedObject, common.EEntityType.File(), processErr)
 			if processErr != nil {
 				return processErr
 			}
 		}
 	}
 
+	if prefetch {
+		return t.ctx.Err()
+	}
 	return nil
 }
 
@@ -821,7 +1042,9 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       ternary.DerefOrZero(ternary.FirstOrZero(blobOpts).IsDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
+		incrementEnumerationFailure: opts.IncrementEnumerationFailure,
 		isSyncDestination:           opts.IsSyncDestination,
+		suppressCrawlStats:          opts.SuppressCrawlStats,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
@@ -837,6 +1060,10 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	if disableHierarchicalScanning == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.ParallelListing = false
+	}
+	if opts.FlatListing && !t.isDFS && opts.DestResourceType != nil && *opts.DestResourceType == common.ELocation.Blob() {
+		t.ParallelListing = false
+		t.FlatListingEnabled = true
 	}
 	return
 }

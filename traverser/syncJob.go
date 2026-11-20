@@ -17,6 +17,7 @@ type SyncJob struct {
 	DeleteDestination     common.DeleteDestination
 	PreserveInfo          bool
 	UseStreamingMergeJoin bool
+	UseFlatListing        bool
 	NewTraverser          func(common.ResourceString, common.Location, context.Context, InitResourceTraverserOptions) (ResourceTraverser, error)
 
 	SetCancel                                    func(context.CancelFunc)

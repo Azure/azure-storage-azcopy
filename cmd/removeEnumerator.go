@@ -45,7 +45,7 @@ var ErrNothingToRemove = errors.New("nothing found to remove")
 // provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
-// TODO: initEnumerator is significantly more verbose at this point, evaluate the impact of switching over
+// TODO: initSyncEnumerator is significantly more verbose at this point, evaluate the impact of switching over
 func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnumerator, err error) {
 	var sourceTraverser traverser.ResourceTraverser
 

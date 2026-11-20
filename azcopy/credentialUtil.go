@@ -43,6 +43,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 const (
@@ -536,30 +537,7 @@ func MDAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 // client to interact with storage service. Default options are modified to suit azcopy.
 // srcCred is required in cases where source is authenticated via oAuth for S2S transfers
 func CreateClientOptions(logger common.ILoggerResetable, srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
-	logOptions := ste.LogOptions{}
-
-	if logger != nil {
-		logOptions.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
-		logOptions.Log = logger.Log
-		logOptions.ShouldLog = logger.ShouldLog
-	}
-	// Job-level/global client if available so we reuse connections and transports.
-	client := common.GetGlobalHTTPClient(logger)
-
-	return ste.NewClientOptions(
-		policy.RetryOptions{
-			MaxRetries:    ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		policy.TelemetryOptions{
-			ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
-		},
-		client, /*Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace*/
-		logOptions,
-		srcCred,
-		targetCred)
+	return traverser.CreateClientOptions(logger, srcCred, targetCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

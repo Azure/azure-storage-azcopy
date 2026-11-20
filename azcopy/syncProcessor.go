@@ -43,7 +43,7 @@ import (
 type ObjectDeleter func(rootPath string, target common.Location, object traverser.StoredObject) error
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func (s *syncer) newSyncTransferProcessor(
+func (s *syncExecutor) newSyncTransferProcessor(
 	numOfTransfersPerPart int,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) { s.spt.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
@@ -269,6 +269,9 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 	}
 	*/
 	objectPath := path.Join(b.rootPath, object.RelativePath)
+	if target == common.ELocation.Blob() {
+		objectPath = common.FlatBlobObjectPath(b.rootPath, object.RelativePath)
+	}
 	if object.RelativePath == "\x00" && target != common.ELocation.Blob() {
 		return nil // Do nothing, we don't want to accidentally delete the root.
 	} else if object.RelativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.

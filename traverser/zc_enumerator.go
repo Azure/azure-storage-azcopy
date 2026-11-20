@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,8 @@ import (
 
 var EnumerationParallelism = 1
 var EnumerationParallelStatFiles = false
+
+const highPerfDefaultMaxQueueDirs = 50_000_000
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
 // the following interfaces and structs allow the sync enumerator
@@ -307,9 +310,12 @@ type filePropsProvider interface {
 func NewStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time,
 	size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
-		Name:               name,
-		RelativePath:       relativePath,
-		EntityType:         entityType,
+		Name:         name,
+		RelativePath: relativePath,
+		EntityType:   entityType,
+		// Normalize to UTC so the time references the shared time.UTC location instead of a
+		// per-blob fixedZone("GMT") allocated by the SDK's RFC1123 date parse. With millions of
+		// enumerated blobs buffered in the shuffle window, those per-blob zones added GBs of live heap.
 		LastModifiedTime:   lmt.UTC(),
 		Size:               size,
 		CacheControl:       props.CacheControl(),
@@ -406,6 +412,8 @@ type InitResourceTraverserOptions struct {
 
 	// Used by local traverser. Extended to Blob, S3 traversers by XDM.
 	// Interface is extensible to other traversers.
+	// Sends wait for the consumer until the traversal context ends, so the consumer must keep draining
+	// until the traversal returns and the channel must not be closed before then.
 	ErrorChannel chan<- TraverserErrorItemInfo
 
 	CpkOptions common.CpkOptions // Used by Blob
@@ -420,7 +428,7 @@ type InitResourceTraverserOptions struct {
 	GetPropertiesInFrontend bool // Files, GCP, S3
 	IncludeDirectoryStubs   bool // Blob, BlobFS
 	PreserveBlobTags        bool // Blob, BlobFS
-	StripTopDir             bool // Local
+	StripTopDir             bool // Local, Files
 
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
@@ -434,6 +442,13 @@ type InitResourceTraverserOptions struct {
 	// Used to return specific not-found errors that the sync orchestrator handles gracefully,
 	// and to keep per-share throttling stats polling on the source share only.
 	IsSyncDestination bool
+
+	// SuppressCrawlStats avoids per-directory diagnostics when an outer sync crawler reports them.
+	SuppressCrawlStats bool
+
+	// FlatListing is a per-job opt-in for confirmed FNS-to-FNS transfers.
+	// In the high-performance profile it requests Arrow with SDK-managed XML fallback.
+	FlatListing bool
 
 	// ScanPacer, when non-nil, meters the IOPS consumed by metadata operations
 	// (List, GetProperties) issued during enumeration, so scanning respects the
@@ -889,6 +904,24 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 		ObjectDispatcher: objectDispatcher,
 		Finalize:         finalizer,
 	}
+}
+
+// Resolve per job to honor feature-config overrides; zero preserves the generic default.
+func ResolveHighPerfMaxQueueDirs() int {
+	if !buildmode.HighPerf() {
+		return 0
+	}
+	setting := enum.EEnvironmentVariable.HighPerfMaxQueuedDirs()
+	v := strings.TrimSpace(setting.Get())
+	if v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+		WarnStdoutAndScanningLog(fmt.Sprintf(
+			"Invalid %s=%q; expected a positive integer, using default %d",
+			setting.Name, v, highPerfDefaultMaxQueueDirs))
+	}
+	return highPerfDefaultMaxQueueDirs
 }
 
 func WarnStdoutAndScanningLog(toLog string) {

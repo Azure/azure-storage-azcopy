@@ -624,7 +624,9 @@ func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory comm
 		jptm.ChunkStatusLogger(),
 		jptm,
 		jptm.SlicePool(),
-		jptm.CacheLimiter())
+		jptm.CacheLimiter(),
+		jptm.FromTo() == common.EFromTo.LocalFileNFS(),
+	)
 
 	return chunkReader
 }

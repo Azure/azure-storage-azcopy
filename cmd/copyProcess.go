@@ -13,6 +13,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
@@ -236,11 +237,14 @@ func (cooked *CookedCopyCmdArgs) ToCopyOptions() (azcopy.CopyOptions, error) {
 		PreserveLastModifiedTime: cooked.preserveLastModifiedTime,
 		PreservePermissions:      cooked.preservePermissions.IsTruthy(),
 		PreserveOwner:            &cooked.preserveOwner, PreserveInfo: &cooked.preserveInfo,
+		UseFlatListing:          cooked.useFlatListing,
 		PreservePosixProperties: cooked.preservePOSIXProperties, AsSubDir: &cooked.asSubdir,
 		PosixPropertiesStyle: cooked.posixPropertiesStyle,
 		Symlinks:             cooked.SymlinkHandling, Hardlinks: cooked.hardlinks, BackupMode: cooked.backupMode,
 		PutMd5: cooked.putMd5, CheckMd5: cooked.md5ValidationOption, CheckLength: cooked.CheckLength,
-		S2SPreserveProperties: &preserveProperties, S2SPreserveAccessTier: &preserveTier,
+		// The library validates an enabled value as if the user chose it, so the untouched default is sent as nil.
+		S2SPreserveProperties:       ternary.Iff(preserveProperties && !cooked.s2sPreserveProperties.isManuallySet, nil, &preserveProperties),
+		S2SPreserveAccessTier:       ternary.Iff(preserveTier && !cooked.s2sPreserveAccessTier.isManuallySet, nil, &preserveTier),
 		S2SDetectSourceChanged:      cooked.s2sSourceChangeValidation,
 		S2SHandleInvalidateMetadata: cooked.s2sInvalidMetadataHandleOption,
 		S2SPreserveBlobTags:         cooked.S2sPreserveBlobTags, ListOfVersionIds: cooked.ListOfVersionIDs,
@@ -283,7 +287,7 @@ type cookedCopyHandler struct{ cooked *CookedCopyCmdArgs }
 
 func (h cookedCopyHandler) OnStart(ctx azcopy.JobContext) {
 	h.cooked.jobID = ctx.JobID
-	StartSystemStatsMonitorForJobID(ctx.JobID)
+	azcopy.StartSystemStatsMonitor(ctx.JobID)
 	h.cooked.jobStartTime = time.Now()
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, h.cooked.isCleanupJob, h.cooked.cleanupJobMessage))
 }

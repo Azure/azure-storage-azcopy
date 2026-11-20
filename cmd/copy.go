@@ -785,6 +785,7 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo                  bool
 	hardlinks                     common.HardlinkHandlingType
+	useFlatListing                bool
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
 	atomicSkippedArchiveFileCount uint64
@@ -1148,7 +1149,7 @@ type cliCopyHandler struct {
 }
 
 func (c cliCopyHandler) OnStart(ctx azcopy.JobContext) {
-	StartSystemStatsMonitorForJobID(ctx.JobID)
+	azcopy.StartSystemStatsMonitor(ctx.JobID)
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
 
 }

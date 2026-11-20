@@ -547,6 +547,68 @@ func (m *SystemStatsMonitor) Stop() {
 	m.wg.Wait()
 }
 
+var (
+	statsMonitorMu sync.Mutex
+	// statsMonitorStop is non-nil while a monitor started by StartSystemStatsMonitor is running.
+	statsMonitorStop func()
+)
+
+// StartSystemStatsMonitor starts GlobalSystemStatsMonitor with a "-rolling-stats" job log and returns a stop function.
+// LogPathFolder and AzcopyJobPlanFolder must be set before calling. It is a no-op outside Linux,
+// and while a monitor started by this function is still running.
+func StartSystemStatsMonitor(jobID JobID) (stop func(), err error) {
+	noop := func() {}
+	if runtime.GOOS != "linux" {
+		return noop, nil
+	}
+
+	statsMonitorMu.Lock()
+	defer statsMonitorMu.Unlock()
+	if statsMonitorStop != nil {
+		return noop, nil
+	}
+
+	logger := NewJobLogger(jobID, LogInfo, LogPathFolder, "-rolling-stats")
+	logger.OpenLog()
+	monitor, err := NewSystemStatsMonitor(StatsMonitorConfig{
+		Interval:      5 * time.Second,
+		MonitorPaths:  []string{LogPathFolder, AzcopyJobPlanFolder},
+		Logger:        logger,
+		LogConditions: LogConditions{LogInterval: 60 * time.Second},
+	})
+	if err != nil {
+		logger.CloseLog()
+		return noop, err
+	}
+	GlobalSystemStatsMonitor = monitor
+	monitor.Start(context.TODO())
+
+	var once sync.Once
+	stop = func() {
+		once.Do(func() {
+			monitor.UnregisterAllCustomStatsCallbacks()
+			monitor.Stop()
+			StopShareControls()
+			logger.CloseLog()
+			statsMonitorMu.Lock()
+			statsMonitorStop = nil
+			statsMonitorMu.Unlock()
+		})
+	}
+	statsMonitorStop = stop
+	return stop, nil
+}
+
+// StopSystemStatsMonitor stops the monitor started by StartSystemStatsMonitor, if one is running.
+func StopSystemStatsMonitor() {
+	statsMonitorMu.Lock()
+	stop := statsMonitorStop
+	statsMonitorMu.Unlock()
+	if stop != nil {
+		stop()
+	}
+}
+
 // GetSnapshot returns the current point-in-time snapshot
 func (m *SystemStatsMonitor) GetSnapshot() SystemStatsSnapshot {
 	m.snapshotMutex.RLock()

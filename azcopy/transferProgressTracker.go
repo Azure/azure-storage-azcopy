@@ -32,8 +32,30 @@ import (
 
 var _ jobProgressTracker = &transferProgressTracker{}
 
+type CopyEnumerationStats struct {
+	FilesScanned            uint64
+	FoldersScanned          uint64
+	FileEnumerationFailed   uint64
+	FolderEnumerationFailed uint64
+	SkippedArchiveFileCount uint64
+	SkippedSymlinkCount     uint32
+	SkippedSpecialFileCount uint32
+	SkippedHardlinkCount    uint32
+	FirstPartOrdered        bool
+	ScanningComplete        bool
+}
+
+// CopyEnumerationStatsHandler is optional so existing CopyHandler implementations remain compatible.
+type CopyEnumerationStatsHandler interface {
+	OnEnumerationStats(CopyEnumerationStats)
+}
+
 type transferProgressTracker struct {
 	atomicSkippedArchiveFileCount atomic.Uint64
+	atomicFilesScanned            atomic.Uint64
+	atomicFoldersScanned          atomic.Uint64
+	atomicFileEnumerationFailed   atomic.Uint64
+	atomicFolderEnumerationFailed atomic.Uint64
 	jobID                         common.JobID
 	fromTo                        common.FromTo
 	handler                       CopyHandler
@@ -74,6 +96,10 @@ func (tpt *transferProgressTracker) Start() {
 }
 
 func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
+	if handler, ok := tpt.handler.(CopyEnumerationStatsHandler); ok {
+		handler.OnEnumerationStats(tpt.GetEnumerationStats())
+	}
+
 	if tpt.firstPartOrdered() {
 		// fetch a job status
 		summary := jobsAdmin.GetJobSummary(tpt.jobID, !buildmode.IsMover)
@@ -191,28 +217,59 @@ func (tpt *transferProgressTracker) getSkippedHardlinkCount() uint32 {
 	return atomic.LoadUint32(&tpt.atomicSkippedHardlinkCount)
 }
 
-func (tpt *transferProgressTracker) incSkippedArchive() {
-	tpt.atomicSkippedArchiveFileCount.Add(1)
-}
-
 func (tpt *transferProgressTracker) getSkippedArchiveFileCount() uint64 {
 	return tpt.atomicSkippedArchiveFileCount.Load()
 }
 
+func (tpt *transferProgressTracker) GetEnumerationStats() CopyEnumerationStats {
+	return CopyEnumerationStats{
+		FilesScanned:            tpt.atomicFilesScanned.Load(),
+		FoldersScanned:          tpt.atomicFoldersScanned.Load(),
+		FileEnumerationFailed:   tpt.atomicFileEnumerationFailed.Load(),
+		FolderEnumerationFailed: tpt.atomicFolderEnumerationFailed.Load(),
+		SkippedArchiveFileCount: tpt.getSkippedArchiveFileCount(),
+		SkippedSymlinkCount:     tpt.getSkippedSymlinkCount(),
+		SkippedSpecialFileCount: tpt.getSkippedSpecialFileCount(),
+		SkippedHardlinkCount:    tpt.getSkippedHardlinkCount(),
+		FirstPartOrdered:        tpt.firstPartOrdered(),
+		ScanningComplete:        tpt.CompletedEnumeration(),
+	}
+}
+
+// incEnumerationFailure mirrors the sync tracker: a failed entity still counts as scanned.
+func (tpt *transferProgressTracker) incEnumerationFailure(entityType common.EntityType) {
+	if entityType == common.EEntityType.Folder() {
+		tpt.atomicFolderEnumerationFailed.Add(1)
+		tpt.atomicFoldersScanned.Add(1)
+	} else {
+		tpt.atomicFileEnumerationFailed.Add(1)
+		tpt.atomicFilesScanned.Add(1)
+	}
+}
+
 func (tpt *transferProgressTracker) incEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
-	if tpt.fromTo.IsNFS() {
-		if entityType == common.EEntityType.Other() {
+	switch entityType {
+	case common.EEntityType.File(), common.EEntityType.Hardlink():
+		tpt.atomicFilesScanned.Add(1)
+		if entityType == common.EEntityType.Hardlink() && tpt.fromTo.IsNFS() && hardlinkHandling == common.SkipHardlinkHandlingType {
+			atomic.AddUint32(&tpt.atomicSkippedHardlinkCount, 1)
+		}
+	case common.EEntityType.Folder():
+		tpt.atomicFoldersScanned.Add(1)
+	case common.EEntityType.Symlink():
+		tpt.atomicFilesScanned.Add(1)
+		// Blob symlinks are metadata and always copied, so only Local and NFS Files sources skip them.
+		if symlinkOption == common.ESymlinkHandlingType.Skip() &&
+			(tpt.fromTo.From() == common.ELocation.Local() || tpt.fromTo.From() == common.ELocation.FileNFS()) {
+			atomic.AddUint32(&tpt.atomicSkippedSymlinkCount, 1)
+		}
+	case common.EEntityType.Other():
+		if tpt.fromTo.IsNFS() {
 			atomic.AddUint32(&tpt.atomicSkippedSpecialFileCount, 1)
-		} else if entityType == common.EEntityType.Symlink() {
-			switch symlinkOption {
-			case common.ESymlinkHandlingType.Skip():
-				atomic.AddUint32(&tpt.atomicSkippedSymlinkCount, 1)
-			}
-		} else if entityType == common.EEntityType.Hardlink() {
-			switch hardlinkHandling {
-			case common.SkipHardlinkHandlingType:
-				atomic.AddUint32(&tpt.atomicSkippedHardlinkCount, 1)
-			}
+			tpt.atomicFilesScanned.Add(1)
+		} else if tpt.fromTo.From() == common.ELocation.S3() {
+			tpt.atomicSkippedArchiveFileCount.Add(1)
+			tpt.atomicFilesScanned.Add(1)
 		}
 	}
 }

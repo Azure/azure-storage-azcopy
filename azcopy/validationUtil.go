@@ -481,8 +481,11 @@ func validateShareProtocolCompatibility(
 	protocol common.Location,
 	fromTo common.FromTo,
 ) error {
-	if !protocol.IsFile() || serviceClient == nil {
+	if !protocol.IsFile() {
 		return nil
+	}
+	if serviceClient == nil {
+		return errors.New("a file service client is required to check the share's protocol")
 	}
 	// We can ignore the error if we fail to get the share properties.
 	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
@@ -499,6 +502,18 @@ func validateShareProtocolCompatibility(
 	}
 
 	if shareProtocol == common.ELocation.FileNFS() {
+		// There is no NFS form of a Blob or BlobFS --from-to, so pointing the user at another flag value would mislead.
+		isBlobFamily := func(location common.Location) bool {
+			return location == common.ELocation.Blob() || location == common.ELocation.BlobFS()
+		}
+		if isSource && isBlobFamily(fromTo.To()) {
+			return errors.New("the source share has NFS protocol enabled. " +
+				"Copying from an NFS share to Blob storage is not supported; only SMB shares can be copied to Blob storage")
+		}
+		if !isSource && isBlobFamily(fromTo.From()) {
+			return errors.New("the destination share has NFS protocol enabled. " +
+				"Copying from Blob storage to an NFS share is not supported; only SMB shares can be copied from Blob storage")
+		}
 		if isSource && fromTo.From() != common.ELocation.FileNFS() {
 			return errors.New("the source share has NFS protocol enabled. " +
 				"To copy from a NFS share, use the appropriate --from-to flag value")
@@ -613,6 +628,11 @@ func ValidateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 			srcProtocol, dstProtocol = common.ELocation.FileNFS(), common.ELocation.File()
 		case common.EFromTo.FileSMBFileNFS():
 			srcProtocol, dstProtocol = common.ELocation.File(), common.ELocation.FileNFS()
+		// Only SMB shares can be copied to or from Blob storage; the Blob side has no protocol to check.
+		case common.EFromTo.FileBlob(), common.EFromTo.FileBlobFS():
+			srcProtocol = common.ELocation.File()
+		case common.EFromTo.BlobFile(), common.EFromTo.BlobFSFile():
+			dstProtocol = common.ELocation.File()
 		}
 
 		// Validate both source and destination

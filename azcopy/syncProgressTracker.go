@@ -233,7 +233,8 @@ func (spt *syncProgressTracker) incSourceEnumeration(entityType common.EntityTyp
 		atomic.AddUint64(&spt.atomicSourceFoldersScanned, 1)
 	case common.EEntityType.Symlink():
 		atomic.AddUint64(&spt.atomicSourceFilesScanned, 1)
-		if spt.fromTo.IsNFS() && symlinkOption == common.ESymlinkHandlingType.Skip() {
+		if symlinkOption == common.ESymlinkHandlingType.Skip() &&
+			(spt.fromTo.From() == common.ELocation.Local() || spt.fromTo.From() == common.ELocation.FileNFS()) {
 			atomic.AddUint32(&spt.atomicSkippedSymlinkCount, 1)
 		}
 	case common.EEntityType.Other():

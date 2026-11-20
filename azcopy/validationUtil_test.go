@@ -73,7 +73,7 @@ func TestM3ProcessorAbortWaitsForActiveDispatch(t *testing.T) {
 
 	aborted := make(chan struct{})
 	var drainCalled atomic.Bool
-	executor := &transferExecutor{opts: &CookedTransferOptions{}, processor: processor}
+	executor := &copyExecutor{opts: &CookedTransferOptions{}, processor: processor}
 	go func() {
 		err := executor.cancelAndDrain(func() {}, common.NewJobID(), func(context.Context, common.JobID) error {
 			drainCalled.Store(true)
@@ -153,7 +153,7 @@ func TestM3CopyRejectsNilContext(t *testing.T) {
 func TestM3CopyDrainPreservesCancellationRequestError(t *testing.T) {
 	operationCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	executor := &transferExecutor{opts: &CookedTransferOptions{}}
+	executor := &copyExecutor{opts: &CookedTransferOptions{}}
 	called := false
 	err := executor.cancelAndDrain(cancel, common.JobID{}, func(context.Context, common.JobID) error {
 		called = true
@@ -169,7 +169,7 @@ func TestM3CopyDrainUsesFreshBoundedContext(t *testing.T) {
 	defer cancel()
 	jobID := common.NewJobID()
 	drainErr := errors.New("drain did not finish")
-	executor := &transferExecutor{opts: &CookedTransferOptions{}}
+	executor := &copyExecutor{opts: &CookedTransferOptions{}}
 	called := false
 	err := executor.cancelAndDrain(cancel, jobID, func(cleanupCtx context.Context, id common.JobID) error {
 		called = true
@@ -189,7 +189,7 @@ func TestM3CopyDrainUsesFreshBoundedContext(t *testing.T) {
 func TestM3CopyDryrunCancelsWithoutCallingEngineDrain(t *testing.T) {
 	operationCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	executor := &transferExecutor{opts: &CookedTransferOptions{dryrun: true}}
+	executor := &copyExecutor{opts: &CookedTransferOptions{dryrun: true}}
 	err := executor.cancelAndDrain(cancel, common.NewJobID(), func(context.Context, common.JobID) error {
 		t.Error("dry-run called the engine drain barrier")
 		return nil
@@ -381,6 +381,18 @@ func TestValidateProtocolCompatibility(t *testing.T) {
 			shouldValidate: true,
 			description:    "Blob to File should validate (destination is File)",
 		},
+		{
+			name:           "FileToBlobFS",
+			fromTo:         common.EFromTo.FileBlobFS(),
+			shouldValidate: true,
+			description:    "File to BlobFS should validate (source is File)",
+		},
+		{
+			name:           "BlobFSToFile",
+			fromTo:         common.EFromTo.BlobFSFile(),
+			shouldValidate: true,
+			description:    "BlobFS to File should validate (destination is File)",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -399,15 +411,9 @@ func TestValidateProtocolCompatibility(t *testing.T) {
 				err := ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, srcClient, dstClient)
 				a.NoError(err, "validateProtocolCompatibility should not fail for %s: %s", tc.name, tc.description)
 			} else {
-				// For File transfers, we expect the function to attempt validation
-				// Since we're passing nil service clients, we expect it to fail gracefully
-				// This tests that the conditional logic correctly identifies File transfers
+				// A File share's protocol can only be checked through its service client, so a missing client is an error.
 				err := ValidateProtocolCompatibility(ctx, tc.fromTo, src, dst, srcClient, dstClient)
-				// We expect an error here because we're passing nil service clients for File transfers
-				// The important thing is that it doesn't panic and attempts validation
-				if tc.fromTo.From().IsFile() || tc.fromTo.To().IsFile() {
-					a.Error(err, "validateProtocolCompatibility should attempt validation for %s and fail with nil clients: %s", tc.name, tc.description)
-				}
+				a.ErrorContains(err, "file service client is required", "validateProtocolCompatibility should require a client for %s: %s", tc.name, tc.description)
 			}
 		})
 	}
