@@ -255,6 +255,12 @@ type ListJobSummaryResponse struct {
 	FoldersSkipped     uint64 `json:",string"`
 	TransfersSkipped   uint64 `json:",string"`
 
+	// Successful transfers performed in this execution; excludes successes already recorded in an existing plan.
+	TransfersCompletedThisExecution uint64 `json:",string"`
+	BytesTransferredThisExecution   uint64 `json:",string"`
+	// Sum of failed transfer sizes, not network traffic spent on failed requests or retries.
+	BytesFailed uint64 `json:",string"`
+
 	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers
 	BytesOverWire uint64 `json:",string"`
 

@@ -26,11 +26,12 @@ import (
 	"strings"
 	"testing"
 
+	"strconv"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"strconv"
-	"time"
 )
 
 func TestPlanFilenameLargeParts(t *testing.T) {
@@ -84,15 +85,16 @@ func runSummaryUpdates(t *testing.T, initial common.ListJobSummaryResponse, part
 		jobID: common.NewJobID(),
 		jstm: &jobStatusManager{
 			respChan:        make(chan common.ListJobSummaryResponse),
-			listReq:         make(chan struct{}),
+			listReq:         make(chan listRequest),
 			partCreated:     make(chan JobPartCreatedMsg),
 			xferDone:        make(chan xferDoneMsg),
 			xferDoneDrained: make(chan struct{}),
 			statusMgrDone:   make(chan struct{}),
 		},
 	}
-	jm.ResurrectSummary(initial)
+	// Resurrection is a request to the session-aware status handler, not a direct assignment.
 	go jm.handleStatusUpdateMessage()
+	jm.ResurrectSummary(initial)
 
 	for _, part := range parts {
 		jm.jstm.partCreated <- part
@@ -163,8 +165,8 @@ func TestJobSummaryCompletionCountsBeyondUint32(t *testing.T) {
 				common.ETransferStatus.SkippedBlobHasSnapshots(),
 			} {
 				transfers = append(transfers,
-					xferDoneMsg{TransferStatus: status, TransferSize: 100},
-					xferDoneMsg{TransferStatus: status, IsFolderProperties: true})
+					xferDoneMsg{TransferDetail: common.TransferDetail{TransferStatus: status, TransferSize: 100}},
+					xferDoneMsg{TransferDetail: common.TransferDetail{TransferStatus: status, IsFolderProperties: true}})
 			}
 			summary := runSummaryUpdates(t, initial, nil, transfers)
 			require.Equal(t, initialCount+2, summary.TransfersCompleted)

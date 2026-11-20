@@ -147,6 +147,8 @@ type jobPartProgressInfo struct {
 
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
+	atomicBytesTransferred uint64
+	sessionState           *jobSessionState
 	// These fields represent the part's existence
 	jobMgr          IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
 	jobMgrInitState *jobMgrInitState
@@ -219,6 +221,7 @@ type jobPartMgr struct {
 	atomicTransfersCompleted uint32
 	atomicTransfersFailed    uint32
 	atomicTransfersSkipped   uint32
+	atomicTransfersCancelled uint32
 
 	cpkOptions common.CpkOptions
 
@@ -254,7 +257,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
 
-	if buildmode.IsMover {
+	if buildmode.IsMover && jpm.sessionState == nil {
 		// Diagnostic: capture context for panic logging to help identify MMF mapping/unmapping race
 		defer func() {
 			if r := recover(); r != nil {
@@ -270,7 +273,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			}
 		}()
 	}
-	if plan.PartNum == 0 && plan.NumTransfers == 0 {
+	if jpm.sessionState == nil && plan.PartNum == 0 && plan.NumTransfers == 0 {
 		/* This will wind down the transfer and report summary */
 		plan.SetJobStatus(common.EJobStatus.Completed())
 		return
@@ -340,6 +343,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// Cache IsFinalPart before the transfer loop, since plan memory may be unmapped
 	// by progressive cleanup after the last ReportTransferDone fires.
 	isFinalPart := plan.IsFinalPart
+	var admission JobPartCreatedMsg
 
 	// *** Schedule this job part's transfers ***
 	// Use cachedNumTransfers (copied at init) instead of plan.NumTransfers (mmap'd memory)
@@ -347,7 +351,46 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	for t := uint32(0); t < jpm.cachedNumTransfers; t++ {
 		jppt := plan.Transfer(t)
 		ts := jppt.TransferStatus()
+		if jpm.sessionState != nil {
+			admission.TotalTransfers++
+			admission.TotalBytesEnumerated += uint64(jppt.SourceSize)
+			switch jppt.EntityType {
+			case common.EEntityType.File():
+				admission.FileTransfers++
+			case common.EEntityType.Folder():
+				admission.FolderTransfer++
+			case common.EEntityType.Symlink():
+				admission.SymlinkTransfers++
+			case common.EEntityType.Hardlink():
+				admission.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				admission.FilePropertyTransfers++
+			}
+			// Publish before the last transfer can finish and retire this part.
+			if t == jpm.cachedNumTransfers-1 {
+				jpm.jobMgr.SendJobPartCreatedMsg(admission)
+			}
+		}
+		if jpm.sessionState != nil && (jppt.EntityType != common.EEntityType.File() ||
+			ts != common.ETransferStatus.Success() && (jpm.srcServiceClient == nil || jpm.dstServiceClient == nil)) {
+			jppt.SetTransferStatus(common.ETransferStatus.Failed(), true)
+			jppt.SetErrorMessage("claimed execution requires file records and Blob clients for unfinished transfers", true)
+			src, dst, folder := plan.TransferSrcDstStrings(t)
+			jpm.SendXferDoneMsg(xferDoneMsg{TransferDetail: common.TransferDetail{
+				Src: src, Dst: dst, IsFolderProperties: folder,
+				TransferStatus: common.ETransferStatus.Failed(), TransferSize: uint64(jppt.SourceSize),
+				ErrorMessage: "claimed execution requires file records and Blob clients for unfinished transfers",
+			}})
+			jpm.ReportTransferDone(common.ETransferStatus.Failed())
+			continue
+		}
 		if ts == common.ETransferStatus.Success() {
+			if jpm.sessionState != nil {
+				jpm.SendXferDoneMsg(xferDoneMsg{
+					TransferDetail: common.TransferDetail{TransferStatus: ts, TransferSize: uint64(jppt.SourceSize)},
+					replayed:       true,
+				})
+			}
 			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
 			continue
 		}
@@ -355,7 +398,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
 			jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
-			if failedCount := atomic.LoadUint32(&jpm.atomicTransfersFailed); failedCount > 0 {
+			if failedCount := atomic.LoadUint32(&jpm.atomicTransfersFailed); jpm.sessionState == nil && failedCount > 0 {
 				atomic.AddUint32(&jpm.atomicTransfersFailed, ^uint32(0))
 			} // Adding uint32 max is effectively subtracting 1
 		}
@@ -488,6 +531,10 @@ func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
+	if jpm.sessionState != nil && jptm.IsLive() &&
+		jptm.TransferStatusIgnoringCancellation() != common.ETransferStatus.Success() {
+		jpm.sessionState.transferStarted(jptm)
+	}
 	jpm.newJobXfer(jptm, jpm.pacer)
 }
 
@@ -634,17 +681,36 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	case common.ETransferStatus.Restarted(): // When a job is resumed, number of failed should reset to 0
-		atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
+		if jpm.sessionState != nil {
+			atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
+		} else {
+			atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
+		}
 	case common.ETransferStatus.Cancelled():
+		if jpm.sessionState != nil {
+			atomic.AddUint32(&jpm.atomicTransfersCancelled, 1)
+		}
 	default:
-		jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
+		if jpm.sessionState != nil {
+			// A reported completion without a recognized terminal outcome is a failure.
+			atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
+		} else {
+			jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
+		}
 	}
 }
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
 func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfersDone uint32) {
-	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
-	jpm.updateJobPartProgress(status)
+	if jpm.sessionState != nil {
+		// Publish this transfer's counters before publishing its completion.
+		// Otherwise the last reporter can observe another reporter's missing count.
+		jpm.updateJobPartProgress(status)
+		transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
+	} else {
+		transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
+		jpm.updateJobPartProgress(status)
+	}
 
 	if transfersDone == jpm.cachedNumTransfers {
 		jppi := jobPartProgressInfo{
@@ -654,8 +720,12 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 			completionChan:     jpm.closeOnCompletion,
 			partNum:            &jpm.cachedPartNum,
 		}
-		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
-			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
+		status := common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
+			jppi.transfersFailed > 0, jppi.transfersCompleted > 0)
+		if jpm.sessionState != nil && atomic.LoadUint32(&jpm.atomicTransfersCancelled) > 0 {
+			status = common.EJobStatus.Cancelled()
+		}
+		jpm.Plan().SetJobPartStatus(status)
 		jpm.jobMgr.ReportJobPartDone(jppi)
 		jpm.Log(common.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
 			jpm.cachedJobID, jpm.cachedPartNum, transfersDone,
@@ -735,6 +805,9 @@ func (jpm *jobPartMgr) SourceIsOAuth() bool {
 
 /* Status update messages should not fail */
 func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
+	if jpm.sessionState != nil && msg.TransferStatus == common.ETransferStatus.Success() {
+		atomic.AddUint64(&jpm.atomicBytesTransferred, msg.TransferSize)
+	}
 	jpm.jobMgr.SendXferDoneMsg(msg)
 }
 

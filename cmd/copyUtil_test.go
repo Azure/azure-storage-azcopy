@@ -21,13 +21,14 @@
 package cmd
 
 import (
+	"math"
+	"sync/atomic"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"sync/atomic"
-	"testing"
 )
 
 func TestUrlIsContainerOrBlob(t *testing.T) {

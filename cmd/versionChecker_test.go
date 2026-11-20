@@ -21,14 +21,16 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVersionEquality(t *testing.T) {
@@ -227,8 +229,8 @@ func TestGetGitHubLatestVersion(t *testing.T) {
 	a.NoError(err)
 	a.NotNil(versionVar)
 	// Check if API response is newer or the same
-	sameOrLaterVersion := latestVersion.OlderThan(common.DerefOrZero(versionVar)) ||
-		latestVersion.EqualTo(common.DerefOrZero(versionVar))
+	sameOrLaterVersion := latestVersion.OlderThan(ternary.DerefOrZero(versionVar)) ||
+		latestVersion.EqualTo(ternary.DerefOrZero(versionVar))
 	a.True(sameOrLaterVersion)
 }
 

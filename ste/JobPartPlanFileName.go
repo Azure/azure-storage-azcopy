@@ -70,17 +70,33 @@ func (jpfn JobPartPlanFileName) Delete() error {
 }
 
 func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
-	// opening the file with given filename
-	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, common.DEFAULT_FILE_PERM)
+	mmf, err := mapJobPartPlanFile(jpfn.GetJobPartPlanPath())
 	common.PanicIfErr(err)
+	return mmf
+}
+
+// mapJobPartPlanFile maps a trusted native plan at an explicit path.
+// Legacy Map retains its global-directory and panic behavior.
+func mapJobPartPlanFile(path string) (*JobPartPlanMMF, error) {
+	file, err := os.OpenFile(path, os.O_RDWR, common.DEFAULT_FILE_PERM)
+	if err != nil {
+		return nil, err
+	}
 	// Ensure the file gets closed (although we can continue to use the MMF)
 	defer file.Close()
 
 	fileInfo, err := file.Stat()
-	common.PanicIfErr(err)
+	if err != nil {
+		return nil, err
+	}
+	if fileInfo.Size() < int64(unsafe.Sizeof(JobPartPlanHeader{})) {
+		return nil, errors.New("job part plan is smaller than its header")
+	}
 	mmf, err := common.NewMMF(file, true, 0, fileInfo.Size())
-	common.PanicIfErr(err)
-	return (*JobPartPlanMMF)(mmf)
+	if err != nil {
+		return nil, err
+	}
+	return (*JobPartPlanMMF)(mmf), nil
 }
 
 // Create writes a native plan. Flush/close errors are logged and returned;

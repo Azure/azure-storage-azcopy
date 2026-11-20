@@ -102,7 +102,7 @@ func TestDestReauthPolicy(t *testing.T) {
 		policy.TelemetryOptions{},
 		transport,
 		LogOptions{},
-		nil, (*cred2.ScopedAuthenticator)(cred2.NewScopedToken[cred2.AuthenticateToken](cred, enum.ECredentialType.OAuthToken())),
+		nil, cred2.NewScopedToken(cred, enum.ECredentialType.OAuthToken()),
 	)
 
 	c, err := blobservice.NewClient("https://foobar.blob.core.windows.net/", cred, &blobservice.ClientOptions{ClientOptions: opts})

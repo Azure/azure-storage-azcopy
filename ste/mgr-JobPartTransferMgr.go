@@ -1012,6 +1012,15 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed
 // TODO: I feel like this should take the status & we kill SetStatus
 func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
+	if jptm.jobPartMgr.(*jobPartMgr).sessionState != nil && jptm.WasCanceled() {
+		// Cancellation can arrive after the epilogue's initial check (including
+		// during source/length validation). Persist only still-pending claimed
+		// transfers as cancelled; never relabel a substantive failure or success.
+		status := jptm.TransferStatusIgnoringCancellation()
+		if status == common.ETransferStatus.Started() || status == common.ETransferStatus.Restarted() {
+			jptm.SetStatus(common.ETransferStatus.Cancelled())
+		}
+	}
 	// In case of context leak in job part transfer manager.
 	jptm.Cancel()
 
@@ -1027,14 +1036,14 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	}
 
 	// Update Status Manager
-	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
+	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{TransferDetail: common.TransferDetail{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
 		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
 		ErrorMessage:       jptm.ErrorMessage(),
-	})
+	}})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }

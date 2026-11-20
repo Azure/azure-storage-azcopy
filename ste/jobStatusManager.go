@@ -39,15 +39,20 @@ type JobPartCreatedMsg struct {
 	FilePropertyTransfers   uint32
 }
 
-type xferDoneMsg = common.TransferDetail
+type xferDoneMsg struct {
+	common.TransferDetail
+	replayed bool
+}
 type listRequest struct {
 	resetLists bool
+	resurrect  *common.ListJobSummaryResponse
 }
 
 type jobStatusManager struct {
+	finalSummaryMu  sync.Mutex // Protects list consumption after the handler has stopped.
 	js              common.ListJobSummaryResponse
 	respChan        chan common.ListJobSummaryResponse
-	listReq         chan struct{}
+	listReq         chan listRequest
 	partCreated     chan JobPartCreatedMsg
 	xferDone        chan xferDoneMsg
 	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
@@ -57,15 +62,6 @@ type jobStatusManager struct {
 
 func (jm *jobMgr) waitToDrainXferDone() {
 	<-jm.jstm.xferDoneDrained
-}
-
-func (jm *jobMgr) statusMgrClosed() bool {
-	select {
-	case <-jm.jstm.statusMgrDone:
-		return true
-	default:
-		return false
-	}
 }
 
 /* These functions should not fail */
@@ -81,7 +77,7 @@ func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
 		}
 
-		if msg.IsFinalPart {
+		if msg.IsFinalPart && jm.session == nil {
 			// Inform statusManager that this is all parts we've
 			close(jm.jstm.partCreated)
 		}
@@ -103,38 +99,139 @@ func (jm *jobMgr) ListJobSummary(reset ...bool) common.ListJobSummaryResponse {
 		resetLists = reset[0]
 	}
 
-	if !resetLists || jm.statusMgrClosed() {
-		return jm.jstm.js
-	}
+	return jm.jstm.requestSummary(listRequest{resetLists: resetLists})
+}
 
+func (jstm *jobStatusManager) requestSummary(request listRequest) common.ListJobSummaryResponse {
 	select {
-	case jm.jstm.listReq <- struct{}{}:
-		return <-jm.jstm.respChan
-	case <-jm.jstm.statusMgrDone:
+	case jstm.listReq <- request:
+		return <-jstm.respChan
+	case <-jstm.statusMgrDone:
 		// StatusManager closed while we requested for an update.
-		// Return the last update. This is okay because there will
-		// be no further updates.
-		return jm.jstm.js
+		// Return the last update; the handler will no longer update counters.
+		jstm.finalSummaryMu.Lock()
+		defer jstm.finalSummaryMu.Unlock()
+		if request.resurrect != nil {
+			jstm.js = *request.resurrect
+		}
+		return jstm.snapshot(request.resetLists)
 	}
 }
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
-	jm.jstm.js = js
+	jm.jstm.requestSummary(listRequest{resurrect: &js})
+}
+
+// GetJobSummary uses the manager's own counters, lifecycle and pacing resources.
+// Session shutdown freezes the summary before releasing those resources.
+// The returned direction enables legacy whole-job benchmark advice only.
+func (jm *jobMgr) GetJobSummary(resetLists bool) (common.ListJobSummaryResponse, common.FromTo) {
+	if jm.session != nil {
+		jm.session.metricsMu.RLock()
+		defer jm.session.metricsMu.RUnlock()
+	}
+	return jm.getJobSummary(resetLists)
+}
+
+func (jm *jobMgr) getJobSummary(resetLists bool) (common.ListJobSummaryResponse, common.FromTo) {
+	js := jm.ListJobSummary(resetLists)
+	js.Timestamp, js.JobID, js.ErrorMsg = time.Now().UTC(), jm.jobID, ""
+	if jm.session != nil && jm.session.finalSummary != nil {
+		final := *jm.session.finalSummary
+		final.Timestamp = js.Timestamp
+		final.FailedTransfers, final.SkippedTransfers = js.FailedTransfers, js.SkippedTransfers
+		return final, common.FromTo(0)
+	}
+	status, ok := jm.lifecycleStatus()
+	if !ok {
+		return js, common.FromTo(0)
+	}
+	fromTo := common.FromTo(0)
+	if jm.session == nil {
+		part0, _ := jm.JobPartMgr(0)
+		fromTo = part0.Plan().FromTo
+		// This is added to let FE to continue fetching the Job Progress Summary
+		// in case of resume. In case of resume, the Job is already completely
+		// ordered so the progress summary should be fetched until all job parts
+		// are iterated and have been scheduled
+		js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+		// If the status is cancelled, then no need to check for completerJobOrdered
+		// since user must have provided the consent to cancel an incompleteJob if that
+		// is the case.
+		// Job is completed if Job order is complete AND ALL transfers are completed/failed
+		// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
+		if status == common.EJobStatus.Cancelled() || js.CompleteJobOrdered && status.IsJobDone() {
+			js.JobStatus = status
+		}
+	} else {
+		js.JobStatus = status
+		js.CompleteJobOrdered = status.IsJobDone()
+	}
+	// Add on byte count from files in flight, to get a more accurate running total
+	// Check is added to prevent double counting
+	activeBytes := jm.SuccessfulBytesInActiveFiles()
+	if js.TotalBytesTransferred <= js.TotalBytesExpected && activeBytes <= js.TotalBytesExpected-js.TotalBytesTransferred {
+		js.TotalBytesTransferred += activeBytes
+	}
+	// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
+	js.PercentComplete = 100
+	if js.TotalBytesExpected != 0 {
+		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+		if js.PercentComplete > 100 {
+			js.PercentComplete = 100
+		}
+	}
+	js.BytesOverWire = uint64(jm.pacer.GetTotalTraffic())
+	// Get the number of active go routines performing the transfer or executing the chunk Func
+	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
+	js.ActiveConnections = jm.ActiveConnections()
+	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+	if stats := jm.PipelineNetworkStats(); stats != nil {
+		js.AverageIOPS = stats.OperationsPerSecond()
+		js.AverageE2EMilliseconds = stats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = stats.AverageConnWaitMs()
+		js.AverageWireMs = stats.AverageWireMs()
+		js.AverageDNSMs = stats.AverageDNSMs()
+		js.AverageTLSMs = stats.AverageTLSMs()
+		js.ConnNewCount, js.ConnReusedCount = stats.ConnNewCount(), stats.ConnReusedCount()
+		js.NetworkErrorPercentage = stats.NetworkErrorPercentage()
+		js.ServerBusyPercentage = stats.TotalServerBusyPercentage()
+	}
+	return js, fromTo
+}
+
+func (jstm *jobStatusManager) snapshot(resetLists bool) common.ListJobSummaryResponse {
+	js := jstm.js
+	js.Timestamp = time.Now().UTC()
+	if resetLists {
+		// Reset the lists so that they don't keep accumulating and take up excessive memory
+		// There is no need to keep sending the same items over and over again
+		jstm.js.FailedTransfers, jstm.js.SkippedTransfers = nil, nil
+	} else {
+		js.FailedTransfers = append([]common.TransferDetail(nil), js.FailedTransfers...)
+		js.SkippedTransfers = append([]common.TransferDetail(nil), js.SkippedTransfers...)
+	}
+	return js
 }
 
 func (jm *jobMgr) handleStatusUpdateMessage() {
 	jstm := jm.jstm
 	js := &jstm.js
-	js.JobID = jm.jobID
-	js.CompleteJobOrdered = false
-	js.ErrorMsg = ""
+	partCreated, xferDone := jstm.partCreated, jstm.xferDone
 	allXferDoneHandled := false
+	defer close(jstm.statusMgrDone)
 
 	for {
+		if jm.session != nil && partCreated == nil && xferDone == nil {
+			return
+		}
 		select {
-		case msg, ok := <-jstm.partCreated:
+		case msg, ok := <-partCreated:
 			if !ok {
-				jstm.partCreated = nil
+				partCreated = nil
+				if jm.session == nil {
+					jstm.partCreated = nil
+				}
 				continue
 			}
 			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
@@ -147,9 +244,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 			js.HardlinksConvertedCount += msg.HardlinksConvertedCount
 
-		case msg, ok := <-jstm.xferDone:
+		case msg, ok := <-xferDone:
 			if !ok { // Channel is closed, all transfers have been attended.
-				jstm.xferDone = nil
+				xferDone = nil
+				if jm.session == nil {
+					jstm.xferDone = nil
+				}
 				// close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
 				jstm.once.Do(func() { close(jstm.xferDoneDrained) })
@@ -173,6 +273,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				}
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += msg.TransferSize
+				if !msg.replayed {
+					js.TransfersCompletedThisExecution++
+					js.BytesTransferredThisExecution += msg.TransferSize
+				}
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
@@ -180,11 +284,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.FoldersFailed++
 				}
 				js.TransfersFailed++
+				js.BytesFailed += msg.TransferSize
 				if buildmode.HighPerf() {
 					msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
 					msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 				}
-				js.FailedTransfers = append(js.FailedTransfers, msg)
+				js.FailedTransfers = append(js.FailedTransfers, msg.TransferDetail)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				if msg.IsFolderProperties {
@@ -195,35 +300,20 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
 					msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 				}
-				js.SkippedTransfers = append(js.SkippedTransfers, msg)
+				js.SkippedTransfers = append(js.SkippedTransfers, msg.TransferDetail)
 			case common.ETransferStatus.SkippedArchiveNotRestored():
 				js.SkippedArchiveFileCount++
 			}
 
-		case <-jstm.listReq:
+		case request := <-jstm.listReq:
 			/* Display stats */
-			js.Timestamp = time.Now().UTC()
-			defer func() { // Exit gracefully if panic
-				if recErr := recover(); recErr != nil {
-					jm.Log(common.LogError, "Cannot send message on respChan")
-				}
-			}()
-			select {
-			case jstm.respChan <- *js:
-				// Send on the channel
-			case <-jstm.statusMgrDone:
-				// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
+			if request.resurrect != nil {
+				*js = *request.resurrect
 			}
+			// Send on the channel
+			jstm.respChan <- jstm.snapshot(request.resetLists)
 
-			// Reset the lists so that they don't keep accumulating and take up excessive memory
-			// There is no need to keep sending the same items over and over again
-			js.FailedTransfers = []common.TransferDetail{}
-			js.SkippedTransfers = []common.TransferDetail{}
-
-			if allXferDoneHandled {
-				close(jstm.statusMgrDone)
-				close(jstm.respChan)
-				close(jstm.listReq)
+			if jm.session == nil && allXferDoneHandled && request.resetLists {
 				return
 			}
 		}

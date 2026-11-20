@@ -687,10 +687,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
-				return
-			}
-
-			if isSecondPrecisionS3Source(sip) {
+				// The last chunk still owns cleanup, destination unlock and
+				// ReportTransferDone, even if validation failed or was cancelled.
+			} else if isSecondPrecisionS3Source(sip) {
 				// GCS/IBM via S3 API: truncate timestamps to seconds to avoid false positives
 				// from precision differences in the S3-compatible API
 				scheduledTime := jptm.LastModifiedTime()

@@ -423,7 +423,9 @@ func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryRespo
 		resetLists = reset[0]
 	}
 
-	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
+	if JobsAdmin == nil {
+		return common.ListJobSummaryResponse{ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID)}
+	}
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {
 		// Job with JobId does not exists
@@ -439,78 +441,10 @@ func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryRespo
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	js := jm.ListJobSummary(resetLists)
-	js.Timestamp = time.Now().UTC()
-	js.JobID = jm.JobID()
-	js.ErrorMsg = ""
-
-	part0, ok := jm.JobPartMgr(0)
-	if !ok {
-		return js
-	}
-	part0PlanStatus := part0.Plan().JobStatus()
-
-	// Add on byte count from files in flight, to get a more accurate running total
-	// Check is added to prevent double counting
-	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
-		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
-	}
-	if js.TotalBytesExpected == 0 {
-		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
-		js.PercentComplete = 100
-	} else {
-		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected))
-	}
-	if js.PercentComplete > 100 {
-		js.PercentComplete = 100
-	}
-
-	// This is added to let FE to continue fetching the Job Progress Summary
-	// in case of resume. In case of resume, the Job is already completely
-	// ordered so the progress summary should be fetched until all job parts
-	// are iterated and have been scheduled
-	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
-
-	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
-
-	// Get the number of active go routines performing the transfer or executing the chunk Func
-	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
-	js.ActiveConnections = jm.ActiveConnections()
-
-	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
-
-	pipeStats := jm.PipelineNetworkStats()
-	if pipeStats != nil {
-		js.AverageIOPS = pipeStats.OperationsPerSecond()
-		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
-		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
-		js.AverageWireMs = pipeStats.AverageWireMs()
-		js.AverageDNSMs = pipeStats.AverageDNSMs()
-		js.AverageTLSMs = pipeStats.AverageTLSMs()
-		js.ConnNewCount = pipeStats.ConnNewCount()
-		js.ConnReusedCount = pipeStats.ConnReusedCount()
-		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
-		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
-	}
-
-	// If the status is cancelled, then no need to check for completerJobOrdered
-	// since user must have provided the consent to cancel an incompleteJob if that
-	// is the case.
-	dir := jm.TransferDirection()
-	p := jm.PipelineNetworkStats()
-	if part0PlanStatus == common.EJobStatus.Cancelled() {
-		js.JobStatus = part0PlanStatus
-		js.PerformanceAdvice = JobsAdmin.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo, dir, p)
-	} else {
-		// Job is completed if Job order is complete AND ALL transfers are completed/failed
-		// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-		if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
-			js.JobStatus = part0PlanStatus
-		}
-
-		if js.JobStatus.IsJobDone() {
-			js.PerformanceAdvice = JobsAdmin.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo, dir, p)
-		}
+	js, fromTo := jm.GetJobSummary(resetLists)
+	if fromTo != common.FromTo(0) && js.JobStatus.IsJobDone() {
+		js.PerformanceAdvice = JobsAdmin.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped,
+			fromTo, jm.TransferDirection(), jm.PipelineNetworkStats())
 	}
 
 	return js

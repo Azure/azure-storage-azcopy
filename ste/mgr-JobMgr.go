@@ -188,6 +188,7 @@ type IJobMgr interface {
 	SendJobPartCreatedMsg(msg JobPartCreatedMsg)
 	SendXferDoneMsg(msg xferDoneMsg)
 	ListJobSummary(reset ...bool) common.ListJobSummaryResponse
+	GetJobSummary(resetLists bool) (common.ListJobSummaryResponse, common.FromTo)
 	ResurrectSummary(js common.ListJobSummaryResponse)
 
 	/* Ported from jobsAdmin() */
@@ -215,8 +216,14 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	return newJobMgr(concurrency, jobID, appCtx, cpuMon, level, commandString, tuner,
+		pacer, slicePool, cacheLimiter, fileCountLimiter, jobLogger, daemonMode, nil, GetChannelSizeConfig())
+}
 
-	config := GetChannelSizeConfig()
+func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
+	commandString string, tuner ConcurrencyTuner,
+	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
+	jobLogger common.ILoggerResetable, daemonMode bool, session *jobSessionState, config ChannelSizeConfig) *jobMgr {
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -235,8 +242,9 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)
 	var jstm jobStatusManager
+	jstm.js.JobID = jobID
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
-	jstm.listReq = make(chan struct{})
+	jstm.listReq = make(chan listRequest)
 	jstm.partCreated = make(chan JobPartCreatedMsg, config.PartCreatedChannelSize)
 	jstm.xferDone = make(chan xferDoneMsg, config.XferDoneChannelSize)
 	jstm.xferDoneDrained = make(chan struct{})
@@ -247,7 +255,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jobLogger.OpenLog()
 	}
 
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+	jm := jobMgr{jobID: jobID, session: session, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:           common.GetGlobalHTTPClient(jobLogger),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
@@ -290,17 +298,18 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
-	go jm.scheduleJobParts()
+	jm.startRoutine(jm.scheduleJobParts)
 	// In addition to the main pool (which is governed ja.poolSizer), we spin up a separate set of workers to process initiation of transfers
 	// (so that transfer initiation can't starve out progress on already-scheduled chunks.
 	// (Not sure whether that can really happen, but this protects against it anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
 	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
-		go jm.transferProcessor(cc)
+		workerID := cc
+		jm.startRoutine(func() { jm.transferProcessor(workerID) })
 	}
 
-	go jm.reportJobPartDoneHandler()
-	go jm.handleStatusUpdateMessage()
+	jm.startRoutine(jm.reportJobPartDoneHandler)
+	jm.startRoutine(jm.handleStatusUpdateMessage)
 
 	return &jm
 }
@@ -442,6 +451,7 @@ type jobMgr struct {
 	httpClient *http.Client
 
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
+	session     *jobSessionState
 
 	// reportCancelCh to close the report thread.
 	reportCancelCh chan struct{}
@@ -584,6 +594,7 @@ type AddJobPartArgs struct {
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 	jpm := &jobPartMgr{
+		sessionState:      jm.session,
 		jobMgr:            jm,
 		filename:          args.PlanFile,
 		srcServiceClient:  args.SrcClient,
@@ -608,7 +619,9 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 	jpm.cachedNumTransfers = plan.NumTransfers
 
 	jm.jobPartMgrs.Set(args.PartNum, jpm)
-	jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
+	if jm.session == nil {
+		jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
+	}
 	jm.setDirection(jpm.Plan().FromTo)
 
 	jm.initMu.Lock()
@@ -831,13 +844,12 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 	for {
 		select {
 		case <-jm.reportCancelCh:
-			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+			status, ok := jm.lifecycleStatus()
 			if ok {
-				part0plan := jobPart0Mgr.Plan()
-				if part0plan.JobStatus() == common.EJobStatus.InProgress() ||
-					part0plan.JobStatus() == common.EJobStatus.Cancelling() {
+				if status == common.EJobStatus.InProgress() ||
+					status == common.EJobStatus.Cancelling() {
 					jm.Panic(fmt.Errorf("reportCancelCh received cancel event while job still not completed, Job(%s) in state: %s",
-						jm.jobID.String(), part0plan.JobStatus()))
+						jm.jobID.String(), status))
 				}
 			} else {
 				jm.Log(common.LogError, "part0Plan of job invalid")
@@ -846,6 +858,12 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			return
 
 		case partProgressInfo := <-jm.jobPartProgress:
+			if jm.session != nil {
+				// The session snapshots and unmaps at this same part-completion
+				// boundary, including part zero, without whole-job completion.
+				close(partProgressInfo.completionChan)
+				continue
+			}
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if !ok {
 				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
@@ -944,6 +962,15 @@ func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 
 func (jm *jobMgr) Context() context.Context { return jm.ctx }
 func (jm *jobMgr) Cancel() {
+	if jm.session != nil {
+		jm.session.mu.Lock()
+		if jm.session.status == common.EJobStatus.InProgress() {
+			jm.session.status = common.EJobStatus.Cancelling()
+		}
+		jm.cancel()
+		jm.session.mu.Unlock()
+		return
+	}
 	jm.cancel()
 	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately
 }
@@ -1130,6 +1157,7 @@ func (jm *jobMgr) poolSizer() {
 
 	nextWorkerId := 0
 	actualConcurrency := 0
+	pendingStarts, pendingStops := 0, 0
 	lastBytesOnWire := int64(0)
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
@@ -1145,14 +1173,17 @@ func (jm *jobMgr) poolSizer() {
 	// loop for ever, driving the actual concurrency towards the most up-to-date target
 	for {
 		// add or remove a worker if necessary
-		if actualConcurrency < targetConcurrency {
+		if actualConcurrency+pendingStarts-pendingStops < targetConcurrency {
 			hasHadTimeToStablize = false
 			nextWorkerId++
-			go jm.chunkProcessor(nextWorkerId) // TODO: make sure this numbering is OK, even if we grow and shrink the pool (the id values don't matter right?)
-		} else if actualConcurrency > targetConcurrency {
+			workerID := nextWorkerId
+			pendingStarts++
+			jm.startRoutine(func() { jm.chunkProcessor(workerID) })
+		} else if actualConcurrency-pendingStops > targetConcurrency {
 			hasHadTimeToStablize = false
+			pendingStops++
 			jm.poolSizingChannels.scalebackRequestCh <- struct{}{}
-		} else if actualConcurrency == 0 && targetConcurrency == 0 {
+		} else if actualConcurrency == 0 && pendingStarts == 0 && targetConcurrency == 0 {
 			jm.Log(common.LogInfo, "Exits Pool sizer")
 			return
 		}
@@ -1163,10 +1194,14 @@ func (jm *jobMgr) poolSizer() {
 			targetConcurrency = 0
 		case <-jm.poolSizingChannels.entryNotificationCh:
 			// new worker has started
+			// A shutdown may arrive before this acknowledgement; the launch
+			// remains outstanding until the worker can register and then exit.
+			pendingStarts--
 			actualConcurrency++
 			atomic.StoreInt32(&jm.atomicCurrentMainPoolSize, int32(actualConcurrency))
 		case <-jm.poolSizingChannels.exitNotificationCh:
 			// worker has exited
+			pendingStops--
 			actualConcurrency--
 			atomic.StoreInt32(&jm.atomicCurrentMainPoolSize, int32(actualConcurrency))
 		case <-slowTuneCh:
@@ -1175,7 +1210,7 @@ func (jm *jobMgr) poolSizer() {
 			throughputMonitoringInterval = expandedMonitoringInterval
 			slowTuneCh = nil // so we won't keep running this case at the expense of others)
 		case <-time.After(throughputMonitoringInterval):
-			if targetConcurrency != 0 && actualConcurrency == targetConcurrency { // scalebacks can take time. Don't want to do any tuning if actual is not yet aligned to target
+			if targetConcurrency != 0 && actualConcurrency == targetConcurrency && pendingStarts == 0 && pendingStops == 0 { // wait for all pool adjustments before tuning
 				bytesOnWire := jm.pacer.GetTotalTraffic()
 				if hasHadTimeToStablize {
 					// throughput has had time to stabilize since last change, so we can meaningfully measure and act on throughput
@@ -1216,7 +1251,7 @@ func (jm *jobMgr) scheduleJobParts() {
 		parallelism = 1
 	}
 	for i := 0; i < parallelism; i++ {
-		go jm.scheduleJobPartsWorker()
+		jm.startRoutine(jm.scheduleJobPartsWorker)
 	}
 }
 
@@ -1243,7 +1278,7 @@ func (jm *jobMgr) scheduleJobPartsWorker() {
 			jm.schedulerStartOnce.Do(func() {
 				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors
-				go jm.poolSizer()
+				jm.startRoutine(jm.poolSizer)
 			})
 
 			inMemoryState := jm.getInMemoryTransitJobState()
@@ -1352,6 +1387,29 @@ func (jm *jobMgr) SuccessfulBytesInActiveFiles() uint64 {
 }
 
 func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
+	if jm.session != nil {
+		// A claimed binding has no authoritative part zero and its mappings may
+		// already be retiring. Legacy callers must only touch local lifecycle.
+		status := jm.session.currentStatus(jm.ctx)
+		if desiredJobStatus != common.EJobStatus.Cancelling() {
+			return common.CancelPauseResumeResponse{
+				ErrorMsg:  "job execution sessions do not support pause or resume; create a new session to replay claimed plans",
+				JobStatus: status,
+			}
+		}
+		if status == common.EJobStatus.Completed() || status == common.EJobStatus.Cancelled() {
+			return common.CancelPauseResumeResponse{
+				ErrorMsg:  "job execution session has already closed",
+				JobStatus: status,
+			}
+		}
+		jm.Cancel()
+		return common.CancelPauseResumeResponse{
+			CancelledPauseResumed: true,
+			JobStatus:             jm.session.currentStatus(jm.ctx),
+		}
+	}
+
 	verb := ternary.Iff(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
 	jobID := jm.jobID
 
