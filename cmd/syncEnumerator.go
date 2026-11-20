@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -329,7 +330,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// unconditional value (true) here regardless of build mode/profile -- there is no redundant round
 	// trip to skip for Blob->Blob in the first place.
 	//
-	// S2SSourceChangeValidation is likewise left at its normal (true) value: it signals "source-change
+	// For Blob->Blob, S2SSourceChangeValidation stays true: it signals "source-change
 	// validation is wanted", and useSourceChangeAccessCondition() (in xfer-anyToRemote-file.go) decides
 	// HOW that validation is enforced for mover-high-perf Blob->Blob transfers -- via the cheaper
 	// source access-condition (412 on StageBlockFromURL/UploadBlobFromURL) instead of a separate
@@ -337,6 +338,20 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// useSourceChangeAccessCondition() would never activate (it requires S2SSourceChangeValidation ==
 	// true) and the GetProperties fallback would also be skipped, silently disabling source-change
 	// detection entirely for that path.
+
+	sourceChangeValidation := true
+	if cca.fromTo.IsS2S() && cca.fromTo.From().IsFile() {
+		source, err := cca.source.String()
+		if err != nil {
+			return nil, err
+		}
+		sourceURL, err := file.ParseURL(source)
+		if err != nil {
+			return nil, err
+		}
+		// Share snapshots are immutable; live sources still require change detection.
+		sourceChangeValidation = sourceURL.ShareSnapshot == ""
+	}
 
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
@@ -364,7 +379,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreservePermissions:            cca.preservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
-		S2SSourceChangeValidation:      true,
+		S2SSourceChangeValidation:      sourceChangeValidation,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
