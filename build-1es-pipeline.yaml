@@ -1152,10 +1152,10 @@ extends:
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMariner
 
-                  - task: 1ES.PushContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:$(azcopy_docker_version)
-                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:$(azcopy_docker_version)
+                  # - task: 1ES.PushContainerImage@1
+                  #   inputs:
+                  #     image: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:$(azcopy_docker_version)
+                  #     remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:$(azcopy_docker_version)
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
@@ -1163,10 +1163,10 @@ extends:
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMariner
 
-                  - task: 1ES.PushContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:latest
-                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:latest
+                  # - task: 1ES.PushContainerImage@1
+                  #   inputs:
+                  #     image: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:latest
+                  #     remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/amd64:latest
 
               - job: LinuxARM64
                 pool:
@@ -1205,10 +1205,10 @@ extends:
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMarinerArm64
 
-                  - task: 1ES.PushContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:$(azcopy_docker_version)
-                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:$(azcopy_docker_version)
+                  # - task: 1ES.PushContainerImage@1
+                  #   inputs:
+                  #     image: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:$(azcopy_docker_version)
+                  #     remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:$(azcopy_docker_version)
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
@@ -1216,10 +1216,10 @@ extends:
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMarinerArm64
 
-                  - task: 1ES.PushContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:latest
-                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:latest
+                  # - task: 1ES.PushContainerImage@1
+                  #   inputs:
+                  #     image: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:latest
+                  #     remoteImage: azcopycontainers.azurecr.io/public/azcopy/linux/arm64:latest
 
       - ${{ if eq(parameters.post_release, true) }}:
         - stage: ReleaseToGithub
