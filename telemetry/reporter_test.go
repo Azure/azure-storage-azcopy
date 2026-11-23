@@ -268,7 +268,7 @@ func TestReportEventTransportError(t *testing.T) {
 
 func TestReportEventBoundsProperties(t *testing.T) {
 	oversized := strings.Repeat("x", maxPropValueLen+100)
-	event := sampleFinished()
+	event := sampleStarted()
 	event.Resource.OSVersion = oversized
 	event.Dimensions.Options.Values = map[string]string{"OptFutureValue": oversized}
 	event.JobID = oversized

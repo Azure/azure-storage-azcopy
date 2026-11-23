@@ -6,6 +6,7 @@ using './main.bicep'
 param environmentName = 'test'
 param location = 'eastus'
 param retentionInDays = 90
+param totalRetentionInDays = 90
 param dailyQuotaGb = '0.1'
 // Application Insights caps are whole GB; 1 GB is well over twice the 0.1 GB workspace cap, which applies first.
 param appInsightsDailyCapGb = 1

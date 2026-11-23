@@ -208,7 +208,7 @@ func waitLiveTelemetry(t *testing.T, ctx context.Context, interval time.Duration
 
 func liveTelemetryEvent() telemetry.JobStartedEvent {
 	return telemetry.JobStartedEvent{
-		Resource:   telemetry.ResourceAttributes{AzCopyVersion: "manual-live-test", SchemaVersion: telemetrySchemaVersion, InstallationID: "manual-live-test"},
+		Resource:   telemetry.ResourceAttributes{AzCopyVersion: "manual-live-test", SchemaVersion: telemetry.SchemaVersion, InstallationID: "manual-live-test"},
 		Dimensions: telemetry.JobDimensions{Command: "copy"},
 		JobID:      "manual-live-test", InvocationID: fmt.Sprint(time.Now().UnixNano()), Timestamp: time.Now().UTC(),
 	}

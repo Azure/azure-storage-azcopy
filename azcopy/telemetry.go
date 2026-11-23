@@ -46,10 +46,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/telemetry"
 )
 
-const (
-	telemetrySchemaVersion = "1"
-)
-
 // telemetryConnectionString targets the production AzCopy telemetry Application Insights component.
 // AZCOPY_TELEMETRY_CONNECTION_STRING overrides it at runtime.
 const telemetryConnectionString = "InstrumentationKey=2c4d1db5-8231-4f37-b4d8-d0cf9d3988b1;" +
@@ -334,7 +330,7 @@ func buildResourceAttributes() telemetry.ResourceAttributes {
 
 	return telemetry.ResourceAttributes{
 		AzCopyVersion:     common.AzcopyVersion,
-		SchemaVersion:     telemetrySchemaVersion,
+		SchemaVersion:     telemetry.SchemaVersion,
 		E2ETestRunID:      strings.TrimSpace(os.Getenv(common.EEnvironmentVariable.E2ETelemetryRunID().Name)),
 		OSType:            runtime.GOOS,
 		OSVersion:         hw.osVersion,
