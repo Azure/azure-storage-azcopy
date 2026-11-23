@@ -1,0 +1,23 @@
+trigger: none
+pr: none
+
+# Manually validates or deploys the dedicated E2E telemetry test resources.
+# Production telemetry uses a separate EV2/Managed SDP rollout.
+parameters:
+  - name: action
+    displayName: 'Action'
+    type: string
+    default: Validate
+    values:
+      - Validate
+      - Deploy
+  - name: azureServiceConnection
+    displayName: 'Deployment workload-identity service connection'
+    type: string
+    default: azcopytelemetrydeploymentidentity
+
+stages:
+  - template: azurePipelineTemplates/telemetry-infrastructure-stages.yml
+    parameters:
+      action: ${{ parameters.action }}
+      azureServiceConnection: ${{ parameters.azureServiceConnection }}
