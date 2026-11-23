@@ -8,14 +8,18 @@
 
 .create-merge table AppEvents (TimeGenerated: datetime, TimeReceived: datetime, Name: string, SchemaVersion: string, InvocationID: string, JobID: string, InstallationID: string, Command: string, InvocationContext: string, AzCopyVersion: string, OSType: string, OSVersion: string, Arch: string, HostCPUModel: string, HostNumCPU: int, HostMemoryTotalGB: real, AzureVMDetected: bool, SourceType: string, DestType: string, SourceStorageAccount: string, DestStorageAccount: string, SourceAuthMechanism: string, DestAuthMechanism: string, SourceEndpointKind: string, DestEndpointKind: string, SourceProtocol: string, DestProtocol: string, SourceScope: string, DestScope: string, SourceCloudType: string, DestCloudType: string, SourceMountType: string, JobStatus: string, TerminalStage: string, JobErrorCode: string, JobErrorCategory: string, BytesTransferred: long, BytesExpected: long, ObjectsScheduled: long, ObjectsCompleted: long, ObjectsFailed: long, ObjectsSkipped: long, TransfersTotal: long, TransfersCompleted: long, TransfersFailed: long, TransfersSkipped: long, JobDurationSeconds: real, TransferPhaseDurationSeconds: real, JobThroughputMbps: real, PercentComplete: real, ServerBusyPct: real, NetworkErrorPct: real, ClientCountryOrRegion: string, ClientStateOrProvince: string, ClientCity: string, ItemCount: int, BilledSize: real, Properties: dynamic, Measurements: dynamic, EventHubSequenceNumber: long, EventHubOffset: string) with (folder = 'AzCopy', docstring = 'One typed row per AzCopy telemetry event. Frequently used fields are columns; Properties and Measurements keep only the remaining keys. Query AppEventsDedup, which removes Event Hub redeliveries.')
 
-.create-or-alter function with (folder = 'AzCopy', docstring = 'Expands diagnostic-setting messages ({"records":[...]}) into AppEvents rows. TimeGenerated is the client timestamp; TimeReceived is the Event Hub enqueue time, about 10-20 seconds after Application Insights received the event. Schema 4 omits summed counters when they are zero, so they are zero-filled on azcopy.job.finished.') ExpandAppEventsFrom(T:(Message:dynamic, EventHubEnqueuedTime:datetime, EventHubSequenceNumber:long, EventHubOffset:string)) {
+.create-or-alter function with (folder = 'AzCopy', docstring = 'Expands diagnostic-setting messages ({"records":[...]}) into AppEvents rows. TimeGenerated is the client timestamp; TimeReceived is the Event Hub enqueue time, about 10-20 seconds after Application Insights received the event. Schema 4 and later omit the counters that consumers sum when they are zero (telemetry.MeasurementOmittedWhenZero), so azcopy.job.finished gets them back as 0, in the columns and in Measurements.') ExpandAppEventsFrom(T:(Message:dynamic, EventHubEnqueuedTime:datetime, EventHubSequenceNumber:long, EventHubOffset:string)) {
     // Keys stored as columns; removed from the bags so each value is stored once.
     let PromotedProperties = dynamic(['SchemaVersion', 'InvocationID', 'JobID', 'InstallationID', 'Command', 'InvocationContext', 'AzCopyVersion', 'OSType', 'OSVersion', 'HostCPUModel', 'HostNumCPU', 'HostMemoryTotalGB', 'AzureVMDetected', 'SourceType', 'DestType', 'SourceStorageAccount', 'DestStorageAccount', 'SourceAuthMechanism', 'DestAuthMechanism', 'SourceEndpointKind', 'DestEndpointKind', 'SourceProtocol', 'DestProtocol', 'SourceScope', 'DestScope', 'SourceCloudType', 'DestCloudType', 'SourceMountType', 'JobStatus', 'TerminalStage', 'JobErrorCode', 'JobErrorCategory']);
     let PromotedMeasurements = dynamic(['azcopy.bytes_transferred', 'azcopy.bytes_expected', 'azcopy.objects_scheduled', 'azcopy.objects_completed', 'azcopy.objects_failed', 'azcopy.objects_skipped', 'azcopy.transfers_total', 'azcopy.transfers_completed', 'azcopy.transfers_failed', 'azcopy.transfers_skipped', 'azcopy.job_duration_seconds', 'azcopy.transfer_phase_duration_seconds', 'azcopy.job_throughput_mbps', 'azcopy.percent_complete', 'azcopy.server_busy_pct', 'azcopy.network_error_pct']);
+    // Must match zeroOmittedMeasurements in telemetry/events.go; TestSchemaZeroFillMatchesClient checks it.
+    let ZeroOmittedMeasurements = dynamic({'azcopy.failure_error_other_count': 0, 'azcopy.bytes_enumerated': 0, 'azcopy.bytes_expected': 0, 'azcopy.bytes_transferred': 0, 'azcopy.bytes_over_wire': 0, 'azcopy.objects_scheduled': 0, 'azcopy.regular_files_scheduled': 0, 'azcopy.symlinks_scheduled': 0, 'azcopy.hardlinks_converted_scheduled': 0, 'azcopy.hardlinks_preserved_scheduled': 0, 'azcopy.folder_properties_scheduled': 0, 'azcopy.objects_completed': 0, 'azcopy.objects_failed': 0, 'azcopy.objects_skipped': 0, 'azcopy.folder_properties_completed': 0, 'azcopy.folder_properties_failed': 0, 'azcopy.folder_properties_skipped': 0, 'azcopy.source_objects_scanned': 0, 'azcopy.source_bytes_scanned': 0, 'azcopy.source_objects_under_1_mib': 0, 'azcopy.containers_scanned': 0, 'azcopy.containers_touched': 0, 'azcopy.buckets_scanned': 0, 'azcopy.buckets_touched': 0, 'azcopy.transfers_completed': 0, 'azcopy.transfers_failed': 0, 'azcopy.transfers_skipped': 0, 'azcopy.transfers_total': 0, 'azcopy.storage_http_attempt_count': 0, 'azcopy.network_error_attempt_count': 0, 'azcopy.server_busy_503_count': 0, 'azcopy.server_busy_throughput_count': 0, 'azcopy.server_busy_iops_count': 0, 'azcopy.server_busy_other_count': 0});
     T
     | mv-expand r = Message.records
-    | extend P = r.Properties, M = r.Measurements, EventName = tostring(r.Name), Schema = tostring(r.Properties.SchemaVersion)
-    | extend ZeroFill = EventName == 'azcopy.job.finished' and Schema == '4'
+    | extend P = r.Properties, EventName = tostring(r.Name), Schema = tostring(r.Properties.SchemaVersion)
+    // bag_merge keeps the client's value when the key is present. Earlier schemas send every counter, so a missing
+    // one there means the client didn't report it and stays null.
+    | extend M = iff(EventName == 'azcopy.job.finished' and toint(Schema) >= 4, bag_merge(r.Measurements, ZeroOmittedMeasurements), r.Measurements)
     | project
         TimeGenerated = todatetime(r['time']),
         TimeReceived = EventHubEnqueuedTime,
@@ -53,16 +57,16 @@
         TerminalStage = tostring(P.TerminalStage),
         JobErrorCode = tostring(P.JobErrorCode),
         JobErrorCategory = tostring(P.JobErrorCategory),
-        BytesTransferred = tolong(coalesce(todouble(M['azcopy.bytes_transferred']), iff(ZeroFill, 0.0, real(null)))),
-        BytesExpected = tolong(coalesce(todouble(M['azcopy.bytes_expected']), iff(ZeroFill, 0.0, real(null)))),
-        ObjectsScheduled = tolong(coalesce(todouble(M['azcopy.objects_scheduled']), iff(ZeroFill, 0.0, real(null)))),
-        ObjectsCompleted = tolong(coalesce(todouble(M['azcopy.objects_completed']), iff(ZeroFill, 0.0, real(null)))),
-        ObjectsFailed = tolong(coalesce(todouble(M['azcopy.objects_failed']), iff(ZeroFill, 0.0, real(null)))),
-        ObjectsSkipped = tolong(coalesce(todouble(M['azcopy.objects_skipped']), iff(ZeroFill, 0.0, real(null)))),
-        TransfersTotal = tolong(coalesce(todouble(M['azcopy.transfers_total']), iff(ZeroFill, 0.0, real(null)))),
-        TransfersCompleted = tolong(coalesce(todouble(M['azcopy.transfers_completed']), iff(ZeroFill, 0.0, real(null)))),
-        TransfersFailed = tolong(coalesce(todouble(M['azcopy.transfers_failed']), iff(ZeroFill, 0.0, real(null)))),
-        TransfersSkipped = tolong(coalesce(todouble(M['azcopy.transfers_skipped']), iff(ZeroFill, 0.0, real(null)))),
+        BytesTransferred = tolong(todouble(M['azcopy.bytes_transferred'])),
+        BytesExpected = tolong(todouble(M['azcopy.bytes_expected'])),
+        ObjectsScheduled = tolong(todouble(M['azcopy.objects_scheduled'])),
+        ObjectsCompleted = tolong(todouble(M['azcopy.objects_completed'])),
+        ObjectsFailed = tolong(todouble(M['azcopy.objects_failed'])),
+        ObjectsSkipped = tolong(todouble(M['azcopy.objects_skipped'])),
+        TransfersTotal = tolong(todouble(M['azcopy.transfers_total'])),
+        TransfersCompleted = tolong(todouble(M['azcopy.transfers_completed'])),
+        TransfersFailed = tolong(todouble(M['azcopy.transfers_failed'])),
+        TransfersSkipped = tolong(todouble(M['azcopy.transfers_skipped'])),
         JobDurationSeconds = todouble(M['azcopy.job_duration_seconds']),
         TransferPhaseDurationSeconds = todouble(M['azcopy.transfer_phase_duration_seconds']),
         JobThroughputMbps = todouble(M['azcopy.job_throughput_mbps']),
