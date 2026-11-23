@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// 'RSMB' returns a RawSMBIOSData buffer: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemfirmwaretable
 const (
 	firmwareTableProviderRSMB = 0x52534d42
 	rawSMBIOSFirmwareTableID  = 0
