@@ -1,9 +1,12 @@
 package e2etest
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 func init() {
@@ -13,15 +16,55 @@ func init() {
 type JobsListSuite struct{}
 
 func (s *JobsListSuite) Scenario_JobsListNoJobs(svm *ScenarioVariationManager) {
-
+	modes := []string{"enabled"}
+	if AppInsightsTelemetryValidationEnabled() {
+		modes = append(modes, "cli-optout", "missing-key", "missing-endpoint")
+	}
+	mode := ResolveVariation(svm, modes)
+	flags := JobsListFlags{}
+	environment := &AzCopyEnvironment{}
+	expected := &telemetryExpectation{CommandOnly: true}
+	switch mode {
+	case "cli-optout":
+		flags.DisableTelemetry = pointerTo(true)
+	case "missing-key":
+		for _, part := range strings.Split(GlobalConfig.AppInsightsValidationConfig.ConnectionString, ";") {
+			if strings.HasPrefix(strings.ToLower(part), "ingestionendpoint=") {
+				environment.TelemetryConnectionString = &part
+			}
+		}
+		svm.AssertNow("configured ingestion endpoint", Equal{}, environment.TelemetryConnectionString != nil, true)
+	case "missing-endpoint":
+		environment.TelemetryConnectionString = pointerTo("InstrumentationKey=11111111-2222-3333-4444-555555555555")
+	}
+	if mode != "enabled" {
+		expected = &telemetryExpectation{NoEvents: true}
+	}
 	jobsListOutput, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:   AzCopyVerbJobsList,
-			Stdout: &AzCopyParsedJobsListStdout{},
-			Flags:  JobsListFlags{},
+			Verb:        AzCopyVerbJobsList,
+			Stdout:      &AzCopyParsedJobsListStdout{},
+			Flags:       flags,
+			Environment: environment,
+			Telemetry:   expected,
 		})
 	ValidateJobsListOutput(svm, jobsListOutput, 0, []string{})
+	if !svm.Dryrun() && (mode == "missing-key" || mode == "missing-endpoint") {
+		// An event sent with an incomplete connection string could never reach the validation workspace, so its
+		// absence there proves nothing. The job log shows whether AzCopy refused to send.
+		svm.AssertNow("job log location", Equal{}, environment.LogLocation != nil, true)
+		logs, err := filepath.Glob(filepath.Join(*environment.LogLocation, "*.log"))
+		svm.NoError("list job logs", err, true)
+		var jobLog strings.Builder
+		for _, path := range logs {
+			contents, err := os.ReadFile(path)
+			svm.NoError("read job log", err, true)
+			jobLog.Write(contents)
+		}
+		svm.Assert("incomplete connection string must stop the send", Equal{},
+			strings.Contains(jobLog.String(), "telemetry: failed to send azcopy.command.invoked: connection string must contain"), true)
+	}
 }
 
 func (s *JobsListSuite) Scenario_JobsListAll(svm *ScenarioVariationManager) {
@@ -96,9 +139,10 @@ func (s *JobsListSuite) Scenario_JobsListAll(svm *ScenarioVariationManager) {
 	jobsListOutput, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:   AzCopyVerbJobsList,
-			Stdout: &AzCopyParsedJobsListStdout{},
-			Flags:  JobsListFlags{},
+			Verb:      AzCopyVerbJobsList,
+			Telemetry: &telemetryExpectation{CommandOnly: true},
+			Stdout:    &AzCopyParsedJobsListStdout{},
+			Flags:     JobsListFlags{},
 			Environment: &AzCopyEnvironment{
 				LogLocation:     &logsDir,
 				JobPlanLocation: &jobPlanDir,
