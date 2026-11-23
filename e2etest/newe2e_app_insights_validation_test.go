@@ -1,13 +1,17 @@
 package e2etest
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func TestValidateAppInsightsValidationConfig(t *testing.T) {
@@ -23,6 +27,13 @@ func TestValidateAppInsightsValidationConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, enabled)
 
+	enabled, err = validateAppInsightsValidationConfig(AppInsightsValidationConfig{
+		ConnectionString: "InstrumentationKey=11111111-2222-3333-4444-555555555555",
+		RunID:            "run-id",
+	})
+	require.NoError(t, err)
+	assert.False(t, enabled)
+
 	_, err = validateAppInsightsValidationConfig(AppInsightsValidationConfig{
 		WorkspaceID: "workspace-id",
 	})
@@ -30,7 +41,6 @@ func TestValidateAppInsightsValidationConfig(t *testing.T) {
 
 	_, err = validateAppInsightsValidationConfig(AppInsightsValidationConfig{
 		ConnectionString: "InstrumentationKey=11111111-2222-3333-4444-555555555555",
-		WorkspaceID:      "workspace-id",
 		RunID:            `run"id`,
 	})
 	assert.ErrorContains(t, err, "may contain only")
@@ -41,6 +51,24 @@ func TestValidateAppInsightsValidationConfig(t *testing.T) {
 		RunID:            strings.Repeat("x", 81),
 	})
 	assert.ErrorContains(t, err, "at most 80 bytes")
+}
+
+func TestSetupAppInsightsTelemetrySendsWithoutWorkspace(t *testing.T) {
+	saved := GlobalConfig.AppInsightsValidationConfig
+	t.Cleanup(func() {
+		GlobalConfig.AppInsightsValidationConfig = saved
+		resetAppInsightsValidation()
+	})
+	t.Setenv("AZCOPY_TELEMETRY_CONNECTION_STRING", "InstrumentationKey=11111111-2222-3333-4444-555555555555")
+	GlobalConfig.AppInsightsValidationConfig = AppInsightsValidationConfig{
+		ConnectionString: "InstrumentationKey=11111111-2222-3333-4444-555555555555",
+		RunID:            "run-id",
+	}
+
+	SetupAppInsightsTelemetryValidation(&FrameworkAsserter{t: t})
+
+	assert.False(t, AppInsightsTelemetryValidationEnabled())
+	assert.Equal(t, "run-id", e2eTelemetryRunID())
 }
 
 func TestDisableUnconfiguredTelemetry(t *testing.T) {
@@ -151,4 +179,82 @@ func TestDecideAppInsightsJobValidation(t *testing.T) {
 				test.jobID))
 		})
 	}
+}
+
+func TestAzCopyJobIDCaptureForwardsAndCapturesJSONOutput(t *testing.T) {
+	var target bytes.Buffer
+	capture := newAzCopyJobIDCapture(&testAzCopyStdout{Buffer: &target})
+	ready := false
+	capture.onJobID = func() { ready = true }
+	jobID := common.NewJobID().String()
+	initMessage, err := json.Marshal(cmd.InitMsgJsonTemplate{JobID: jobID})
+	require.NoError(t, err)
+	output, err := json.Marshal(cmd.JsonOutputTemplate{
+		MessageType:    cmd.EOutputMessageType.Init().String(),
+		MessageContent: string(initMessage),
+	})
+	require.NoError(t, err)
+	output = append(output, '\n')
+
+	n, err := capture.Write(output)
+	require.NoError(t, err)
+	assert.Equal(t, len(output), n)
+	assert.Equal(t, output, target.Bytes())
+	assert.True(t, ready)
+	assert.Equal(t, jobID, capture.JobID())
+}
+
+func TestAzCopyJobIDCaptureHandlesSplitTextOutput(t *testing.T) {
+	var target bytes.Buffer
+	capture := newAzCopyJobIDCapture(&testAzCopyStdout{Buffer: &target})
+	jobID := common.NewJobID().String()
+	output := []byte("\nJob " + jobID + " has started\nLog file is located at: log.txt\n")
+
+	for _, chunk := range [][]byte{output[:9], output[9:31], output[31:]} {
+		n, err := capture.Write(chunk)
+		require.NoError(t, err)
+		assert.Equal(t, len(chunk), n)
+	}
+
+	assert.Equal(t, output, target.Bytes())
+	assert.Equal(t, jobID, capture.JobID())
+}
+
+func TestAzCopyJobIDCaptureFlushesFinalLineAndRejectsInvalidIDs(t *testing.T) {
+	var target bytes.Buffer
+	capture := newAzCopyJobIDCapture(&testAzCopyStdout{Buffer: &target})
+	validJobID := common.NewJobID().String()
+	output := []byte("Job not-a-job-id has started\nJob " + validJobID + " has started")
+
+	n, err := capture.Write(output)
+	require.NoError(t, err)
+	assert.Equal(t, len(output), n)
+	assert.Equal(t, validJobID, capture.JobID())
+	assert.Equal(t, output, target.Bytes())
+}
+
+func TestAzCopyJobIDCaptureSupportsRawAndDiscardStdout(t *testing.T) {
+	for name, target := range map[string]AzCopyStdout{
+		"raw":     &AzCopyRawStdout{},
+		"discard": &AzCopyDiscardStdout{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			capture := newAzCopyJobIDCapture(target)
+			jobID := common.NewJobID().String()
+			output := []byte("Job " + jobID + " has started\n")
+
+			n, err := capture.Write(output)
+			require.NoError(t, err)
+			assert.Equal(t, len(output), n)
+			assert.Equal(t, jobID, capture.JobID())
+		})
+	}
+}
+
+type testAzCopyStdout struct {
+	*bytes.Buffer
+}
+
+func (s *testAzCopyStdout) RawStdout() []string {
+	return strings.Split(s.String(), "\n")
 }
