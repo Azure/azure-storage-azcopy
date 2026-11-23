@@ -448,6 +448,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						TransferStatus:     common.ETransferStatus.Failed(),
 						ErrorCode:          jppt.ErrorCode()}) // TODO: Optimize
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
+				common.ETransferStatus.SkippedEntityHasInvalidName(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
 				if isFolder {
