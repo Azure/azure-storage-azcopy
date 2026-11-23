@@ -218,8 +218,17 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	sourceShare := s.NewShareClient(jptm.Info().SrcContainer)
 
-	if jptm.Info().SnapshotID != "" {
-		sourceShare, err = sourceShare.WithSnapshot(jptm.Info().SnapshotID)
+	// Share snapshots are carried in the source URL, not the per-blob snapshot field.
+	sourceParts, err := file.ParseURL(jptm.Info().Source)
+	if err != nil {
+		return nil, err
+	}
+	snapshot := sourceParts.ShareSnapshot
+	if snapshot == "" {
+		snapshot = jptm.Info().SnapshotID
+	}
+	if snapshot != "" {
+		sourceShare, err = sourceShare.WithSnapshot(snapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +246,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		defaultRemoteSourceInfoProvider: *base,
 		ctx:                             ctx,
 		cacheOnce:                       &sync.Once{},
-		srcShareClient:                  s.NewShareClient(jptm.Info().SrcContainer),
+		srcShareClient:                  sourceShare,
 		scanPacer:                       sourceSharePacer(source.URL()),
 		sourceURL:                       source.URL()}, nil
 }
@@ -255,21 +264,16 @@ func (p *fileSourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCl
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
-	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
-	if err != nil {
-		return nil, err
-	}
-	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	if err := common.ScanPacerAcquire(p.ctx, p.scanPacer, 1); err != nil {
 		return nil, err
 	}
 	switch p.EntityType() {
 	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.FileProperties():
-		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
+		fileClient := p.srcShareClient.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
 	case common.EEntityType.Folder():
-		directoryClient := share.NewDirectoryClient(p.transferInfo.SrcFilePath)
+		directoryClient := p.srcShareClient.NewDirectoryClient(p.transferInfo.SrcFilePath)
 		props, err := directoryClient.GetProperties(p.ctx, nil)
 		return &directoryGetPropertiesAdapter{props}, err
 	default:
@@ -374,12 +378,7 @@ func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		if count <= common.MaxRangeGetSize {
 			rangeGetContentMD5 = to.Ptr(true)
 		}
-		fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
-		if err != nil {
-			return nil, err
-		}
-		shareClient := fsc.NewShareClient(p.transferInfo.SrcContainer)
-		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
+		fileClient := p.srcShareClient.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		if p.scanPacer != nil {
 			if err := p.scanPacer.AcquireIO(p.ctx, count, 1); err != nil {
 				return nil, err
