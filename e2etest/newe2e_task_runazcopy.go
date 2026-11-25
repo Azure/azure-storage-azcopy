@@ -332,6 +332,18 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 			}
 		}
 		return target.URI(opts) // Generate like public
+	case EExplicitCredentialType.S3():
+		// AzCopy reads S3 access keys from the environment.
+		for _, name := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"} {
+			c.Environment.InheritEnvVar(name)
+		}
+		return target.URI(opts)
+	case EExplicitCredentialType.GCP():
+		// AzCopy reads the GCS service account key file, and the project for service-level copies, from the environment.
+		for _, name := range []string{"GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"} {
+			c.Environment.InheritEnvVar(name)
+		}
+		return target.URI(opts)
 	default:
 		a.Error("unsupported credential type")
 		return target.URI(opts)

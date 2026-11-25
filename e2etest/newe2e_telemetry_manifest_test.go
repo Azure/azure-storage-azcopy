@@ -236,6 +236,9 @@ func TestTelemetryManifestAuthCloud(t *testing.T) {
 		{"OAuth upload", "Local", "BlobFS", "NotApplicable", "OAuth", "", "public"},
 		{"OAuth service copy", "File", "Blob", "OAuth", "OAuth", "public", "public"},
 		{"mixed service auth", "Blob", "Blob", "SAS", "OAuth", "public", "public"},
+		// Cloud type describes Azure endpoints only.
+		{"S3 service copy", "S3", "Blob", "S3AccessKey", "SAS", "", "public"},
+		{"GCS service copy", "GCP", "Blob", "GoogleAppCredentials", "SAS", "", "public"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			properties := map[string]string{
