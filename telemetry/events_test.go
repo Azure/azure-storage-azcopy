@@ -21,6 +21,9 @@
 package telemetry
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -255,6 +258,24 @@ func TestFinishedMeasurementsOmitOnlyZeroCounters(t *testing.T) {
 	assert.NotContains(t, byName, "azcopy.transfers_failed")
 	assert.Contains(t, byName, "azcopy.percent_complete")
 	assert.Len(t, byName, 49)
+}
+
+// The Kusto export fills the counters omitted when zero back in; a counter missing from its list would read as
+// "not reported" there instead of 0.
+func TestSchemaZeroFillMatchesClient(t *testing.T) {
+	schema, err := os.ReadFile(filepath.Join("..", "infra", "telemetry", "kusto", "schema.kql"))
+	require.NoError(t, err)
+	list := regexp.MustCompile(`let ZeroOmittedMeasurements = dynamic\(\{([^}]*)\}\);`).FindSubmatch(schema)
+	require.NotNil(t, list, "ZeroOmittedMeasurements not found in schema.kql")
+	var filled []string
+	for _, match := range regexp.MustCompile(`'([a-z0-9_.]+)': 0`).FindAllSubmatch(list[1], -1) {
+		filled = append(filled, string(match[1]))
+	}
+	var omitted []string
+	for name := range zeroOmittedMeasurements {
+		omitted = append(omitted, name)
+	}
+	assert.ElementsMatch(t, omitted, filled)
 }
 
 func TestFinishedMeasurementOmissionRules(t *testing.T) {
