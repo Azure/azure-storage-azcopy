@@ -161,6 +161,7 @@ jobs:
       job_name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
       telemetry: ${{ parameters.e2eTelemetry }}
+      cloud_source_credentials: true
       
   - job: Unit_and_Python_Tests
     variables:
