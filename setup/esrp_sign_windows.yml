@@ -4,7 +4,7 @@ parameters:
   Pattern: '*.exe'
 
 steps:
-- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@6
   displayName: 'Sign Windows executable'
   inputs:
     ConnectedServiceName: 'azcopy-release'
